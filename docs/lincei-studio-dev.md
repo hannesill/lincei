@@ -26,8 +26,8 @@ bun run dev:lincei
 
 This runs the Electron desktop app with an isolated local profile:
 
-- `T3CODE_HOME=.dev-home`
-- `T3CODE_DEV_INSTANCE=lincei-studio`
+- `LINCEI_STUDIO_HOME=.dev-home`
+- `LINCEI_STUDIO_DEV_INSTANCE=lincei-studio`
 
 The renderer is served by Vite with hot reload. Electron main and preload files are rebuilt by `tsdown --watch`, and the Electron process restarts when those built files change.
 

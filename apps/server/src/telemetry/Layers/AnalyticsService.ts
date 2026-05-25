@@ -11,6 +11,7 @@ import * as Config from "effect/Config";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
@@ -25,17 +26,43 @@ interface BufferedAnalyticsEvent {
   readonly capturedAt: string;
 }
 
+const aliasedOption = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
+  Config.all({
+    primary: primary.pipe(Config.option),
+    legacy: legacy.pipe(Config.option),
+  }).pipe(Config.map(({ primary, legacy }) => Option.orElse(primary, () => legacy)));
+
+const aliasedWithDefault = <A>(
+  primary: Config.Config<A>,
+  legacy: Config.Config<A>,
+  defaultValue: A,
+) => aliasedOption(primary, legacy).pipe(Config.map(Option.getOrElse(() => defaultValue)));
+
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.string("T3CODE_POSTHOG_KEY").pipe(
-    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
+  posthogKey: aliasedWithDefault(
+    Config.string("LINCEI_STUDIO_POSTHOG_KEY"),
+    Config.string("T3CODE_POSTHOG_KEY"),
+    "phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m",
   ),
-  posthogHost: Config.string("T3CODE_POSTHOG_HOST").pipe(
-    Config.withDefault("https://us.i.posthog.com"),
+  posthogHost: aliasedWithDefault(
+    Config.string("LINCEI_STUDIO_POSTHOG_HOST"),
+    Config.string("T3CODE_POSTHOG_HOST"),
+    "https://us.i.posthog.com",
   ),
-  enabled: Config.boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true)),
-  flushBatchSize: Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
-  maxBufferedEvents: Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
-    Config.withDefault(1_000),
+  enabled: aliasedWithDefault(
+    Config.boolean("LINCEI_STUDIO_TELEMETRY_ENABLED"),
+    Config.boolean("T3CODE_TELEMETRY_ENABLED"),
+    true,
+  ),
+  flushBatchSize: aliasedWithDefault(
+    Config.number("LINCEI_STUDIO_TELEMETRY_FLUSH_BATCH_SIZE"),
+    Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE"),
+    20,
+  ),
+  maxBufferedEvents: aliasedWithDefault(
+    Config.number("LINCEI_STUDIO_TELEMETRY_MAX_BUFFERED_EVENTS"),
+    Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS"),
+    1_000,
   ),
 });
 

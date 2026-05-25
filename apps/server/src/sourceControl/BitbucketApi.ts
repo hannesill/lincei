@@ -22,13 +22,23 @@ import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
 const DEFAULT_API_BASE_URL = "https://api.bitbucket.org/2.0";
 
+const aliasedOption = (primaryName: string, legacyName: string) =>
+  Config.all({
+    primary: Config.string(primaryName).pipe(Config.option),
+    legacy: Config.string(legacyName).pipe(Config.option),
+  }).pipe(Config.map(({ primary, legacy }) => Option.orElse(primary, () => legacy)));
+
 const BitbucketApiEnvConfig = Config.all({
-  baseUrl: Config.string("T3CODE_BITBUCKET_API_BASE_URL").pipe(
-    Config.withDefault(DEFAULT_API_BASE_URL),
+  baseUrl: aliasedOption(
+    "LINCEI_STUDIO_BITBUCKET_API_BASE_URL",
+    "T3CODE_BITBUCKET_API_BASE_URL",
+  ).pipe(Config.map(Option.getOrElse(() => DEFAULT_API_BASE_URL))),
+  accessToken: aliasedOption(
+    "LINCEI_STUDIO_BITBUCKET_ACCESS_TOKEN",
+    "T3CODE_BITBUCKET_ACCESS_TOKEN",
   ),
-  accessToken: Config.string("T3CODE_BITBUCKET_ACCESS_TOKEN").pipe(Config.option),
-  email: Config.string("T3CODE_BITBUCKET_EMAIL").pipe(Config.option),
-  apiToken: Config.string("T3CODE_BITBUCKET_API_TOKEN").pipe(Config.option),
+  email: aliasedOption("LINCEI_STUDIO_BITBUCKET_EMAIL", "T3CODE_BITBUCKET_EMAIL"),
+  apiToken: aliasedOption("LINCEI_STUDIO_BITBUCKET_API_TOKEN", "T3CODE_BITBUCKET_API_TOKEN"),
 });
 
 export class BitbucketApiError extends Schema.TaggedErrorClass<BitbucketApiError>()(
@@ -295,7 +305,7 @@ function checkoutBranchName(input: {
     return input.headBranch;
   }
 
-  return `t3code/pr-${input.pullRequestId}/${sanitizeBranchFragment(input.headBranch)}`;
+  return `lincei-studio/pr-${input.pullRequestId}/${sanitizeBranchFragment(input.headBranch)}`;
 }
 
 function repositoryNameWithOwner(
@@ -337,7 +347,7 @@ function authFromConfig(
     account: Option.none(),
     host: Option.some("bitbucket.org"),
     detail: Option.some(
-      "Set T3CODE_BITBUCKET_EMAIL and T3CODE_BITBUCKET_API_TOKEN, or T3CODE_BITBUCKET_ACCESS_TOKEN.",
+      "Set LINCEI_STUDIO_BITBUCKET_EMAIL and LINCEI_STUDIO_BITBUCKET_API_TOKEN, or LINCEI_STUDIO_BITBUCKET_ACCESS_TOKEN.",
     ),
   };
 }
