@@ -1,0 +1,8 @@
+---
+description: Project agent instructions
+alwaysApply: true
+---
+
+Follow the repository-level instructions in `AGENTS.md` for all coding, review, testing, and collaboration behavior in this project.
+
+When work is non-trivial, help the project owner learn by briefly explaining relevant architecture, tradeoffs, risks, and review checkpoints, without sacrificing correctness, reliability, maintainability, or verification.
