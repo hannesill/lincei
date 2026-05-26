@@ -78,9 +78,18 @@
       }
 
       #boot-shell-logo {
+        display: flex;
         width: 64px;
         height: 64px;
-        object-fit: contain;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        background: #f7f5ef;
+        color: #111111;
+        font-family: Baskerville, Palatino, Georgia, "Times New Roman", serif;
+        font-size: 24px;
+        font-weight: 500;
+        line-height: 1;
       }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -95,7 +104,7 @@
     <div id="root">
       <div id="boot-shell">
         <div id="boot-shell-card" aria-label="Lincei splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="Lincei" />
+          <div id="boot-shell-logo" aria-hidden="true">L</div>
         </div>
       </div>
     </div>

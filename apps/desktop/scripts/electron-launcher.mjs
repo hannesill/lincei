@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_DISPLAY_NAME = isDevelopment ? "Lincei (Dev)" : "Lincei (Alpha)";
 const APP_BUNDLE_ID = isDevelopment ? "studio.lincei.app.dev" : "studio.lincei.app";
-const LAUNCHER_VERSION = 2;
+const LAUNCHER_VERSION = 3;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const desktopDir = resolve(__dirname, "..");
@@ -162,6 +162,14 @@ function buildMacLauncher(electronBinaryPath) {
   return targetBinaryPath;
 }
 
+function patchDevelopmentMacBundle(electronBinaryPath) {
+  const sourceAppBundlePath = resolve(electronBinaryPath, "../../..");
+  const runtimeDir = join(desktopDir, ".electron-runtime");
+  const iconPath = ensureDevelopmentIconIcns(runtimeDir);
+  patchMainBundleInfoPlist(sourceAppBundlePath, iconPath);
+  return electronBinaryPath;
+}
+
 export function resolveElectronPath() {
   const require = createRequire(import.meta.url);
   const electronBinaryPath = require("electron");
@@ -173,7 +181,7 @@ export function resolveElectronPath() {
   // Dev launches do not need a renamed app bundle badly enough to risk breaking
   // Electron helper resource lookup on macOS.
   if (isDevelopment) {
-    return electronBinaryPath;
+    return patchDevelopmentMacBundle(electronBinaryPath);
   }
 
   return buildMacLauncher(electronBinaryPath);
