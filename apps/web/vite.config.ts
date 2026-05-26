@@ -23,7 +23,7 @@ const configuredHostedAppUrl = (() => {
   }
   return undefined;
 })();
-const sourcemapEnv = (process.env.LINCEI_STUDIO_WEB_SOURCEMAP ?? process.env.T3CODE_WEB_SOURCEMAP)
+const sourcemapEnv = (process.env.LINCEI_WEB_SOURCEMAP ?? process.env.T3CODE_WEB_SOURCEMAP)
   ?.trim()
   .toLowerCase();
 

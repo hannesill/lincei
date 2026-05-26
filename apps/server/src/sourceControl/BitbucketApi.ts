@@ -29,16 +29,12 @@ const aliasedOption = (primaryName: string, legacyName: string) =>
   }).pipe(Config.map(({ primary, legacy }) => Option.orElse(primary, () => legacy)));
 
 const BitbucketApiEnvConfig = Config.all({
-  baseUrl: aliasedOption(
-    "LINCEI_STUDIO_BITBUCKET_API_BASE_URL",
-    "T3CODE_BITBUCKET_API_BASE_URL",
-  ).pipe(Config.map(Option.getOrElse(() => DEFAULT_API_BASE_URL))),
-  accessToken: aliasedOption(
-    "LINCEI_STUDIO_BITBUCKET_ACCESS_TOKEN",
-    "T3CODE_BITBUCKET_ACCESS_TOKEN",
+  baseUrl: aliasedOption("LINCEI_BITBUCKET_API_BASE_URL", "T3CODE_BITBUCKET_API_BASE_URL").pipe(
+    Config.map(Option.getOrElse(() => DEFAULT_API_BASE_URL)),
   ),
-  email: aliasedOption("LINCEI_STUDIO_BITBUCKET_EMAIL", "T3CODE_BITBUCKET_EMAIL"),
-  apiToken: aliasedOption("LINCEI_STUDIO_BITBUCKET_API_TOKEN", "T3CODE_BITBUCKET_API_TOKEN"),
+  accessToken: aliasedOption("LINCEI_BITBUCKET_ACCESS_TOKEN", "T3CODE_BITBUCKET_ACCESS_TOKEN"),
+  email: aliasedOption("LINCEI_BITBUCKET_EMAIL", "T3CODE_BITBUCKET_EMAIL"),
+  apiToken: aliasedOption("LINCEI_BITBUCKET_API_TOKEN", "T3CODE_BITBUCKET_API_TOKEN"),
 });
 
 export class BitbucketApiError extends Schema.TaggedErrorClass<BitbucketApiError>()(
@@ -305,7 +301,7 @@ function checkoutBranchName(input: {
     return input.headBranch;
   }
 
-  return `lincei-studio/pr-${input.pullRequestId}/${sanitizeBranchFragment(input.headBranch)}`;
+  return `lincei/pr-${input.pullRequestId}/${sanitizeBranchFragment(input.headBranch)}`;
 }
 
 function repositoryNameWithOwner(
@@ -347,7 +343,7 @@ function authFromConfig(
     account: Option.none(),
     host: Option.some("bitbucket.org"),
     detail: Option.some(
-      "Set LINCEI_STUDIO_BITBUCKET_EMAIL and LINCEI_STUDIO_BITBUCKET_API_TOKEN, or LINCEI_STUDIO_BITBUCKET_ACCESS_TOKEN.",
+      "Set LINCEI_BITBUCKET_EMAIL and LINCEI_BITBUCKET_API_TOKEN, or LINCEI_BITBUCKET_ACCESS_TOKEN.",
     ),
   };
 }

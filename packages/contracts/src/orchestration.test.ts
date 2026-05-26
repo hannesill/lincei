@@ -277,7 +277,7 @@ it.effect("accepts bootstrap metadata in thread.turn.start", () =>
         prepareWorktree: {
           projectCwd: "/tmp/workspace",
           baseBranch: "main",
-          branch: "lincei-studio/example",
+          branch: "lincei/example",
         },
         runSetupScript: true,
       },

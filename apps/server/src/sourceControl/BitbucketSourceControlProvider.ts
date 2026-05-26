@@ -122,7 +122,7 @@ export const makeDiscovery = Effect.fn("makeBitbucketSourceControlProviderDiscov
     kind: "bitbucket",
     label: "Bitbucket",
     installHint:
-      "Set LINCEI_STUDIO_BITBUCKET_EMAIL and LINCEI_STUDIO_BITBUCKET_API_TOKEN on the server (use a Bitbucket API token with pull request and repository scopes).",
+      "Set LINCEI_BITBUCKET_EMAIL and LINCEI_BITBUCKET_API_TOKEN on the server (use a Bitbucket API token with pull request and repository scopes).",
     probeAuth: bitbucket.probeAuth,
   } satisfies SourceControlProviderDiscovery.SourceControlApiDiscoverySpec;
 });

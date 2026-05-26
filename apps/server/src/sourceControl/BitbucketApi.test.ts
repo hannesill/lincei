@@ -598,17 +598,17 @@ it.effect("checks out fork pull requests through an ensured fork remote", () => 
       cwd: "/repo",
       remoteName: "example-fork",
       remoteBranch: "main",
-      localBranch: "lincei-studio/pr-42/main",
+      localBranch: "lincei/pr-42/main",
     });
     assert.deepStrictEqual(git.setBranchUpstream.mock.calls[0]?.[0], {
       cwd: "/repo",
-      branch: "lincei-studio/pr-42/main",
+      branch: "lincei/pr-42/main",
       remoteName: "example-fork",
       remoteBranch: "main",
     });
     assert.deepStrictEqual(git.switchRef.mock.calls[0]?.[0], {
       cwd: "/repo",
-      refName: "lincei-studio/pr-42/main",
+      refName: "lincei/pr-42/main",
     });
   }).pipe(Effect.provide(layer));
 });

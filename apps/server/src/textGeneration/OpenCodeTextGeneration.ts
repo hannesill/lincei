@@ -302,7 +302,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
               : {}),
           });
           const session = await client.session.create({
-            title: `Lincei Studio ${input.operation}`,
+            title: `Lincei ${input.operation}`,
             permission: [{ permission: "*", pattern: "*", action: "deny" }],
           });
           if (!session.data) {

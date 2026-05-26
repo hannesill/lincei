@@ -59,7 +59,7 @@ function cleanupStaleDevApps() {
     return;
   }
 
-  spawnSync("pkill", ["-f", "--", `--lincei-studio-dev-root=${desktopDir}`], {
+  spawnSync("pkill", ["-f", "--", `--lincei-dev-root=${desktopDir}`], {
     stdio: "ignore",
   });
 }
@@ -71,7 +71,7 @@ function startApp() {
 
   const app = spawn(
     resolveElectronPath(),
-    [`--lincei-studio-dev-root=${desktopDir}`, "dist-electron/main.cjs"],
+    [`--lincei-dev-root=${desktopDir}`, "dist-electron/main.cjs"],
     {
       cwd: desktopDir,
       env: childEnv,

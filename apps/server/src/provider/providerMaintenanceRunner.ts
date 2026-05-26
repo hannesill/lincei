@@ -359,9 +359,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 startedAt,
                 finishedAt,
                 message: couldNotVerify
-                  ? "Update command completed, but Lincei Studio could not verify the provider version."
+                  ? "Update command completed, but Lincei could not verify the provider version."
                   : stillOutdated
-                    ? "Update command completed, but Lincei Studio still detects an outdated provider version."
+                    ? "Update command completed, but Lincei still detects an outdated provider version."
                     : "Provider updated.",
                 output: commandOutput(result),
               }),

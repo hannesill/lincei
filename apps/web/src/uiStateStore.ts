@@ -1,7 +1,7 @@
 import { Debouncer } from "@tanstack/react-pacer";
 import { create } from "zustand";
 
-export const PERSISTED_STATE_KEY = "lincei-studio:ui-state:v1";
+export const PERSISTED_STATE_KEY = "lincei:ui-state:v1";
 const LEGACY_PERSISTED_STATE_KEYS = [
   "t3code:ui-state:v1",
   "t3code:renderer-state:v8",

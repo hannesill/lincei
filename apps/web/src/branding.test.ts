@@ -20,9 +20,9 @@ describe("branding", () => {
       value: {
         desktopBridge: {
           getAppBranding: () => ({
-            baseName: "Lincei Studio",
+            baseName: "Lincei",
             stageLabel: "Nightly",
-            displayName: "Lincei Studio (Nightly)",
+            displayName: "Lincei (Nightly)",
           }),
         },
       },
@@ -30,9 +30,9 @@ describe("branding", () => {
 
     const branding = await import("./branding");
 
-    expect(branding.APP_BASE_NAME).toBe("Lincei Studio");
+    expect(branding.APP_BASE_NAME).toBe("Lincei");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("Lincei Studio (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("Lincei (Nightly)");
   });
 
   it("normalizes hosted app channel metadata", async () => {
@@ -43,7 +43,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("nightly");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Nightly");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("Lincei Studio (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("Lincei (Nightly)");
   });
 
   it("ignores unknown hosted app channels", async () => {

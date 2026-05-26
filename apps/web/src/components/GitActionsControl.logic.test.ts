@@ -1094,8 +1094,8 @@ describe("resolveLiveThreadBranchUpdate", () => {
 
   it("does not regress a semantic thread ref back to a temporary worktree ref", () => {
     const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "lincei-studio/github-query-rate-limit",
-      gitStatus: status({ refName: "lincei-studio/bda76797" }),
+      threadBranch: "lincei/github-query-rate-limit",
+      gitStatus: status({ refName: "lincei/bda76797" }),
     });
 
     assert.equal(update, null);

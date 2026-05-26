@@ -38,7 +38,7 @@ export interface TerminalEventEntry {
   event: TerminalEvent;
 }
 
-const TERMINAL_STATE_STORAGE_KEY = "lincei-studio:terminal-state:v1";
+const TERMINAL_STATE_STORAGE_KEY = "lincei:terminal-state:v1";
 const EMPTY_TERMINAL_EVENT_ENTRIES: ReadonlyArray<TerminalEventEntry> = [];
 const MAX_TERMINAL_EVENT_BUFFER = 200;
 

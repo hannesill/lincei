@@ -47,7 +47,7 @@ vi.mock("electron", () => ({
     getAppPath: getAppPathMock,
     getVersion: getVersionMock,
     isPackaged: true,
-    name: "Lincei Studio",
+    name: "Lincei",
     on: onMock,
     quit: quitMock,
     relaunch: relaunchMock,

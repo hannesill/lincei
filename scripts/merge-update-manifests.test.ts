@@ -20,13 +20,13 @@ describe("merge-update-manifests", () => {
       "mac",
       `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-arm64.zip
+  - url: Lincei-0.0.4-arm64.zip
     sha512: arm64zip
     size: 125621344
-  - url: Lincei-Studio-0.0.4-arm64.dmg
+  - url: Lincei-0.0.4-arm64.dmg
     sha512: arm64dmg
     size: 131754935
-path: Lincei-Studio-0.0.4-arm64.zip
+path: Lincei-0.0.4-arm64.zip
 sha512: arm64zip
 releaseDate: '2026-03-07T10:32:14.587Z'
 `,
@@ -37,13 +37,13 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "mac",
       `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-x64.zip
+  - url: Lincei-0.0.4-x64.zip
     sha512: x64zip
     size: 132000112
-  - url: Lincei-Studio-0.0.4-x64.dmg
+  - url: Lincei-0.0.4-x64.dmg
     sha512: x64dmg
     size: 138148807
-path: Lincei-Studio-0.0.4-x64.zip
+path: Lincei-0.0.4-x64.zip
 sha512: x64zip
 releaseDate: '2026-03-07T10:36:07.540Z'
 `,
@@ -57,10 +57,10 @@ releaseDate: '2026-03-07T10:36:07.540Z'
     assert.deepStrictEqual(
       merged.files.map((file) => file.url),
       [
-        "Lincei-Studio-0.0.4-arm64.zip",
-        "Lincei-Studio-0.0.4-arm64.dmg",
-        "Lincei-Studio-0.0.4-x64.zip",
-        "Lincei-Studio-0.0.4-x64.dmg",
+        "Lincei-0.0.4-arm64.zip",
+        "Lincei-0.0.4-arm64.dmg",
+        "Lincei-0.0.4-x64.zip",
+        "Lincei-0.0.4-x64.dmg",
       ],
     );
 
@@ -74,13 +74,13 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "win",
       `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-arm64.exe
+  - url: Lincei-0.0.4-arm64.exe
     sha512: arm64exe
     size: 125621344
-  - url: Lincei-Studio-0.0.4-arm64.exe.blockmap
+  - url: Lincei-0.0.4-arm64.exe.blockmap
     sha512: arm64blockmap
     size: 131754
-path: Lincei-Studio-0.0.4-arm64.exe
+path: Lincei-0.0.4-arm64.exe
 sha512: arm64exe
 releaseDate: '2026-03-07T10:32:14.587Z'
 `,
@@ -91,13 +91,13 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "win",
       `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-x64.exe
+  - url: Lincei-0.0.4-x64.exe
     sha512: x64exe
     size: 132000112
-  - url: Lincei-Studio-0.0.4-x64.exe.blockmap
+  - url: Lincei-0.0.4-x64.exe.blockmap
     sha512: x64blockmap
     size: 138148
-path: Lincei-Studio-0.0.4-x64.exe
+path: Lincei-0.0.4-x64.exe
 sha512: x64exe
 releaseDate: '2026-03-07T10:36:07.540Z'
 `,
@@ -111,10 +111,10 @@ releaseDate: '2026-03-07T10:36:07.540Z'
     assert.deepStrictEqual(
       merged.files.map((file) => file.url),
       [
-        "Lincei-Studio-0.0.4-arm64.exe",
-        "Lincei-Studio-0.0.4-arm64.exe.blockmap",
-        "Lincei-Studio-0.0.4-x64.exe",
-        "Lincei-Studio-0.0.4-x64.exe.blockmap",
+        "Lincei-0.0.4-arm64.exe",
+        "Lincei-0.0.4-arm64.exe.blockmap",
+        "Lincei-0.0.4-x64.exe",
+        "Lincei-0.0.4-x64.exe.blockmap",
       ],
     );
 
@@ -128,7 +128,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "win",
       `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-arm64.exe
+  - url: Lincei-0.0.4-arm64.exe
     sha512: arm64exe
     size: 1
 releaseDate: '2026-03-07T10:32:14.587Z'
@@ -140,7 +140,7 @@ releaseDate: '2026-03-07T10:32:14.587Z'
       "win",
       `version: 0.0.5
 files:
-  - url: Lincei-Studio-0.0.5-x64.exe
+  - url: Lincei-0.0.5-x64.exe
     sha512: x64exe
     size: 1
 releaseDate: '2026-03-07T10:36:07.540Z'
@@ -159,7 +159,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "mac",
       `version: '1.0'
 files:
-  - url: Lincei-Studio-1.0-x64.zip
+  - url: Lincei-1.0-x64.zip
     sha512: zipsha
     size: 1
 releaseName: 'true'
@@ -181,7 +181,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       "win",
       `version: '1.0'
 files:
-  - url: Lincei-Studio-1.0-x64.exe
+  - url: Lincei-1.0-x64.exe
     sha512: exesha
     size: 1
 releaseDate: '2026-03-07T10:36:07.540Z'
@@ -200,26 +200,26 @@ releaseDate: '2026-03-07T10:36:07.540Z'
 it.layer(NodeServices.layer)("merge-update-manifests cli", (it) => {
   const arm64MacManifest = `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-arm64.zip
+  - url: Lincei-0.0.4-arm64.zip
     sha512: arm64zip
     size: 125621344
-  - url: Lincei-Studio-0.0.4-arm64.dmg
+  - url: Lincei-0.0.4-arm64.dmg
     sha512: arm64dmg
     size: 131754935
-path: Lincei-Studio-0.0.4-arm64.zip
+path: Lincei-0.0.4-arm64.zip
 sha512: arm64zip
 releaseDate: '2026-03-07T10:32:14.587Z'
 `;
 
   const x64MacManifest = `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-x64.zip
+  - url: Lincei-0.0.4-x64.zip
     sha512: x64zip
     size: 132000112
-  - url: Lincei-Studio-0.0.4-x64.dmg
+  - url: Lincei-0.0.4-x64.dmg
     sha512: x64dmg
     size: 138148807
-path: Lincei-Studio-0.0.4-x64.zip
+path: Lincei-0.0.4-x64.zip
 sha512: x64zip
 releaseDate: '2026-03-07T10:36:07.540Z'
 `;
@@ -240,8 +240,8 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       yield* runCli(["--platform", "mac", primaryPath, secondaryPath]);
 
       const merged = yield* fs.readFileString(primaryPath);
-      assert.ok(merged.includes("Lincei-Studio-0.0.4-arm64.zip"));
-      assert.ok(merged.includes("Lincei-Studio-0.0.4-x64.zip"));
+      assert.ok(merged.includes("Lincei-0.0.4-arm64.zip"));
+      assert.ok(merged.includes("Lincei-0.0.4-x64.zip"));
       assert.ok(!merged.includes("path:"));
     }),
   );
@@ -261,7 +261,7 @@ releaseDate: '2026-03-07T10:36:07.540Z'
         primaryPath,
         `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-arm64.exe
+  - url: Lincei-0.0.4-arm64.exe
     sha512: arm64exe
     size: 125621344
 releaseDate: '2026-03-07T10:32:14.587Z'
@@ -271,7 +271,7 @@ releaseDate: '2026-03-07T10:32:14.587Z'
         secondaryPath,
         `version: 0.0.4
 files:
-  - url: Lincei-Studio-0.0.4-x64.exe
+  - url: Lincei-0.0.4-x64.exe
     sha512: x64exe
     size: 132000112
 releaseDate: '2026-03-07T10:36:07.540Z'
@@ -281,8 +281,8 @@ releaseDate: '2026-03-07T10:36:07.540Z'
       yield* runCli(["--platform", "win", primaryPath, secondaryPath, outputPath]);
 
       const merged = yield* fs.readFileString(outputPath);
-      assert.ok(merged.includes("Lincei-Studio-0.0.4-arm64.exe"));
-      assert.ok(merged.includes("Lincei-Studio-0.0.4-x64.exe"));
+      assert.ok(merged.includes("Lincei-0.0.4-arm64.exe"));
+      assert.ok(merged.includes("Lincei-0.0.4-x64.exe"));
     }),
   );
 

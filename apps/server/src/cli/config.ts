@@ -39,7 +39,7 @@ export const hostFlag = Flag.string("host").pipe(
   Flag.optional,
 );
 export const baseDirFlag = Flag.string("base-dir").pipe(
-  Flag.withDescription("Base directory path (equivalent to LINCEI_STUDIO_HOME)."),
+  Flag.withDescription("Base directory path (equivalent to LINCEI_HOME)."),
   Flag.optional,
 );
 export const devUrlFlag = Flag.string("dev-url").pipe(
@@ -64,7 +64,7 @@ export const autoBootstrapProjectFromCwdFlag = Flag.boolean("auto-bootstrap-proj
 );
 export const logWebSocketEventsFlag = Flag.boolean("log-websocket-events").pipe(
   Flag.withDescription(
-    "Emit server-side logs for outbound WebSocket push traffic (equivalent to LINCEI_STUDIO_LOG_WS_EVENTS).",
+    "Emit server-side logs for outbound WebSocket push traffic (equivalent to LINCEI_LOG_WS_EVENTS).",
   ),
   Flag.withAlias("log-ws-events"),
   Flag.optional,
@@ -83,109 +83,72 @@ export const tailscaleServePortFlag = Flag.integer("tailscale-serve-port").pipe(
 
 const aliasedOptionalValue = <A>(
   primary: Config.Config<A>,
-  legacy: Config.Config<A>,
+  ...fallbacks: ReadonlyArray<Config.Config<A>>
 ): Config.Config<A | undefined> =>
-  Config.all({
-    primary: primary.pipe(Config.option),
-    legacy: legacy.pipe(Config.option),
-  }).pipe(
-    Config.map(({ primary, legacy }) =>
-      Option.getOrUndefined(Option.orElse(primary, () => legacy)),
+  Config.all([primary, ...fallbacks].map((config) => config.pipe(Config.option))).pipe(
+    Config.map((values) =>
+      Option.getOrUndefined(
+        values.reduce((resolved, value) => Option.orElse(resolved, () => value), Option.none<A>()),
+      ),
     ),
   );
 
-const aliasedWithDefault = <A>(
-  primary: Config.Config<A>,
-  legacy: Config.Config<A>,
+const linceiEnvName = (name: string) => `LINCEI_${name}`;
+const t3CodeEnvName = (name: string) => `T3CODE_${name}`;
+
+const linceiConfig = {
+  boolean: (name: string) =>
+    aliasedOptionalValue(Config.boolean(linceiEnvName(name)), Config.boolean(t3CodeEnvName(name))),
+  int: (name: string) =>
+    aliasedOptionalValue(Config.int(linceiEnvName(name)), Config.int(t3CodeEnvName(name))),
+  logLevel: (name: string) =>
+    aliasedOptionalValue(
+      Config.logLevel(linceiEnvName(name)),
+      Config.logLevel(t3CodeEnvName(name)),
+    ),
+  port: (name: string) =>
+    aliasedOptionalValue(Config.port(linceiEnvName(name)), Config.port(t3CodeEnvName(name))),
+  string: (name: string) =>
+    aliasedOptionalValue(Config.string(linceiEnvName(name)), Config.string(t3CodeEnvName(name))),
+};
+
+const linceiConfigWithDefault = <A>(
+  config: Config.Config<A | undefined>,
   defaultValue: A,
-): Config.Config<A> =>
-  aliasedOptionalValue(primary, legacy).pipe(Config.map((value) => value ?? defaultValue));
+): Config.Config<A> => config.pipe(Config.map((value) => value ?? defaultValue));
 
 const EnvServerConfig = Config.all({
-  logLevel: aliasedWithDefault(
-    Config.logLevel("LINCEI_STUDIO_LOG_LEVEL"),
-    Config.logLevel("T3CODE_LOG_LEVEL"),
-    "Info" as const,
-  ),
-  traceMinLevel: aliasedWithDefault(
-    Config.logLevel("LINCEI_STUDIO_TRACE_MIN_LEVEL"),
-    Config.logLevel("T3CODE_TRACE_MIN_LEVEL"),
-    "Info" as const,
-  ),
-  traceTimingEnabled: aliasedWithDefault(
-    Config.boolean("LINCEI_STUDIO_TRACE_TIMING_ENABLED"),
-    Config.boolean("T3CODE_TRACE_TIMING_ENABLED"),
-    true,
-  ),
-  traceFile: aliasedOptionalValue(
-    Config.string("LINCEI_STUDIO_TRACE_FILE"),
-    Config.string("T3CODE_TRACE_FILE"),
-  ),
-  traceMaxBytes: aliasedWithDefault(
-    Config.int("LINCEI_STUDIO_TRACE_MAX_BYTES"),
-    Config.int("T3CODE_TRACE_MAX_BYTES"),
-    10 * 1024 * 1024,
-  ),
-  traceMaxFiles: aliasedWithDefault(
-    Config.int("LINCEI_STUDIO_TRACE_MAX_FILES"),
-    Config.int("T3CODE_TRACE_MAX_FILES"),
-    10,
-  ),
-  traceBatchWindowMs: aliasedWithDefault(
-    Config.int("LINCEI_STUDIO_TRACE_BATCH_WINDOW_MS"),
-    Config.int("T3CODE_TRACE_BATCH_WINDOW_MS"),
-    200,
-  ),
-  otlpTracesUrl: aliasedOptionalValue(
-    Config.string("LINCEI_STUDIO_OTLP_TRACES_URL"),
-    Config.string("T3CODE_OTLP_TRACES_URL"),
-  ),
-  otlpMetricsUrl: aliasedOptionalValue(
-    Config.string("LINCEI_STUDIO_OTLP_METRICS_URL"),
-    Config.string("T3CODE_OTLP_METRICS_URL"),
-  ),
-  otlpExportIntervalMs: aliasedWithDefault(
-    Config.int("LINCEI_STUDIO_OTLP_EXPORT_INTERVAL_MS"),
-    Config.int("T3CODE_OTLP_EXPORT_INTERVAL_MS"),
+  logLevel: linceiConfigWithDefault(linceiConfig.logLevel("LOG_LEVEL"), "Info" as const),
+  traceMinLevel: linceiConfigWithDefault(linceiConfig.logLevel("TRACE_MIN_LEVEL"), "Info" as const),
+  traceTimingEnabled: linceiConfigWithDefault(linceiConfig.boolean("TRACE_TIMING_ENABLED"), true),
+  traceFile: linceiConfig.string("TRACE_FILE"),
+  traceMaxBytes: linceiConfigWithDefault(linceiConfig.int("TRACE_MAX_BYTES"), 10 * 1024 * 1024),
+  traceMaxFiles: linceiConfigWithDefault(linceiConfig.int("TRACE_MAX_FILES"), 10),
+  traceBatchWindowMs: linceiConfigWithDefault(linceiConfig.int("TRACE_BATCH_WINDOW_MS"), 200),
+  otlpTracesUrl: linceiConfig.string("OTLP_TRACES_URL"),
+  otlpMetricsUrl: linceiConfig.string("OTLP_METRICS_URL"),
+  otlpExportIntervalMs: linceiConfigWithDefault(
+    linceiConfig.int("OTLP_EXPORT_INTERVAL_MS"),
     10_000,
   ),
-  otlpServiceName: aliasedWithDefault(
-    Config.string("LINCEI_STUDIO_OTLP_SERVICE_NAME"),
-    Config.string("T3CODE_OTLP_SERVICE_NAME"),
-    "lincei-studio-server",
+  otlpServiceName: linceiConfigWithDefault(
+    linceiConfig.string("OTLP_SERVICE_NAME"),
+    "lincei-server",
   ),
   mode: aliasedOptionalValue(
-    Config.schema(RuntimeMode, "LINCEI_STUDIO_MODE"),
+    Config.schema(RuntimeMode, "LINCEI_MODE"),
     Config.schema(RuntimeMode, "T3CODE_MODE"),
   ),
-  port: aliasedOptionalValue(Config.port("LINCEI_STUDIO_PORT"), Config.port("T3CODE_PORT")),
-  host: aliasedOptionalValue(Config.string("LINCEI_STUDIO_HOST"), Config.string("T3CODE_HOST")),
-  t3Home: aliasedOptionalValue(Config.string("LINCEI_STUDIO_HOME"), Config.string("T3CODE_HOME")),
+  port: linceiConfig.port("PORT"),
+  host: linceiConfig.string("HOST"),
+  t3Home: linceiConfig.string("HOME"),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  noBrowser: aliasedOptionalValue(
-    Config.boolean("LINCEI_STUDIO_NO_BROWSER"),
-    Config.boolean("T3CODE_NO_BROWSER"),
-  ),
-  bootstrapFd: aliasedOptionalValue(
-    Config.int("LINCEI_STUDIO_BOOTSTRAP_FD"),
-    Config.int("T3CODE_BOOTSTRAP_FD"),
-  ),
-  autoBootstrapProjectFromCwd: aliasedOptionalValue(
-    Config.boolean("LINCEI_STUDIO_AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
-    Config.boolean("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
-  ),
-  logWebSocketEvents: aliasedOptionalValue(
-    Config.boolean("LINCEI_STUDIO_LOG_WS_EVENTS"),
-    Config.boolean("T3CODE_LOG_WS_EVENTS"),
-  ),
-  tailscaleServeEnabled: aliasedOptionalValue(
-    Config.boolean("LINCEI_STUDIO_TAILSCALE_SERVE"),
-    Config.boolean("T3CODE_TAILSCALE_SERVE"),
-  ),
-  tailscaleServePort: aliasedOptionalValue(
-    Config.port("LINCEI_STUDIO_TAILSCALE_SERVE_PORT"),
-    Config.port("T3CODE_TAILSCALE_SERVE_PORT"),
-  ),
+  noBrowser: linceiConfig.boolean("NO_BROWSER"),
+  bootstrapFd: linceiConfig.int("BOOTSTRAP_FD"),
+  autoBootstrapProjectFromCwd: linceiConfig.boolean("AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
+  logWebSocketEvents: linceiConfig.boolean("LOG_WS_EVENTS"),
+  tailscaleServeEnabled: linceiConfig.boolean("TAILSCALE_SERVE"),
+  tailscaleServePort: linceiConfig.port("TAILSCALE_SERVE_PORT"),
 });
 
 export interface CliServerFlags {

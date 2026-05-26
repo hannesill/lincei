@@ -44,12 +44,12 @@ describe("ssh auth", () => {
       const askpassPath = path.join(directory, "ssh-askpass.sh");
       assert.equal(env.SSH_ASKPASS, askpassPath);
       assert.equal(env.SSH_ASKPASS_REQUIRE, "force");
-      assert.equal(env.LINCEI_STUDIO_SSH_AUTH_SECRET, "super-secret");
-      assert.equal(env.DISPLAY, "lincei-studio");
+      assert.equal(env.LINCEI_SSH_AUTH_SECRET, "super-secret");
+      assert.equal(env.DISPLAY, "lincei");
       assert.equal(yield* fs.exists(askpassPath), true);
       assert.include(
         yield* fs.readFileString(askpassPath),
-        'printf "%s\\n" "$LINCEI_STUDIO_SSH_AUTH_SECRET"',
+        'printf "%s\\n" "$LINCEI_SSH_AUTH_SECRET"',
       );
     }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
   );
@@ -57,11 +57,11 @@ describe("ssh auth", () => {
   it.effect("builds a windows askpass launcher pair", () =>
     Effect.gen(function* () {
       const descriptor = yield* buildSshAskpassHelperDescriptor({
-        directory: "C:\\temp\\lincei-studio-ssh-askpass",
+        directory: "C:\\temp\\lincei-ssh-askpass",
         platform: "win32",
       }).pipe(Effect.provide(NodeServices.layer));
 
-      assert.equal(descriptor.launcherPath, "C:\\temp\\lincei-studio-ssh-askpass\\ssh-askpass.cmd");
+      assert.equal(descriptor.launcherPath, "C:\\temp\\lincei-ssh-askpass\\ssh-askpass.cmd");
       assert.deepEqual(
         descriptor.files.map((file) => file.path.split("\\").at(-1)),
         ["ssh-askpass.cmd", "ssh-askpass.ps1"],

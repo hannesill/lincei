@@ -13,9 +13,9 @@ const defaultInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "0.0.22",
-  appPath: "/Applications/Lincei Studio.app/Contents/Resources/app.asar",
+  appPath: "/Applications/Lincei.app/Contents/Resources/app.asar",
   isPackaged: false,
-  resourcesPath: "/Applications/Lincei Studio.app/Contents/Resources",
+  resourcesPath: "/Applications/Lincei.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -42,13 +42,13 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          LINCEI_STUDIO_HOME: " /tmp/lincei ",
-          LINCEI_STUDIO_COMMIT_HASH: " 0123456789abcdef ",
-          LINCEI_STUDIO_PORT: "4949",
+          LINCEI_HOME: " /tmp/lincei ",
+          LINCEI_COMMIT_HASH: " 0123456789abcdef ",
+          LINCEI_PORT: "4949",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
-          LINCEI_STUDIO_DEV_REMOTE_SERVER_ENTRY_PATH: " /remote/server.mjs ",
-          LINCEI_STUDIO_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
-          LINCEI_STUDIO_OTLP_EXPORT_INTERVAL_MS: "2500",
+          LINCEI_DEV_REMOTE_SERVER_ENTRY_PATH: " /remote/server.mjs ",
+          LINCEI_OTLP_TRACES_URL: " http://127.0.0.1:4318/v1/traces ",
+          LINCEI_OTLP_EXPORT_INTERVAL_MS: "2500",
         },
       );
 
@@ -69,7 +69,7 @@ describe("DesktopEnvironment", () => {
       assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
       assert.equal(environment.backendCwd, "/repo");
       assert.equal(environment.appUserModelId, "studio.lincei.app.dev");
-      assert.equal(environment.linuxWmClass, "lincei-studio-dev");
+      assert.equal(environment.linuxWmClass, "lincei-dev");
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
@@ -87,7 +87,7 @@ describe("DesktopEnvironment", () => {
       const environment = yield* makeEnvironment(
         {},
         {
-          LINCEI_STUDIO_HOME: "/tmp/lincei",
+          LINCEI_HOME: "/tmp/lincei",
         },
       );
 

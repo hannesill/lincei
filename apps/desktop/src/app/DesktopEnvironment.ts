@@ -80,7 +80,7 @@ export class DesktopEnvironment extends Context.Service<
   DesktopEnvironmentShape
 >()("t3/desktop/Environment") {}
 
-const APP_BASE_NAME = "Lincei Studio";
+const APP_BASE_NAME = "Lincei";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -151,9 +151,7 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
       : input.platform === "darwin"
         ? path.join(homeDirectory, "Library", "Application Support")
         : Option.getOrElse(config.xdgConfigHome, () => path.join(homeDirectory, ".config"));
-  const baseDir = Option.getOrElse(config.baseDir, () =>
-    path.join(homeDirectory, ".lincei-studio"),
-  );
+  const baseDir = Option.getOrElse(config.baseDir, () => path.join(homeDirectory, ".lincei"));
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
   const branding = resolveDesktopAppBranding({
@@ -162,7 +160,7 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
   });
   const displayName = branding.displayName;
   const stateDir = path.join(baseDir, isDevelopment ? "dev" : "userdata");
-  const userDataDirName = isDevelopment ? "lincei-studio-dev" : "lincei-studio";
+  const userDataDirName = isDevelopment ? "lincei-dev" : "lincei";
   const legacyUserDataDirName = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
   const resourcesPath = input.resourcesPath;
 
@@ -202,8 +200,8 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: isDevelopment ? "studio.lincei.app.dev" : "studio.lincei.app",
-    linuxDesktopEntryName: isDevelopment ? "lincei-studio-dev.desktop" : "lincei-studio.desktop",
-    linuxWmClass: isDevelopment ? "lincei-studio-dev" : "lincei-studio",
+    linuxDesktopEntryName: isDevelopment ? "lincei-dev.desktop" : "lincei.desktop",
+    linuxWmClass: isDevelopment ? "lincei-dev" : "lincei",
     userDataDirName,
     legacyUserDataDirName,
     defaultDesktopSettings: resolveDefaultDesktopSettings(input.appVersion),
@@ -243,7 +241,7 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
       path.join(resourcesPath, "resources", fileName),
       path.join(resourcesPath, fileName),
     ],
-    developmentDockIconPath: path.join(rootDir, "assets", "dev", "lincei-studio-macos-1024.png"),
+    developmentDockIconPath: path.join(rootDir, "assets", "dev", "lincei-macos-1024.png"),
   });
 });
 

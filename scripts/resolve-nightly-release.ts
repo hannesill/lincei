@@ -61,7 +61,7 @@ export const resolveNightlyReleaseMetadata = (
     baseVersion,
     version,
     tag: `v${version}`,
-    name: `Lincei Studio Nightly ${version} (${shortSha})`,
+    name: `Lincei Nightly ${version} (${shortSha})`,
     shortSha,
   };
 };

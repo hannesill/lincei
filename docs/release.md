@@ -45,9 +45,9 @@ Required GitHub Actions secrets:
 Optional GitHub Actions variables:
 
 - `VERCEL_TEAM_SLUG`: overrides the Vercel CLI scope when the team slug is preferred over the `VERCEL_ORG_ID` secret.
-- `LINCEI_STUDIO_WEB_ROUTER_URL`: defaults to `https://app.lincei.studio`.
-- `LINCEI_STUDIO_WEB_LATEST_DOMAIN`: defaults to `latest.app.lincei.studio`.
-- `LINCEI_STUDIO_WEB_NIGHTLY_DOMAIN`: defaults to `nightly.app.lincei.studio`.
+- `LINCEI_WEB_ROUTER_URL`: defaults to `https://app.lincei.studio`.
+- `LINCEI_WEB_LATEST_DOMAIN`: defaults to `latest.app.lincei.studio`.
+- `LINCEI_WEB_NIGHTLY_DOMAIN`: defaults to `nightly.app.lincei.studio`.
 
 Required Vercel domains:
 
@@ -56,9 +56,9 @@ Required Vercel domains:
 - `nightly.app.lincei.studio`: channel alias updated by nightly releases.
 
 The router domain uses `apps/web/vercel.ts` routes. Users opt into a channel by
-visiting `/__lincei-studio/channel?channel=latest` or
-`/__lincei-studio/channel?channel=nightly`; the router stores the
-`lincei_studio_web_channel` cookie and rewrites future requests on `app.lincei.studio` to
+visiting `/__lincei/channel?channel=latest` or
+`/__lincei/channel?channel=nightly`; the router stores the
+`lincei_web_channel` cookie and rewrites future requests on `app.lincei.studio` to
 the matching channel alias.
 
 The release deploy job rewrites release package versions before upload so the
@@ -67,7 +67,7 @@ same deployment to both the `latest` channel and the router domain so the router
 rules stay current. Nightly deploys only alias the `nightly` channel. The job
 also passes `VITE_HOSTED_APP_CHANNEL=latest|nightly`, which renders the hosted
 update track selector in the About panel. Changing the selector navigates
-through `/__lincei-studio/channel` on the router domain so the user's channel cookie is
+through `/__lincei/channel` on the router domain so the user's channel cookie is
 updated before redirecting to the hosted app root.
 
 One-time Vercel dashboard setup:
@@ -106,10 +106,10 @@ One-time Vercel dashboard setup:
   - The desktop UI shows a rocket update button when an update is available; click once to download, click again after download to restart/install.
 - Provider: GitHub Releases (`provider: github`) configured at build time.
 - Repository slug source:
-  - `LINCEI_STUDIO_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
+  - `LINCEI_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
   - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
 - Temporary private-repo auth workaround:
-  - set `LINCEI_STUDIO_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
+  - set `LINCEI_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
   - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)

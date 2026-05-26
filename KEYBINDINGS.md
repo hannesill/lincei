@@ -1,6 +1,6 @@
 # Keybindings
 
-Lincei Studio reads keybindings from:
+Lincei reads keybindings from:
 
 - `~/.t3/keybindings.json`
 

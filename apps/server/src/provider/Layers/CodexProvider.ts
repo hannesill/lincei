@@ -238,8 +238,8 @@ const requestAllCodexModels = Effect.fn("requestAllCodexModels")(function* (
 export function buildCodexInitializeParams(): CodexSchema.V1InitializeParams {
   return {
     clientInfo: {
-      name: "lincei_studio_desktop",
-      title: "Lincei Studio Desktop",
+      name: "lincei_desktop",
+      title: "Lincei Desktop",
       version: packageJson.version,
     },
     capabilities: {
@@ -277,8 +277,8 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
 
   const initialize = yield* client.request("initialize", {
     clientInfo: {
-      name: "lincei_studio_desktop",
-      title: "Lincei Studio Desktop",
+      name: "lincei_desktop",
+      title: "Lincei Desktop",
       version: "0.1.0",
     },
     capabilities: {
@@ -349,7 +349,7 @@ const makePendingCodexProvider = (
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Codex is disabled in Lincei Studio settings.",
+          message: "Codex is disabled in Lincei settings.",
         },
       });
     }
@@ -433,7 +433,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Codex is disabled in Lincei Studio settings.",
+        message: "Codex is disabled in Lincei settings.",
       },
     });
   }

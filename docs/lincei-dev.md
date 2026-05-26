@@ -1,6 +1,6 @@
-# Lincei Studio Desktop Development
+# Lincei Desktop Development
 
-This repository is a local fork of `pingdotgg/t3code` for Lincei Studio.
+This repository is a local fork of `pingdotgg/t3code` for Lincei.
 
 ## Runtime
 
@@ -26,8 +26,8 @@ bun run dev:lincei
 
 This runs the Electron desktop app with an isolated local profile:
 
-- `LINCEI_STUDIO_HOME=.dev-home`
-- `LINCEI_STUDIO_DEV_INSTANCE=lincei-studio`
+- `LINCEI_HOME=.dev-home`
+- `LINCEI_DEV_INSTANCE=lincei`
 
 The renderer is served by Vite with hot reload. Electron main and preload files are rebuilt by `tsdown --watch`, and the Electron process restarts when those built files change.
 

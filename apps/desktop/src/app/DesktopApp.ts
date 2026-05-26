@@ -46,7 +46,7 @@ class DesktopDevelopmentBackendPortRequiredError extends Data.TaggedError(
   "DesktopDevelopmentBackendPortRequiredError",
 )<{}> {
   override get message() {
-    return "LINCEI_STUDIO_PORT is required in desktop development.";
+    return "LINCEI_PORT is required in desktop development.";
   }
 }
 
@@ -118,7 +118,7 @@ const handleFatalStartupError = Effect.fn("desktop.startup.handleFatalStartupErr
   const wasQuitting = yield* Ref.getAndSet(state.quitting, true);
   if (!wasQuitting) {
     yield* electronDialog.showErrorBox(
-      "Lincei Studio failed to start",
+      "Lincei failed to start",
       `Stage: ${stage}\n${message}${detail}`,
     );
   }

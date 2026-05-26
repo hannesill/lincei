@@ -81,7 +81,7 @@ export function buildInitialCursorProviderSnapshot(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Cursor is disabled in Lincei Studio settings.",
+          message: "Cursor is disabled in Lincei settings.",
         },
       });
     }
@@ -1108,7 +1108,7 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Cursor is disabled in Lincei Studio settings.",
+        message: "Cursor is disabled in Lincei settings.",
       },
     });
   }

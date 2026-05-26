@@ -61,7 +61,7 @@ export const make = Effect.fn("makeVcsProjectConfig")(function* () {
   const findConfigPath = Effect.fn("VcsProjectConfig.findConfigPath")(function* (cwd: string) {
     let current = cwd;
     while (true) {
-      for (const configDirectoryName of [".lincei-studio", ".t3code"]) {
+      for (const configDirectoryName of [".lincei", ".t3code"]) {
         const candidate = path.join(current, configDirectoryName, "vcs.json");
         if (yield* fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false))) {
           return candidate;

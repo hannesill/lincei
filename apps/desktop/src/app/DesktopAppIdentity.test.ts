@@ -19,9 +19,9 @@ const defaultEnvironmentInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "1.2.3",
-  appPath: "/Applications/Lincei Studio.app/Contents/Resources/app.asar",
+  appPath: "/Applications/Lincei.app/Contents/Resources/app.asar",
   isPackaged: true,
-  resourcesPath: "/Applications/Lincei Studio.app/Contents/Resources",
+  resourcesPath: "/Applications/Lincei.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -38,7 +38,7 @@ interface ElectronAppCalls {
 const makeElectronAppLayer = (calls: ElectronAppCalls) =>
   Layer.succeed(ElectronApp.ElectronApp, {
     metadata: Effect.die("unexpected metadata read"),
-    name: Effect.succeed("Lincei Studio"),
+    name: Effect.succeed("Lincei"),
     whenReady: Effect.void,
     quit: Effect.void,
     exit: () => Effect.void,
@@ -156,8 +156,8 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         yield* identity.configure;
 
-        assert.deepEqual(calls.setName, ["Lincei Studio (Alpha)"]);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "Lincei Studio (Alpha)");
+        assert.deepEqual(calls.setName, ["Lincei (Alpha)"]);
+        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "Lincei (Alpha)");
         assert.equal(calls.setAboutPanelOptions[0]?.applicationVersion, "1.2.3");
         assert.equal(calls.setAboutPanelOptions[0]?.version, "0123456789ab");
         assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
@@ -166,7 +166,7 @@ describe("DesktopAppIdentity", () => {
         calls,
         environment: {
           env: {
-            LINCEI_STUDIO_COMMIT_HASH: "0123456789abcdef",
+            LINCEI_COMMIT_HASH: "0123456789abcdef",
           },
         },
         pngIconPath: Option.some("/icon.png"),

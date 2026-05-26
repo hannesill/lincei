@@ -45,7 +45,7 @@ import { UnifiedSettings } from "@t3tools/contracts/settings";
 const isRuntimeMode = Schema.is(RuntimeMode);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 
-export const COMPOSER_DRAFT_STORAGE_KEY = "lincei-studio:composer-drafts:v1";
+export const COMPOSER_DRAFT_STORAGE_KEY = "lincei:composer-drafts:v1";
 const COMPOSER_DRAFT_STORAGE_VERSION = 6;
 const DraftThreadEnvModeSchema = Schema.Literals(["local", "worktree"]);
 export type DraftThreadEnvMode = typeof DraftThreadEnvModeSchema.Type;

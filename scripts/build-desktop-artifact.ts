@@ -253,41 +253,35 @@ const aliasedBooleanWithDefault = (primaryName: string, legacyName: string) =>
 
 const BuildEnvConfig = Config.all({
   platform: aliasedOption(
-    Config.schema(BuildPlatform, "LINCEI_STUDIO_DESKTOP_PLATFORM"),
+    Config.schema(BuildPlatform, "LINCEI_DESKTOP_PLATFORM"),
     Config.schema(BuildPlatform, "T3CODE_DESKTOP_PLATFORM"),
   ),
   target: aliasedOption(
-    Config.string("LINCEI_STUDIO_DESKTOP_TARGET"),
+    Config.string("LINCEI_DESKTOP_TARGET"),
     Config.string("T3CODE_DESKTOP_TARGET"),
   ),
   arch: aliasedOption(
-    Config.schema(BuildArch, "LINCEI_STUDIO_DESKTOP_ARCH"),
+    Config.schema(BuildArch, "LINCEI_DESKTOP_ARCH"),
     Config.schema(BuildArch, "T3CODE_DESKTOP_ARCH"),
   ),
   version: aliasedOption(
-    Config.string("LINCEI_STUDIO_DESKTOP_VERSION"),
+    Config.string("LINCEI_DESKTOP_VERSION"),
     Config.string("T3CODE_DESKTOP_VERSION"),
   ),
   outputDir: aliasedOption(
-    Config.string("LINCEI_STUDIO_DESKTOP_OUTPUT_DIR"),
+    Config.string("LINCEI_DESKTOP_OUTPUT_DIR"),
     Config.string("T3CODE_DESKTOP_OUTPUT_DIR"),
   ),
-  skipBuild: aliasedBooleanWithDefault(
-    "LINCEI_STUDIO_DESKTOP_SKIP_BUILD",
-    "T3CODE_DESKTOP_SKIP_BUILD",
-  ),
-  keepStage: aliasedBooleanWithDefault(
-    "LINCEI_STUDIO_DESKTOP_KEEP_STAGE",
-    "T3CODE_DESKTOP_KEEP_STAGE",
-  ),
-  signed: aliasedBooleanWithDefault("LINCEI_STUDIO_DESKTOP_SIGNED", "T3CODE_DESKTOP_SIGNED"),
-  verbose: aliasedBooleanWithDefault("LINCEI_STUDIO_DESKTOP_VERBOSE", "T3CODE_DESKTOP_VERBOSE"),
+  skipBuild: aliasedBooleanWithDefault("LINCEI_DESKTOP_SKIP_BUILD", "T3CODE_DESKTOP_SKIP_BUILD"),
+  keepStage: aliasedBooleanWithDefault("LINCEI_DESKTOP_KEEP_STAGE", "T3CODE_DESKTOP_KEEP_STAGE"),
+  signed: aliasedBooleanWithDefault("LINCEI_DESKTOP_SIGNED", "T3CODE_DESKTOP_SIGNED"),
+  verbose: aliasedBooleanWithDefault("LINCEI_DESKTOP_VERBOSE", "T3CODE_DESKTOP_VERBOSE"),
   mockUpdates: aliasedBooleanWithDefault(
-    "LINCEI_STUDIO_DESKTOP_MOCK_UPDATES",
+    "LINCEI_DESKTOP_MOCK_UPDATES",
     "T3CODE_DESKTOP_MOCK_UPDATES",
   ),
   mockUpdateServerPort: aliasedOption(
-    Config.string("LINCEI_STUDIO_DESKTOP_MOCK_UPDATE_SERVER_PORT"),
+    Config.string("LINCEI_DESKTOP_MOCK_UPDATE_SERVER_PORT"),
     Config.string("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT"),
   ),
 });
@@ -442,7 +436,7 @@ function stageMacIcons(stageResourcesDir: string, sourcePng: string, verbose: bo
     }
 
     const tmpRoot = yield* fs.makeTempDirectoryScoped({
-      prefix: "lincei-studio-icon-build-",
+      prefix: "lincei-icon-build-",
     });
 
     const iconPngPath = path.join(stageResourcesDir, "icon.png");
@@ -553,7 +547,7 @@ function resolveGitHubPublishConfig(updateChannel: "latest" | "nightly"):
     }
   | undefined {
   const rawRepo =
-    process.env.LINCEI_STUDIO_DESKTOP_UPDATE_REPOSITORY?.trim() ||
+    process.env.LINCEI_DESKTOP_UPDATE_REPOSITORY?.trim() ||
     process.env.T3CODE_DESKTOP_UPDATE_REPOSITORY?.trim() ||
     process.env.GITHUB_REPOSITORY?.trim() ||
     "";
@@ -597,8 +591,8 @@ export function resolveMockUpdateServerUrl(mockUpdateServerPort: number | undefi
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "Lincei Studio (Nightly)"
-    : (desktopPackageJson.productName ?? "Lincei Studio");
+    ? "Lincei (Nightly)"
+    : (desktopPackageJson.productName ?? "Lincei");
 }
 
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -612,7 +606,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: "studio.lincei.app",
     productName: resolveDesktopProductName(version),
-    artifactName: "Lincei-Studio-${version}-${arch}.${ext}",
+    artifactName: "Lincei-${version}-${arch}.${ext}",
     directories: {
       buildResources: "apps/desktop/resources",
     },
@@ -641,12 +635,12 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "linux") {
     buildConfig.linux = {
       target: [target],
-      executableName: "lincei-studio",
+      executableName: "lincei",
       icon: "icon.png",
       category: "Development",
       desktop: {
         entry: {
-          StartupWMClass: "lincei-studio",
+          StartupWMClass: "lincei",
         },
       },
     };
@@ -758,7 +752,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
-    prefix: `lincei-studio-desktop-${options.platform}-stage-`,
+    prefix: `lincei-desktop-${options.platform}-stage-`,
   });
 
   const stageAppDir = path.join(stageRoot, "app");
@@ -821,13 +815,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));
 
   const stagePackageJson: StagePackageJson = {
-    name: "lincei-studio",
+    name: "lincei",
     version: appVersion,
     buildVersion: appVersion,
     linceiStudioCommitHash: commitHash,
     private: true,
-    description: "Lincei Studio desktop build",
-    author: "Lincei Studio",
+    description: "Lincei desktop build",
+    author: "Lincei Labs",
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
       options.platform,
@@ -934,62 +928,58 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
 const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   platform: Flag.choice("platform", BuildPlatform.literals).pipe(
-    Flag.withDescription("Build platform (env: LINCEI_STUDIO_DESKTOP_PLATFORM)."),
+    Flag.withDescription("Build platform (env: LINCEI_DESKTOP_PLATFORM)."),
     Flag.optional,
   ),
   target: Flag.string("target").pipe(
     Flag.withDescription(
-      "Artifact target, for example dmg/AppImage/nsis (env: LINCEI_STUDIO_DESKTOP_TARGET).",
+      "Artifact target, for example dmg/AppImage/nsis (env: LINCEI_DESKTOP_TARGET).",
     ),
     Flag.optional,
   ),
   arch: Flag.choice("arch", BuildArch.literals).pipe(
-    Flag.withDescription(
-      "Build arch, for example arm64/x64/universal (env: LINCEI_STUDIO_DESKTOP_ARCH).",
-    ),
+    Flag.withDescription("Build arch, for example arm64/x64/universal (env: LINCEI_DESKTOP_ARCH)."),
     Flag.optional,
   ),
   buildVersion: Flag.string("build-version").pipe(
-    Flag.withDescription("Artifact version metadata (env: LINCEI_STUDIO_DESKTOP_VERSION)."),
+    Flag.withDescription("Artifact version metadata (env: LINCEI_DESKTOP_VERSION)."),
     Flag.optional,
   ),
   outputDir: Flag.string("output-dir").pipe(
-    Flag.withDescription("Output directory for artifacts (env: LINCEI_STUDIO_DESKTOP_OUTPUT_DIR)."),
+    Flag.withDescription("Output directory for artifacts (env: LINCEI_DESKTOP_OUTPUT_DIR)."),
     Flag.optional,
   ),
   skipBuild: Flag.boolean("skip-build").pipe(
     Flag.withDescription(
-      "Skip `bun run build:desktop` and use existing dist artifacts (env: LINCEI_STUDIO_DESKTOP_SKIP_BUILD).",
+      "Skip `bun run build:desktop` and use existing dist artifacts (env: LINCEI_DESKTOP_SKIP_BUILD).",
     ),
     Flag.optional,
   ),
   keepStage: Flag.boolean("keep-stage").pipe(
-    Flag.withDescription("Keep temporary staging files (env: LINCEI_STUDIO_DESKTOP_KEEP_STAGE)."),
+    Flag.withDescription("Keep temporary staging files (env: LINCEI_DESKTOP_KEEP_STAGE)."),
     Flag.optional,
   ),
   signed: Flag.boolean("signed").pipe(
     Flag.withDescription(
-      "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: LINCEI_STUDIO_DESKTOP_SIGNED).",
+      "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: LINCEI_DESKTOP_SIGNED).",
     ),
     Flag.optional,
   ),
   verbose: Flag.boolean("verbose").pipe(
-    Flag.withDescription("Stream subprocess stdout (env: LINCEI_STUDIO_DESKTOP_VERBOSE)."),
+    Flag.withDescription("Stream subprocess stdout (env: LINCEI_DESKTOP_VERBOSE)."),
     Flag.optional,
   ),
   mockUpdates: Flag.boolean("mock-updates").pipe(
-    Flag.withDescription("Enable mock updates (env: LINCEI_STUDIO_DESKTOP_MOCK_UPDATES)."),
+    Flag.withDescription("Enable mock updates (env: LINCEI_DESKTOP_MOCK_UPDATES)."),
     Flag.optional,
   ),
   mockUpdateServerPort: Flag.integer("mock-update-server-port").pipe(
     Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
-    Flag.withDescription(
-      "Mock update server port (env: LINCEI_STUDIO_DESKTOP_MOCK_UPDATE_SERVER_PORT).",
-    ),
+    Flag.withDescription("Mock update server port (env: LINCEI_DESKTOP_MOCK_UPDATE_SERVER_PORT)."),
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for Lincei Studio."),
+  Command.withDescription("Build a desktop artifact for Lincei."),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

@@ -1,13 +1,13 @@
-# Lincei Studio
+# Lincei
 
-Lincei Studio is a minimal web GUI for coding agents (currently Codex, Claude, and OpenCode, more coming soon).
+Lincei is a minimal web GUI for coding agents (currently Codex, Claude, and OpenCode, more coming soon).
 
-Lincei Studio is based on the MIT-licensed T3 Code project.
+Lincei is based on the MIT-licensed T3 Code project.
 
 ## Installation
 
 > [!WARNING]
-> Lincei Studio currently supports Codex, Claude, and OpenCode.
+> Lincei currently supports Codex, Claude, and OpenCode.
 > Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
@@ -22,24 +22,24 @@ npx t3
 
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/lincei-studio/lincei-studio/releases), or from your favorite package registry:
+Install the latest version of the desktop app from [GitHub Releases](https://github.com/lincei/lincei/releases), or from your favorite package registry:
 
 #### Windows (`winget`)
 
 ```bash
-winget install LinceiStudio.LinceiStudio
+winget install LinceiLabs.Lincei
 ```
 
 #### macOS (Homebrew)
 
 ```bash
-brew install --cask lincei-studio
+brew install --cask lincei
 ```
 
 #### Arch Linux (AUR)
 
 ```bash
-yay -S lincei-studio-bin
+yay -S lincei-bin
 ```
 
 ## Some notes

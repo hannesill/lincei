@@ -38,32 +38,32 @@ const aliasedWithDefault = <A>(
   defaultValue: A,
 ) => aliasedOption(primary, legacy).pipe(Config.map(Option.getOrElse(() => defaultValue)));
 
-// TODO(lincei): Set LINCEI_STUDIO_POSTHOG_KEY via env and enable telemetry when ready.
+// TODO(lincei): Set LINCEI_POSTHOG_KEY via env and enable telemetry when ready.
 const DEFAULT_POSTHOG_KEY = "";
 
 const TelemetryEnvConfig = Config.all({
   posthogKey: aliasedWithDefault(
-    Config.string("LINCEI_STUDIO_POSTHOG_KEY"),
+    Config.string("LINCEI_POSTHOG_KEY"),
     Config.string("T3CODE_POSTHOG_KEY"),
     DEFAULT_POSTHOG_KEY,
   ),
   posthogHost: aliasedWithDefault(
-    Config.string("LINCEI_STUDIO_POSTHOG_HOST"),
+    Config.string("LINCEI_POSTHOG_HOST"),
     Config.string("T3CODE_POSTHOG_HOST"),
     "https://us.i.posthog.com",
   ),
   enabled: aliasedWithDefault(
-    Config.boolean("LINCEI_STUDIO_TELEMETRY_ENABLED"),
+    Config.boolean("LINCEI_TELEMETRY_ENABLED"),
     Config.boolean("T3CODE_TELEMETRY_ENABLED"),
     false,
   ),
   flushBatchSize: aliasedWithDefault(
-    Config.number("LINCEI_STUDIO_TELEMETRY_FLUSH_BATCH_SIZE"),
+    Config.number("LINCEI_TELEMETRY_FLUSH_BATCH_SIZE"),
     Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE"),
     20,
   ),
   maxBufferedEvents: aliasedWithDefault(
-    Config.number("LINCEI_STUDIO_TELEMETRY_MAX_BUFFERED_EVENTS"),
+    Config.number("LINCEI_TELEMETRY_MAX_BUFFERED_EVENTS"),
     Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS"),
     1_000,
   ),

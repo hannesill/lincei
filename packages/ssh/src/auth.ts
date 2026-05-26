@@ -58,7 +58,7 @@ export interface SshChildEnvironmentOptions {
   readonly platform?: NodeJS.Platform;
 }
 
-const SSH_ASKPASS_DIR_NAME = "lincei-studio-ssh-askpass";
+const SSH_ASKPASS_DIR_NAME = "lincei-ssh-askpass";
 
 function joinSshAskpassPath(
   directory: string,
@@ -70,14 +70,14 @@ function joinSshAskpassPath(
 }
 
 export const ASKPASS_POSIX_SCRIPT = `#!/bin/sh
-# Invoked by ssh via SSH_ASKPASS when Lincei Studio re-runs ssh with a cached password
+# Invoked by ssh via SSH_ASKPASS when Lincei re-runs ssh with a cached password
 # from the renderer's in-app prompt. We never expose a native dialog here - if
-# LINCEI_STUDIO_SSH_AUTH_SECRET is missing, that's a caller bug and we fail loudly.
-if [ "\${LINCEI_STUDIO_SSH_AUTH_SECRET+x}" = "x" ]; then
-  printf "%s\\n" "$LINCEI_STUDIO_SSH_AUTH_SECRET"
+# LINCEI_SSH_AUTH_SECRET is missing, that's a caller bug and we fail loudly.
+if [ "\${LINCEI_SSH_AUTH_SECRET+x}" = "x" ]; then
+  printf "%s\\n" "$LINCEI_SSH_AUTH_SECRET"
   exit 0
 fi
-printf 'Lincei Studio ssh-askpass invoked without LINCEI_STUDIO_SSH_AUTH_SECRET.\\n' >&2
+printf 'Lincei ssh-askpass invoked without LINCEI_SSH_AUTH_SECRET.\\n' >&2
 exit 1
 `;
 
@@ -85,15 +85,15 @@ export const ASKPASS_WINDOWS_LAUNCHER_SCRIPT = `@echo off\r
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0ssh-askpass.ps1" %*\r
 `;
 
-export const ASKPASS_WINDOWS_SCRIPT = `# Invoked by ssh via SSH_ASKPASS (through ssh-askpass.cmd) when Lincei Studio re-runs\r
+export const ASKPASS_WINDOWS_SCRIPT = `# Invoked by ssh via SSH_ASKPASS (through ssh-askpass.cmd) when Lincei re-runs\r
 # ssh with a cached password from the renderer's in-app prompt. We never expose\r
-# a native dialog here - if LINCEI_STUDIO_SSH_AUTH_SECRET is missing, that's a caller bug\r
+# a native dialog here - if LINCEI_SSH_AUTH_SECRET is missing, that's a caller bug\r
 # and we fail loudly.\r
-if ($null -ne $env:LINCEI_STUDIO_SSH_AUTH_SECRET) {\r
-  [Console]::Out.WriteLine($env:LINCEI_STUDIO_SSH_AUTH_SECRET)\r
+if ($null -ne $env:LINCEI_SSH_AUTH_SECRET) {\r
+  [Console]::Out.WriteLine($env:LINCEI_SSH_AUTH_SECRET)\r
   exit 0\r
 }\r
-[Console]::Error.WriteLine("Lincei Studio ssh-askpass invoked without LINCEI_STUDIO_SSH_AUTH_SECRET.")\r
+[Console]::Error.WriteLine("Lincei ssh-askpass invoked without LINCEI_SSH_AUTH_SECRET.")\r
 exit 1\r
 `;
 
@@ -101,7 +101,7 @@ export const getDefaultSshAskpassDirectory = Effect.fn("ssh/auth.getDefaultSshAs
   function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const parentDirectory = yield* fs.makeTempDirectory({ prefix: "lincei-studio-ssh-runtime-" });
+    const parentDirectory = yield* fs.makeTempDirectory({ prefix: "lincei-ssh-runtime-" });
     return path.join(parentDirectory, SSH_ASKPASS_DIR_NAME);
   },
 );
@@ -192,10 +192,8 @@ export const buildSshChildEnvironment = Effect.fn("ssh/auth.buildSshChildEnviron
     ...baseEnv,
     SSH_ASKPASS: sshAskpass,
     SSH_ASKPASS_REQUIRE: "force",
-    ...(input.authSecret === undefined
-      ? {}
-      : { LINCEI_STUDIO_SSH_AUTH_SECRET: input.authSecret ?? "" }),
-    ...(platform === "win32" || baseEnv.DISPLAY ? {} : { DISPLAY: "lincei-studio" }),
+    ...(input.authSecret === undefined ? {} : { LINCEI_SSH_AUTH_SECRET: input.authSecret ?? "" }),
+    ...(platform === "win32" || baseEnv.DISPLAY ? {} : { DISPLAY: "lincei" }),
   };
 });
 

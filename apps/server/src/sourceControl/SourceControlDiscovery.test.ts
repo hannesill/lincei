@@ -94,7 +94,7 @@ Logged in to github.com account juliusmarminge (keyring)
             account: Option.none(),
             host: Option.some("bitbucket.org"),
             detail: Option.some(
-              "Set LINCEI_STUDIO_BITBUCKET_EMAIL and LINCEI_STUDIO_BITBUCKET_API_TOKEN, or LINCEI_STUDIO_BITBUCKET_ACCESS_TOKEN.",
+              "Set LINCEI_BITBUCKET_EMAIL and LINCEI_BITBUCKET_API_TOKEN, or LINCEI_BITBUCKET_ACCESS_TOKEN.",
             ),
           }),
         },
