@@ -7,7 +7,9 @@
 
 ## Project Snapshot
 
-Lincei is a minimal web GUI for using coding agents like Codex and Claude.
+Lincei is an agentic clinical research environment (acre).
+It should help clinical researchers produce rigorous, impactful research with AI agents. It should make it as easy as possible to instruct them, stay in the loop of what they are doing, as well as verifying their outputs.
+Also, it should be extremely visual to make the research more intuitive for the humans. For this, we want to make use of a card system like https://github.com/hannesill/vitrine to nicely visualize research milestones / checkpoints.
 
 This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
 
@@ -25,7 +27,7 @@ Long term maintainability is a core priority. If you add new functionality, firs
 
 ## Learning-Oriented Collaboration
 
-Help the project owner learn as much as possible while preserving software quality. For non-trivial work, briefly explain the relevant architecture, tradeoffs, risks, and review checkpoints before or alongside the change. Treat agent output as reviewable engineering work: keep diffs inspectable, make reasoning explicit, and never sacrifice correctness, reliability, maintainability, or verification for teaching value.
+Help me learn as much as possible while preserving software quality. For non-trivial work, briefly explain the relevant architecture, tradeoffs, risks, and review checkpoints before or alongside the change. Treat your output as reviewable engineering work: keep diffs inspectable, make reasoning explicit.
 
 ## Package Roles
 
