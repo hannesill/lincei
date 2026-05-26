@@ -167,7 +167,7 @@ it.effect("probes provider authentication without exposing token details", () =>
       if (input.command === "gh" && input.args.join(" ") === "auth status") {
         return Effect.succeed(
           processOutput(`github.com
-Logged in to github.com account octocat (keyring)
+Logged in to github.com account example-user (keyring)
 - Token: gho_************************************
 - Token scopes: 'repo'
 `),
@@ -232,7 +232,7 @@ Logged in to gitlab.com as gitlab-user
         {
           kind: "github",
           auth: "authenticated",
-          account: Option.some("octocat"),
+          account: Option.some("example-user"),
           detail: Option.none(),
         },
         {

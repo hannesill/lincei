@@ -43,14 +43,14 @@ layer("GitLabCli.layer", (it) => {
             JSON.stringify({
               iid: 42,
               title: "Add MR thread creation",
-              web_url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+              web_url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/42",
               target_branch: "main",
               source_branch: "feature/mr-threads",
               state: "opened",
               source_project_id: 101,
               target_project_id: 100,
               source_project: {
-                path_with_namespace: "octocat/t3code",
+                path_with_namespace: "example-fork/example-app",
               },
             }),
           ),
@@ -68,13 +68,13 @@ layer("GitLabCli.layer", (it) => {
       assert.deepStrictEqual(result, {
         number: 42,
         title: "Add MR thread creation",
-        url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+        url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/42",
         baseRefName: "main",
         headRefName: "feature/mr-threads",
         state: "open",
         isCrossRepository: true,
-        headRepositoryNameWithOwner: "octocat/t3code",
-        headRepositoryOwnerLogin: "octocat",
+        headRepositoryNameWithOwner: "example-fork/example-app",
+        headRepositoryOwnerLogin: "example-fork",
       });
       expect(mockedRun).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -96,14 +96,14 @@ layer("GitLabCli.layer", (it) => {
               {
                 iid: 0,
                 title: "invalid",
-                web_url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/0",
+                web_url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/0",
                 target_branch: "main",
                 source_branch: "feature/invalid",
               },
               {
                 iid: 43,
                 title: "  Valid MR  ",
-                web_url: " https://gitlab.com/pingdotgg/t3code/-/merge_requests/43 ",
+                web_url: " https://gitlab.com/example-workspace/example-app/-/merge_requests/43 ",
                 target_branch: " main ",
                 source_branch: " feature/mr-list ",
                 state: "merged",
@@ -126,7 +126,7 @@ layer("GitLabCli.layer", (it) => {
         {
           number: 43,
           title: "Valid MR",
-          url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/43",
+          url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/43",
           baseRefName: "main",
           headRefName: "feature/mr-list",
           state: "merged",
@@ -159,10 +159,10 @@ layer("GitLabCli.layer", (it) => {
           processOutput(
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             JSON.stringify({
-              path_with_namespace: "octocat/t3code",
-              web_url: "https://gitlab.com/octocat/t3code",
-              http_url_to_repo: "https://gitlab.com/octocat/t3code.git",
-              ssh_url_to_repo: "git@gitlab.com:octocat/t3code.git",
+              path_with_namespace: "example-fork/example-app",
+              web_url: "https://gitlab.com/example-fork/example-app",
+              http_url_to_repo: "https://gitlab.com/example-fork/example-app.git",
+              ssh_url_to_repo: "git@gitlab.com:example-fork/example-app.git",
             }),
           ),
         ),
@@ -172,14 +172,14 @@ layer("GitLabCli.layer", (it) => {
         const glab = yield* GitLabCli.GitLabCli;
         return yield* glab.getRepositoryCloneUrls({
           cwd: "/repo",
-          repository: "octocat/t3code",
+          repository: "example-fork/example-app",
         });
       });
 
       assert.deepStrictEqual(result, {
-        nameWithOwner: "octocat/t3code",
-        url: "https://gitlab.com/octocat/t3code",
-        sshUrl: "git@gitlab.com:octocat/t3code.git",
+        nameWithOwner: "example-fork/example-app",
+        url: "https://gitlab.com/example-fork/example-app",
+        sshUrl: "git@gitlab.com:example-fork/example-app.git",
       });
     }),
   );
@@ -237,10 +237,10 @@ layer("GitLabCli.layer", (it) => {
             processOutput(
               // @effect-diagnostics-next-line preferSchemaOverJson:off
               JSON.stringify({
-                path_with_namespace: "octocat/t3code",
-                web_url: "https://gitlab.com/octocat/t3code",
-                http_url_to_repo: "https://gitlab.com/octocat/t3code.git",
-                ssh_url_to_repo: "git@gitlab.com:octocat/t3code.git",
+                path_with_namespace: "example-fork/example-app",
+                web_url: "https://gitlab.com/example-fork/example-app",
+                http_url_to_repo: "https://gitlab.com/example-fork/example-app.git",
+                ssh_url_to_repo: "git@gitlab.com:example-fork/example-app.git",
               }),
             ),
           ),
@@ -249,21 +249,21 @@ layer("GitLabCli.layer", (it) => {
       const glab = yield* GitLabCli.GitLabCli;
       const result = yield* glab.createRepository({
         cwd: "/repo",
-        repository: "octocat/t3code",
+        repository: "example-fork/example-app",
         visibility: "public",
       });
 
       assert.deepStrictEqual(result, {
-        nameWithOwner: "octocat/t3code",
-        url: "https://gitlab.com/octocat/t3code",
-        sshUrl: "git@gitlab.com:octocat/t3code.git",
+        nameWithOwner: "example-fork/example-app",
+        url: "https://gitlab.com/example-fork/example-app",
+        sshUrl: "git@gitlab.com:example-fork/example-app.git",
       });
       expect(mockedRun).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
           command: "glab",
           cwd: "/repo",
-          args: ["api", "namespaces/octocat"],
+          args: ["api", "namespaces/example-fork"],
         }),
       );
       expect(mockedRun).toHaveBeenNthCalledWith(
@@ -277,9 +277,9 @@ layer("GitLabCli.layer", (it) => {
             "POST",
             "projects",
             "--raw-field",
-            "path=t3code",
+            "path=example-app",
             "--raw-field",
-            "name=t3code",
+            "name=example-app",
             "--raw-field",
             "visibility=public",
             "--raw-field",

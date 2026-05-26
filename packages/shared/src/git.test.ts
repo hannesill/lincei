@@ -12,24 +12,24 @@ import {
 
 describe("normalizeGitRemoteUrl", () => {
   it("canonicalizes equivalent GitHub remotes across protocol variants", () => {
-    expect(normalizeGitRemoteUrl("git@github.com:Lincei-Studio/Lincei-Studio.git")).toBe(
-      "github.com/lincei-studio/lincei-studio",
+    expect(normalizeGitRemoteUrl("git@github.com:example-workspace/example-app.git")).toBe(
+      "github.com/example-workspace/example-app",
     );
-    expect(normalizeGitRemoteUrl("https://github.com/Lincei-Studio/Lincei-Studio.git")).toBe(
-      "github.com/lincei-studio/lincei-studio",
+    expect(normalizeGitRemoteUrl("https://github.com/example-workspace/example-app.git")).toBe(
+      "github.com/example-workspace/example-app",
     );
-    expect(normalizeGitRemoteUrl("ssh://git@github.com/Lincei-Studio/Lincei-Studio")).toBe(
-      "github.com/lincei-studio/lincei-studio",
+    expect(normalizeGitRemoteUrl("ssh://git@github.com/example-workspace/example-app")).toBe(
+      "github.com/example-workspace/example-app",
     );
   });
 
   it("preserves nested group paths for providers like GitLab", () => {
-    expect(normalizeGitRemoteUrl("git@gitlab.com:Lincei-Studio/platform/Lincei-Studio.git")).toBe(
-      "gitlab.com/lincei-studio/platform/lincei-studio",
+    expect(normalizeGitRemoteUrl("git@gitlab.com:example-workspace/platform/example-app.git")).toBe(
+      "gitlab.com/example-workspace/platform/example-app",
     );
     expect(
-      normalizeGitRemoteUrl("https://gitlab.com/Lincei-Studio/platform/Lincei-Studio.git"),
-    ).toBe("gitlab.com/lincei-studio/platform/lincei-studio");
+      normalizeGitRemoteUrl("https://gitlab.com/example-workspace/platform/example-app.git"),
+    ).toBe("gitlab.com/example-workspace/platform/example-app");
   });
 
   it("drops explicit ports from URL-shaped remotes", () => {
@@ -45,13 +45,15 @@ describe("normalizeGitRemoteUrl", () => {
 describe("parseGitHubRepositoryNameWithOwnerFromRemoteUrl", () => {
   it("extracts the owner and repository from common GitHub remote shapes", () => {
     expect(
-      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("git@github.com:T3Tools/LinceiStudio.git"),
-    ).toBe("T3Tools/LinceiStudio");
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl(
+        "git@github.com:example-fork/example-app.git",
+      ),
+    ).toBe("example-fork/example-app");
     expect(
       parseGitHubRepositoryNameWithOwnerFromRemoteUrl(
-        "https://github.com/T3Tools/LinceiStudio.git",
+        "https://github.com/example-fork/example-app.git",
       ),
-    ).toBe("T3Tools/LinceiStudio");
+    ).toBe("example-fork/example-app");
   });
 });
 

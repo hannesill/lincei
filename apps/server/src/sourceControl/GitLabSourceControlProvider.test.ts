@@ -19,13 +19,13 @@ it.effect("maps GitLab MR summaries into provider-neutral change requests", () =
         Effect.succeed({
           number: 42,
           title: "Add GitLab provider",
-          url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+          url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/42",
           baseRefName: "main",
           headRefName: "feature/source-control",
           state: "open",
           isCrossRepository: true,
-          headRepositoryNameWithOwner: "fork/t3code",
-          headRepositoryOwnerLogin: "fork",
+          headRepositoryNameWithOwner: "example-fork/example-app",
+          headRepositoryOwnerLogin: "example-fork",
         }),
     });
 
@@ -38,14 +38,14 @@ it.effect("maps GitLab MR summaries into provider-neutral change requests", () =
       provider: "gitlab",
       number: 42,
       title: "Add GitLab provider",
-      url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+      url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/42",
       baseRefName: "main",
       headRefName: "feature/source-control",
       state: "open",
       updatedAt: Option.none(),
       isCrossRepository: true,
-      headRepositoryNameWithOwner: "fork/t3code",
-      headRepositoryOwnerLogin: "fork",
+      headRepositoryNameWithOwner: "example-fork/example-app",
+      headRepositoryOwnerLogin: "example-fork",
     });
   }),
 );

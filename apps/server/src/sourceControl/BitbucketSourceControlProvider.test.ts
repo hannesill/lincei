@@ -19,14 +19,14 @@ it.effect("maps Bitbucket PR summaries into provider-neutral change requests", (
         Effect.succeed({
           number: 42,
           title: "Add Bitbucket provider",
-          url: "https://bitbucket.org/pingdotgg/t3code/pull-requests/42",
+          url: "https://bitbucket.org/example-workspace/example-app/pull-requests/42",
           baseRefName: "main",
           headRefName: "feature/source-control",
           state: "open",
           updatedAt: Option.none(),
           isCrossRepository: true,
-          headRepositoryNameWithOwner: "fork/t3code",
-          headRepositoryOwnerLogin: "fork",
+          headRepositoryNameWithOwner: "example-fork/example-app",
+          headRepositoryOwnerLogin: "example-fork",
         }),
     });
 
@@ -39,14 +39,14 @@ it.effect("maps Bitbucket PR summaries into provider-neutral change requests", (
       provider: "bitbucket",
       number: 42,
       title: "Add Bitbucket provider",
-      url: "https://bitbucket.org/pingdotgg/t3code/pull-requests/42",
+      url: "https://bitbucket.org/example-workspace/example-app/pull-requests/42",
       baseRefName: "main",
       headRefName: "feature/source-control",
       state: "open",
       updatedAt: Option.none(),
       isCrossRepository: true,
-      headRepositoryNameWithOwner: "fork/t3code",
-      headRepositoryOwnerLogin: "fork",
+      headRepositoryNameWithOwner: "example-fork/example-app",
+      headRepositoryOwnerLogin: "example-fork",
     });
   }),
 );

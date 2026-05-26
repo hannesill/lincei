@@ -30,13 +30,13 @@ it.effect("maps GitHub PR summaries into provider-neutral change requests", () =
         Effect.succeed({
           number: 42,
           title: "Add GitHub provider",
-          url: "https://github.com/pingdotgg/t3code/pull/42",
+          url: "https://github.com/example-workspace/example-app/pull/42",
           baseRefName: "main",
           headRefName: "feature/source-control",
           state: "open",
           isCrossRepository: true,
-          headRepositoryNameWithOwner: "fork/t3code",
-          headRepositoryOwnerLogin: "fork",
+          headRepositoryNameWithOwner: "example-fork/example-app",
+          headRepositoryOwnerLogin: "example-fork",
         }),
     });
 
@@ -49,14 +49,14 @@ it.effect("maps GitHub PR summaries into provider-neutral change requests", () =
       provider: "github",
       number: 42,
       title: "Add GitHub provider",
-      url: "https://github.com/pingdotgg/t3code/pull/42",
+      url: "https://github.com/example-workspace/example-app/pull/42",
       baseRefName: "main",
       headRefName: "feature/source-control",
       state: "open",
       updatedAt: Option.none(),
       isCrossRepository: true,
-      headRepositoryNameWithOwner: "fork/t3code",
-      headRepositoryOwnerLogin: "fork",
+      headRepositoryNameWithOwner: "example-fork/example-app",
+      headRepositoryOwnerLogin: "example-fork",
     });
   }),
 );
@@ -73,7 +73,7 @@ it.effect("uses gh json listing for non-open change request state queries", () =
               {
                 number: 7,
                 title: "Merged work",
-                url: "https://github.com/pingdotgg/t3code/pull/7",
+                url: "https://github.com/example-workspace/example-app/pull/7",
                 baseRefName: "main",
                 headRefName: "feature/merged",
                 state: "merged",
