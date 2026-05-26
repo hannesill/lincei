@@ -97,9 +97,9 @@ npx t3 serve --tailscale-serve --tailscale-serve-port 8443
 ```
 
 > Note
-> The GUIs do not currently support adding projects on remote environments.
+> The GUIs do not currently support adding studies on remote environments.
 > For now, use `t3 project ...` on the server machine instead.
-> Full GUI support for remote project management is coming soon.
+> Full GUI support for remote study management is coming soon.
 
 ### Option 3: Desktop-Managed SSH Launch
 
@@ -111,7 +111,7 @@ Use this when you want the desktop app to start or reuse Lincei on another machi
 4. Enter the SSH target, such as `user@example.com`.
 5. Confirm the launch. The desktop app probes the host, starts or reuses a remote T3 server, opens a local port forward, and saves the environment.
 
-After setup, the renderer connects to a local forwarded HTTP/WebSocket endpoint. The remote host still owns the actual T3 server, projects, files, git state, terminals, and provider sessions.
+After setup, the renderer connects to a local forwarded HTTP/WebSocket endpoint. The remote host still owns the actual T3 server, studies, files, git state, terminals, and provider sessions.
 
 SSH launch is a desktop feature because it needs local process and SSH access. Once the environment is paired and saved, it uses the same environment list and connection model as direct LAN, Tailscale, HTTPS, or future tunnel-backed environments.
 

@@ -4406,9 +4406,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await expect.element(palette).toBeInTheDocument();
       await expect
-        .element(palette.getByText("New thread in Project", { exact: true }))
+        .element(palette.getByText("New thread in Study", { exact: true }))
         .toBeInTheDocument();
-      await palette.getByText("New thread in Project", { exact: true }).click();
+      await palette.getByText("New thread in Study", { exact: true }).click();
 
       await waitForURL(
         mounted.router,
@@ -4457,10 +4457,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, projects, and threads...").fill("settings");
+      await page.getByPlaceholder("Search commands, studies, and threads...").fill("settings");
       await expect.element(palette.getByText("Open settings", { exact: true })).toBeInTheDocument();
       await expect
-        .element(palette.getByText("New thread in Project", { exact: true }))
+        .element(palette.getByText("New thread in Study", { exact: true }))
         .not.toBeInTheDocument();
     } finally {
       await mounted.cleanup();
@@ -4472,7 +4472,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-enter" as MessageId,
-        targetText: "command palette add project enter",
+        targetText: "command palette add study enter",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -4530,7 +4530,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add project", { exact: true }).click();
+      await palette.getByText("Add study", { exact: true }).click();
       await palette.getByText("Local folder", { exact: true }).click();
 
       const browseInput = await waitForCommandPaletteInput(ADD_PROJECT_SUBMENU_PLACEHOLDER);
@@ -4578,12 +4578,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("shows clone destination controls after resolving an add project repository", async () => {
+  it("shows clone destination controls after resolving an add study repository", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-remote" as MessageId,
-        targetText: "command palette add project remote",
+        targetText: "command palette add study remote",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -4648,7 +4648,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add project", { exact: true }).click();
+      await palette.getByText("Add study", { exact: true }).click();
       await palette.getByText("GitHub repository", { exact: true }).click();
 
       const repositoryInput = await waitForCommandPaletteInput(
@@ -4698,12 +4698,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("opens add project browse mode from the sidebar add button", async () => {
+  it("opens add study browse mode from the sidebar add button", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-sidebar-add-project-trigger" as MessageId,
-        targetText: "sidebar add project trigger",
+        targetText: "sidebar add study trigger",
       }),
       resolveRpc: (body) => {
         if (body._tag === WS_METHODS.filesystemBrowse) {
@@ -4745,12 +4745,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("starts add project browse mode from the configured base directory", async () => {
+  it("starts add study browse mode from the configured base directory", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-sidebar-add-project-custom-base-dir" as MessageId,
-        targetText: "sidebar add project custom base directory",
+        targetText: "sidebar add study custom base directory",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -5012,7 +5012,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-multi-env" as MessageId,
-        targetText: "command palette add project multi env",
+        targetText: "command palette add study multi env",
       }),
     });
 
@@ -5053,7 +5053,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add project", { exact: true }).click();
+      await palette.getByText("Add study", { exact: true }).click();
       await expect.element(palette.getByText("Environments", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("This device", { exact: true }).first())
@@ -5109,13 +5109,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("picks a local project from the native file manager", async () => {
-    const pickFolder = vi.fn().mockResolvedValue("/Users/julius/Projects/finder-picked");
+    const pickFolder = vi.fn().mockResolvedValue("/Users/julius/Studies/finder-picked");
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-file-manager" as MessageId,
-        targetText: "command palette add project file manager",
+        targetText: "command palette add study file manager",
       }),
       resolveRpc: (body) => {
         if (body._tag === WS_METHODS.filesystemBrowse) {
@@ -5189,7 +5189,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
             type: "project.create",
-            workspaceRoot: "/Users/julius/Projects/finder-picked",
+            workspaceRoot: "/Users/julius/Studies/finder-picked",
             title: "finder-picked",
           });
         },
@@ -5211,7 +5211,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-mod-enter" as MessageId,
-        targetText: "command palette add project mod enter",
+        targetText: "command palette add study mod enter",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -5270,7 +5270,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add project", { exact: true }).click();
+      await palette.getByText("Add study", { exact: true }).click();
       await palette.getByText("Local folder", { exact: true }).click();
 
       const browseInput = await waitForCommandPaletteInput(ADD_PROJECT_SUBMENU_PLACEHOLDER);
@@ -5369,7 +5369,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, projects, and threads...").fill("docs");
+      await page.getByPlaceholder("Search commands, studies, and threads...").fill("docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("Release checklist", { exact: true }))
@@ -5418,7 +5418,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, projects, and threads...").fill("clients/docs");
+      await page.getByPlaceholder("Search commands, studies, and threads...").fill("clients/docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("/repo/clients/docs-portal", { exact: true }))
@@ -5441,7 +5441,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a new thread from project search when no active project thread exists", async () => {
+  it("creates a new thread from project search when no active study thread exists", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithSecondaryProject({ includeSecondaryThread: false }),
@@ -5480,7 +5480,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, projects, and threads...").fill("clients/docs");
+      await page.getByPlaceholder("Search commands, studies, and threads...").fill("clients/docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("/repo/clients/docs-portal", { exact: true }))
@@ -5536,7 +5536,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, projects, and threads...").fill("docs-archive");
+      await page.getByPlaceholder("Search commands, studies, and threads...").fill("docs-archive");
       await expect
         .element(palette.getByText("Archived Docs Notes", { exact: true }))
         .not.toBeInTheDocument();

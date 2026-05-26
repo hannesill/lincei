@@ -956,7 +956,7 @@ function OpenCommandPaletteDialog() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to browse projects",
+          title: "Unable to browse studies",
           description: "No environment is available.",
         }),
       );
@@ -1017,7 +1017,7 @@ function OpenCommandPaletteDialog() {
       title: "New thread in...",
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
-      groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+      groups: [{ value: "projects", label: "Studies", items: projectThreadItems }],
     });
   }
 
@@ -1025,7 +1025,7 @@ function OpenCommandPaletteDialog() {
     kind: "action",
     value: "action:add-project",
     searchTerms: [
-      "add project",
+      "add study",
       "folder",
       "directory",
       "browse",
@@ -1042,7 +1042,7 @@ function OpenCommandPaletteDialog() {
       "url",
       "environment",
     ],
-    title: "Add project",
+    title: "Add study",
     icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
     keepOpen: true,
     run: async () => {
@@ -1082,7 +1082,7 @@ function OpenCommandPaletteDialog() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to add project",
+            title: "Failed to add study",
             description: "Windows-style paths are only supported on Windows.",
           }),
         );
@@ -1093,8 +1093,8 @@ function OpenCommandPaletteDialog() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to add project",
-            description: "Relative paths require an active project.",
+            title: "Failed to add study",
+            description: "Relative paths require an active study.",
           }),
         );
         return;
@@ -1152,7 +1152,7 @@ function OpenCommandPaletteDialog() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to add project",
+            title: "Failed to add study",
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
@@ -1186,7 +1186,7 @@ function OpenCommandPaletteDialog() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to clone project",
+          title: "Unable to clone study",
           description: "Environment API is not available.",
         }),
       );
@@ -1269,7 +1269,7 @@ function OpenCommandPaletteDialog() {
         stackedThreadToast({
           type: "error",
           title: "Clone failed",
-          description: "Relative paths require an active project.",
+          description: "Relative paths require an active study.",
         }),
       );
       return;
@@ -1676,11 +1676,11 @@ function OpenCommandPaletteDialog() {
               : addProjectCloneFlow?.step === "confirm"
                 ? { emptyStateMessage: "Choose a destination path and press Enter to clone." }
                 : relativePathNeedsActiveProject
-                  ? { emptyStateMessage: "Relative paths require an active project." }
+                  ? { emptyStateMessage: "Relative paths require an active study." }
                   : willCreateProjectPath
                     ? {
                         emptyStateMessage:
-                          "Press Enter to create this folder and add it as a project.",
+                          "Press Enter to create this folder and add it as a study.",
                       }
                     : {})}
           />

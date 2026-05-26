@@ -12,7 +12,7 @@ import {
 
 import { isMacPlatform } from "../../lib/utils";
 
-export type KeybindingSource = "Default" | "Custom" | "Project";
+export type KeybindingSource = "Default" | "Custom" | "Study";
 
 export interface KeybindingRow {
   readonly id: string;
@@ -91,7 +91,7 @@ export function parseWhenExpressionDraft(
 
 function sourceForBinding(binding: ResolvedKeybindingRule): KeybindingSource {
   if (String(binding.command).startsWith("script.")) {
-    return "Project";
+    return "Study";
   }
 
   const bindingKey = shortcutToKeybindingInput(binding.shortcut);

@@ -52,6 +52,6 @@ describe("formatProviderSkillInstallSource", () => {
         path: "/workspace/.codex/skills/review-follow-up/SKILL.md",
         scope: "project",
       }),
-    ).toBe("Project");
+    ).toBe("Study");
   });
 });
