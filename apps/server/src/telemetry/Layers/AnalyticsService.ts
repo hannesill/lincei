@@ -38,11 +38,14 @@ const aliasedWithDefault = <A>(
   defaultValue: A,
 ) => aliasedOption(primary, legacy).pipe(Config.map(Option.getOrElse(() => defaultValue)));
 
+// TODO(lincei): Set LINCEI_STUDIO_POSTHOG_KEY via env and enable telemetry when ready.
+const DEFAULT_POSTHOG_KEY = "";
+
 const TelemetryEnvConfig = Config.all({
   posthogKey: aliasedWithDefault(
     Config.string("LINCEI_STUDIO_POSTHOG_KEY"),
     Config.string("T3CODE_POSTHOG_KEY"),
-    "phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m",
+    DEFAULT_POSTHOG_KEY,
   ),
   posthogHost: aliasedWithDefault(
     Config.string("LINCEI_STUDIO_POSTHOG_HOST"),
@@ -52,7 +55,7 @@ const TelemetryEnvConfig = Config.all({
   enabled: aliasedWithDefault(
     Config.boolean("LINCEI_STUDIO_TELEMETRY_ENABLED"),
     Config.boolean("T3CODE_TELEMETRY_ENABLED"),
-    true,
+    false,
   ),
   flushBatchSize: aliasedWithDefault(
     Config.number("LINCEI_STUDIO_TELEMETRY_FLUSH_BATCH_SIZE"),
@@ -66,8 +69,12 @@ const TelemetryEnvConfig = Config.all({
   ),
 });
 
+const isTelemetryActive = (config: { readonly enabled: boolean; readonly posthogKey: string }) =>
+  config.enabled && config.posthogKey.trim().length > 0;
+
 const makeAnalyticsService = Effect.gen(function* () {
   const telemetryConfig = yield* TelemetryEnvConfig.asEffect();
+  const telemetryActive = isTelemetryActive(telemetryConfig);
   const httpClient = yield* HttpClient.HttpClient;
   const serverConfig = yield* ServerConfig;
   const identifier = yield* getTelemetryIdentifier;
@@ -104,7 +111,7 @@ const makeAnalyticsService = Effect.gen(function* () {
   const sendBatch = Effect.fn("sendBatch")(function* (
     events: ReadonlyArray<BufferedAnalyticsEvent>,
   ) {
-    if (!telemetryConfig.enabled || !identifier) return;
+    if (!telemetryActive || !identifier) return;
 
     const payload = {
       api_key: telemetryConfig.posthogKey,
@@ -158,7 +165,7 @@ const makeAnalyticsService = Effect.gen(function* () {
 
   const record: AnalyticsServiceShape["record"] = Effect.fn("record")(
     function* (event, properties) {
-      if (!telemetryConfig.enabled || !identifier) return;
+      if (!telemetryActive || !identifier) return;
 
       const enqueueResult = yield* enqueueBufferedEvent(event, properties);
       if (enqueueResult.dropped) {

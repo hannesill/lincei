@@ -118,4 +118,43 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
       );
     }),
   );
+
+  it.effect("does not flush when telemetry is disabled by default", () =>
+    Effect.gen(function* () {
+      const capturedRequests: Array<RecordedBatchRequest> = [];
+      const serverConfigLayer = ServerConfig.layerTest(process.cwd(), {
+        prefix: "t3-telemetry-disabled-",
+      });
+
+      const telemetryLayer = AnalyticsServiceLayerLive.pipe(Layer.provideMerge(serverConfigLayer));
+      const batchServerLayer = HttpServer.serve(
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          if (request.method !== "POST") {
+            return HttpServerResponse.empty({ status: 404 });
+          }
+
+          const payload = yield* request.json.pipe(
+            Effect.map((body) => body as RecordedBatchRequest["body"]),
+            Effect.catch(() => Effect.succeed(null)),
+          );
+
+          capturedRequests.push({ path: request.url, body: payload });
+
+          return HttpServerResponse.jsonUnsafe({});
+        }),
+      );
+      const runtimeLayer = telemetryLayer.pipe(Layer.provideMerge(NodeHttpServer.layerTest));
+
+      yield* Effect.gen(function* () {
+        yield* Layer.launch(batchServerLayer).pipe(Effect.forkScoped);
+        const analytics = yield* AnalyticsService;
+
+        yield* analytics.record("test.disabled.default");
+        yield* analytics.flush;
+      }).pipe(Effect.provide(runtimeLayer));
+
+      assert.equal(capturedRequests.length, 0);
+    }),
+  );
 });
