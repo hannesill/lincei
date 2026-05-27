@@ -98,6 +98,7 @@ const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
 const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
+const MESSAGE_META_CLASS = "font-sans text-[10px] leading-4 text-muted-foreground/35 tabular-nums";
 
 // ---------------------------------------------------------------------------
 // Props (public API)
@@ -328,10 +329,11 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
   const terminalContexts = displayedUserMessage.contexts;
   const canRevertAgentWork = typeof row.revertTurnCount === "number";
+  const showUserMessageActions = Boolean(displayedUserMessage.copyText) || canRevertAgentWork;
 
   return (
-    <div className="flex justify-end">
-      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+    <div className="group/user-message flex flex-col items-end">
+      <div className="group relative max-w-[80%] rounded-md rounded-br-sm border border-primary bg-primary/90 px-3 py-2 text-primary-foreground">
         {userImages.length > 0 && (
           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
             {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
@@ -369,20 +371,25 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           text={displayedUserMessage.visibleText}
           terminalContexts={terminalContexts}
           skills={ctx.skills}
-          footer={
-            <>
-              <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
-                {displayedUserMessage.copyText && (
-                  <MessageCopyButton text={displayedUserMessage.copyText} />
-                )}
-                {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
-              </div>
-              <p className="text-right text-xs text-muted-foreground/50">
-                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
-              </p>
-            </>
-          }
         />
+      </div>
+      <div className="mt-1 flex items-center justify-end gap-1.5 px-1">
+        {showUserMessageActions ? (
+          <div className="flex items-center gap-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/user-message:opacity-100">
+            {displayedUserMessage.copyText && (
+              <MessageCopyButton
+                text={displayedUserMessage.copyText}
+                size="icon-xs"
+                variant="outline"
+                className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
+              />
+            )}
+            {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
+          </div>
+        ) : null}
+        <p className={cn(MESSAGE_META_CLASS, "text-right")}>
+          {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
+        </p>
       </div>
     </div>
   );
@@ -415,7 +422,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
       {row.showCompletionDivider && (
         <AssistantCompletionDivider completionSummary={row.completionSummary} />
       )}
-      <div className="min-w-0 px-1 py-0.5">
+      <div className="min-w-0 px-1 py-0.5 font-serif">
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -429,7 +436,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
         <div className="mt-1.5 flex items-center gap-2">
-          <p className="text-[10px] text-muted-foreground/30">
+          <p className={MESSAGE_META_CLASS}>
             {row.message.streaming ? (
               <LiveMessageMeta
                 createdAt={row.message.createdAt}
@@ -455,7 +462,7 @@ function AssistantCompletionDivider({ completionSummary }: { completionSummary: 
   return (
     <div className="my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
-      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+      <span className="rounded-sm border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
         {completionSummary ? `Response • ${completionSummary}` : "Response"}
       </span>
       <span className="h-px flex-1 bg-border" />
@@ -820,7 +827,7 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
               aria-expanded={expanded}
               data-scroll-anchor-ignore
               onClick={() => setExpanded((value) => !value)}
-              className="-ml-1 h-6 rounded-md px-1.5 text-xs text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85"
+              className="-ml-1 h-6 rounded-md px-1.5 text-xs text-primary-foreground/72 hover:bg-primary-foreground/12 hover:text-primary-foreground"
             >
               {expanded ? "Show less" : "Show full message"}
             </Button>
@@ -883,7 +890,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
         }
 
         return (
-          <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
+          <div className="whitespace-pre-wrap wrap-break-word text-sm leading-snug text-primary-foreground">
             {inlineNodes}
           </div>
         );
@@ -915,7 +922,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
     }
 
     return (
-      <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
+      <div className="whitespace-pre-wrap wrap-break-word text-sm leading-snug text-primary-foreground">
         {inlineNodes}
       </div>
     );
@@ -926,7 +933,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
   }
 
   return (
-    <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
+    <div className="whitespace-pre-wrap wrap-break-word text-sm leading-snug text-primary-foreground">
       <SkillInlineText text={props.text} skills={props.skills} />
     </div>
   );

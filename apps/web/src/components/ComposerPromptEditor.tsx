@@ -1604,6 +1604,8 @@ function ComposerPromptEditorInner({
     });
   }, []);
 
+  const hasMultipleLogicalLines = value.includes("\n");
+
   return (
     <ComposerTerminalContextActionsContext value={terminalContextActions}>
       <div className="relative">
@@ -1611,7 +1613,8 @@ function ComposerPromptEditorInner({
           contentEditable={
             <ContentEditable
               className={cn(
-                "block max-h-50 min-h-17.5 w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent text-[16px] leading-relaxed text-foreground focus:outline-none sm:text-[14px]",
+                "block max-h-40 w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent text-[16px] leading-normal text-foreground focus:outline-none sm:text-[14px]",
+                hasMultipleLogicalLines ? "min-h-12" : "min-h-8",
                 className,
               )}
               data-testid="composer-editor"
@@ -1622,7 +1625,7 @@ function ComposerPromptEditorInner({
           }
           placeholder={
             terminalContexts.length > 0 ? null : (
-              <div className="pointer-events-none absolute inset-0 text-[16px] leading-relaxed text-muted-foreground/35 sm:text-[14px]">
+              <div className="pointer-events-none absolute inset-0 text-[16px] leading-normal text-muted-foreground/35 sm:text-[14px]">
                 {placeholder}
               </div>
             )
