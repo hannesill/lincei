@@ -576,26 +576,25 @@ describe("resolveSessionStatusPill", () => {
 });
 
 describe("resolveSessionRowClassName", () => {
-  it("uses the darker selected palette when a session is both selected and active", () => {
+  it("uses the sidebar accent palette when a session is both selected and active", () => {
     const className = resolveSessionRowClassName({ isActive: true, isSelected: true });
-    expect(className).toContain("bg-primary/22");
-    expect(className).toContain("hover:bg-primary/26");
-    expect(className).toContain("dark:bg-primary/30");
-    expect(className).not.toContain("bg-accent/85");
+    expect(className).toContain("bg-sidebar-accent");
+    expect(className).toContain("hover:bg-sidebar-accent");
+    expect(className).toContain("text-sidebar-accent-foreground");
+    expect(className).not.toContain("bg-primary");
   });
 
   it("uses selected hover colors for selected sessions", () => {
     const className = resolveSessionRowClassName({ isActive: false, isSelected: true });
-    expect(className).toContain("bg-primary/15");
-    expect(className).toContain("hover:bg-primary/19");
-    expect(className).toContain("dark:bg-primary/22");
-    expect(className).not.toContain("hover:bg-accent");
+    expect(className).toContain("bg-sidebar-accent");
+    expect(className).toContain("hover:bg-sidebar-accent");
+    expect(className).not.toContain("bg-primary");
   });
 
   it("keeps the accent palette for active-only sessions", () => {
     const className = resolveSessionRowClassName({ isActive: true, isSelected: false });
-    expect(className).toContain("bg-accent/85");
-    expect(className).toContain("hover:bg-accent");
+    expect(className).toContain("bg-sidebar-accent");
+    expect(className).toContain("hover:bg-sidebar-accent");
   });
 });
 
@@ -609,8 +608,8 @@ describe("resolveProjectStatusIndicator", () => {
       resolveProjectStatusIndicator([
         {
           label: "Completed",
-          colorClass: "text-emerald-600",
-          dotClass: "bg-emerald-500",
+          colorClass: "text-zinc-600",
+          dotClass: "bg-zinc-500",
           pulse: false,
         },
         {
@@ -634,8 +633,8 @@ describe("resolveProjectStatusIndicator", () => {
       resolveProjectStatusIndicator([
         {
           label: "Completed",
-          colorClass: "text-emerald-600",
-          dotClass: "bg-emerald-500",
+          colorClass: "text-zinc-600",
+          dotClass: "bg-zinc-500",
           pulse: false,
         },
         {

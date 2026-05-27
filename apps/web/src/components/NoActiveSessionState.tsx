@@ -5,8 +5,8 @@ import { cn } from "~/lib/utils";
 
 export function NoActiveSessionState() {
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground dark:bg-background">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-white dark:bg-background">
         <header
           className={cn(
             "border-b border-border px-3 sm:px-5",

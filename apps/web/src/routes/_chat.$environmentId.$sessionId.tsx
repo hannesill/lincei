@@ -245,7 +245,7 @@ function ChatSessionRouteView() {
   if (!shouldUseDiffSheet) {
     return (
       <>
-        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
           <ChatView
             environmentId={sessionRef.environmentId}
             sessionId={sessionRef.sessionId}
@@ -266,7 +266,7 @@ function ChatSessionRouteView() {
 
   return (
     <>
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
         <ChatView
           environmentId={sessionRef.environmentId}
           sessionId={sessionRef.sessionId}

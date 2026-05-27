@@ -108,7 +108,9 @@ function ChatRouteLayout() {
   return (
     <>
       <ChatRouteGlobalShortcuts />
-      <Outlet />
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-white text-foreground dark:bg-background">
+        <Outlet />
+      </div>
     </>
   );
 }

@@ -125,7 +125,7 @@ export function PullRequestSessionDialog({
       case "closed":
         return "text-zinc-500 dark:text-zinc-400/80";
       case "open":
-        return "text-emerald-600 dark:text-emerald-300/90";
+        return "text-zinc-600 dark:text-zinc-300/90";
       default:
         return "text-muted-foreground";
     }

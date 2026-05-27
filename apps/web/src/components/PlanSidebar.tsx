@@ -32,7 +32,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 function stepStatusIcon(status: string): React.ReactNode {
   if (status === "completed") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-zinc-500/15 text-zinc-500">
         <CheckIcon className="size-3" />
       </span>
     );
@@ -213,7 +213,7 @@ const PlanSidebar = memo(function PlanSidebar({
                   className={cn(
                     "flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-200",
                     step.status === "inProgress" && "bg-blue-500/5",
-                    step.status === "completed" && "bg-emerald-500/5",
+                    step.status === "completed" && "bg-zinc-500/5",
                   )}
                 >
                   <div className="mt-0.5">{stepStatusIcon(step.status)}</div>

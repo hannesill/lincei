@@ -41,7 +41,7 @@ export function prStatusIndicator(
   if (pr.state === "open") {
     return {
       label: `${presentation.shortName} open`,
-      colorClass: "text-emerald-600 dark:text-emerald-300/90",
+      colorClass: "text-zinc-600 dark:text-zinc-300/90",
       tooltip: `#${pr.number} ${presentation.shortName} open: ${pr.title}`,
       url: pr.url,
     };
@@ -88,7 +88,7 @@ export function terminalStatusFromRunningIds(
   }
   return {
     label: "Terminal process running",
-    colorClass: "text-teal-600 dark:text-teal-300/90",
+    colorClass: "text-zinc-600 dark:text-zinc-300/90",
     pulse: true,
   };
 }

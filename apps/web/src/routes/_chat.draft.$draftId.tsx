@@ -55,7 +55,7 @@ function DraftChatSessionRouteView() {
 
   if (canonicalSessionRef) {
     return (
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
         <ChatView
           environmentId={canonicalSessionRef.environmentId}
           sessionId={canonicalSessionRef.sessionId}
@@ -70,7 +70,7 @@ function DraftChatSessionRouteView() {
   }
 
   return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
       <ChatView
         draftId={draftId}
         environmentId={draftSession.environmentId}

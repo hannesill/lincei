@@ -634,7 +634,7 @@ const SidebarSessionRow = memo(function SidebarSessionRow(props: SidebarSessionR
                 data-session-selection-safe
                 data-testid={`session-archive-confirm-${session.id}`}
                 aria-label={`Confirm archive ${session.title}`}
-                className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
+                className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-md bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
                 onPointerDown={stopPropagationOnPointerDown}
                 onClick={handleConfirmArchiveClick}
               >
@@ -697,7 +697,7 @@ const SidebarSessionRow = memo(function SidebarSessionRow(props: SidebarSessionR
                 )}
                 {jumpLabel ? (
                   <span
-                    className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
+                    className="inline-flex h-5 items-center rounded-md border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
                     title={jumpLabel}
                   >
                     {jumpLabel}
@@ -866,7 +866,7 @@ const SidebarProjectSessionList = memo(function SidebarProjectSessionList(
             render={showMoreButtonRender}
             data-session-selection-safe
             size="sm"
-            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={() => {
               expandSessionListForProject(projectKey);
             }}
@@ -884,7 +884,7 @@ const SidebarProjectSessionList = memo(function SidebarProjectSessionList(
             render={showLessButtonRender}
             data-session-selection-safe
             size="sm"
-            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={() => {
               collapseSessionListForProject(projectKey);
             }}
@@ -1999,7 +1999,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         <SidebarMenuButton
           ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
           size="sm"
-          className={`gap-2 px-2 py-1.5 pr-8 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
+          className={`gap-2 px-2 py-1.5 pr-8 text-left hover:bg-sidebar-accent group-hover/project-header:bg-sidebar-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
             isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
           }`}
           {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
@@ -2258,7 +2258,7 @@ function LinceiLabsWordmark() {
   return (
     <span
       aria-label="Lincei"
-      className="shrink-0 text-[15px] font-medium leading-none tracking-normal text-foreground"
+      className="shrink-0 text-[18px] font-medium leading-none tracking-normal text-foreground"
       style={{ fontFamily: "Baskerville, Palatino, Georgia, 'Times New Roman', serif" }}
     >
       Lincei
@@ -2309,7 +2309,7 @@ function ProjectSortMenu({
       <Tooltip>
         <TooltipTrigger
           render={
-            <MenuTrigger className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
+            <MenuTrigger className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />
           }
         >
           <ArrowUpDownIcon className="size-3.5" />
@@ -2474,7 +2474,7 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
               to="/"
             >
               <LinceiLabsWordmark />
-              <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+              <span className="rounded-sm bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
                 {APP_STAGE_LABEL}
               </span>
             </Link>
@@ -2514,7 +2514,7 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"
-            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={handleSettingsClick}
           >
             <SettingsIcon className="size-3.5" />
@@ -2639,7 +2639,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               render={
                 <SidebarMenuButton
                   size="sm"
-                  className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:ring-0"
+                  className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-0"
                   data-testid="command-palette-trigger"
                 />
               }
@@ -2701,7 +2701,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     type="button"
                     aria-label="Add study"
                     data-testid="sidebar-add-project-trigger"
-                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     onClick={openAddProject}
                   />
                 }

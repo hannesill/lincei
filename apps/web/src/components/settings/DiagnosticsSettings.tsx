@@ -330,7 +330,7 @@ function ProcessNameCell({
       ) : (
         <span className="size-5 shrink-0" aria-hidden="true" />
       )}
-      <span className="size-1.5 shrink-0 rounded-full bg-emerald-500/80" />
+      <span className="size-1.5 shrink-0 rounded-full bg-zinc-500/80" />
       <Tooltip>
         <TooltipTrigger
           render={<span className="min-w-0 truncate font-medium text-foreground">{name}</span>}
@@ -557,7 +557,7 @@ function ResourceHistoryProcessNameCell({
       <span
         className={cn(
           "size-1.5 shrink-0 rounded-full",
-          process.isServerRoot ? "bg-amber-500/90" : "bg-emerald-500/80",
+          process.isServerRoot ? "bg-amber-500/90" : "bg-zinc-500/80",
         )}
       />
       <Tooltip>
