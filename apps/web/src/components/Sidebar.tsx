@@ -1828,7 +1828,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     if (trimmed.length === 0) {
       toastManager.add({
         type: "warning",
-        title: "Project title cannot be empty",
+        title: "Study title cannot be empty",
       });
       return;
     }
@@ -1843,7 +1843,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Failed to rename project",
+          title: "Failed to rename study",
           description: "Study API unavailable.",
         }),
       );
@@ -1862,7 +1862,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Failed to rename project",
+          title: "Failed to rename study",
           description: error instanceof Error ? error.message : "An error occurred.",
         }),
       );
@@ -2122,14 +2122,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             <DialogDescription>
               {projectRenameTarget
                 ? `Update the title for ${projectRenameTarget.cwd}.`
-                : "Update the project title."}
+                : "Update the study title."}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Project title</span>
+              <span className="text-xs font-medium text-foreground">Study title</span>
               <Input
-                aria-label="Project title"
+                aria-label="Study title"
                 value={projectRenameTitle}
                 onChange={(event) => setProjectRenameTitle(event.target.value)}
                 onKeyDown={(event) => {
@@ -2240,11 +2240,11 @@ const SidebarProjectListRow = memo(function SidebarProjectListRow(props: Sidebar
 function LinceiLabsWordmark() {
   return (
     <span
-      aria-label="Lincei Labs"
+      aria-label="Lincei"
       className="shrink-0 text-[15px] font-medium leading-none tracking-normal text-foreground"
       style={{ fontFamily: "Baskerville, Palatino, Georgia, 'Times New Roman', serif" }}
     >
-      Lincei Labs
+      Lincei
     </span>
   );
 }

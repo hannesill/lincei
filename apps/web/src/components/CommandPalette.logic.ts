@@ -355,10 +355,10 @@ export function getCommandPaletteInputPlaceholder(mode: CommandPaletteMode): str
     case "root":
       return "Search commands, studies, and threads...";
     case "root-browse":
-      return "Enter study path (e.g. ~/projects/my-app)";
+      return "Enter study path (e.g. ~/Studies/heart-failure)";
     case "submenu":
       return "Search...";
     case "submenu-browse":
-      return "Enter path (e.g. ~/projects/my-app)";
+      return "Enter path (e.g. ~/Studies/heart-failure)";
   }
 }

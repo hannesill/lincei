@@ -95,7 +95,7 @@ const PROJECT_LOGICAL_KEY = deriveLogicalProjectKeyFromSettings(
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
 const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
-const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/projects/my-app)";
+const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/Studies/heart-failure)";
 
 interface TestFixture {
   snapshot: OrchestrationReadModel;
@@ -4660,7 +4660,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           const clonePathInput = document.querySelector<HTMLInputElement>(
-            'input[placeholder="Enter path (e.g. ~/projects/my-app)"]',
+            'input[placeholder="Enter path (e.g. ~/Studies/heart-failure)"]',
           );
           expect(clonePathInput?.value).toBe("~/");
           expect(document.body.textContent).toContain("Repository");
@@ -4674,10 +4674,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await page
-        .getByPlaceholder("Enter path (e.g. ~/projects/my-app)")
+        .getByPlaceholder("Enter path (e.g. ~/Studies/heart-failure)")
         .fill("~/Development/t3env");
       const clonePathInput = await waitForCommandPaletteInput(
-        "Enter path (e.g. ~/projects/my-app)",
+        "Enter path (e.g. ~/Studies/heart-failure)",
       );
       await dispatchInputKey(clonePathInput, { key: "Enter" });
 

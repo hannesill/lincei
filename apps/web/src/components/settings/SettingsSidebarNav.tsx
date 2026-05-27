@@ -29,12 +29,15 @@ export type SettingsSectionPath =
   | "/settings/connections"
   | "/settings/archived";
 
-export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
+type SettingsNavItem = {
   label: string;
   to: SettingsSectionPath;
   icon: ComponentType<{ className?: string }>;
-}> = [
+};
+
+export const SETTINGS_NAV_ITEMS: ReadonlyArray<SettingsNavItem> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
+  // Future prototype tabs should slot here: Datasets first, then Skills.
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },

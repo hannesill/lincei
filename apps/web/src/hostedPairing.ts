@@ -1,6 +1,6 @@
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 
-const DEFAULT_HOSTED_APP_URL = "https://app.t3.codes";
+const DEFAULT_HOSTED_APP_URL = "https://app.linceilabs.com";
 
 export interface HostedPairingRequest {
   readonly host: string;

@@ -2,7 +2,7 @@
 
 Lincei reads keybindings from:
 
-- `~/.t3/keybindings.json`
+- `~/.lincei/keybindings.json`
 
 The file must be a JSON array of rules:
 
