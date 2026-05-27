@@ -203,7 +203,13 @@ function proposedPlanIdFromEvent(event: ProviderRuntimeEvent, sessionId: Session
 }
 
 function assistantSegmentBaseKeyFromEvent(event: ProviderRuntimeEvent): string {
-  return String(event.itemId ?? event.turnId ?? event.eventId);
+  if (event.turnId && event.itemId) {
+    return `turn:${event.turnId}:item:${event.itemId}`;
+  }
+  if (event.turnId) {
+    return `turn:${event.turnId}`;
+  }
+  return String(event.itemId ?? event.eventId);
 }
 
 function assistantSegmentMessageId(baseKey: string, segmentIndex: number): MessageId {
@@ -1439,9 +1445,7 @@ const make = Effect.gen(function* () {
       const assistantCompletion =
         event.type === "item.completed" && event.payload.itemType === "assistant_message"
           ? {
-              messageId: MessageId.make(
-                `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-              ),
+              messageId: assistantSegmentMessageId(assistantSegmentBaseKeyFromEvent(event), 0),
               fallbackText: event.payload.detail,
             }
           : undefined;
@@ -1614,8 +1618,9 @@ const make = Effect.gen(function* () {
           if (hasCheckpointForTurn(checkpointContext.checkpoints, turnId)) {
             // Already tracked; no-op.
           } else {
-            const assistantMessageId = MessageId.make(
-              `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
+            const assistantMessageId = assistantSegmentMessageId(
+              assistantSegmentBaseKeyFromEvent(event),
+              0,
             );
             yield* orchestrationEngine.dispatch({
               type: "session.turn.diff.complete",

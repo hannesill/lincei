@@ -717,11 +717,11 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-1" && !message.streaming,
+          message.id === "assistant:turn:turn-2:item:item-1" && !message.streaming,
       ),
     );
     const message = session.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-1",
+      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:turn:turn-2:item:item-1",
     );
     expect(message?.text).toBe("hello world");
     expect(message?.streaming).toBe(false);
@@ -749,11 +749,12 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-no-delta" && !message.streaming,
+          message.id === "assistant:turn:turn-no-delta:item:item-no-delta" && !message.streaming,
       ),
     );
     const message = session.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-no-delta",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id === "assistant:turn:turn-no-delta:item:item-no-delta",
     );
     expect(message?.text).toBe("assistant-only final text");
     expect(message?.streaming).toBe(false);
@@ -1541,7 +1542,8 @@ describe("ProviderRuntimeIngestion", () => {
     );
     expect(
       midSession?.messages.some(
-        (message: ProviderRuntimeTestMessage) => message.id === "assistant:item-buffered",
+        (message: ProviderRuntimeTestMessage) =>
+          message.id === "assistant:turn:turn-buffered:item:item-buffered",
       ),
     ).toBe(false);
 
@@ -1562,11 +1564,12 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffered" && !message.streaming,
+          message.id === "assistant:turn:turn-buffered:item:item-buffered" && !message.streaming,
       ),
     );
     const message = session.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-buffered",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id === "assistant:turn:turn-buffered:item:item-buffered",
     );
     expect(message?.text).toBe("buffer me");
     expect(message?.streaming).toBe(false);
@@ -1621,13 +1624,15 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffered-request-flush" &&
+          message.id ===
+            "assistant:turn:turn-buffered-request-flush:item:item-buffered-request-flush" &&
           !message.streaming &&
           message.text === "visible before approval",
       ),
     );
     const message = session.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-buffered-request-flush",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id === "assistant:turn:turn-buffered-request-flush:item:item-buffered-request-flush",
     );
     expect(message?.streaming).toBe(false);
   });
@@ -1687,14 +1692,16 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffered-user-input-flush" &&
+          message.id ===
+            "assistant:turn:turn-buffered-user-input-flush:item:item-buffered-user-input-flush" &&
           !message.streaming &&
           message.text === "visible before user input",
       ),
     );
     const message = session.messages.find(
       (entry: ProviderRuntimeTestMessage) =>
-        entry.id === "assistant:item-buffered-user-input-flush",
+        entry.id ===
+        "assistant:turn:turn-buffered-user-input-flush:item:item-buffered-user-input-flush",
     );
     expect(message?.streaming).toBe(false);
   });
@@ -1754,7 +1761,8 @@ describe("ProviderRuntimeIngestion", () => {
     expect(
       session.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffered-whitespace-request",
+          message.id ===
+          "assistant:turn:turn-buffered-whitespace-request:item:item-buffered-whitespace-request",
       ),
     ).toBe(false);
   });
@@ -1811,7 +1819,8 @@ describe("ProviderRuntimeIngestion", () => {
     await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffered-request-append" &&
+          message.id ===
+            "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append" &&
           !message.streaming &&
           message.text === "first half",
       ),
@@ -1847,17 +1856,21 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffered-request-append:segment:1" &&
+          message.id ===
+            "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append:segment:1" &&
           !message.streaming &&
           message.text === " second half",
       ),
     );
     const firstMessage = session.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-buffered-request-append",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id ===
+        "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append",
     );
     const resumedMessage = session.messages.find(
       (entry: ProviderRuntimeTestMessage) =>
-        entry.id === "assistant:item-buffered-request-append:segment:1",
+        entry.id ===
+        "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append:segment:1",
     );
     expect(firstMessage?.text).toBe("first half");
     expect(firstMessage?.streaming).toBe(false);
@@ -1872,7 +1885,9 @@ describe("ProviderRuntimeIngestion", () => {
     const assistantEvents = events.filter(
       (event): event is Extract<(typeof events)[number], { type: "session.message-sent" }> =>
         event.type === "session.message-sent" &&
-        event.payload.messageId.startsWith("assistant:item-buffered-request-append"),
+        event.payload.messageId.startsWith(
+          "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append",
+        ),
     );
     expect(assistantEvents).toHaveLength(4);
     expect(assistantEvents[0]?.payload.streaming).toBe(true);
@@ -1880,12 +1895,12 @@ describe("ProviderRuntimeIngestion", () => {
     expect(assistantEvents[1]?.payload.streaming).toBe(false);
     expect(assistantEvents[1]?.payload.text).toBe("");
     expect(assistantEvents[2]?.payload.messageId).toBe(
-      "assistant:item-buffered-request-append:segment:1",
+      "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append:segment:1",
     );
     expect(assistantEvents[2]?.payload.streaming).toBe(true);
     expect(assistantEvents[2]?.payload.text).toBe(" second half");
     expect(assistantEvents[3]?.payload.messageId).toBe(
-      "assistant:item-buffered-request-append:segment:1",
+      "assistant:turn:turn-buffered-request-append:item:item-buffered-request-append:segment:1",
     );
     expect(assistantEvents[3]?.payload.streaming).toBe(false);
     expect(assistantEvents[3]?.payload.text).toBe("");
@@ -1943,7 +1958,8 @@ describe("ProviderRuntimeIngestion", () => {
     await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-streaming-request-segment" &&
+          message.id ===
+            "assistant:turn:turn-streaming-request-segment:item:item-streaming-request-segment" &&
           !message.streaming &&
           message.text === "before approval",
       ),
@@ -1979,7 +1995,8 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-streaming-request-segment:segment:1" &&
+          message.id ===
+            "assistant:turn:turn-streaming-request-segment:item:item-streaming-request-segment:segment:1" &&
           !message.streaming &&
           message.text === " after approval",
       ),
@@ -1987,13 +2004,15 @@ describe("ProviderRuntimeIngestion", () => {
     expect(
       session.messages.find(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-streaming-request-segment",
+          message.id ===
+          "assistant:turn:turn-streaming-request-segment:item:item-streaming-request-segment",
       )?.text,
     ).toBe("before approval");
     expect(
       session.messages.find(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-streaming-request-segment:segment:1",
+          message.id ===
+          "assistant:turn:turn-streaming-request-segment:item:item-streaming-request-segment:segment:1",
       )?.text,
     ).toBe(" after approval");
   });
@@ -2052,13 +2071,14 @@ describe("ProviderRuntimeIngestion", () => {
     const liveSession = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-streaming-mode" &&
+          message.id === "assistant:turn:turn-streaming-mode:item:item-streaming-mode" &&
           message.streaming &&
           message.text === "hello live",
       ),
     );
     const liveMessage = liveSession.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-streaming-mode",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id === "assistant:turn:turn-streaming-mode:item:item-streaming-mode",
     );
     expect(liveMessage?.streaming).toBe(true);
 
@@ -2080,11 +2100,13 @@ describe("ProviderRuntimeIngestion", () => {
     const finalSession = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-streaming-mode" && !message.streaming,
+          message.id === "assistant:turn:turn-streaming-mode:item:item-streaming-mode" &&
+          !message.streaming,
       ),
     );
     const finalMessage = finalSession.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-streaming-mode",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id === "assistant:turn:turn-streaming-mode:item:item-streaming-mode",
     );
     expect(finalMessage?.text).toBe("hello live");
     expect(finalMessage?.streaming).toBe(false);
@@ -2140,11 +2162,13 @@ describe("ProviderRuntimeIngestion", () => {
     const session = await waitForSession(harness.readModel, (entry) =>
       entry.messages.some(
         (message: ProviderRuntimeTestMessage) =>
-          message.id === "assistant:item-buffer-spill" && !message.streaming,
+          message.id === "assistant:turn:turn-buffer-spill:item:item-buffer-spill" &&
+          !message.streaming,
       ),
     );
     const message = session.messages.find(
-      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-buffer-spill",
+      (entry: ProviderRuntimeTestMessage) =>
+        entry.id === "assistant:turn:turn-buffer-spill:item:item-buffer-spill",
     );
     expect(message?.text.length).toBe(oversizedText.length);
     expect(message?.text).toBe(oversizedText);
@@ -2216,7 +2240,8 @@ describe("ProviderRuntimeIngestion", () => {
         session.session?.activeTurnId === null &&
         session.messages.some(
           (message: ProviderRuntimeTestMessage) =>
-            message.id === "assistant:item-complete-dedup" && !message.streaming,
+            message.id === "assistant:turn:turn-complete-dedup:item:item-complete-dedup" &&
+            !message.streaming,
         ),
     );
 
@@ -2230,11 +2255,143 @@ describe("ProviderRuntimeIngestion", () => {
         return false;
       }
       return (
-        event.payload.messageId === "assistant:item-complete-dedup" &&
+        event.payload.messageId === "assistant:turn:turn-complete-dedup:item:item-complete-dedup" &&
         event.payload.streaming === false
       );
     });
     expect(completionEvents).toHaveLength(1);
+  });
+
+  it("keeps assistant messages separate when a provider reuses item ids across turns", async () => {
+    const harness = await createHarness();
+    const firstAt = "2026-01-01T00:00:00.000Z";
+    const secondAt = "2026-01-01T00:00:01.000Z";
+    const reusedItemId = asItemId("assistant-reused-item");
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-reused-item-turn-one-started"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: firstAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-one"),
+    });
+    await waitForSession(
+      harness.readModel,
+      (session) =>
+        session.session?.status === "running" &&
+        session.session?.activeTurnId === "turn-reused-item-one",
+    );
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-reused-item-turn-one-delta"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: firstAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-one"),
+      itemId: reusedItemId,
+      payload: {
+        streamKind: "assistant_text",
+        delta: "first response",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-reused-item-turn-one-completed"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: firstAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-one"),
+      itemId: reusedItemId,
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-reused-item-turn-one-turn-completed"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: firstAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-one"),
+      payload: {
+        state: "completed",
+      },
+    });
+    await waitForSession(
+      harness.readModel,
+      (session) => session.session?.status === "ready" && session.session?.activeTurnId === null,
+    );
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-reused-item-turn-two-started"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: secondAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-two"),
+    });
+    await waitForSession(
+      harness.readModel,
+      (session) =>
+        session.session?.status === "running" &&
+        session.session?.activeTurnId === "turn-reused-item-two",
+    );
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-reused-item-turn-two-delta"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: secondAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-two"),
+      itemId: reusedItemId,
+      payload: {
+        streamKind: "assistant_text",
+        delta: "second response",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-reused-item-turn-two-completed"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: secondAt,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-reused-item-two"),
+      itemId: reusedItemId,
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+
+    const firstMessageId = "assistant:turn:turn-reused-item-one:item:assistant-reused-item";
+    const secondMessageId = "assistant:turn:turn-reused-item-two:item:assistant-reused-item";
+    const session = await waitForSession(
+      harness.readModel,
+      (entry) =>
+        entry.messages.some(
+          (message: ProviderRuntimeTestMessage) =>
+            message.id === firstMessageId &&
+            message.text === "first response" &&
+            !message.streaming,
+        ) &&
+        entry.messages.some(
+          (message: ProviderRuntimeTestMessage) =>
+            message.id === secondMessageId &&
+            message.text === "second response" &&
+            !message.streaming,
+        ),
+    );
+
+    expect(
+      session.messages.find((message: ProviderRuntimeTestMessage) => message.id === firstMessageId)
+        ?.createdAt,
+    ).toBe(firstAt);
+    expect(
+      session.messages.find((message: ProviderRuntimeTestMessage) => message.id === secondMessageId)
+        ?.createdAt,
+    ).toBe(secondAt);
   });
 
   it("maps canonical request events into approval activities with requestKind", async () => {
@@ -2587,7 +2744,7 @@ describe("ProviderRuntimeIngestion", () => {
       (entry: ProviderRuntimeTestCheckpoint) => entry.turnId === "turn-p1",
     );
     expect(checkpoint?.status).toBe("missing");
-    expect(checkpoint?.assistantMessageId).toBe("assistant:item-p1-assistant");
+    expect(checkpoint?.assistantMessageId).toBe("assistant:turn:turn-p1:item:item-p1-assistant");
     expect(checkpoint?.checkpointRef).toBe("provider-diff:evt-turn-diff-updated");
   });
 

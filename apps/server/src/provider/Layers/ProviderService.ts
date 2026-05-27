@@ -72,6 +72,15 @@ const ProviderRollbackConversationInput = Schema.Struct({
   numTurns: NonNegativeInt,
 });
 
+function isProviderAdapterSessionNotFoundError(
+  error: ProviderAdapterError,
+): error is Extract<
+  ProviderAdapterError,
+  { readonly _tag: "ProviderAdapterSessionNotFoundError" }
+> {
+  return error._tag === "ProviderAdapterSessionNotFoundError";
+}
+
 function toValidationError(
   operation: string,
   issue: string,
@@ -439,6 +448,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     if (hasRequestedSession) {
       return {
         adapter,
+        binding,
         instanceId,
         sessionId: input.sessionId,
         isActive: true,
@@ -448,6 +458,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     if (!input.allowRecovery) {
       return {
         adapter,
+        binding,
         instanceId,
         sessionId: input.sessionId,
         isActive: false,
@@ -460,6 +471,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     });
     return {
       adapter: recovered.adapter,
+      binding,
       instanceId,
       sessionId: input.sessionId,
       isActive: true,
@@ -657,10 +669,20 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.kind": routed.adapter.provider,
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
-      const turn = yield* routed.adapter.sendTurn(input);
+      const sendVia = (adapter: ProviderAdapterShape<ProviderAdapterError>) =>
+        adapter.sendTurn(input).pipe(Effect.map((turn) => ({ adapter, turn })));
+      const sent = yield* sendVia(routed.adapter).pipe(
+        Effect.catchIf(isProviderAdapterSessionNotFoundError, () =>
+          recoverSessionForSession({
+            binding: routed.binding,
+            operation: "ProviderService.sendTurn",
+          }).pipe(Effect.flatMap((recovered) => sendVia(recovered.adapter))),
+        ),
+      );
+      const turn = sent.turn;
       yield* directory.upsert({
         sessionId: input.sessionId,
-        provider: routed.adapter.provider,
+        provider: sent.adapter.provider,
         providerInstanceId: routed.instanceId,
         status: "running",
         ...(turn.resumeCursor !== undefined ? { resumeCursor: turn.resumeCursor } : {}),
@@ -672,7 +694,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         },
       });
       yield* analytics.record("provider.turn.sent", {
-        provider: routed.adapter.provider,
+        provider: sent.adapter.provider,
         model: input.modelSelection?.model,
         interactionMode: input.interactionMode,
         attachmentCount: input.attachments.length,

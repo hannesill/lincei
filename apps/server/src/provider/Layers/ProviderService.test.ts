@@ -238,11 +238,15 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
     }
     sessions.set(sessionId, update(existing));
   };
+  const removeSession = (sessionId: SessionId): void => {
+    sessions.delete(sessionId);
+  };
 
   return {
     adapter,
     emit,
     updateSession,
+    removeSession,
     startSession,
     sendTurn,
     interruptTurn,
@@ -907,6 +911,57 @@ routing.layer("ProviderServiceLive routing", (it) => {
       assert.equal(routing.codex.rollbackSession.mock.calls.length, 1);
       const rollbackCall = routing.codex.rollbackSession.mock.calls[0];
       assert.equal(rollbackCall?.[1], 1);
+    }),
+  );
+
+  it.effect("recovers and retries when an adapter session disappears during send", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+
+      const initial = yield* provider.startSession(asSessionId("session-send-race"), {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        sessionId: asSessionId("session-send-race"),
+        cwd: "/tmp/project-send-race",
+        runtimeMode: "full-access",
+      });
+      routing.codex.startSession.mockClear();
+      routing.codex.sendTurn.mockClear();
+      routing.codex.sendTurn.mockImplementationOnce((input: ProviderSendTurnInput) =>
+        Effect.sync(() => {
+          routing.codex.removeSession(input.sessionId);
+        }).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new ProviderAdapterSessionNotFoundError({
+                provider: CODEX_DRIVER,
+                sessionId: input.sessionId,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      yield* provider.sendTurn({
+        sessionId: initial.sessionId,
+        input: "after adapter restart",
+        attachments: [],
+      });
+
+      assert.equal(routing.codex.startSession.mock.calls.length, 1);
+      const resumedStartInput = routing.codex.startSession.mock.calls[0]?.[0];
+      assert.equal(typeof resumedStartInput === "object" && resumedStartInput !== null, true);
+      if (resumedStartInput && typeof resumedStartInput === "object") {
+        const startPayload = resumedStartInput as {
+          cwd?: string;
+          resumeCursor?: unknown;
+          sessionId?: string;
+        };
+        assert.equal(startPayload.cwd, "/tmp/project-send-race");
+        assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
+        assert.equal(startPayload.sessionId, initial.sessionId);
+      }
+      assert.equal(routing.codex.sendTurn.mock.calls.length, 2);
     }),
   );
 
