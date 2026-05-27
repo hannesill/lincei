@@ -211,7 +211,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
     ),
   );
 
-  it.effect("generates thread titles through Cursor ACP text generation", () =>
+  it.effect("generates session titles through Cursor ACP text generation", () =>
     withFakeAcpAgent(
       {
         T3_ACP_PROMPT_RESPONSE_TEXT: JSON.stringify({
@@ -220,7 +220,7 @@ it.layer(CursorTextGenerationTestLayer)("CursorTextGeneration", (it) => {
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
+          const generated = yield* textGeneration.generateSessionTitle({
             cwd: process.cwd(),
             message: "Fix the reconnect spinner after a resumed session.",
             modelSelection: {

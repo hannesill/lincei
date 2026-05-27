@@ -14,7 +14,7 @@ describe("AcpAdapterSupport", () => {
   it("maps ACP request errors to provider adapter request errors", () => {
     const error = mapAcpToAdapterError(
       ProviderDriverKind.make("cursor"),
-      "thread-1" as never,
+      "session-1" as never,
       "session/prompt",
       new EffectAcpErrors.AcpRequestError({
         code: -32602,

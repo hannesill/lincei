@@ -76,11 +76,11 @@ Claude HOME path: ~/.claude_personal_home
 Use the email shown in Settings to confirm each provider is using the intended account. Emails are
 blurred by default; click the blurred email to reveal it.
 
-## Can I Switch Claude Accounts In An Existing Thread?
+## Can I Switch Claude Accounts In An Existing Session?
 
 Usually, no.
 
-Lincei only offers Claude providers that use the same Claude home for an existing thread. A
+Lincei only offers Claude providers that use the same Claude home for an existing session. A
 different Claude home is treated as a different Claude environment.
 
 This is different from the recommended Codex setup. Claude Code keeps account and local state across

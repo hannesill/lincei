@@ -18,13 +18,13 @@ Use explicit Zod schemas for localStorage state parsing and migration.
 
 1. Add schema module: `apps/renderer/src/persistenceSchema.ts`
    - Persisted payload versions (`v1`, `v2`)
-   - Thread/message/project schemas
-2. Replace `sanitizeProjects/sanitizeThreads/sanitizeMessages` with schema parsing + transforms.
+   - Session/message/project schemas
+2. Replace `sanitizeProjects/sanitizeSessions/sanitizeMessages` with schema parsing + transforms.
 3. Keep migration logic explicit (legacy model migration and key migration).
 4. Add tests for:
    - Invalid payload fallback to initial state
    - Legacy payload migration
-   - Unknown thread/project references filtered
+   - Unknown session/project references filtered
 
 ## Risks
 

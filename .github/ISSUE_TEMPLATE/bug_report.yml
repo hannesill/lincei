@@ -54,7 +54,7 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      placeholder: The thread should resume normally and accept the new message.
+      placeholder: The session should resume normally and accept the new message.
     validations:
       required: true
 

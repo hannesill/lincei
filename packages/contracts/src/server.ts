@@ -7,7 +7,7 @@ import {
   NonNegativeInt,
   PositiveInt,
   ProjectId,
-  ThreadId,
+  SessionId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import {
@@ -98,7 +98,7 @@ export type ServerProviderSkill = typeof ServerProviderSkill.Type;
  *    up. Default for legacy snapshots produced from the closed
  *    `ServerSettings.providers` map.
  *  - `unavailable` — the user's `ServerSettings.providerInstances` (or a
- *    persisted thread / session binding) references a driver this build
+ *    persisted session / session binding) references a driver this build
  *    doesn't ship. Common after rolling back from a fork or PR branch
  *    that introduced a new driver. The snapshot is preserved so the UI
  *    can render "missing driver" affordances and so the data round-trips
@@ -197,7 +197,7 @@ export type ServerProviders = typeof ServerProviders.Type;
 /**
  * Treat the optional `availability` as "available" when absent. This is
  * the rule legacy producers (which omit the field) and new producers
- * (which set it explicitly) agree on so consumers never have to thread
+ * (which set it explicitly) agree on so consumers never have to session
  * `?? "available"` defaults through their code paths.
  */
 export const isProviderAvailable = (snapshot: ServerProvider): boolean =>
@@ -508,7 +508,7 @@ export const ServerLifecycleWelcomePayload = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   projectName: TrimmedNonEmptyString,
   bootstrapProjectId: Schema.optional(ProjectId),
-  bootstrapThreadId: Schema.optional(ThreadId),
+  bootstrapSessionId: Schema.optional(SessionId),
 });
 export type ServerLifecycleWelcomePayload = typeof ServerLifecycleWelcomePayload.Type;
 

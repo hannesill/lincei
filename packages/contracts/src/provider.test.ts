@@ -23,7 +23,7 @@ function getOptionValue(
 describe("ProviderSessionStartInput", () => {
   it("accepts codex-compatible payloads", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       provider: "codex",
       cwd: "/tmp/workspace",
       modelSelection: {
@@ -46,7 +46,7 @@ describe("ProviderSessionStartInput", () => {
   it("rejects payloads without runtime mode", () => {
     expect(() =>
       decodeProviderSessionStartInput({
-        threadId: "thread-1",
+        sessionId: "session-1",
         provider: "codex",
       }),
     ).toThrow();
@@ -54,7 +54,7 @@ describe("ProviderSessionStartInput", () => {
 
   it("accepts claude runtime knobs", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       provider: "claudeAgent",
       cwd: "/tmp/workspace",
       modelSelection: {
@@ -79,7 +79,7 @@ describe("ProviderSessionStartInput", () => {
 
   it("accepts cursor provider", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       provider: "cursor",
       cwd: "/tmp/workspace",
       runtimeMode: "full-access",
@@ -97,7 +97,7 @@ describe("ProviderSessionStartInput", () => {
 
   it("accepts fork-provided driver kinds as branded slugs", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       provider: "ollama",
       providerInstanceId: "ollama_local",
       cwd: "/tmp/workspace",
@@ -117,7 +117,7 @@ describe("ProviderSessionStartInput", () => {
 describe("ProviderSendTurnInput", () => {
   it("accepts codex modelSelection", () => {
     const parsed = decodeProviderSendTurnInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       modelSelection: {
         provider: "codex",
         model: "gpt-5.3-codex",
@@ -136,7 +136,7 @@ describe("ProviderSendTurnInput", () => {
 
   it("accepts claude modelSelection including ultrathink", () => {
     const parsed = decodeProviderSendTurnInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-sonnet-4-6",
@@ -156,7 +156,7 @@ describe("ProviderSendTurnInput", () => {
 describe("providerInstanceId routing key (slice-2 invariant)", () => {
   it("decodes a ProviderSessionStartInput without providerInstanceId (legacy producer)", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       provider: "codex",
       runtimeMode: "full-access",
     });
@@ -165,7 +165,7 @@ describe("providerInstanceId routing key (slice-2 invariant)", () => {
 
   it("decodes a ProviderSessionStartInput with providerInstanceId (post-migration producer)", () => {
     const parsed = decodeProviderSessionStartInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       provider: "codex",
       providerInstanceId: "codex_personal",
       runtimeMode: "full-access",
@@ -179,7 +179,7 @@ describe("providerInstanceId routing key (slice-2 invariant)", () => {
       providerInstanceId: "codex_work",
       status: "ready",
       runtimeMode: "full-access",
-      threadId: "thread-1",
+      sessionId: "session-1",
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
     });
@@ -192,7 +192,7 @@ describe("providerInstanceId routing key (slice-2 invariant)", () => {
       providerInstanceId: "ollama_local",
       status: "ready",
       runtimeMode: "full-access",
-      threadId: "thread-1",
+      sessionId: "session-1",
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
     });
@@ -207,7 +207,7 @@ describe("providerInstanceId routing key (slice-2 invariant)", () => {
       kind: "notification",
       provider: "codex",
       providerInstanceId: "codex_personal",
-      threadId: "thread-1",
+      sessionId: "session-1",
       createdAt: "2024-01-01T00:00:00Z",
       method: "session.created",
     });
@@ -218,7 +218,7 @@ describe("providerInstanceId routing key (slice-2 invariant)", () => {
   it("rejects providerInstanceId values that fail the slug pattern (defense in depth)", () => {
     expect(() =>
       decodeProviderSessionStartInput({
-        threadId: "thread-1",
+        sessionId: "session-1",
         provider: "codex",
         providerInstanceId: "1bad",
         runtimeMode: "full-access",

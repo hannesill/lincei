@@ -18,8 +18,8 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE TABLE IF NOT EXISTS projection_threads (
-      thread_id TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS projection_sessions (
+      session_id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       title TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -33,9 +33,9 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE TABLE IF NOT EXISTS projection_thread_messages (
+    CREATE TABLE IF NOT EXISTS projection_session_messages (
       message_id TEXT PRIMARY KEY,
-      thread_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
       turn_id TEXT,
       role TEXT NOT NULL,
       text TEXT NOT NULL,
@@ -46,9 +46,9 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE TABLE IF NOT EXISTS projection_thread_activities (
+    CREATE TABLE IF NOT EXISTS projection_session_activities (
       activity_id TEXT PRIMARY KEY,
-      thread_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
       turn_id TEXT,
       tone TEXT NOT NULL,
       kind TEXT NOT NULL,
@@ -59,12 +59,11 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE TABLE IF NOT EXISTS projection_thread_sessions (
-      thread_id TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS projection_session_sessions (
+      session_id TEXT PRIMARY KEY,
       status TEXT NOT NULL,
       provider_name TEXT,
       provider_session_id TEXT,
-      provider_thread_id TEXT,
       active_turn_id TEXT,
       last_error TEXT,
       updated_at TEXT NOT NULL
@@ -74,7 +73,7 @@ export default Effect.gen(function* () {
   yield* sql`
     CREATE TABLE IF NOT EXISTS projection_turns (
       row_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      thread_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
       turn_id TEXT,
       pending_message_id TEXT,
       assistant_message_id TEXT,
@@ -86,15 +85,15 @@ export default Effect.gen(function* () {
       checkpoint_ref TEXT,
       checkpoint_status TEXT,
       checkpoint_files_json TEXT NOT NULL,
-      UNIQUE (thread_id, turn_id),
-      UNIQUE (thread_id, checkpoint_turn_count)
+      UNIQUE (session_id, turn_id),
+      UNIQUE (session_id, checkpoint_turn_count)
     )
   `;
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS projection_pending_approvals (
       request_id TEXT PRIMARY KEY,
-      thread_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
       turn_id TEXT,
       status TEXT NOT NULL,
       decision TEXT,
@@ -117,37 +116,37 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_threads_project_id
-    ON projection_threads(project_id)
+    CREATE INDEX IF NOT EXISTS idx_projection_sessions_project_id
+    ON projection_sessions(project_id)
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_thread_messages_thread_created
-    ON projection_thread_messages(thread_id, created_at)
+    CREATE INDEX IF NOT EXISTS idx_projection_session_messages_session_created
+    ON projection_session_messages(session_id, created_at)
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_thread_activities_thread_created
-    ON projection_thread_activities(thread_id, created_at)
+    CREATE INDEX IF NOT EXISTS idx_projection_session_activities_session_created
+    ON projection_session_activities(session_id, created_at)
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_thread_sessions_provider_session
-    ON projection_thread_sessions(provider_session_id)
+    CREATE INDEX IF NOT EXISTS idx_projection_session_sessions_provider_session
+    ON projection_session_sessions(provider_session_id)
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_turns_thread_requested
-    ON projection_turns(thread_id, requested_at)
+    CREATE INDEX IF NOT EXISTS idx_projection_turns_session_requested
+    ON projection_turns(session_id, requested_at)
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_turns_thread_checkpoint_completed
-    ON projection_turns(thread_id, checkpoint_turn_count, completed_at)
+    CREATE INDEX IF NOT EXISTS idx_projection_turns_session_checkpoint_completed
+    ON projection_turns(session_id, checkpoint_turn_count, completed_at)
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_pending_approvals_thread_status
-    ON projection_pending_approvals(thread_id, status)
+    CREATE INDEX IF NOT EXISTS idx_projection_pending_approvals_session_status
+    ON projection_pending_approvals(session_id, status)
   `;
 });

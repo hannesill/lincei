@@ -19,8 +19,8 @@ Claude integration must plug into this path instead of reintroducing legacy prov
 
 1. Provider runtime ingestion expects canonical `ProviderRuntimeEvent` shapes, not provider-native payloads.
 2. Start input now uses typed `providerOptions` and generic `resumeCursor`; top-level provider-specific fields were removed.
-3. `resumeCursor` is intentionally opaque outside adapters and must never be synthesized from `providerThreadId`.
-4. `ProviderService` still requires adapter `startSession()` to return a `ProviderSession` with `threadId`.
+3. `resumeCursor` is intentionally opaque outside adapters and must never be synthesized from `providerSessionId`.
+4. `ProviderService` still requires adapter `startSession()` to return a `ProviderSession` with `sessionId`.
 5. Checkpoint revert currently calls `providerService.rollbackConversation()`, so Claude adapter needs a rollback strategy compatible with current reactor behavior.
 6. Web currently marks Claude as unavailable (`"Claude Code (soon)"`) and model picker is Codex-only.
 
@@ -55,8 +55,8 @@ Expected outcomes:
 
 Update `packages/contracts/src/orchestration.ts`:
 
-1. Add optional `provider: ProviderKind` to `ThreadTurnStartCommand`.
-2. Carry provider through `ThreadTurnStartRequestedPayload`.
+1. Add optional `provider: ProviderKind` to `SessionTurnStartCommand`.
+2. Carry provider through `SessionTurnStartRequestedPayload`.
 3. Keep existing command valid when provider is omitted.
 
 This removes the implicit “Codex unless session already exists” behavior as the only path.
@@ -69,7 +69,7 @@ Update `packages/contracts/src/provider.ts`:
    - `providerOptions.codex`
    - `providerOptions.claudeCode`
 2. Keep `resumeCursor` as the single cross-provider resume input in `ProviderSessionStartInput`.
-3. Deprecate/remove `resumeThreadId` from the generic start contract.
+3. Deprecate/remove `resumeSessionId` from the generic start contract.
 4. Treat `resumeCursor` as adapter-owned opaque state.
 
 ### 1.4 Contract tests (completed)
@@ -156,7 +156,7 @@ const acquireSession = (input: ProviderSessionStartInput) =>
             permissionMode: claudeOptions?.permissionMode,
             maxThinkingTokens: claudeOptions?.maxThinkingTokens,
             pathToClaudeCodeExecutable: claudeOptions?.binaryPath,
-            resume: resumeState?.threadId,
+            resume: resumeState?.sessionId,
             resumeSessionAt: resumeState?.sessionAt,
             signal: abortController.signal,
             includePartialMessages: true,
@@ -234,7 +234,7 @@ Initial mapping target:
 2. final assistant text -> `item.completed` and/or `turn.completed`
 3. approval requests -> `request.opened`
 4. approval results -> `request.resolved`
-5. system lifecycle -> `session.*`, `thread.*`, `turn.*`
+5. system lifecycle -> `session.*`, `session.*`, `turn.*`
 6. errors -> `runtime.error`
 7. plan/proposed-plan content when derivable
 
@@ -251,7 +251,7 @@ Define Claude-owned opaque resume state, e.g.:
 ```ts
 interface ClaudeResumeCursor {
   readonly version: 1;
-  readonly threadId?: string;
+  readonly sessionId?: string;
   readonly sessionAt?: string;
 }
 ```
@@ -261,7 +261,7 @@ Rules:
 1. Serialize only adapter-owned state into `resumeCursor`.
 2. Parse/validate only inside Claude adapter.
 3. Store updated cursor when Claude runtime yields enough data to resume safely.
-4. Never overload orchestration thread id as Claude thread id.
+4. Never overload orchestration session id as Claude session id.
 
 ### 2.5 Interrupt and stop semantics
 
@@ -269,7 +269,7 @@ Map orchestration stop/interrupt expectations onto SDK controls:
 
 1. `interruptTurn()` -> active query interrupt.
 2. `stopSession()` -> close session resources and prevent future sends.
-3. `rollbackThread()` -> see Phase 4.
+3. `rollbackSession()` -> see Phase 4.
 
 ---
 
@@ -284,7 +284,7 @@ Update provider registry layer to include Claude:
 
 ### 3.2 Persist provider binding
 
-Current `ProviderSessionDirectory` already stores provider/thread binding and opaque `resumeCursor`.
+Current `ProviderSessionDirectory` already stores provider/session binding and opaque `resumeCursor`.
 
 Required validation:
 
@@ -296,8 +296,8 @@ Required validation:
 
 Update `ProviderCommandReactor` / orchestration flow:
 
-1. If a thread turn start requests `provider: "claudeCode"`, start Claude if no active session exists.
-2. If a thread already has Claude session binding, reuse it.
+1. If a session turn start requests `provider: "claudeCode"`, start Claude if no active session exists.
+2. If a session already has Claude session binding, reuse it.
 3. If provider switches between Codex and Claude, explicitly stop/rebind before next send.
 
 ---
@@ -339,7 +339,7 @@ Whichever option is chosen:
 
 Update web state/UI:
 
-1. allow choosing Claude as thread provider before first turn
+1. allow choosing Claude as session provider before first turn
 2. show Claude model list from provider-aware model helpers
 3. preserve existing Codex default behavior when provider omitted
 
@@ -364,7 +364,7 @@ Do not hardcode provider-specific config into generic session state if it belong
 
 No new WS channel should be needed. Claude should appear through existing:
 
-1. thread messages
+1. session messages
 2. activities/worklog
 3. approvals
 4. session state
@@ -436,6 +436,6 @@ Recommended implementation order:
 ## Non-goals
 
 1. Reintroducing provider-specific WS methods/channels.
-2. Storing provider-native thread ids as orchestration ids.
+2. Storing provider-native session ids as orchestration ids.
 3. Bypassing orchestration engine for Claude-specific UI flows.
 4. Encoding Claude resume semantics outside adapter-owned `resumeCursor`.

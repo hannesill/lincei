@@ -1,64 +1,64 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import ChatView from "../components/ChatView";
-import { threadHasStarted } from "../components/ChatView.logic";
+import { sessionHasStarted } from "../components/ChatView.logic";
 import { useComposerDraftStore, DraftId } from "../composerDraftStore";
 import { SidebarInset } from "../components/ui/sidebar";
-import { createThreadSelectorAcrossEnvironments } from "../storeSelectors";
+import { createSessionSelectorAcrossEnvironments } from "../storeSelectors";
 import { useStore } from "../store";
-import { buildThreadRouteParams } from "../threadRoutes";
+import { buildSessionRouteParams } from "../sessionRoutes";
 
-function DraftChatThreadRouteView() {
+function DraftChatSessionRouteView() {
   const navigate = useNavigate();
   const { draftId: rawDraftId } = Route.useParams();
   const draftId = DraftId.make(rawDraftId);
   const draftSession = useComposerDraftStore((store) => store.getDraftSession(draftId));
-  const serverThread = useStore(
+  const serverSession = useStore(
     useMemo(
-      () => createThreadSelectorAcrossEnvironments(draftSession?.threadId ?? null),
-      [draftSession?.threadId],
+      () => createSessionSelectorAcrossEnvironments(draftSession?.sessionId ?? null),
+      [draftSession?.sessionId],
     ),
   );
-  const serverThreadStarted = threadHasStarted(serverThread);
-  const canonicalThreadRef = useMemo(
+  const serverSessionStarted = sessionHasStarted(serverSession);
+  const canonicalSessionRef = useMemo(
     () =>
       draftSession?.promotedTo
-        ? serverThreadStarted
+        ? serverSessionStarted
           ? draftSession.promotedTo
           : null
-        : serverThread
+        : serverSession
           ? {
-              environmentId: serverThread.environmentId,
-              threadId: serverThread.id,
+              environmentId: serverSession.environmentId,
+              sessionId: serverSession.id,
             }
           : null,
-    [draftSession?.promotedTo, serverThread, serverThreadStarted],
+    [draftSession?.promotedTo, serverSession, serverSessionStarted],
   );
 
   useEffect(() => {
-    if (!canonicalThreadRef) {
+    if (!canonicalSessionRef) {
       return;
     }
     void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(canonicalThreadRef),
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(canonicalSessionRef),
       replace: true,
     });
-  }, [canonicalThreadRef, navigate]);
+  }, [canonicalSessionRef, navigate]);
 
   useEffect(() => {
-    if (draftSession || canonicalThreadRef) {
+    if (draftSession || canonicalSessionRef) {
       return;
     }
     void navigate({ to: "/", replace: true });
-  }, [canonicalThreadRef, draftSession, navigate]);
+  }, [canonicalSessionRef, draftSession, navigate]);
 
-  if (canonicalThreadRef) {
+  if (canonicalSessionRef) {
     return (
       <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
         <ChatView
-          environmentId={canonicalThreadRef.environmentId}
-          threadId={canonicalThreadRef.threadId}
+          environmentId={canonicalSessionRef.environmentId}
+          sessionId={canonicalSessionRef.sessionId}
           routeKind="server"
         />
       </SidebarInset>
@@ -74,7 +74,7 @@ function DraftChatThreadRouteView() {
       <ChatView
         draftId={draftId}
         environmentId={draftSession.environmentId}
-        threadId={draftSession.threadId}
+        sessionId={draftSession.sessionId}
         routeKind="draft"
       />
     </SidebarInset>
@@ -82,5 +82,5 @@ function DraftChatThreadRouteView() {
 }
 
 export const Route = createFileRoute("/_chat/draft/$draftId")({
-  component: DraftChatThreadRouteView,
+  component: DraftChatSessionRouteView,
 });

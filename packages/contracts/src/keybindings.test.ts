@@ -65,11 +65,11 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedModelPickerJump.command, "modelPicker.jump.1");
 
-    const parsedThreadPrevious = yield* decode(KeybindingRule, {
+    const parsedSessionPrevious = yield* decode(KeybindingRule, {
       key: "mod+shift+[",
-      command: "thread.previous",
+      command: "session.previous",
     });
-    assert.strictEqual(parsedThreadPrevious.command, "thread.previous");
+    assert.strictEqual(parsedSessionPrevious.command, "session.previous");
   }),
 );
 
@@ -145,7 +145,7 @@ it.effect("parses resolved keybindings arrays", () =>
         },
       },
       {
-        command: "thread.jump.3",
+        command: "session.jump.3",
         shortcut: {
           key: "3",
           metaKey: false,

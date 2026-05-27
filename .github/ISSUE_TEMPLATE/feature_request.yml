@@ -42,7 +42,7 @@ body:
     attributes:
       label: Problem or use case
       description: What are you trying to do? What is hard, slow, or impossible today?
-      placeholder: I want to reconnect to an existing provider session after a browser refresh without losing the current thread state.
+      placeholder: I want to reconnect to an existing provider session after a browser refresh without losing the current session state.
     validations:
       required: true
 
@@ -69,7 +69,7 @@ body:
     attributes:
       label: Smallest useful scope
       description: What is the narrowest version of this request that would still solve your problem?
-      placeholder: A first pass only needs to support restoring the active session for the current thread.
+      placeholder: A first pass only needs to support restoring the active session for the current session.
     validations:
       required: true
 

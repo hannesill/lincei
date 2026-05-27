@@ -9,7 +9,7 @@ import {
   TerminalOpenInput,
   TerminalResizeInput,
   TerminalSessionSnapshot,
-  TerminalThreadInput,
+  TerminalSessionInput,
   TerminalWriteInput,
 } from "./terminal.ts";
 
@@ -30,7 +30,7 @@ describe("TerminalOpenInput", () => {
   it("accepts valid open input", () => {
     expect(
       decodes(TerminalOpenInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         cwd: "/tmp/project",
         cols: 120,
         rows: 40,
@@ -41,7 +41,7 @@ describe("TerminalOpenInput", () => {
   it("accepts ultrawide terminal dimensions from xterm fit", () => {
     expect(
       decodes(TerminalOpenInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         cwd: "/tmp/project",
         cols: 423,
         rows: 40,
@@ -52,7 +52,7 @@ describe("TerminalOpenInput", () => {
   it("rejects invalid bounds", () => {
     expect(
       decodes(TerminalOpenInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         cwd: "/tmp/project",
         cols: 10,
         rows: 0,
@@ -62,7 +62,7 @@ describe("TerminalOpenInput", () => {
 
   it("defaults terminalId when missing", () => {
     const parsed = decodeSync(TerminalOpenInput, {
-      threadId: "thread-1",
+      sessionId: "session-1",
       cwd: "/tmp/project",
       cols: 100,
       rows: 24,
@@ -72,7 +72,7 @@ describe("TerminalOpenInput", () => {
 
   it("accepts optional env overrides", () => {
     const parsed = decodeSync(TerminalOpenInput, {
-      threadId: "thread-1",
+      sessionId: "session-1",
       cwd: "/tmp/project",
       worktreePath: "/tmp/project/.t3/worktrees/feature-a",
       cols: 100,
@@ -92,7 +92,7 @@ describe("TerminalOpenInput", () => {
   it("rejects invalid env keys", () => {
     expect(
       decodes(TerminalOpenInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         cwd: "/tmp/project",
         cols: 100,
         rows: 24,
@@ -108,7 +108,7 @@ describe("TerminalWriteInput", () => {
   it("accepts non-empty data", () => {
     expect(
       decodes(TerminalWriteInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         data: "echo hello\n",
       }),
     ).toBe(true);
@@ -117,17 +117,17 @@ describe("TerminalWriteInput", () => {
   it("rejects empty data", () => {
     expect(
       decodes(TerminalWriteInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         data: "",
       }),
     ).toBe(false);
   });
 });
 
-describe("TerminalThreadInput", () => {
-  it("trims thread ids", () => {
-    const parsed = decodeSync(TerminalThreadInput, { threadId: " thread-1 " });
-    expect(parsed.threadId).toBe("thread-1");
+describe("TerminalSessionInput", () => {
+  it("trims session ids", () => {
+    const parsed = decodeSync(TerminalSessionInput, { sessionId: " session-1 " });
+    expect(parsed.sessionId).toBe("session-1");
   });
 });
 
@@ -135,7 +135,7 @@ describe("TerminalResizeInput", () => {
   it("accepts valid size", () => {
     expect(
       decodes(TerminalResizeInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         cols: 80,
         rows: 24,
       }),
@@ -146,7 +146,7 @@ describe("TerminalResizeInput", () => {
 describe("TerminalClearInput", () => {
   it("defaults terminal id", () => {
     const parsed = decodeSync(TerminalClearInput, {
-      threadId: "thread-1",
+      sessionId: "session-1",
     });
     expect(parsed.terminalId).toBe(DEFAULT_TERMINAL_ID);
   });
@@ -156,7 +156,7 @@ describe("TerminalCloseInput", () => {
   it("accepts optional deleteHistory", () => {
     expect(
       decodes(TerminalCloseInput, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         deleteHistory: true,
       }),
     ).toBe(true);
@@ -169,7 +169,7 @@ describe("TerminalSessionSnapshot", () => {
   it("accepts running snapshots", () => {
     expect(
       decodes(TerminalSessionSnapshot, {
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         cwd: "/tmp/project",
         worktreePath: null,
@@ -191,7 +191,7 @@ describe("TerminalEvent", () => {
     expect(
       decodes(TerminalEvent, {
         type: "output",
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         createdAt: isoTimestamp,
         data: "line\n",
@@ -203,7 +203,7 @@ describe("TerminalEvent", () => {
     expect(
       decodes(TerminalEvent, {
         type: "exited",
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         createdAt: isoTimestamp,
         exitCode: 0,
@@ -216,7 +216,7 @@ describe("TerminalEvent", () => {
     expect(
       decodes(TerminalEvent, {
         type: "activity",
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         createdAt: isoTimestamp,
         hasRunningSubprocess: true,
@@ -228,11 +228,11 @@ describe("TerminalEvent", () => {
     expect(
       decodes(TerminalEvent, {
         type: "started",
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         createdAt: isoTimestamp,
         snapshot: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           terminalId: DEFAULT_TERMINAL_ID,
           cwd: "/tmp/project/.t3/worktrees/feature-a",
           worktreePath: "/tmp/project/.t3/worktrees/feature-a",

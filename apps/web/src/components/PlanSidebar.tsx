@@ -26,7 +26,7 @@ import {
 } from "../proposedPlan";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { readEnvironmentApi } from "~/environmentApi";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { stackedSessionToast, toastManager } from "./ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
 function stepStatusIcon(status: string): React.ReactNode {
@@ -113,7 +113,7 @@ const PlanSidebar = memo(function PlanSidebar({
       })
       .catch((error) => {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Could not save plan",
             description: error instanceof Error ? error.message : "An error occurred.",

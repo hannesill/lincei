@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
-import { ThreadId } from "@t3tools/contracts";
+import { SessionId } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 
@@ -13,13 +13,13 @@ import {
 } from "../CodexDeveloperInstructions.ts";
 import {
   buildTurnStartParams,
-  isRecoverableThreadResumeError,
-  openCodexThread,
+  isRecoverableSessionResumeError,
+  openCodexSession,
 } from "./CodexSessionRuntime.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
-function makeThreadOpenResponse(
-  threadId: string,
+function makeSessionOpenResponse(
+  sessionId: string,
 ): CodexRpc.ClientRequestResponsesByMethod["thread/start"] {
   return {
     cwd: "/tmp/project",
@@ -29,7 +29,7 @@ function makeThreadOpenResponse(
     approvalsReviewer: "user",
     sandbox: { type: "danger-full-access" },
     thread: {
-      id: threadId,
+      id: sessionId,
       createdAt: "2026-04-18T00:00:00.000Z",
       source: { session: "cli" },
       turns: [],
@@ -45,7 +45,7 @@ describe("buildTurnStartParams", () => {
   it("includes plan collaboration mode when requested", () => {
     const params = Effect.runSync(
       buildTurnStartParams({
-        threadId: "provider-thread-1",
+        sessionId: "provider-session-1",
         runtimeMode: "full-access",
         prompt: "Make a plan",
         model: "gpt-5.3-codex",
@@ -55,7 +55,7 @@ describe("buildTurnStartParams", () => {
     );
 
     assert.deepStrictEqual(params, {
-      threadId: "provider-thread-1",
+      threadId: "provider-session-1",
       approvalPolicy: "never",
       sandboxPolicy: {
         type: "dangerFullAccess",
@@ -82,7 +82,7 @@ describe("buildTurnStartParams", () => {
   it("includes default collaboration mode and image attachments", () => {
     const params = Effect.runSync(
       buildTurnStartParams({
-        threadId: "provider-thread-1",
+        sessionId: "provider-session-1",
         runtimeMode: "auto-accept-edits",
         prompt: "Implement it",
         model: "gpt-5.3-codex",
@@ -97,7 +97,7 @@ describe("buildTurnStartParams", () => {
     );
 
     assert.deepStrictEqual(params, {
-      threadId: "provider-thread-1",
+      threadId: "provider-session-1",
       approvalPolicy: "on-request",
       sandboxPolicy: {
         type: "workspaceWrite",
@@ -127,14 +127,14 @@ describe("buildTurnStartParams", () => {
   it("omits collaboration mode when interaction mode is absent", () => {
     const params = Effect.runSync(
       buildTurnStartParams({
-        threadId: "provider-thread-1",
+        sessionId: "provider-session-1",
         runtimeMode: "approval-required",
         prompt: "Review",
       }),
     );
 
     assert.deepStrictEqual(params, {
-      threadId: "provider-thread-1",
+      threadId: "provider-session-1",
       approvalPolicy: "untrusted",
       sandboxPolicy: {
         type: "readOnly",
@@ -149,13 +149,13 @@ describe("buildTurnStartParams", () => {
   });
 });
 
-describe("isRecoverableThreadResumeError", () => {
-  it("matches missing thread errors", () => {
+describe("isRecoverableSessionResumeError", () => {
+  it("matches missing session errors", () => {
     assert.equal(
-      isRecoverableThreadResumeError(
+      isRecoverableSessionResumeError(
         new CodexErrors.CodexAppServerRequestError({
           code: -32603,
-          errorMessage: "Thread does not exist",
+          errorMessage: "Session does not exist",
         }),
       ),
       true,
@@ -164,7 +164,7 @@ describe("isRecoverableThreadResumeError", () => {
 
   it("ignores non-recoverable resume errors", () => {
     assert.equal(
-      isRecoverableThreadResumeError(
+      isRecoverableSessionResumeError(
         new CodexErrors.CodexAppServerRequestError({
           code: -32603,
           errorMessage: "Permission denied",
@@ -174,9 +174,9 @@ describe("isRecoverableThreadResumeError", () => {
     );
   });
 
-  it("ignores unrelated missing-resource errors that do not mention threads", () => {
+  it("ignores unrelated missing-resource errors that do not mention sessions", () => {
     assert.equal(
-      isRecoverableThreadResumeError(
+      isRecoverableSessionResumeError(
         new CodexErrors.CodexAppServerRequestError({
           code: -32603,
           errorMessage: "Config file not found",
@@ -185,7 +185,7 @@ describe("isRecoverableThreadResumeError", () => {
       false,
     );
     assert.equal(
-      isRecoverableThreadResumeError(
+      isRecoverableSessionResumeError(
         new CodexErrors.CodexAppServerRequestError({
           code: -32603,
           errorMessage: "Model does not exist",
@@ -196,10 +196,10 @@ describe("isRecoverableThreadResumeError", () => {
   });
 });
 
-describe("openCodexThread", () => {
-  it("falls back to thread/start when resume fails recoverably", async () => {
+describe("openCodexSession", () => {
+  it("falls back to session/start when resume fails recoverably", async () => {
     const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];
-    const started = makeThreadOpenResponse("fresh-thread");
+    const started = makeSessionOpenResponse("fresh-session");
     const client = {
       request: <M extends "thread/start" | "thread/resume">(
         method: M,
@@ -210,7 +210,7 @@ describe("openCodexThread", () => {
           return Effect.fail(
             new CodexErrors.CodexAppServerRequestError({
               code: -32603,
-              errorMessage: "thread not found",
+              errorMessage: "session not found",
             }),
           );
         }
@@ -219,18 +219,18 @@ describe("openCodexThread", () => {
     };
 
     const opened = await Effect.runPromise(
-      openCodexThread({
+      openCodexSession({
         client,
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
         runtimeMode: "full-access",
         cwd: "/tmp/project",
         requestedModel: "gpt-5.3-codex",
         serviceTier: undefined,
-        resumeThreadId: "stale-thread",
+        resumeSessionId: "stale-session",
       }),
     );
 
-    assert.equal(opened.thread.id, "fresh-thread");
+    assert.equal(opened.thread.id, "fresh-session");
     assert.deepStrictEqual(
       calls.map((call) => call.method),
       ["thread/resume", "thread/start"],
@@ -252,21 +252,21 @@ describe("openCodexThread", () => {
           );
         }
         return Effect.succeed(
-          makeThreadOpenResponse("fresh-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
+          makeSessionOpenResponse("fresh-session") as CodexRpc.ClientRequestResponsesByMethod[M],
         );
       },
     };
 
     await assert.rejects(
       Effect.runPromise(
-        openCodexThread({
+        openCodexSession({
           client,
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           runtimeMode: "full-access",
           cwd: "/tmp/project",
           requestedModel: "gpt-5.3-codex",
           serviceTier: undefined,
-          resumeThreadId: "stale-thread",
+          resumeSessionId: "stale-session",
         }),
       ),
       (error: unknown) =>

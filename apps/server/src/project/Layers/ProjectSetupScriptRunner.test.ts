@@ -34,11 +34,11 @@ const makeProjectionSnapshotQueryLayer = (project: OrchestrationProject) =>
       ),
     getProjectShellById: (projectId) =>
       Effect.succeed(projectId === project.id ? Option.some(project) : Option.none()),
-    getFirstActiveThreadIdByProjectId: () => Effect.die("unused"),
-    getThreadCheckpointContext: () => Effect.die("unused"),
-    getFullThreadDiffContext: () => Effect.die("unused"),
-    getThreadShellById: () => Effect.die("unused"),
-    getThreadDetailById: () => Effect.die("unused"),
+    getFirstActiveSessionIdByProjectId: () => Effect.die("unused"),
+    getSessionCheckpointContext: () => Effect.die("unused"),
+    getFullSessionDiffContext: () => Effect.die("unused"),
+    getSessionShellById: () => Effect.die("unused"),
+    getSessionDetailById: () => Effect.die("unused"),
   });
 
 describe("ProjectSetupScriptRunner", () => {
@@ -68,8 +68,8 @@ describe("ProjectSetupScriptRunner", () => {
     );
 
     const result = await Effect.runPromise(
-      runner.runForThread({
-        threadId: "thread-1",
+      runner.runForSession({
+        sessionId: "session-1",
         projectId: "project-1",
         worktreePath: "/repo/worktrees/a",
       }),
@@ -83,7 +83,7 @@ describe("ProjectSetupScriptRunner", () => {
   it("opens the deterministic setup terminal with worktree env and writes the command", async () => {
     const open = vi.fn(() =>
       Effect.succeed({
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: "setup-setup",
         cwd: "/repo/worktrees/a",
         worktreePath: "/repo/worktrees/a",
@@ -127,8 +127,8 @@ describe("ProjectSetupScriptRunner", () => {
     );
 
     const result = await Effect.runPromise(
-      runner.runForThread({
-        threadId: "thread-1",
+      runner.runForSession({
+        sessionId: "session-1",
         projectCwd: "/repo/project",
         worktreePath: "/repo/worktrees/a",
       }),
@@ -142,7 +142,7 @@ describe("ProjectSetupScriptRunner", () => {
       cwd: "/repo/worktrees/a",
     });
     expect(open).toHaveBeenCalledWith({
-      threadId: "thread-1",
+      sessionId: "session-1",
       terminalId: "setup-setup",
       cwd: "/repo/worktrees/a",
       worktreePath: "/repo/worktrees/a",
@@ -154,7 +154,7 @@ describe("ProjectSetupScriptRunner", () => {
       },
     });
     expect(write).toHaveBeenCalledWith({
-      threadId: "thread-1",
+      sessionId: "session-1",
       terminalId: "setup-setup",
       data: "bun install\r",
     });

@@ -56,15 +56,15 @@ export function resolveLockedWorkspaceLabel(activeWorktreePath: string | null): 
 
 export function resolveEffectiveEnvMode(input: {
   activeWorktreePath: string | null;
-  hasServerThread: boolean;
-  draftThreadEnvMode: EnvMode | undefined;
+  hasServerSession: boolean;
+  draftSessionEnvMode: EnvMode | undefined;
 }): EnvMode {
-  const { activeWorktreePath, hasServerThread, draftThreadEnvMode } = input;
-  if (!hasServerThread) {
+  const { activeWorktreePath, hasServerSession, draftSessionEnvMode } = input;
+  if (!hasServerSession) {
     if (activeWorktreePath) {
       return "local";
     }
-    return draftThreadEnvMode === "worktree" ? "worktree" : "local";
+    return draftSessionEnvMode === "worktree" ? "worktree" : "local";
   }
   return activeWorktreePath ? "worktree" : "local";
 }
@@ -87,14 +87,14 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
 export function resolveBranchToolbarValue(input: {
   envMode: EnvMode;
   activeWorktreePath: string | null;
-  activeThreadBranch: string | null;
+  activeSessionBranch: string | null;
   currentGitBranch: string | null;
 }): string | null {
-  const { envMode, activeWorktreePath, activeThreadBranch, currentGitBranch } = input;
+  const { envMode, activeWorktreePath, activeSessionBranch, currentGitBranch } = input;
   if (envMode === "worktree" && !activeWorktreePath) {
-    return activeThreadBranch ?? currentGitBranch;
+    return activeSessionBranch ?? currentGitBranch;
   }
-  return currentGitBranch ?? activeThreadBranch;
+  return currentGitBranch ?? activeSessionBranch;
 }
 
 export function resolveBranchSelectionTarget(input: {

@@ -1,7 +1,7 @@
 /**
  * Helpers for synthesizing "unavailable" `ServerProvider` snapshots.
  *
- * When `ServerSettings.providerInstances` (or persisted thread/session
+ * When `ServerSettings.providerInstances` (or persisted session/session
  * state) references a driver this build does not ship — typical after a
  * downgrade from a fork or a feature-branch test session — the runtime
  * needs to surface the entry to the UI without crashing. This module

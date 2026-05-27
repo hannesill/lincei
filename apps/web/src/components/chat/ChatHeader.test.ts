@@ -10,7 +10,7 @@ describe("shouldShowOpenInPicker", () => {
     expect(
       shouldShowOpenInPicker({
         activeProjectName: "codething-mvp",
-        activeThreadEnvironmentId: primaryEnvironmentId,
+        activeSessionEnvironmentId: primaryEnvironmentId,
         primaryEnvironmentId,
       }),
     ).toBe(true);
@@ -20,7 +20,7 @@ describe("shouldShowOpenInPicker", () => {
     expect(
       shouldShowOpenInPicker({
         activeProjectName: "codething-mvp",
-        activeThreadEnvironmentId: EnvironmentId.make("environment-remote"),
+        activeSessionEnvironmentId: EnvironmentId.make("environment-remote"),
         primaryEnvironmentId: null,
       }),
     ).toBe(false);
@@ -30,7 +30,7 @@ describe("shouldShowOpenInPicker", () => {
     expect(
       shouldShowOpenInPicker({
         activeProjectName: "codething-mvp",
-        activeThreadEnvironmentId: EnvironmentId.make("environment-remote"),
+        activeSessionEnvironmentId: EnvironmentId.make("environment-remote"),
         primaryEnvironmentId,
       }),
     ).toBe(false);
@@ -40,7 +40,7 @@ describe("shouldShowOpenInPicker", () => {
     expect(
       shouldShowOpenInPicker({
         activeProjectName: undefined,
-        activeThreadEnvironmentId: primaryEnvironmentId,
+        activeSessionEnvironmentId: primaryEnvironmentId,
         primaryEnvironmentId,
       }),
     ).toBe(false);

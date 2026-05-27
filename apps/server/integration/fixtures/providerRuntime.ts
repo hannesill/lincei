@@ -3,7 +3,7 @@ import type { LegacyProviderRuntimeEvent } from "../TestProviderAdapter.integrat
 
 const PROVIDER = ProviderDriverKind.make("codex");
 const SESSION_ID = "fixture-session";
-const THREAD_ID = "fixture-thread";
+const THREAD_ID = "fixture-session";
 const TURN_ID = "fixture-turn";
 const REQUEST_ID = RuntimeRequestId.make("req-1");
 
@@ -23,14 +23,14 @@ export const codexTurnTextFixture = [
   {
     type: "turn.started",
     ...baseEvent("evt-1", "2026-02-23T00:00:00.000Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {},
   },
   {
     type: "content.delta",
     ...baseEvent("evt-2", "2026-02-23T00:00:00.100Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       streamKind: "assistant_text",
@@ -40,7 +40,7 @@ export const codexTurnTextFixture = [
   {
     type: "content.delta",
     ...baseEvent("evt-3", "2026-02-23T00:00:00.200Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       streamKind: "assistant_text",
@@ -50,7 +50,7 @@ export const codexTurnTextFixture = [
   {
     type: "turn.completed",
     ...baseEvent("evt-4", "2026-02-23T00:00:00.300Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       state: "completed",
@@ -62,14 +62,14 @@ export const codexTurnToolFixture = [
   {
     type: "turn.started",
     ...baseEvent("evt-11", "2026-02-23T00:01:00.000Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {},
   },
   {
     type: "item.started",
     ...baseEvent("evt-12", "2026-02-23T00:01:00.100Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       itemType: "command_execution",
@@ -80,7 +80,7 @@ export const codexTurnToolFixture = [
   {
     type: "item.completed",
     ...baseEvent("evt-13", "2026-02-23T00:01:00.200Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       itemType: "command_execution",
@@ -92,7 +92,7 @@ export const codexTurnToolFixture = [
   {
     type: "content.delta",
     ...baseEvent("evt-14", "2026-02-23T00:01:00.300Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       streamKind: "assistant_text",
@@ -102,7 +102,7 @@ export const codexTurnToolFixture = [
   {
     type: "turn.completed",
     ...baseEvent("evt-15", "2026-02-23T00:01:00.400Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       state: "completed",
@@ -114,14 +114,14 @@ export const codexTurnApprovalFixture = [
   {
     type: "turn.started",
     ...baseEvent("evt-21", "2026-02-23T00:02:00.000Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {},
   },
   {
     type: "request.opened",
     ...baseEvent("evt-22", "2026-02-23T00:02:00.100Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     requestId: REQUEST_ID,
     payload: {
@@ -132,7 +132,7 @@ export const codexTurnApprovalFixture = [
   {
     type: "request.resolved",
     ...baseEvent("evt-23", "2026-02-23T00:02:00.200Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     requestId: REQUEST_ID,
     payload: {
@@ -143,7 +143,7 @@ export const codexTurnApprovalFixture = [
   {
     type: "content.delta",
     ...baseEvent("evt-24", "2026-02-23T00:02:00.300Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       streamKind: "assistant_text",
@@ -153,7 +153,7 @@ export const codexTurnApprovalFixture = [
   {
     type: "turn.completed",
     ...baseEvent("evt-25", "2026-02-23T00:02:00.400Z"),
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     turnId: TURN_ID,
     payload: {
       state: "completed",

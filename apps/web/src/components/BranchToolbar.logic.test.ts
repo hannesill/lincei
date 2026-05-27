@@ -55,7 +55,7 @@ describe("resolveBranchToolbarValue", () => {
       resolveBranchToolbarValue({
         envMode: "worktree",
         activeWorktreePath: null,
-        activeThreadBranch: null,
+        activeSessionBranch: null,
         currentGitBranch: "main",
       }),
     ).toBe("main");
@@ -66,7 +66,7 @@ describe("resolveBranchToolbarValue", () => {
       resolveBranchToolbarValue({
         envMode: "worktree",
         activeWorktreePath: null,
-        activeThreadBranch: "feature/base",
+        activeSessionBranch: "feature/base",
         currentGitBranch: "main",
       }),
     ).toBe("feature/base");
@@ -77,7 +77,7 @@ describe("resolveBranchToolbarValue", () => {
       resolveBranchToolbarValue({
         envMode: "local",
         activeWorktreePath: null,
-        activeThreadBranch: "feature/base",
+        activeSessionBranch: "feature/base",
         currentGitBranch: "main",
       }),
     ).toBe("main");
@@ -120,22 +120,22 @@ describe("resolveEnvironmentOptionLabel", () => {
 });
 
 describe("resolveEffectiveEnvMode", () => {
-  it("treats draft threads already attached to a worktree as current-checkout mode", () => {
+  it("treats draft sessions already attached to a worktree as current-checkout mode", () => {
     expect(
       resolveEffectiveEnvMode({
         activeWorktreePath: "/repo/.t3/worktrees/feature-a",
-        hasServerThread: false,
-        draftThreadEnvMode: "worktree",
+        hasServerSession: false,
+        draftSessionEnvMode: "worktree",
       }),
     ).toBe("local");
   });
 
-  it("keeps explicit new-worktree mode for draft threads without a worktree path", () => {
+  it("keeps explicit new-worktree mode for draft sessions without a worktree path", () => {
     expect(
       resolveEffectiveEnvMode({
         activeWorktreePath: null,
-        hasServerThread: false,
-        draftThreadEnvMode: "worktree",
+        hasServerSession: false,
+        draftSessionEnvMode: "worktree",
       }),
     ).toBe("worktree");
   });

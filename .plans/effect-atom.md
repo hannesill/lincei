@@ -9,7 +9,7 @@
 ## Target Architecture
 - Extract the websocket `RpcClient.Protocol` layer from [wsTransport.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsTransport.ts) into `rpc/protocol.ts`.
 - Define one `AtomRpc.Service` for `WsRpcGroup` in `rpc/client.ts`.
-- Add `rpc/invalidation.ts` with explicit scoped invalidation keys: `git:${cwd}`, `project:${cwd}`, `checkpoint:${threadId}`, `server-config`.
+- Add `rpc/invalidation.ts` with explicit scoped invalidation keys: `git:${cwd}`, `project:${cwd}`, `checkpoint:${sessionId}`, `server-config`.
 - Add `platform/desktopBridge.ts` as the only browser/desktop facade.
 - Remove from web by the end: [wsNativeApi.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApi.ts), [nativeApi.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/nativeApi.ts), [wsNativeApiState.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApiState.ts), [wsNativeApiAtoms.tsx](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApiAtoms.tsx), [wsRpcClient.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsRpcClient.ts), and all `*ReactQuery.ts` modules.
 
@@ -30,16 +30,16 @@
 ## Phase 3: Replace React Query Domain By Domain
 1. Replace [gitReactQuery.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/lib/gitReactQuery.ts) first.
 2. Add `rpc/gitAtoms.ts` and `rpc/useGit.ts` with `useGitStatus`, `useGitBranches`, `useResolvePullRequest`, and `useGitMutation`.
-3. Mutation settlement must invalidate scoped keys, not a global cache. `checkout`, `pull`, `init`, `createWorktree`, `removeWorktree`, `preparePullRequestThread`, and stacked actions invalidate `git:${cwd}`. Worktree create/remove also invalidates `project:${cwd}`.
+3. Mutation settlement must invalidate scoped keys, not a global cache. `checkout`, `pull`, `init`, `createWorktree`, `removeWorktree`, `preparePullRequestSession`, and stacked actions invalidate `git:${cwd}`. Worktree create/remove also invalidates `project:${cwd}`.
 4. Replace [projectReactQuery.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/lib/projectReactQuery.ts) second. `useProjectSearchEntries` must preserve current “keep previous results while loading” behavior.
-5. Replace [providerReactQuery.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/lib/providerReactQuery.ts) third. Preserve current checkpoint error normalization and retry/backoff semantics inside the atom effect. Invalidate by `checkpoint:${threadId}`.
+5. Replace [providerReactQuery.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/lib/providerReactQuery.ts) third. Preserve current checkpoint error normalization and retry/backoff semantics inside the atom effect. Invalidate by `checkpoint:${sessionId}`.
 6. Defer the desktop updater until the last phase.
 
 ## Phase 4: Move Root Invalidation Off `queryClient`
 1. In [__root.tsx](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/routes/__root.tsx), remove `QueryClient` usage and replace the throttled `invalidateQueries` block with throttled invalidation helpers.
 2. Keep Zustand orchestration/event application unchanged.
 3. Map current effects exactly:
-- git or checkpoint-affecting orchestration events touch `checkpoint:${threadId}`
+- git or checkpoint-affecting orchestration events touch `checkpoint:${sessionId}`
 - file creation/deletion/restoration touches `project:${cwd}`
 - config-affecting server events touch `server-config`
 
@@ -50,7 +50,7 @@
 - `rpc/gitActions.ts`
 - `rpc/projectActions.ts`
 - `platform/desktopBridge.ts`
-2. Migrate direct [nativeApi.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/nativeApi.ts) callers by domain, not file-by-file: git-heavy components first, then orchestration/thread actions, then shell/dialog helpers.
+2. Migrate direct [nativeApi.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/nativeApi.ts) callers by domain, not file-by-file: git-heavy components first, then orchestration/session actions, then shell/dialog helpers.
 3. After the last caller is gone, delete [nativeApi.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/nativeApi.ts) and the `window.nativeApi` fallback entirely.
 4. In the final cleanup PR, remove `NativeApi` from [ipc.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/packages/contracts/src/ipc.ts) if nothing outside web still needs it.
 

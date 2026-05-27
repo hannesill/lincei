@@ -108,7 +108,7 @@ function createRegisteredGitStatusClient(environmentId: EnvironmentId) {
     git: {
       runStackedAction: vi.fn(async () => ({}) as any),
       resolvePullRequest: vi.fn(async () => undefined),
-      preparePullRequestThread: vi.fn(async () => undefined),
+      preparePullRequestSession: vi.fn(async () => undefined),
     },
     server: {
       getConfig: vi.fn(async () => ({
@@ -127,9 +127,9 @@ function createRegisteredGitStatusClient(environmentId: EnvironmentId) {
     orchestration: {
       dispatchCommand: vi.fn(async () => undefined),
       getTurnDiff: vi.fn(async () => undefined),
-      getFullThreadDiff: vi.fn(async () => undefined),
+      getFullSessionDiff: vi.fn(async () => undefined),
       subscribeShell: vi.fn(() => () => undefined),
-      subscribeThread: vi.fn(() => () => undefined),
+      subscribeSession: vi.fn(() => () => undefined),
     },
   } as unknown as WsRpcClient;
 

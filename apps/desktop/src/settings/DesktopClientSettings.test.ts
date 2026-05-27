@@ -13,8 +13,8 @@ import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
   autoOpenPlanSidebar: false,
-  confirmThreadArchive: true,
-  confirmThreadDelete: false,
+  confirmSessionArchive: true,
+  confirmSessionDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
   diffWordWrap: true,
@@ -25,8 +25,8 @@ const clientSettings: ClientSettings = {
     "environment-1:/tmp/project-a": "separate",
   },
   sidebarProjectSortOrder: "manual",
-  sidebarThreadSortOrder: "created_at",
-  sidebarThreadPreviewCount: 6,
+  sidebarSessionSortOrder: "created_at",
+  sidebarSessionPreviewCount: 6,
   timestampFormat: "24-hour",
 };
 

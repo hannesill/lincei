@@ -1,5 +1,5 @@
 import type { ProviderRuntimeEvent } from "@t3tools/contracts";
-import { ProviderDriverKind, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, SessionId } from "@t3tools/contracts";
 import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts/settings";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, assert } from "@effect/vitest";
@@ -25,7 +25,7 @@ import {
 import { ServerSettingsService } from "../src/serverSettings.ts";
 import { AnalyticsService } from "../src/telemetry/Services/AnalyticsService.ts";
 import { SqlitePersistenceMemory } from "../src/persistence/Layers/Sqlite.ts";
-import { ProviderSessionRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderSessionRuntime.ts";
+import { ProviderRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderRuntime.ts";
 
 import {
   makeTestProviderAdapterHarness,
@@ -63,7 +63,7 @@ const makeIntegrationFixture = Effect.gen(function* () {
   });
 
   const directoryLayer = ProviderSessionDirectoryLive.pipe(
-    Layer.provide(ProviderSessionRuntimeRepositoryLive),
+    Layer.provide(ProviderRuntimeRepositoryLive),
   );
 
   const shared = Layer.mergeAll(
@@ -107,17 +107,17 @@ const collectEventsDuring = <A, E, R>(
 const runTurn = (input: {
   readonly provider: ProviderServiceShape;
   readonly harness: TestProviderAdapterHarness;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly userText: string;
   readonly response: TestTurnResponse;
 }) =>
   Effect.gen(function* () {
-    yield* input.harness.queueTurnResponse(input.threadId, input.response);
+    yield* input.harness.queueTurnResponse(input.sessionId, input.response);
     return yield* collectEventsDuring(
       input.provider.streamEvents,
       input.response.events.length,
       input.provider.sendTurn({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         input: input.userText,
         attachments: [],
       }),
@@ -130,19 +130,19 @@ it.live("replays typed runtime fixture events", () =>
 
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(ThreadId.make("thread-integration-typed"), {
-        threadId: ThreadId.make("thread-integration-typed"),
+      const session = yield* provider.startSession(SessionId.make("session-integration-typed"), {
+        sessionId: SessionId.make("session-integration-typed"),
         provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
       });
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.sessionId ?? "").length > 0, true);
 
       const observedEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         userText: "hello",
         response: { events: codexTurnTextFixture },
       });
@@ -167,19 +167,19 @@ it.live("replays file-changing fixture turn events", () =>
 
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(ThreadId.make("thread-integration-tools"), {
-        threadId: ThreadId.make("thread-integration-tools"),
+      const session = yield* provider.startSession(SessionId.make("session-integration-tools"), {
+        sessionId: SessionId.make("session-integration-tools"),
         provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
       });
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.sessionId ?? "").length > 0, true);
 
       const observedEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         userText: "make a small change",
         response: {
           events: codexTurnToolFixture,
@@ -204,19 +204,19 @@ it.live("runs multi-turn tool/approval flow", () =>
 
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(ThreadId.make("thread-integration-multi"), {
-        threadId: ThreadId.make("thread-integration-multi"),
+      const session = yield* provider.startSession(SessionId.make("session-integration-multi"), {
+        sessionId: SessionId.make("session-integration-multi"),
         provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
       });
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.sessionId ?? "").length > 0, true);
 
       const firstTurnEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         userText: "turn 1",
         response: {
           events: codexTurnToolFixture,
@@ -232,7 +232,7 @@ it.live("runs multi-turn tool/approval flow", () =>
       const secondTurnEvents = yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         userText: "turn 2 approval",
         response: {
           events: codexTurnApprovalFixture,
@@ -256,19 +256,19 @@ it.live("rolls back provider conversation state only", () =>
 
     yield* Effect.gen(function* () {
       const provider = yield* ProviderService;
-      const session = yield* provider.startSession(ThreadId.make("thread-integration-rollback"), {
-        threadId: ThreadId.make("thread-integration-rollback"),
+      const session = yield* provider.startSession(SessionId.make("session-integration-rollback"), {
+        sessionId: SessionId.make("session-integration-rollback"),
         provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         cwd: fixture.cwd,
         runtimeMode: "full-access",
       });
-      assert.equal((session.threadId ?? "").length > 0, true);
+      assert.equal((session.sessionId ?? "").length > 0, true);
 
       yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         userText: "turn 1",
         response: {
           events: codexTurnToolFixture,
@@ -280,7 +280,7 @@ it.live("rolls back provider conversation state only", () =>
       yield* runTurn({
         provider,
         harness: fixture.harness,
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         userText: "turn 2 approval",
         response: {
           events: codexTurnApprovalFixture,
@@ -290,11 +290,11 @@ it.live("rolls back provider conversation state only", () =>
       });
 
       yield* provider.rollbackConversation({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         numTurns: 1,
       });
 
-      const rollbackCalls = fixture.harness.getRollbackCalls(session.threadId);
+      const rollbackCalls = fixture.harness.getRollbackCalls(session.sessionId);
       assert.deepEqual(rollbackCalls, [1]);
 
       const readme = yield* readFileString(join(fixture.cwd, "README.md"));

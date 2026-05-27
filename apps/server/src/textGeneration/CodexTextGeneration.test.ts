@@ -330,7 +330,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
     ),
   );
 
-  it.effect("generates thread titles and trims them for sidebar use", () =>
+  it.effect("generates session titles and trims them for sidebar use", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
@@ -340,7 +340,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
+          const generated = yield* textGeneration.generateSessionTitle({
             cwd: process.cwd(),
             message: "Please investigate websocket reconnect regressions after a worktree restore.",
             modelSelection: DEFAULT_TEST_MODEL_SELECTION,
@@ -351,7 +351,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
     ),
   );
 
-  it.effect("falls back when thread title normalization becomes whitespace-only", () =>
+  it.effect("falls back when session title normalization becomes whitespace-only", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
@@ -360,18 +360,18 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
+          const generated = yield* textGeneration.generateSessionTitle({
             cwd: process.cwd(),
-            message: "Name this thread.",
+            message: "Name this session.",
             modelSelection: DEFAULT_TEST_MODEL_SELECTION,
           });
 
-          expect(generated.title).toBe("New thread");
+          expect(generated.title).toBe("New session");
         }),
     ),
   );
 
-  it.effect("trims whitespace exposed after quote removal in thread titles", () =>
+  it.effect("trims whitespace exposed after quote removal in session titles", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
@@ -380,9 +380,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
+          const generated = yield* textGeneration.generateSessionTitle({
             cwd: process.cwd(),
-            message: "Name this thread.",
+            message: "Name this session.",
             modelSelection: DEFAULT_TEST_MODEL_SELECTION,
           });
 
@@ -426,7 +426,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
           const { attachmentsDir } = yield* ServerConfig;
-          const attachmentId = "thread-branch-image-attachment";
+          const attachmentId = "session-branch-image-attachment";
           const attachmentPath = path.join(attachmentsDir, `${attachmentId}.png`);
           yield* fs.makeDirectory(attachmentsDir, { recursive: true });
           yield* fs.writeFile(attachmentPath, Buffer.from("hello"));
@@ -464,7 +464,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
           const { attachmentsDir } = yield* ServerConfig;
-          const attachmentId = "thread-1-attachment";
+          const attachmentId = "session-1-attachment";
           const imagePath = path.join(attachmentsDir, `${attachmentId}.png`);
           yield* fs.makeDirectory(attachmentsDir, { recursive: true });
           yield* fs.writeFile(imagePath, Buffer.from("hello"));
@@ -513,7 +513,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
           const { attachmentsDir } = yield* ServerConfig;
-          const missingAttachmentId = "thread-missing-attachment";
+          const missingAttachmentId = "session-missing-attachment";
           const missingPath = path.join(attachmentsDir, `${missingAttachmentId}.png`);
           yield* fs.remove(missingPath).pipe(Effect.catch(() => Effect.void));
 

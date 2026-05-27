@@ -5,7 +5,7 @@ This is a living glossary for T3 Code. It explains what common terms mean in thi
 ## Table of contents
 
 - [Project and workspace](#project-and-workspace)
-- [Thread timeline](#thread-timeline)
+- [Session timeline](#session-timeline)
 - [Orchestration](#orchestration)
 - [Provider runtime](#provider-runtime)
 - [Checkpointing](#checkpointing)
@@ -16,7 +16,7 @@ This is a living glossary for T3 Code. It explains what common terms mean in thi
 
 #### Project
 
-The top-level workspace record in the app. In [the orchestration contracts][1], a project has a `workspaceRoot`, a title, and one or more threads. See [workspace-layout.md][2].
+The top-level workspace record in the app. In [the orchestration contracts][1], a project has a `workspaceRoot`, a title, and one or more sessions. See [workspace-layout.md][2].
 
 #### Workspace root
 
@@ -24,21 +24,21 @@ The root filesystem path for a project. In [the orchestration model][1], it is t
 
 #### Worktree
 
-A Git worktree used as an isolated workspace for a thread. If a thread has a `worktreePath` in [the contracts][1], it runs there instead of in the main working tree. Git operations live in [GitCore.ts][3].
+A Git worktree used as an isolated workspace for a session. If a session has a `worktreePath` in [the contracts][1], it runs there instead of in the main working tree. Git operations live in [GitCore.ts][3].
 
-### Thread timeline
+### Session timeline
 
-#### Thread
+#### Session
 
-The main durable unit of conversation and workspace history. In [the orchestration contracts][1], a thread holds messages, activities, checkpoints, and session-related state. See [projector.ts][4].
+The main durable unit of conversation and workspace history. In [the orchestration contracts][1], a session holds messages, activities, checkpoints, and session-related state. See [projector.ts][4].
 
 #### Turn
 
-A single user-to-assistant work cycle inside a thread. It starts with user input and ends when follow-up work like checkpointing settles. See [the contracts][1], [ProviderRuntimeIngestion.ts][5], and [CheckpointReactor.ts][6].
+A single user-to-assistant work cycle inside a session. It starts with user input and ends when follow-up work like checkpointing settles. See [the contracts][1], [ProviderRuntimeIngestion.ts][5], and [CheckpointReactor.ts][6].
 
 #### Activity
 
-A user-visible log item attached to a thread. In [the contracts][1], activities cover important non-message events like approvals, tool actions, and failures. They are projected into thread state in [projector.ts][4].
+A user-visible log item attached to a session. In [the contracts][1], activities cover important non-message events like approvals, tool actions, and failures. They are projected into session state in [projector.ts][4].
 
 ### Orchestration
 
@@ -46,17 +46,17 @@ Orchestration is the server-side domain layer that turns runtime activity into s
 
 #### Aggregate
 
-The domain object a command or event belongs to. In [the contracts][1], that is usually `project` or `thread`. See [decider.ts][8].
+The domain object a command or event belongs to. In [the contracts][1], that is usually `project` or `session`. See [decider.ts][8].
 
 #### Command
 
 A typed request to change domain state. In [the contracts][1], commands are validated in [commandInvariants.ts][9] and turned into events by [decider.ts][8].
-Examples include `thread.create`, `thread.turn.start`, and `thread.checkpoint.revert`.
+Examples include `session.create`, `session.turn.start`, and `session.checkpoint.revert`.
 
 #### Domain Event
 
 A persisted fact that something already happened. In [the contracts][1], events are the source of truth, and [projector.ts][4] shows how they are applied.
-Examples include `thread.created`, `thread.message-sent`, and `thread.turn-diff-completed`.
+Examples include `session.created`, `session.message-sent`, and `session.turn-diff-completed`.
 
 #### Decider
 
@@ -72,7 +72,7 @@ The logic that applies domain events to the read model or projection tables. See
 
 #### Read model
 
-The current materialized view of orchestration state. In [the contracts][1], it holds projects, threads, messages, activities, checkpoints, and session state. See [ProjectionSnapshotQuery.ts][10] and [OrchestrationEngine.ts][7].
+The current materialized view of orchestration state. In [the contracts][1], it holds projects, sessions, messages, activities, checkpoints, and session state. See [ProjectionSnapshotQuery.ts][10] and [OrchestrationEngine.ts][7].
 
 #### Reactor
 
@@ -97,19 +97,19 @@ The backend agent runtime that actually performs work. See [ProviderService.ts][
 
 #### Session
 
-The live provider-backed runtime attached to a thread. Session shape is in [the orchestration contracts][1], and lifecycle is managed in [ProviderService.ts][14].
+The live provider-backed runtime attached to a session. Session shape is in [the orchestration contracts][1], and lifecycle is managed in [ProviderService.ts][14].
 
 #### Runtime mode
 
-The safety/access mode for a thread or session. In [the contracts][1], the main values are `approval-required` and `full-access`. See [runtime-modes.md][18].
+The safety/access mode for a session or session. In [the contracts][1], the main values are `approval-required` and `full-access`. See [runtime-modes.md][18].
 
 #### Interaction mode
 
-The agent interaction style for a thread. In [the contracts][1], the main values are `default` and `plan`. See [runtime-modes.md][18].
+The agent interaction style for a session. In [the contracts][1], the main values are `default` and `plan`. See [runtime-modes.md][18].
 
 #### Assistant delivery mode
 
-Controls how assistant text reaches the thread timeline. In [the contracts][1], `streaming` updates incrementally and `buffered` delivers a completed result. See [ProviderService.ts][14].
+Controls how assistant text reaches the session timeline. In [the contracts][1], `streaming` updates incrementally and `buffered` delivers a completed result. See [ProviderService.ts][14].
 
 #### Snapshot
 
@@ -121,7 +121,7 @@ Checkpointing captures workspace state over time so the app can diff turns and r
 
 #### Checkpoint
 
-A saved snapshot of a thread workspace at a particular turn. In practice it is a hidden Git ref in [CheckpointStore.ts][19] plus a projected summary from [ProjectionCheckpoints.ts][21]. Capture and lifecycle work happen in [CheckpointReactor.ts][6].
+A saved snapshot of a session workspace at a particular turn. In practice it is a hidden Git ref in [CheckpointStore.ts][19] plus a projected summary from [ProjectionCheckpoints.ts][21]. Capture and lifecycle work happen in [CheckpointReactor.ts][6].
 
 #### Checkpoint ref
 
@@ -129,7 +129,7 @@ The durable identifier for a filesystem checkpoint, stored as a Git ref. It is t
 
 #### Checkpoint baseline
 
-The starting checkpoint for diffing a thread timeline. This flow is surfaced through [RuntimeReceiptBus.ts][13], coordinated in [CheckpointReactor.ts][6], and supported by [Utils.ts][22].
+The starting checkpoint for diffing a session timeline. This flow is surfaced through [RuntimeReceiptBus.ts][13], coordinated in [CheckpointReactor.ts][6], and supported by [Utils.ts][22].
 
 #### Checkpoint diff
 
@@ -137,7 +137,7 @@ The patch difference between two checkpoints. Query logic lives in [CheckpointDi
 
 #### Turn diff
 
-The file patch and changed-file summary for one turn. It is usually computed in [CheckpointDiffQuery.ts][20], represented in [the contracts][1], and recorded into thread state by [projector.ts][4].
+The file patch and changed-file summary for one turn. It is usually computed in [CheckpointDiffQuery.ts][20], represented in [the contracts][1], and recorded into session state by [projector.ts][4].
 
 ## Practical Shortcuts
 

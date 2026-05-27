@@ -1,4 +1,4 @@
-import { ThreadId } from "@t3tools/contracts";
+import { SessionId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -25,7 +25,7 @@ import {
 function makeContext(overrides?: Partial<TerminalContextDraft>): TerminalContextDraft {
   return {
     id: "context-1",
-    threadId: ThreadId.make("thread-1"),
+    sessionId: SessionId.make("session-1"),
     terminalId: "default",
     terminalLabel: "Terminal 1",
     lineStart: 12,

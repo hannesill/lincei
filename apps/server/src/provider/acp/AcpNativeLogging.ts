@@ -1,4 +1,4 @@
-import type { ProviderDriverKind, ThreadId } from "@t3tools/contracts";
+import type { ProviderDriverKind, SessionId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -11,7 +11,7 @@ import type { AcpSessionRequestLogEvent, AcpSessionRuntimeOptions } from "./AcpS
 function writeNativeAcpLog(input: {
   readonly nativeEventLogger: EventNdjsonLogger | undefined;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly kind: "request" | "protocol";
   readonly payload: unknown;
 }): Effect.Effect<void, never> {
@@ -26,11 +26,11 @@ function writeNativeAcpLog(input: {
           kind: input.kind,
           provider: input.provider,
           createdAt: observedAt,
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           payload: input.payload,
         },
       },
-      input.threadId,
+      input.sessionId,
     );
   });
 }
@@ -48,14 +48,14 @@ function formatRequestLogPayload(event: AcpSessionRequestLogEvent) {
 export function makeAcpNativeLoggers(input: {
   readonly nativeEventLogger: EventNdjsonLogger | undefined;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
 }): Pick<AcpSessionRuntimeOptions, "requestLogger" | "protocolLogging"> {
   return {
     requestLogger: (event) =>
       writeNativeAcpLog({
         nativeEventLogger: input.nativeEventLogger,
         provider: input.provider,
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         kind: "request",
         payload: formatRequestLogPayload(event),
       }),
@@ -68,7 +68,7 @@ export function makeAcpNativeLoggers(input: {
               writeNativeAcpLog({
                 nativeEventLogger: input.nativeEventLogger,
                 provider: input.provider,
-                threadId: input.threadId,
+                sessionId: input.sessionId,
                 kind: "protocol",
                 payload: event,
               }),

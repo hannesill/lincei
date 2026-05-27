@@ -4,7 +4,7 @@ import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   ProjectId,
-  ThreadId,
+  SessionId,
   type OrchestrationCommand,
   type OrchestrationReadModel,
   ProviderInstanceId,
@@ -12,11 +12,11 @@ import {
 import * as Effect from "effect/Effect";
 
 import {
-  findThreadById,
-  listThreadsByProjectId,
+  findSessionById,
+  listSessionsByProjectId,
   requireNonNegativeInteger,
-  requireThread,
-  requireThreadAbsent,
+  requireSession,
+  requireSessionAbsent,
 } from "./commandInvariants.ts";
 
 const now = "2026-01-01T00:00:00.000Z";
@@ -52,11 +52,11 @@ const readModel: OrchestrationReadModel = {
       deletedAt: null,
     },
   ],
-  threads: [
+  sessions: [
     {
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       projectId: ProjectId.make("project-a"),
-      title: "Thread A",
+      title: "Session A",
       modelSelection: {
         instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5-codex",
@@ -77,9 +77,9 @@ const readModel: OrchestrationReadModel = {
       deletedAt: null,
     },
     {
-      id: ThreadId.make("thread-2"),
+      id: SessionId.make("session-2"),
       projectId: ProjectId.make("project-b"),
-      title: "Thread B",
+      title: "Session B",
       modelSelection: {
         instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5-codex",
@@ -103,9 +103,9 @@ const readModel: OrchestrationReadModel = {
 };
 
 const messageSendCommand: OrchestrationCommand = {
-  type: "thread.turn.start",
+  type: "session.turn.start",
   commandId: CommandId.make("cmd-1"),
-  threadId: ThreadId.make("thread-1"),
+  sessionId: SessionId.make("session-1"),
   message: {
     messageId: MessageId.make("msg-1"),
     role: "user",
@@ -118,43 +118,43 @@ const messageSendCommand: OrchestrationCommand = {
 };
 
 describe("commandInvariants", () => {
-  it("finds threads by id and project", () => {
-    expect(findThreadById(readModel, ThreadId.make("thread-1"))?.projectId).toBe("project-a");
-    expect(findThreadById(readModel, ThreadId.make("missing"))).toBeUndefined();
+  it("finds sessions by id and project", () => {
+    expect(findSessionById(readModel, SessionId.make("session-1"))?.projectId).toBe("project-a");
+    expect(findSessionById(readModel, SessionId.make("missing"))).toBeUndefined();
     expect(
-      listThreadsByProjectId(readModel, ProjectId.make("project-b")).map((thread) => thread.id),
-    ).toEqual([ThreadId.make("thread-2")]);
+      listSessionsByProjectId(readModel, ProjectId.make("project-b")).map((session) => session.id),
+    ).toEqual([SessionId.make("session-2")]);
   });
 
-  it("requires existing thread", async () => {
-    const thread = await Effect.runPromise(
-      requireThread({
+  it("requires existing session", async () => {
+    const session = await Effect.runPromise(
+      requireSession({
         readModel,
         command: messageSendCommand,
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
       }),
     );
-    expect(thread.id).toBe(ThreadId.make("thread-1"));
+    expect(session.id).toBe(SessionId.make("session-1"));
 
     await expect(
       Effect.runPromise(
-        requireThread({
+        requireSession({
           readModel,
           command: messageSendCommand,
-          threadId: ThreadId.make("missing"),
+          sessionId: SessionId.make("missing"),
         }),
       ),
     ).rejects.toThrow("does not exist");
   });
 
-  it("requires missing thread for create flows", async () => {
+  it("requires missing session for create flows", async () => {
     await Effect.runPromise(
-      requireThreadAbsent({
+      requireSessionAbsent({
         readModel,
         command: {
-          type: "thread.create",
+          type: "session.create",
           commandId: CommandId.make("cmd-2"),
-          threadId: ThreadId.make("thread-3"),
+          sessionId: SessionId.make("session-3"),
           projectId: ProjectId.make("project-a"),
           title: "new",
           modelSelection: {
@@ -167,18 +167,18 @@ describe("commandInvariants", () => {
           worktreePath: null,
           createdAt: now,
         },
-        threadId: ThreadId.make("thread-3"),
+        sessionId: SessionId.make("session-3"),
       }),
     );
 
     await expect(
       Effect.runPromise(
-        requireThreadAbsent({
+        requireSessionAbsent({
           readModel,
           command: {
-            type: "thread.create",
+            type: "session.create",
             commandId: CommandId.make("cmd-3"),
-            threadId: ThreadId.make("thread-1"),
+            sessionId: SessionId.make("session-1"),
             projectId: ProjectId.make("project-a"),
             title: "dup",
             modelSelection: {
@@ -191,7 +191,7 @@ describe("commandInvariants", () => {
             worktreePath: null,
             createdAt: now,
           },
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
         }),
       ),
     ).rejects.toThrow("already exists");
@@ -200,7 +200,7 @@ describe("commandInvariants", () => {
   it("requires non-negative integers", async () => {
     await Effect.runPromise(
       requireNonNegativeInteger({
-        commandType: "thread.checkpoint.revert",
+        commandType: "session.checkpoint.revert",
         field: "turnCount",
         value: 0,
       }),
@@ -209,7 +209,7 @@ describe("commandInvariants", () => {
     await expect(
       Effect.runPromise(
         requireNonNegativeInteger({
-          commandType: "thread.checkpoint.revert",
+          commandType: "session.checkpoint.revert",
           field: "turnCount",
           value: -1,
         }),

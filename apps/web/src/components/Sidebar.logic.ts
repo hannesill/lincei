@@ -1,21 +1,21 @@
 import * as React from "react";
-import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
+import type { SidebarProjectSortOrder, SidebarSessionSortOrder } from "@t3tools/contracts/settings";
 import {
-  getThreadSortTimestamp,
-  sortThreads,
+  getSessionSortTimestamp,
+  sortSessions,
   toSortableTimestamp,
-  type ThreadSortInput,
-} from "../lib/threadSort";
-import type { SidebarThreadSummary, Thread } from "../types";
+  type SessionSortInput,
+} from "../lib/sessionSort";
+import type { SidebarSessionSummary, Session } from "../types";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
 
-export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
+export const THREAD_SELECTION_SAFE_SELECTOR = "[data-session-item], [data-session-selection-safe]";
 export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 100;
-// Visible sidebar rows are prewarmed into the thread-detail cache so opening a
-// nearby thread usually reuses an already-hot subscription.
+// Visible sidebar rows are prewarmed into the session-detail cache so opening a
+// nearby session usually reuses an already-hot subscription.
 export const SIDEBAR_THREAD_PREWARM_LIMIT = 10;
-export type SidebarNewThreadEnvMode = "local" | "worktree";
+export type SidebarNewSessionEnvMode = "local" | "worktree";
 type SidebarProject = {
   id: string;
   name: string;
@@ -23,9 +23,9 @@ type SidebarProject = {
   updatedAt?: string | undefined;
 };
 
-export type ThreadTraversalDirection = "previous" | "next";
+export type SessionTraversalDirection = "previous" | "next";
 
-export interface ThreadStatusPill {
+export interface SessionStatusPill {
   label:
     | "Working"
     | "Connecting"
@@ -38,7 +38,7 @@ export interface ThreadStatusPill {
   pulse: boolean;
 }
 
-const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
+const THREAD_STATUS_PRIORITY: Record<SessionStatusPill["label"], number> = {
   "Pending Approval": 5,
   "Awaiting Input": 4,
   Working: 3,
@@ -47,8 +47,8 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Completed: 1,
 };
 
-type ThreadStatusInput = Pick<
-  SidebarThreadSummary,
+type SessionStatusInput = Pick<
+  SidebarSessionSummary,
   | "hasActionableProposedPlan"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
@@ -59,17 +59,17 @@ type ThreadStatusInput = Pick<
   lastVisitedAt?: string | undefined;
 };
 
-export interface ThreadJumpHintVisibilityController {
+export interface SessionJumpHintVisibilityController {
   sync: (shouldShow: boolean) => void;
   dispose: () => void;
 }
 
-export function createThreadJumpHintVisibilityController(input: {
+export function createSessionJumpHintVisibilityController(input: {
   delayMs: number;
   onVisibilityChange: (visible: boolean) => void;
   setTimeoutFn?: typeof globalThis.setTimeout;
   clearTimeoutFn?: typeof globalThis.clearTimeout;
-}): ThreadJumpHintVisibilityController {
+}): SessionJumpHintVisibilityController {
   const setTimeoutFn = input.setTimeoutFn ?? globalThis.setTimeout;
   const clearTimeoutFn = input.clearTimeoutFn ?? globalThis.clearTimeout;
   let isVisible = false;
@@ -110,18 +110,18 @@ export function createThreadJumpHintVisibilityController(input: {
   };
 }
 
-export function useThreadJumpHintVisibility(): {
-  showThreadJumpHints: boolean;
-  updateThreadJumpHintsVisibility: (shouldShow: boolean) => void;
+export function useSessionJumpHintVisibility(): {
+  showSessionJumpHints: boolean;
+  updateSessionJumpHintsVisibility: (shouldShow: boolean) => void;
 } {
-  const [showThreadJumpHints, setShowThreadJumpHints] = React.useState(false);
-  const controllerRef = React.useRef<ThreadJumpHintVisibilityController | null>(null);
+  const [showSessionJumpHints, setShowSessionJumpHints] = React.useState(false);
+  const controllerRef = React.useRef<SessionJumpHintVisibilityController | null>(null);
 
   React.useEffect(() => {
-    const controller = createThreadJumpHintVisibilityController({
+    const controller = createSessionJumpHintVisibilityController({
       delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
-        setShowThreadJumpHints(visible);
+        setShowSessionJumpHints(visible);
       },
       setTimeoutFn: window.setTimeout.bind(window),
       clearTimeoutFn: window.clearTimeout.bind(window),
@@ -134,57 +134,57 @@ export function useThreadJumpHintVisibility(): {
     };
   }, []);
 
-  const updateThreadJumpHintsVisibility = React.useCallback((shouldShow: boolean) => {
+  const updateSessionJumpHintsVisibility = React.useCallback((shouldShow: boolean) => {
     controllerRef.current?.sync(shouldShow);
   }, []);
 
   return {
-    showThreadJumpHints,
-    updateThreadJumpHintsVisibility,
+    showSessionJumpHints,
+    updateSessionJumpHintsVisibility,
   };
 }
 
-export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
-  if (!thread.latestTurn?.completedAt) return false;
-  const completedAt = Date.parse(thread.latestTurn.completedAt);
+export function hasUnseenCompletion(session: SessionStatusInput): boolean {
+  if (!session.latestTurn?.completedAt) return false;
+  const completedAt = Date.parse(session.latestTurn.completedAt);
   if (Number.isNaN(completedAt)) return false;
-  if (!thread.lastVisitedAt) return true;
+  if (!session.lastVisitedAt) return true;
 
-  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
+  const lastVisitedAt = Date.parse(session.lastVisitedAt);
   if (Number.isNaN(lastVisitedAt)) return true;
   return completedAt > lastVisitedAt;
 }
 
-export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
+export function shouldClearSessionSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
   return !target.closest(THREAD_SELECTION_SAFE_SELECTOR);
 }
 
-export function resolveSidebarNewThreadEnvMode(input: {
-  requestedEnvMode?: SidebarNewThreadEnvMode;
-  defaultEnvMode: SidebarNewThreadEnvMode;
-}): SidebarNewThreadEnvMode {
+export function resolveSidebarNewSessionEnvMode(input: {
+  requestedEnvMode?: SidebarNewSessionEnvMode;
+  defaultEnvMode: SidebarNewSessionEnvMode;
+}): SidebarNewSessionEnvMode {
   return input.requestedEnvMode ?? input.defaultEnvMode;
 }
 
-export function resolveSidebarNewThreadSeedContext(input: {
+export function resolveSidebarNewSessionSeedContext(input: {
   projectId: string;
-  defaultEnvMode: SidebarNewThreadEnvMode;
-  activeThread?: {
+  defaultEnvMode: SidebarNewSessionEnvMode;
+  activeSession?: {
     projectId: string;
     branch: string | null;
     worktreePath: string | null;
   } | null;
-  activeDraftThread?: {
+  activeDraftSession?: {
     projectId: string;
     branch: string | null;
     worktreePath: string | null;
-    envMode: SidebarNewThreadEnvMode;
+    envMode: SidebarNewSessionEnvMode;
   } | null;
 }): {
   branch?: string | null;
   worktreePath?: string | null;
-  envMode: SidebarNewThreadEnvMode;
+  envMode: SidebarNewSessionEnvMode;
 } {
   if (input.defaultEnvMode === "worktree") {
     return {
@@ -192,19 +192,19 @@ export function resolveSidebarNewThreadSeedContext(input: {
     };
   }
 
-  if (input.activeDraftThread?.projectId === input.projectId) {
+  if (input.activeDraftSession?.projectId === input.projectId) {
     return {
-      branch: input.activeDraftThread.branch,
-      worktreePath: input.activeDraftThread.worktreePath,
-      envMode: input.activeDraftThread.envMode,
+      branch: input.activeDraftSession.branch,
+      worktreePath: input.activeDraftSession.worktreePath,
+      envMode: input.activeDraftSession.envMode,
     };
   }
 
-  if (input.activeThread?.projectId === input.projectId) {
+  if (input.activeSession?.projectId === input.projectId) {
     return {
-      branch: input.activeThread.branch,
-      worktreePath: input.activeThread.worktreePath,
-      envMode: input.activeThread.worktreePath ? "worktree" : "local",
+      branch: input.activeSession.branch,
+      worktreePath: input.activeSession.worktreePath,
+      envMode: input.activeSession.worktreePath ? "worktree" : "local",
     };
   }
 
@@ -241,49 +241,49 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   return [...ordered, ...remaining];
 }
 
-export function getVisibleSidebarThreadIds<TThreadId>(
+export function getVisibleSidebarSessionIds<TSessionId>(
   renderedProjects: readonly {
-    shouldShowThreadPanel?: boolean;
-    renderedThreadIds: readonly TThreadId[];
+    shouldShowSessionPanel?: boolean;
+    renderedSessionIds: readonly TSessionId[];
   }[],
-): TThreadId[] {
+): TSessionId[] {
   return renderedProjects.flatMap((renderedProject) =>
-    renderedProject.shouldShowThreadPanel === false ? [] : renderedProject.renderedThreadIds,
+    renderedProject.shouldShowSessionPanel === false ? [] : renderedProject.renderedSessionIds,
   );
 }
 
-export function getSidebarThreadIdsToPrewarm<TThreadId>(
-  visibleThreadIds: readonly TThreadId[],
+export function getSidebarSessionIdsToPrewarm<TSessionId>(
+  visibleSessionIds: readonly TSessionId[],
   limit = SIDEBAR_THREAD_PREWARM_LIMIT,
-): TThreadId[] {
-  return visibleThreadIds.slice(0, Math.max(0, limit));
+): TSessionId[] {
+  return visibleSessionIds.slice(0, Math.max(0, limit));
 }
 
-export function resolveAdjacentThreadId<T>(input: {
-  threadIds: readonly T[];
-  currentThreadId: T | null;
-  direction: ThreadTraversalDirection;
+export function resolveAdjacentSessionId<T>(input: {
+  sessionIds: readonly T[];
+  currentSessionId: T | null;
+  direction: SessionTraversalDirection;
 }): T | null {
-  const { currentThreadId, direction, threadIds } = input;
+  const { currentSessionId, direction, sessionIds } = input;
 
-  if (threadIds.length === 0) {
+  if (sessionIds.length === 0) {
     return null;
   }
 
-  if (currentThreadId === null) {
-    return direction === "previous" ? (threadIds.at(-1) ?? null) : (threadIds[0] ?? null);
+  if (currentSessionId === null) {
+    return direction === "previous" ? (sessionIds.at(-1) ?? null) : (sessionIds[0] ?? null);
   }
 
-  const currentIndex = threadIds.indexOf(currentThreadId);
+  const currentIndex = sessionIds.indexOf(currentSessionId);
   if (currentIndex === -1) {
     return null;
   }
 
   if (direction === "previous") {
-    return currentIndex > 0 ? (threadIds[currentIndex - 1] ?? null) : null;
+    return currentIndex > 0 ? (sessionIds[currentIndex - 1] ?? null) : null;
   }
 
-  return currentIndex < threadIds.length - 1 ? (threadIds[currentIndex + 1] ?? null) : null;
+  return currentIndex < sessionIds.length - 1 ? (sessionIds[currentIndex + 1] ?? null) : null;
 }
 
 export function isContextMenuPointerDown(input: {
@@ -295,7 +295,7 @@ export function isContextMenuPointerDown(input: {
   return input.isMac && input.button === 0 && input.ctrlKey;
 }
 
-export function resolveThreadRowClassName(input: {
+export function resolveSessionRowClassName(input: {
   isActive: boolean;
   isSelected: boolean;
 }): string {
@@ -326,12 +326,12 @@ export function resolveThreadRowClassName(input: {
   return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
 }
 
-export function resolveThreadStatusPill(input: {
-  thread: ThreadStatusInput;
-}): ThreadStatusPill | null {
-  const { thread } = input;
+export function resolveSessionStatusPill(input: {
+  session: SessionStatusInput;
+}): SessionStatusPill | null {
+  const { session } = input;
 
-  if (thread.hasPendingApprovals) {
+  if (session.hasPendingApprovals) {
     return {
       label: "Pending Approval",
       colorClass: "text-amber-600 dark:text-amber-300/90",
@@ -340,7 +340,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.hasPendingUserInput) {
+  if (session.hasPendingUserInput) {
     return {
       label: "Awaiting Input",
       colorClass: "text-indigo-600 dark:text-indigo-300/90",
@@ -349,7 +349,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "running") {
+  if (session.session?.status === "running") {
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -358,7 +358,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "connecting") {
+  if (session.session?.status === "connecting") {
     return {
       label: "Connecting",
       colorClass: "text-sky-600 dark:text-sky-300/80",
@@ -368,10 +368,10 @@ export function resolveThreadStatusPill(input: {
   }
 
   const hasPlanReadyPrompt =
-    !thread.hasPendingUserInput &&
-    thread.interactionMode === "plan" &&
-    isLatestTurnSettled(thread.latestTurn, thread.session) &&
-    thread.hasActionableProposedPlan;
+    !session.hasPendingUserInput &&
+    session.interactionMode === "plan" &&
+    isLatestTurnSettled(session.latestTurn, session.session) &&
+    session.hasActionableProposedPlan;
   if (hasPlanReadyPrompt) {
     return {
       label: "Plan Ready",
@@ -381,7 +381,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (hasUnseenCompletion(thread)) {
+  if (hasUnseenCompletion(session)) {
     return {
       label: "Completed",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
@@ -394,9 +394,9 @@ export function resolveThreadStatusPill(input: {
 }
 
 export function resolveProjectStatusIndicator(
-  statuses: ReadonlyArray<ThreadStatusPill | null>,
-): ThreadStatusPill | null {
-  let highestPriorityStatus: ThreadStatusPill | null = null;
+  statuses: ReadonlyArray<SessionStatusPill | null>,
+): SessionStatusPill | null {
+  let highestPriorityStatus: SessionStatusPill | null = null;
 
   for (const status of statuses) {
     if (status === null) continue;
@@ -411,75 +411,77 @@ export function resolveProjectStatusIndicator(
   return highestPriorityStatus;
 }
 
-export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input: {
-  threads: readonly T[];
-  activeThreadId: T["id"] | undefined;
-  isThreadListExpanded: boolean;
+export function getVisibleSessionsForProject<T extends Pick<Session, "id">>(input: {
+  sessions: readonly T[];
+  activeSessionId: T["id"] | undefined;
+  isSessionListExpanded: boolean;
   previewLimit: number;
 }): {
-  hasHiddenThreads: boolean;
-  visibleThreads: T[];
-  hiddenThreads: T[];
+  hasHiddenSessions: boolean;
+  visibleSessions: T[];
+  hiddenSessions: T[];
 } {
-  const { activeThreadId, isThreadListExpanded, previewLimit, threads } = input;
-  const hasHiddenThreads = threads.length > previewLimit;
+  const { activeSessionId, isSessionListExpanded, previewLimit, sessions } = input;
+  const hasHiddenSessions = sessions.length > previewLimit;
 
-  if (!hasHiddenThreads || isThreadListExpanded) {
+  if (!hasHiddenSessions || isSessionListExpanded) {
     return {
-      hasHiddenThreads,
-      hiddenThreads: [],
-      visibleThreads: [...threads],
+      hasHiddenSessions,
+      hiddenSessions: [],
+      visibleSessions: [...sessions],
     };
   }
 
-  const previewThreads = threads.slice(0, previewLimit);
-  if (!activeThreadId || previewThreads.some((thread) => thread.id === activeThreadId)) {
+  const previewSessions = sessions.slice(0, previewLimit);
+  if (!activeSessionId || previewSessions.some((session) => session.id === activeSessionId)) {
     return {
-      hasHiddenThreads: true,
-      hiddenThreads: threads.slice(previewLimit),
-      visibleThreads: previewThreads,
+      hasHiddenSessions: true,
+      hiddenSessions: sessions.slice(previewLimit),
+      visibleSessions: previewSessions,
     };
   }
 
-  const activeThread = threads.find((thread) => thread.id === activeThreadId);
-  if (!activeThread) {
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
+  if (!activeSession) {
     return {
-      hasHiddenThreads: true,
-      hiddenThreads: threads.slice(previewLimit),
-      visibleThreads: previewThreads,
+      hasHiddenSessions: true,
+      hiddenSessions: sessions.slice(previewLimit),
+      visibleSessions: previewSessions,
     };
   }
 
-  const visibleThreadIds = new Set([...previewThreads, activeThread].map((thread) => thread.id));
+  const visibleSessionIds = new Set(
+    [...previewSessions, activeSession].map((session) => session.id),
+  );
 
   return {
-    hasHiddenThreads: true,
-    hiddenThreads: threads.filter((thread) => !visibleThreadIds.has(thread.id)),
-    visibleThreads: threads.filter((thread) => visibleThreadIds.has(thread.id)),
+    hasHiddenSessions: true,
+    hiddenSessions: sessions.filter((session) => !visibleSessionIds.has(session.id)),
+    visibleSessions: sessions.filter((session) => visibleSessionIds.has(session.id)),
   };
 }
 
-export function getFallbackThreadIdAfterDelete<
-  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> & ThreadSortInput,
+export function getFallbackSessionIdAfterDelete<
+  T extends Pick<Session, "id" | "projectId" | "createdAt" | "updatedAt"> & SessionSortInput,
 >(input: {
-  threads: readonly T[];
-  deletedThreadId: T["id"];
-  sortOrder: SidebarThreadSortOrder;
-  deletedThreadIds?: ReadonlySet<T["id"]>;
+  sessions: readonly T[];
+  deletedSessionId: T["id"];
+  sortOrder: SidebarSessionSortOrder;
+  deletedSessionIds?: ReadonlySet<T["id"]>;
 }): T["id"] | null {
-  const { deletedThreadId, deletedThreadIds, sortOrder, threads } = input;
-  const deletedThread = threads.find((thread) => thread.id === deletedThreadId);
-  if (!deletedThread) {
+  const { deletedSessionId, deletedSessionIds, sortOrder, sessions } = input;
+  const deletedSession = sessions.find((session) => session.id === deletedSessionId);
+  if (!deletedSession) {
     return null;
   }
 
   return (
-    sortThreads(
-      threads.filter(
-        (thread) =>
-          thread.projectId === deletedThread.projectId &&
-          thread.id !== deletedThreadId &&
-          !deletedThreadIds?.has(thread.id),
+    sortSessions(
+      sessions.filter(
+        (session) =>
+          session.projectId === deletedSession.projectId &&
+          session.id !== deletedSessionId &&
+          !deletedSessionIds?.has(session.id),
       ),
       sortOrder,
     )[0]?.id ?? null
@@ -487,12 +489,12 @@ export function getFallbackThreadIdAfterDelete<
 }
 export function getProjectSortTimestamp(
   project: SidebarProject,
-  projectThreads: readonly ThreadSortInput[],
+  projectSessions: readonly SessionSortInput[],
   sortOrder: Exclude<SidebarProjectSortOrder, "manual">,
 ): number {
-  if (projectThreads.length > 0) {
-    return projectThreads.reduce(
-      (latest, thread) => Math.max(latest, getThreadSortTimestamp(thread, sortOrder)),
+  if (projectSessions.length > 0) {
+    return projectSessions.reduce(
+      (latest, session) => Math.max(latest, getSessionSortTimestamp(session, sortOrder)),
       Number.NEGATIVE_INFINITY,
     );
   }
@@ -505,32 +507,32 @@ export function getProjectSortTimestamp(
 
 export function sortProjectsForSidebar<
   TProject extends SidebarProject,
-  TThread extends Pick<Thread, "projectId" | "createdAt" | "updatedAt"> & ThreadSortInput,
+  TSession extends Pick<Session, "projectId" | "createdAt" | "updatedAt"> & SessionSortInput,
 >(
   projects: readonly TProject[],
-  threads: readonly TThread[],
+  sessions: readonly TSession[],
   sortOrder: SidebarProjectSortOrder,
 ): TProject[] {
   if (sortOrder === "manual") {
     return [...projects];
   }
 
-  const threadsByProjectId = new Map<string, TThread[]>();
-  for (const thread of threads) {
-    const existing = threadsByProjectId.get(thread.projectId) ?? [];
-    existing.push(thread);
-    threadsByProjectId.set(thread.projectId, existing);
+  const sessionsByProjectId = new Map<string, TSession[]>();
+  for (const session of sessions) {
+    const existing = sessionsByProjectId.get(session.projectId) ?? [];
+    existing.push(session);
+    sessionsByProjectId.set(session.projectId, existing);
   }
 
   return [...projects].toSorted((left, right) => {
     const rightTimestamp = getProjectSortTimestamp(
       right,
-      threadsByProjectId.get(right.id) ?? [],
+      sessionsByProjectId.get(right.id) ?? [],
       sortOrder,
     );
     const leftTimestamp = getProjectSortTimestamp(
       left,
-      threadsByProjectId.get(left.id) ?? [],
+      sessionsByProjectId.get(left.id) ?? [],
       sortOrder,
     );
     const byTimestamp =

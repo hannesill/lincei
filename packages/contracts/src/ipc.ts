@@ -2,8 +2,8 @@ import type {
   VcsSwitchRefInput,
   VcsSwitchRefResult,
   VcsCreateRefInput,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
+  GitPreparePullRequestSessionInput,
+  GitPreparePullRequestSessionResult,
   GitPullRequestRefInput,
   VcsCreateWorktreeInput,
   VcsCreateWorktreeResult,
@@ -53,14 +53,14 @@ import type { ServerRemoveKeybindingInput, ServerUpsertKeybindingInput } from ".
 import * as Schema from "effect/Schema";
 import type {
   ClientOrchestrationCommand,
-  OrchestrationGetFullThreadDiffInput,
-  OrchestrationGetFullThreadDiffResult,
+  OrchestrationGetFullSessionDiffInput,
+  OrchestrationGetFullSessionDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamItem,
-  OrchestrationSubscribeThreadInput,
-  OrchestrationThreadStreamItem,
+  OrchestrationSubscribeSessionInput,
+  OrchestrationSessionStreamItem,
 } from "./orchestration.ts";
 import { EnvironmentId } from "./baseSchemas.ts";
 import { AuthBearerBootstrapResult, AuthSessionState, AuthWebSocketTokenResult } from "./auth.ts";
@@ -540,16 +540,16 @@ export interface EnvironmentApi {
   };
   git: {
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
-    preparePullRequestThread: (
-      input: GitPreparePullRequestThreadInput,
-    ) => Promise<GitPreparePullRequestThreadResult>;
+    preparePullRequestSession: (
+      input: GitPreparePullRequestSessionInput,
+    ) => Promise<GitPreparePullRequestSessionResult>;
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
-    getFullThreadDiff: (
-      input: OrchestrationGetFullThreadDiffInput,
-    ) => Promise<OrchestrationGetFullThreadDiffResult>;
+    getFullSessionDiff: (
+      input: OrchestrationGetFullSessionDiffInput,
+    ) => Promise<OrchestrationGetFullSessionDiffResult>;
     getArchivedShellSnapshot: () => Promise<OrchestrationShellSnapshot>;
     subscribeShell: (
       callback: (event: OrchestrationShellStreamItem) => void,
@@ -557,9 +557,9 @@ export interface EnvironmentApi {
         onResubscribe?: () => void;
       },
     ) => () => void;
-    subscribeThread: (
-      input: OrchestrationSubscribeThreadInput,
-      callback: (event: OrchestrationThreadStreamItem) => void,
+    subscribeSession: (
+      input: OrchestrationSubscribeSessionInput,
+      callback: (event: OrchestrationSessionStreamItem) => void,
       options?: {
         onResubscribe?: () => void;
       },

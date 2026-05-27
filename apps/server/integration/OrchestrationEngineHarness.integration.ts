@@ -7,7 +7,7 @@ import {
   CodexSettings,
   ProviderDriverKind,
   type OrchestrationEvent,
-  type OrchestrationThread,
+  type OrchestrationSession,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -29,7 +29,7 @@ import { OrchestrationCommandReceiptRepositoryLive } from "../src/persistence/La
 import { OrchestrationEventStoreLive } from "../src/persistence/Layers/OrchestrationEventStore.ts";
 import { ProjectionCheckpointRepositoryLive } from "../src/persistence/Layers/ProjectionCheckpoints.ts";
 import { ProjectionPendingApprovalRepositoryLive } from "../src/persistence/Layers/ProjectionPendingApprovals.ts";
-import { ProviderSessionRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderSessionRuntime.ts";
+import { ProviderRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderRuntime.ts";
 import { makeSqlitePersistenceLive } from "../src/persistence/Layers/Sqlite.ts";
 import { ProjectionCheckpointRepository } from "../src/persistence/Services/ProjectionCheckpoints.ts";
 import { ProjectionPendingApprovalRepository } from "../src/persistence/Services/ProjectionPendingApprovals.ts";
@@ -58,7 +58,7 @@ import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
 } from "../src/orchestration/Services/OrchestrationEngine.ts";
-import { ThreadDeletionReactor } from "../src/orchestration/Services/ThreadDeletionReactor.ts";
+import { SessionDeletionReactor } from "../src/orchestration/Services/SessionDeletionReactor.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
@@ -181,11 +181,11 @@ export interface OrchestrationIntegrationHarness {
   readonly checkpointStore: CheckpointStore["Service"];
   readonly checkpointRepository: ProjectionCheckpointRepository["Service"];
   readonly pendingApprovalRepository: ProjectionPendingApprovalRepository["Service"];
-  readonly waitForThread: (
-    threadId: string,
-    predicate: (thread: OrchestrationThread) => boolean,
+  readonly waitForSession: (
+    sessionId: string,
+    predicate: (session: OrchestrationSession) => boolean,
     timeoutMs?: number,
-  ) => Effect.Effect<OrchestrationThread, never>;
+  ) => Effect.Effect<OrchestrationSession, never>;
   readonly waitForDomainEvent: (
     predicate: (event: OrchestrationEvent) => boolean,
     timeoutMs?: number,
@@ -262,7 +262,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
     );
     const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
-      Layer.provide(ProviderSessionRuntimeRepositoryLive),
+      Layer.provide(ProviderRuntimeRepositoryLive),
     );
     const realCodexRegistry = Layer.effect(
       ProviderAdapterRegistry,
@@ -318,7 +318,7 @@ export const makeOrchestrationIntegrationHarness = (
     });
     const textGenerationLayer = Layer.succeed(TextGeneration, {
       generateBranchName: () => Effect.succeed({ branch: "update" }),
-      generateThreadTitle: () => Effect.succeed({ title: "New thread" }),
+      generateSessionTitle: () => Effect.succeed({ title: "New session" }),
     } as unknown as TextGenerationShape);
     const providerCommandReactorLayer = ProviderCommandReactorLive.pipe(
       Layer.provideMerge(runtimeServicesLayer),
@@ -359,7 +359,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(providerCommandReactorLayer),
       Layer.provideMerge(checkpointReactorLayer),
       Layer.provideMerge(
-        Layer.succeed(ThreadDeletionReactor, {
+        Layer.succeed(SessionDeletionReactor, {
           start: () => Effect.void,
           drain: Effect.void,
         }),
@@ -413,8 +413,8 @@ export const makeOrchestrationIntegrationHarness = (
     ).pipe(Effect.forkIn(scope));
     yield* Effect.sleep(10);
 
-    const waitForThread: OrchestrationIntegrationHarness["waitForThread"] = (
-      threadId,
+    const waitForSession: OrchestrationIntegrationHarness["waitForSession"] = (
+      sessionId,
       predicate,
       timeoutMs,
     ) =>
@@ -423,13 +423,13 @@ export const makeOrchestrationIntegrationHarness = (
           .getSnapshot()
           .pipe(
             Effect.map(
-              (snapshot) => snapshot.threads.find((thread) => thread.id === threadId) ?? null,
+              (snapshot) => snapshot.sessions.find((session) => session.id === sessionId) ?? null,
             ),
           ),
-        (thread): thread is OrchestrationThread => thread !== null && predicate(thread),
-        `projected thread '${threadId}'`,
+        (session): session is OrchestrationSession => session !== null && predicate(session),
+        `projected session '${sessionId}'`,
         timeoutMs,
-      ) as Effect.Effect<OrchestrationThread, never>;
+      ) as Effect.Effect<OrchestrationSession, never>;
 
     const waitForDomainEvent: OrchestrationIntegrationHarness["waitForDomainEvent"] = (
       predicate,
@@ -542,7 +542,7 @@ export const makeOrchestrationIntegrationHarness = (
       checkpointStore,
       checkpointRepository,
       pendingApprovalRepository,
-      waitForThread,
+      waitForSession,
       waitForDomainEvent,
       waitForPendingApproval,
       waitForReceipt,

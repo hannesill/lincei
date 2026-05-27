@@ -1,18 +1,18 @@
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ProviderInstanceId, SessionId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
-import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "./worktreeCleanup";
+import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Session } from "./types";
+import { formatWorktreePathForDisplay, getOrphanedWorktreePathForSession } from "./worktreeCleanup";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeSession(overrides: Partial<Session> = {}): Session {
   return {
-    id: ThreadId.make("thread-1"),
+    id: SessionId.make("session-1"),
     environmentId: localEnvironmentId,
-    codexThreadId: null,
+    codexSessionId: null,
     projectId: ProjectId.make("project-1"),
-    title: "Thread",
+    title: "Session",
     modelSelection: {
       instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5.3-codex",
@@ -34,51 +34,51 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-describe("getOrphanedWorktreePathForThread", () => {
-  it("returns null when the target thread does not exist", () => {
-    const result = getOrphanedWorktreePathForThread([], ThreadId.make("missing-thread"));
+describe("getOrphanedWorktreePathForSession", () => {
+  it("returns null when the target session does not exist", () => {
+    const result = getOrphanedWorktreePathForSession([], SessionId.make("missing-session"));
     expect(result).toBeNull();
   });
 
-  it("returns null when the target thread has no worktree", () => {
-    const threads = [makeThread()];
-    const result = getOrphanedWorktreePathForThread(threads, ThreadId.make("thread-1"));
+  it("returns null when the target session has no worktree", () => {
+    const sessions = [makeSession()];
+    const result = getOrphanedWorktreePathForSession(sessions, SessionId.make("session-1"));
     expect(result).toBeNull();
   });
 
-  it("returns the path when no other thread links to that worktree", () => {
-    const threads = [makeThread({ worktreePath: "/tmp/repo/worktrees/feature-a" })];
-    const result = getOrphanedWorktreePathForThread(threads, ThreadId.make("thread-1"));
+  it("returns the path when no other session links to that worktree", () => {
+    const sessions = [makeSession({ worktreePath: "/tmp/repo/worktrees/feature-a" })];
+    const result = getOrphanedWorktreePathForSession(sessions, SessionId.make("session-1"));
     expect(result).toBe("/tmp/repo/worktrees/feature-a");
   });
 
-  it("returns null when another thread links to the same worktree", () => {
-    const threads = [
-      makeThread({
-        id: ThreadId.make("thread-1"),
+  it("returns null when another session links to the same worktree", () => {
+    const sessions = [
+      makeSession({
+        id: SessionId.make("session-1"),
         worktreePath: "/tmp/repo/worktrees/feature-a",
       }),
-      makeThread({
-        id: ThreadId.make("thread-2"),
+      makeSession({
+        id: SessionId.make("session-2"),
         worktreePath: "/tmp/repo/worktrees/feature-a",
       }),
     ];
-    const result = getOrphanedWorktreePathForThread(threads, ThreadId.make("thread-1"));
+    const result = getOrphanedWorktreePathForSession(sessions, SessionId.make("session-1"));
     expect(result).toBeNull();
   });
 
-  it("ignores threads linked to different worktrees", () => {
-    const threads = [
-      makeThread({
-        id: ThreadId.make("thread-1"),
+  it("ignores sessions linked to different worktrees", () => {
+    const sessions = [
+      makeSession({
+        id: SessionId.make("session-1"),
         worktreePath: "/tmp/repo/worktrees/feature-a",
       }),
-      makeThread({
-        id: ThreadId.make("thread-2"),
+      makeSession({
+        id: SessionId.make("session-2"),
         worktreePath: "/tmp/repo/worktrees/feature-b",
       }),
     ];
-    const result = getOrphanedWorktreePathForThread(threads, ThreadId.make("thread-1"));
+    const result = getOrphanedWorktreePathForSession(sessions, SessionId.make("session-1"));
     expect(result).toBe("/tmp/repo/worktrees/feature-a");
   });
 });

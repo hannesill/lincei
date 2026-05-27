@@ -3,10 +3,10 @@
 ## Small things
 
 - [ ] Submitting new messages should scroll to bottom
-- [ ] Only show last 10 threads for a given study
-- [ ] Thread archiving
+- [ ] Only show last 10 sessions for a given study
+- [ ] Session archiving
 - [ ] New studies should go on top
-- [ ] Studies should be sorted by latest thread update
+- [ ] Studies should be sorted by latest session update
 
 ## Bigger things
 

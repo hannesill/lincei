@@ -19,7 +19,7 @@ const makeStubTextGeneration = (overrides: Partial<TextGenerationShape>): TextGe
     Effect.die("generateCommitMessage stub not configured for this test"),
   generatePrContent: () => Effect.die("generatePrContent stub not configured for this test"),
   generateBranchName: () => Effect.die("generateBranchName stub not configured for this test"),
-  generateThreadTitle: () => Effect.die("generateThreadTitle stub not configured for this test"),
+  generateSessionTitle: () => Effect.die("generateSessionTitle stub not configured for this test"),
   ...overrides,
 });
 

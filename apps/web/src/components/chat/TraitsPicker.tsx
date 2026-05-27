@@ -3,7 +3,7 @@ import {
   type ProviderInstanceId,
   type ProviderOptionDescriptor,
   type ProviderOptionSelection,
-  type ScopedThreadRef,
+  type ScopedSessionRef,
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import {
@@ -35,12 +35,12 @@ type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
 type TraitsPersistence =
   | {
-      threadRef?: ScopedThreadRef;
+      sessionRef?: ScopedSessionRef;
       draftId?: DraftId;
       onModelOptionsChange?: never;
     }
   | {
-      threadRef?: undefined;
+      sessionRef?: undefined;
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
@@ -226,11 +226,11 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         persistence.onModelOptionsChange(nextOptions);
         return;
       }
-      const threadTarget = persistence.threadRef ?? persistence.draftId;
-      if (!threadTarget) {
+      const sessionTarget = persistence.sessionRef ?? persistence.draftId;
+      if (!sessionTarget) {
         return;
       }
-      setProviderModelOptions(threadTarget, provider, nextOptions, {
+      setProviderModelOptions(sessionTarget, provider, nextOptions, {
         ...(instanceId ? { instanceId } : {}),
         model,
         persistSticky: true,

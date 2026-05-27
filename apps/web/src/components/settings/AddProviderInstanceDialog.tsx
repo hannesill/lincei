@@ -388,7 +388,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
                   <span className="text-[11px] text-destructive">{instanceIdError}</span>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">
-                    Routing key used by threads and sessions. Letters, digits, '-', or '_'.
+                    Routing key used by sessions and sessions. Letters, digits, '-', or '_'.
                   </span>
                 )}
               </label>

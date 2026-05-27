@@ -105,7 +105,7 @@ CheckpointCatalog        ------> SQLite
 
 - Add dedicated router service to validate, authorize, and route commands.
 - Move command-to-event mapping out of `orchestration/Layer.ts` into handlers.
-- Add aggregate-level invariant checks before append (thread exists, project exists, etc.).
+- Add aggregate-level invariant checks before append (session exists, project exists, etc.).
 - Expected files:
   - `apps/server/src/orchestration/Services/CommandRouter.ts` (new)
   - `apps/server/src/orchestration/Layers/CommandRouter.ts` (new)
@@ -147,7 +147,7 @@ CheckpointCatalog        ------> SQLite
 
 - Replace in-memory-only `ProviderSessionDirectoryLive` with persistence-backed registry.
 - Keep in-memory cache optional, but source of truth must be persistent.
-- Add startup reconciliation to prune dead sessions / keep known thread mapping.
+- Add startup reconciliation to prune dead sessions / keep known session mapping.
 - Expected files:
   - `apps/server/src/provider/Services/ProviderSessionDirectory.ts` (or new SessionRegistry service)
   - `apps/server/src/provider/Layers/ProviderSessionDirectory.ts`
@@ -157,18 +157,18 @@ CheckpointCatalog        ------> SQLite
   - survives server restart with correct mapping
   - stale session cleanup semantics
 
-### Commit 6: Re-key checkpoint metadata from session to thread identity
+### Commit 6: Re-key checkpoint metadata from session to session identity
 
-- Change checkpoint catalog primary identity from `provider_session_id` to durable `thread_id`.
+- Change checkpoint catalog primary identity from `provider_session_id` to durable `session_id`.
 - Keep `session_id` as nullable metadata only.
-- Update checkpoint flows (`initialize`, `capture`, `list`, `diff`, `revert`) to use thread identity.
+- Update checkpoint flows (`initialize`, `capture`, `list`, `diff`, `revert`) to use session identity.
 - Expected files:
   - `apps/server/src/persistence/Migrations/00x_*.ts` (checkpoint schema migration)
   - `apps/server/src/persistence/Services/Checkpoints.ts`
   - `apps/server/src/persistence/Layers/Checkpoints.ts`
   - `apps/server/src/checkpointing/Layers/CheckpointService.ts`
 - Tests:
-  - resume/new session over same thread sees same checkpoint history
+  - resume/new session over same session sees same checkpoint history
   - revert/diff still work after session churn
 
 ### Commit 7: Add durable projection persistence for orchestration read models

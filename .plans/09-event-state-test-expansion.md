@@ -17,7 +17,7 @@ Add focused tests for renderer event handling and session evolution logic.
 ## Proposed Changes
 
 1. Add tests for `evolveSession`:
-   - `thread/started`
+   - `session/started`
    - `turn/started`
    - `turn/completed` success/failure
    - error/session closed events

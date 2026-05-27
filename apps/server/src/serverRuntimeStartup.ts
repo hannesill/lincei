@@ -5,7 +5,7 @@ import {
   type ModelSelection,
   ProjectId,
   ProviderInstanceId,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
@@ -126,13 +126,13 @@ export const recordStartupHeartbeat = Effect.gen(function* () {
   const analytics = yield* AnalyticsService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
 
-  const { threadCount, projectCount } = yield* projectionSnapshotQuery.getCounts().pipe(
+  const { sessionCount, projectCount } = yield* projectionSnapshotQuery.getCounts().pipe(
     Effect.catch((cause) =>
       Effect.logWarning("failed to gather startup projection counts for telemetry", {
         cause,
       }).pipe(
         Effect.as({
-          threadCount: 0,
+          sessionCount: 0,
           projectCount: 0,
         }),
       ),
@@ -140,7 +140,7 @@ export const recordStartupHeartbeat = Effect.gen(function* () {
   );
 
   yield* analytics.record("server.boot.heartbeat", {
-    threadCount,
+    sessionCount,
     projectCount,
   });
 });
@@ -176,7 +176,7 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
   const path = yield* Path.Path;
 
   let bootstrapProjectId: ProjectId | undefined;
-  let bootstrapThreadId: ThreadId | undefined;
+  let bootstrapSessionId: SessionId | undefined;
 
   if (serverConfig.autoBootstrapProjectFromCwd) {
     yield* Effect.gen(function* () {
@@ -206,17 +206,17 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
           existingProject.value.defaultModelSelection ?? getAutoBootstrapDefaultModelSelection();
       }
 
-      const existingThreadId =
-        yield* projectionReadModelQuery.getFirstActiveThreadIdByProjectId(nextProjectId);
-      if (Option.isNone(existingThreadId)) {
+      const existingSessionId =
+        yield* projectionReadModelQuery.getFirstActiveSessionIdByProjectId(nextProjectId);
+      if (Option.isNone(existingSessionId)) {
         const createdAt = DateTime.formatIso(yield* DateTime.now);
-        const createdThreadId = ThreadId.make(crypto.randomUUID());
+        const createdSessionId = SessionId.make(crypto.randomUUID());
         yield* orchestrationEngine.dispatch({
-          type: "thread.create",
+          type: "session.create",
           commandId: CommandId.make(crypto.randomUUID()),
-          threadId: createdThreadId,
+          sessionId: createdSessionId,
           projectId: nextProjectId,
-          title: "New thread",
+          title: "New session",
           modelSelection: nextProjectDefaultModelSelection,
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "full-access",
@@ -225,17 +225,17 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
           createdAt,
         });
         bootstrapProjectId = nextProjectId;
-        bootstrapThreadId = createdThreadId;
+        bootstrapSessionId = createdSessionId;
       } else {
         bootstrapProjectId = nextProjectId;
-        bootstrapThreadId = existingThreadId.value;
+        bootstrapSessionId = existingSessionId.value;
       }
     });
   }
 
   return {
     ...(bootstrapProjectId ? { bootstrapProjectId } : {}),
-    ...(bootstrapThreadId ? { bootstrapThreadId } : {}),
+    ...(bootstrapSessionId ? { bootstrapSessionId } : {}),
   } as const;
 });
 
@@ -359,7 +359,7 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
           "welcome.autobootstrap",
           Effect.gen(function* () {
             const bootstrapTargets = yield* resolveAutoBootstrapWelcomeTargets;
-            if (!bootstrapTargets.bootstrapProjectId && !bootstrapTargets.bootstrapThreadId) {
+            if (!bootstrapTargets.bootstrapProjectId && !bootstrapTargets.bootstrapSessionId) {
               return;
             }
 
@@ -368,7 +368,7 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
               cwd: welcomeBase.cwd,
               projectName: welcomeBase.projectName,
               bootstrapProjectId: bootstrapTargets.bootstrapProjectId,
-              bootstrapThreadId: bootstrapTargets.bootstrapThreadId,
+              bootstrapSessionId: bootstrapTargets.bootstrapSessionId,
             });
             yield* lifecycleEvents.publish({
               version: 1,

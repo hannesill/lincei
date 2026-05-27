@@ -4,7 +4,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ThreadId,
+  SessionId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
@@ -96,7 +96,7 @@ describe("decider project scripts", () => {
     expect((event.payload as { scripts?: unknown[] }).scripts).toEqual(scripts);
   });
 
-  it("emits user message and turn-start-requested events for thread.turn.start", async () => {
+  it("emits user message and turn-start-requested events for session.turn.start", async () => {
     const now = "2026-01-01T00:00:00.000Z";
     const initial = createEmptyReadModel(now);
     const withProject = await Effect.runPromise(
@@ -125,19 +125,19 @@ describe("decider project scripts", () => {
     const readModel = await Effect.runPromise(
       projectEvent(withProject, {
         sequence: 2,
-        eventId: asEventId("evt-thread-create"),
-        aggregateKind: "thread",
-        aggregateId: ThreadId.make("thread-1"),
-        type: "thread.created",
+        eventId: asEventId("evt-session-create"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-1"),
+        type: "session.created",
         occurredAt: now,
-        commandId: CommandId.make("cmd-thread-create"),
+        commandId: CommandId.make("cmd-session-create"),
         causationEventId: null,
-        correlationId: CommandId.make("cmd-thread-create"),
+        correlationId: CommandId.make("cmd-session-create"),
         metadata: {},
         payload: {
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread",
+          title: "Session",
           modelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
@@ -155,9 +155,9 @@ describe("decider project scripts", () => {
     const result = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {
-          type: "thread.turn.start",
+          type: "session.turn.start",
           commandId: CommandId.make("cmd-turn-start"),
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           message: {
             messageId: asMessageId("message-user-1"),
             role: "user",
@@ -179,15 +179,15 @@ describe("decider project scripts", () => {
     expect(Array.isArray(result)).toBe(true);
     const events = Array.isArray(result) ? result : [result];
     expect(events).toHaveLength(2);
-    expect(events[0]?.type).toBe("thread.message-sent");
+    expect(events[0]?.type).toBe("session.message-sent");
     const turnStartEvent = events[1];
-    expect(turnStartEvent?.type).toBe("thread.turn-start-requested");
+    expect(turnStartEvent?.type).toBe("session.turn-start-requested");
     expect(turnStartEvent?.causationEventId).toBe(events[0]?.eventId ?? null);
-    if (turnStartEvent?.type !== "thread.turn-start-requested") {
+    if (turnStartEvent?.type !== "session.turn-start-requested") {
       return;
     }
     expect(turnStartEvent.payload).toMatchObject({
-      threadId: ThreadId.make("thread-1"),
+      sessionId: SessionId.make("session-1"),
       messageId: asMessageId("message-user-1"),
       modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
         { id: "reasoningEffort", value: "high" },
@@ -197,7 +197,7 @@ describe("decider project scripts", () => {
     });
   });
 
-  it("emits thread.runtime-mode-set from thread.runtime-mode.set", async () => {
+  it("emits session.runtime-mode-set from session.runtime-mode.set", async () => {
     const now = "2026-01-01T00:00:00.000Z";
     const initial = createEmptyReadModel(now);
     const withProject = await Effect.runPromise(
@@ -226,19 +226,19 @@ describe("decider project scripts", () => {
     const readModel = await Effect.runPromise(
       projectEvent(withProject, {
         sequence: 2,
-        eventId: asEventId("evt-thread-create"),
-        aggregateKind: "thread",
-        aggregateId: ThreadId.make("thread-1"),
-        type: "thread.created",
+        eventId: asEventId("evt-session-create"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-1"),
+        type: "session.created",
         occurredAt: now,
-        commandId: CommandId.make("cmd-thread-create"),
+        commandId: CommandId.make("cmd-session-create"),
         causationEventId: null,
-        correlationId: CommandId.make("cmd-thread-create"),
+        correlationId: CommandId.make("cmd-session-create"),
         metadata: {},
         payload: {
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread",
+          title: "Session",
           modelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
@@ -256,9 +256,9 @@ describe("decider project scripts", () => {
     const result = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {
-          type: "thread.runtime-mode.set",
+          type: "session.runtime-mode.set",
           commandId: CommandId.make("cmd-runtime-mode-set"),
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           runtimeMode: "approval-required",
           createdAt: now,
         },
@@ -271,15 +271,15 @@ describe("decider project scripts", () => {
       throw new Error("Expected a single runtime-mode-set event.");
     }
     expect(singleResult).toMatchObject({
-      type: "thread.runtime-mode-set",
+      type: "session.runtime-mode-set",
       payload: {
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
         runtimeMode: "approval-required",
       },
     });
   });
 
-  it("emits thread.interaction-mode-set from thread.interaction-mode.set", async () => {
+  it("emits session.interaction-mode-set from session.interaction-mode.set", async () => {
     const now = "2026-01-01T00:00:00.000Z";
     const initial = createEmptyReadModel(now);
     const withProject = await Effect.runPromise(
@@ -308,19 +308,19 @@ describe("decider project scripts", () => {
     const readModel = await Effect.runPromise(
       projectEvent(withProject, {
         sequence: 2,
-        eventId: asEventId("evt-thread-create"),
-        aggregateKind: "thread",
-        aggregateId: ThreadId.make("thread-1"),
-        type: "thread.created",
+        eventId: asEventId("evt-session-create"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-1"),
+        type: "session.created",
         occurredAt: now,
-        commandId: CommandId.make("cmd-thread-create"),
+        commandId: CommandId.make("cmd-session-create"),
         causationEventId: null,
-        correlationId: CommandId.make("cmd-thread-create"),
+        correlationId: CommandId.make("cmd-session-create"),
         metadata: {},
         payload: {
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           projectId: asProjectId("project-1"),
-          title: "Thread",
+          title: "Session",
           modelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
@@ -338,9 +338,9 @@ describe("decider project scripts", () => {
     const result = await Effect.runPromise(
       decideOrchestrationCommand({
         command: {
-          type: "thread.interaction-mode.set",
+          type: "session.interaction-mode.set",
           commandId: CommandId.make("cmd-interaction-mode-set"),
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           interactionMode: "plan",
           createdAt: now,
         },
@@ -353,9 +353,9 @@ describe("decider project scripts", () => {
       throw new Error("Expected a single interaction-mode-set event.");
     }
     expect(singleResult).toMatchObject({
-      type: "thread.interaction-mode-set",
+      type: "session.interaction-mode-set",
       payload: {
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
         interactionMode: "plan",
       },
     });

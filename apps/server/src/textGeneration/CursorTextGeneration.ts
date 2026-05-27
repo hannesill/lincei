@@ -9,17 +9,17 @@ import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shar
 import { extractJsonObject } from "@t3tools/shared/schemaJson";
 
 import { TextGenerationError } from "@t3tools/contracts";
-import { type ThreadTitleGenerationResult, type TextGenerationShape } from "./TextGeneration.ts";
+import { type SessionTitleGenerationResult, type TextGenerationShape } from "./TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-  buildThreadTitlePrompt,
+  buildSessionTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
-  sanitizeThreadTitle,
+  sanitizeSessionTitle,
 } from "./TextGenerationUtils.ts";
 import {
   applyCursorAcpModelSelection,
@@ -33,7 +33,7 @@ function mapCursorAcpError(
     | "generateCommitMessage"
     | "generatePrContent"
     | "generateBranchName"
-    | "generateThreadTitle",
+    | "generateSessionTitle",
   detail: string,
   cause: unknown,
 ): TextGenerationError {
@@ -74,7 +74,7 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateSessionTitle";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -248,16 +248,16 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
     };
   });
 
-  const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
-    "CursorTextGeneration.generateThreadTitle",
+  const generateSessionTitle: TextGenerationShape["generateSessionTitle"] = Effect.fn(
+    "CursorTextGeneration.generateSessionTitle",
   )(function* (input) {
-    const { prompt, outputSchema } = buildThreadTitlePrompt({
+    const { prompt, outputSchema } = buildSessionTitlePrompt({
       message: input.message,
       attachments: input.attachments,
     });
 
     const generated = yield* runCursorJson({
-      operation: "generateThreadTitle",
+      operation: "generateSessionTitle",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
@@ -265,14 +265,14 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
     });
 
     return {
-      title: sanitizeThreadTitle(generated.title),
-    } satisfies ThreadTitleGenerationResult;
+      title: sanitizeSessionTitle(generated.title),
+    } satisfies SessionTitleGenerationResult;
   });
 
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
-    generateThreadTitle,
+    generateSessionTitle,
   } satisfies TextGenerationShape;
 });

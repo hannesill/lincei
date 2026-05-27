@@ -1,7 +1,7 @@
 /**
  * ProjectionCheckpointRepository - Projection repository interface for checkpoints.
  *
- * Owns persistence operations for projected checkpoint summaries in thread
+ * Owns persistence operations for projected checkpoint summaries in session
  * timelines.
  *
  * @module ProjectionCheckpointRepository
@@ -13,7 +13,7 @@ import {
   NonNegativeInt,
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
-  ThreadId,
+  SessionId,
   TurnId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -24,7 +24,7 @@ import type * as Effect from "effect/Effect";
 import type { ProjectionRepositoryError } from "../Errors.ts";
 
 export const ProjectionCheckpoint = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
@@ -35,21 +35,21 @@ export const ProjectionCheckpoint = Schema.Struct({
 });
 export type ProjectionCheckpoint = typeof ProjectionCheckpoint.Type;
 
-export const ListByThreadIdInput = Schema.Struct({
-  threadId: ThreadId,
+export const ListBySessionIdInput = Schema.Struct({
+  sessionId: SessionId,
 });
-export type ListByThreadIdInput = typeof ListByThreadIdInput.Type;
+export type ListBySessionIdInput = typeof ListBySessionIdInput.Type;
 
-export const GetByThreadAndTurnCountInput = Schema.Struct({
-  threadId: ThreadId,
+export const GetBySessionAndTurnCountInput = Schema.Struct({
+  sessionId: SessionId,
   checkpointTurnCount: NonNegativeInt,
 });
-export type GetByThreadAndTurnCountInput = typeof GetByThreadAndTurnCountInput.Type;
+export type GetBySessionAndTurnCountInput = typeof GetBySessionAndTurnCountInput.Type;
 
-export const DeleteByThreadIdInput = Schema.Struct({
-  threadId: ThreadId,
+export const DeleteBySessionIdInput = Schema.Struct({
+  sessionId: SessionId,
 });
-export type DeleteByThreadIdInput = typeof DeleteByThreadIdInput.Type;
+export type DeleteBySessionIdInput = typeof DeleteBySessionIdInput.Type;
 
 /**
  * ProjectionCheckpointRepositoryShape - Service API for projected checkpoints.
@@ -58,31 +58,31 @@ export interface ProjectionCheckpointRepositoryShape {
   /**
    * Insert or replace a projected checkpoint row.
    *
-   * Upserts by composite key `(threadId, checkpointTurnCount)`.
+   * Upserts by composite key `(sessionId, checkpointTurnCount)`.
    */
   readonly upsert: (row: ProjectionCheckpoint) => Effect.Effect<void, ProjectionRepositoryError>;
 
   /**
-   * List projected checkpoints for a thread.
+   * List projected checkpoints for a session.
    *
    * Returned in ascending checkpoint turn-count order.
    */
-  readonly listByThreadId: (
-    input: ListByThreadIdInput,
+  readonly listBySessionId: (
+    input: ListBySessionIdInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionCheckpoint>, ProjectionRepositoryError>;
 
   /**
-   * Read a projected checkpoint by thread and turn-count key.
+   * Read a projected checkpoint by session and turn-count key.
    */
-  readonly getByThreadAndTurnCount: (
-    input: GetByThreadAndTurnCountInput,
+  readonly getBySessionAndTurnCount: (
+    input: GetBySessionAndTurnCountInput,
   ) => Effect.Effect<Option.Option<ProjectionCheckpoint>, ProjectionRepositoryError>;
 
   /**
-   * Delete projected checkpoint rows by thread.
+   * Delete projected checkpoint rows by session.
    */
-  readonly deleteByThreadId: (
-    input: DeleteByThreadIdInput,
+  readonly deleteBySessionId: (
+    input: DeleteBySessionIdInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

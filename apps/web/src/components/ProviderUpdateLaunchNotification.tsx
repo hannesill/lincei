@@ -19,7 +19,7 @@ import {
   providerUpdateNotificationKey,
   type ProviderUpdateToastView,
 } from "./ProviderUpdateLaunchNotification.logic";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { stackedSessionToast, toastManager } from "./ui/toast";
 
 const seenProviderUpdateNotificationKeys = new Set<string>();
 type ProviderUpdateToastId = ReturnType<typeof toastManager.add>;
@@ -78,7 +78,7 @@ function updateProviderUpdateToast(input: {
 
   toastManager.update(
     input.toastId,
-    stackedThreadToast({
+    stackedSessionToast({
       type: input.view.type,
       title: input.view.title,
       description: input.view.description,
@@ -251,7 +251,7 @@ export function ProviderUpdateLaunchNotification() {
     };
 
     toastId = toastManager.add(
-      stackedThreadToast({
+      stackedSessionToast({
         type: initialView.type,
         title: initialView.title,
         description: initialView.description,

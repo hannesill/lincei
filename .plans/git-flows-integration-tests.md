@@ -80,7 +80,7 @@ import {
 
 - init → commit → create branch → create worktree → verify worktree dir exists and has correct branch
 
-**8. Full flow: thread switching simulation**
+**8. Full flow: session switching simulation**
 
 - init → commit → create branch-a, branch-b → checkout a → checkout b → checkout a → verify current matches
 

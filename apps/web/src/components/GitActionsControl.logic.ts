@@ -361,7 +361,7 @@ export function resolveDefaultBranchActionDialogCopy(input: {
   };
 }
 
-export function resolveThreadBranchUpdate(
+export function resolveSessionBranchUpdate(
   result: GitRunStackedActionResult,
 ): { branch: string } | null {
   if (result.branch.status !== "created" || !result.branch.name) {
@@ -373,26 +373,26 @@ export function resolveThreadBranchUpdate(
   };
 }
 
-export function resolveLiveThreadBranchUpdate(input: {
-  threadBranch: string | null;
+export function resolveLiveSessionBranchUpdate(input: {
+  sessionBranch: string | null;
   gitStatus: VcsStatusResult | null;
 }): { branch: string | null } | null {
   if (!input.gitStatus) {
     return null;
   }
 
-  if (input.gitStatus.refName === null && input.threadBranch !== null) {
+  if (input.gitStatus.refName === null && input.sessionBranch !== null) {
     return null;
   }
 
-  if (input.threadBranch === input.gitStatus.refName) {
+  if (input.sessionBranch === input.gitStatus.refName) {
     return null;
   }
 
   if (
-    input.threadBranch !== null &&
+    input.sessionBranch !== null &&
     input.gitStatus.refName !== null &&
-    !isTemporaryWorktreeBranch(input.threadBranch) &&
+    !isTemporaryWorktreeBranch(input.sessionBranch) &&
     isTemporaryWorktreeBranch(input.gitStatus.refName)
   ) {
     return null;

@@ -18,6 +18,6 @@ export function isTransportConnectionErrorMessage(message: string | null | undef
   return TRANSPORT_ERROR_PATTERNS.some((pattern) => pattern.test(normalizedMessage));
 }
 
-export function sanitizeThreadErrorMessage(message: string | null | undefined): string | null {
+export function sanitizeSessionErrorMessage(message: string | null | undefined): string | null {
   return isTransportConnectionErrorMessage(message) ? null : (message ?? null);
 }

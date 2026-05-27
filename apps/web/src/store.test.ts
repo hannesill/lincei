@@ -1,4 +1,4 @@
-import { scopeThreadRef } from "@t3tools/client-runtime";
+import { scopeSessionRef } from "@t3tools/client-runtime";
 import {
   CheckpointRef,
   DEFAULT_MODEL,
@@ -7,7 +7,7 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
-  ThreadId,
+  SessionId,
   TurnId,
   type OrchestrationEvent,
 } from "@t3tools/contracts";
@@ -19,14 +19,14 @@ import {
   removeEnvironmentState,
   selectEnvironmentState,
   selectProjectsAcrossEnvironments,
-  selectThreadByRef,
-  selectThreadExistsByRef,
-  setThreadBranch,
-  selectThreadsAcrossEnvironments,
+  selectSessionByRef,
+  selectSessionExistsByRef,
+  setSessionBranch,
+  selectSessionsAcrossEnvironments,
   type AppState,
   type EnvironmentState,
 } from "./store";
-import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
+import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Session } from "./types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
 const remoteEnvironmentId = EnvironmentId.make("environment-remote");
@@ -59,13 +59,13 @@ function withActiveEnvironmentState(
   };
 }
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeSession(overrides: Partial<Session> = {}): Session {
   return {
-    id: ThreadId.make("thread-1"),
+    id: SessionId.make("session-1"),
     environmentId: localEnvironmentId,
-    codexThreadId: null,
+    codexSessionId: null,
     projectId: ProjectId.make("project-1"),
-    title: "Thread",
+    title: "Session",
     modelSelection: {
       instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5-codex",
@@ -87,11 +87,11 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-function makeState(thread: Thread): AppState {
+function makeState(session: Session): AppState {
   const projectId = ProjectId.make("project-1");
   const project = {
     id: projectId,
-    environmentId: thread.environmentId,
+    environmentId: session.environmentId,
     name: "Project",
     cwd: "/tmp/project",
     defaultModelSelection: {
@@ -102,82 +102,82 @@ function makeState(thread: Thread): AppState {
     updatedAt: "2026-02-13T00:00:00.000Z",
     scripts: [],
   };
-  const threadIdsByProjectId: EnvironmentState["threadIdsByProjectId"] = {
-    [thread.projectId]: [thread.id],
+  const sessionIdsByProjectId: EnvironmentState["sessionIdsByProjectId"] = {
+    [session.projectId]: [session.id],
   };
   const environmentState = {
     projectIds: [projectId],
     projectById: {
       [projectId]: project,
     },
-    threadIds: [thread.id],
-    threadIdsByProjectId,
-    threadShellById: {
-      [thread.id]: {
-        id: thread.id,
-        environmentId: thread.environmentId,
-        codexThreadId: thread.codexThreadId,
-        projectId: thread.projectId,
-        title: thread.title,
-        modelSelection: thread.modelSelection,
-        runtimeMode: thread.runtimeMode,
-        interactionMode: thread.interactionMode,
-        error: thread.error,
-        createdAt: thread.createdAt,
-        archivedAt: thread.archivedAt,
-        updatedAt: thread.updatedAt,
-        branch: thread.branch,
-        worktreePath: thread.worktreePath,
+    sessionIds: [session.id],
+    sessionIdsByProjectId,
+    sessionShellById: {
+      [session.id]: {
+        id: session.id,
+        environmentId: session.environmentId,
+        codexSessionId: session.codexSessionId,
+        projectId: session.projectId,
+        title: session.title,
+        modelSelection: session.modelSelection,
+        runtimeMode: session.runtimeMode,
+        interactionMode: session.interactionMode,
+        error: session.error,
+        createdAt: session.createdAt,
+        archivedAt: session.archivedAt,
+        updatedAt: session.updatedAt,
+        branch: session.branch,
+        worktreePath: session.worktreePath,
       },
     },
-    threadSessionById: {
-      [thread.id]: thread.session,
+    providerRuntimeById: {
+      [session.id]: session.session,
     },
-    threadTurnStateById: {
-      [thread.id]: {
-        latestTurn: thread.latestTurn,
-        ...(thread.pendingSourceProposedPlan
-          ? { pendingSourceProposedPlan: thread.pendingSourceProposedPlan }
+    sessionTurnStateById: {
+      [session.id]: {
+        latestTurn: session.latestTurn,
+        ...(session.pendingSourceProposedPlan
+          ? { pendingSourceProposedPlan: session.pendingSourceProposedPlan }
           : {}),
       },
     },
-    messageIdsByThreadId: {
-      [thread.id]: thread.messages.map((message) => message.id),
+    messageIdsBySessionId: {
+      [session.id]: session.messages.map((message) => message.id),
     },
-    messageByThreadId: {
-      [thread.id]: Object.fromEntries(
-        thread.messages.map((message) => [message.id, message] as const),
-      ) as EnvironmentState["messageByThreadId"][ThreadId],
+    messageBySessionId: {
+      [session.id]: Object.fromEntries(
+        session.messages.map((message) => [message.id, message] as const),
+      ) as EnvironmentState["messageBySessionId"][SessionId],
     },
-    activityIdsByThreadId: {
-      [thread.id]: thread.activities.map((activity) => activity.id),
+    activityIdsBySessionId: {
+      [session.id]: session.activities.map((activity) => activity.id),
     },
-    activityByThreadId: {
-      [thread.id]: Object.fromEntries(
-        thread.activities.map((activity) => [activity.id, activity] as const),
-      ) as EnvironmentState["activityByThreadId"][ThreadId],
+    activityBySessionId: {
+      [session.id]: Object.fromEntries(
+        session.activities.map((activity) => [activity.id, activity] as const),
+      ) as EnvironmentState["activityBySessionId"][SessionId],
     },
-    proposedPlanIdsByThreadId: {
-      [thread.id]: thread.proposedPlans.map((plan) => plan.id),
+    proposedPlanIdsBySessionId: {
+      [session.id]: session.proposedPlans.map((plan) => plan.id),
     },
-    proposedPlanByThreadId: {
-      [thread.id]: Object.fromEntries(
-        thread.proposedPlans.map((plan) => [plan.id, plan] as const),
-      ) as EnvironmentState["proposedPlanByThreadId"][ThreadId],
+    proposedPlanBySessionId: {
+      [session.id]: Object.fromEntries(
+        session.proposedPlans.map((plan) => [plan.id, plan] as const),
+      ) as EnvironmentState["proposedPlanBySessionId"][SessionId],
     },
-    turnDiffIdsByThreadId: {
-      [thread.id]: thread.turnDiffSummaries.map((summary) => summary.turnId),
+    turnDiffIdsBySessionId: {
+      [session.id]: session.turnDiffSummaries.map((summary) => summary.turnId),
     },
-    turnDiffSummaryByThreadId: {
-      [thread.id]: Object.fromEntries(
-        thread.turnDiffSummaries.map((summary) => [summary.turnId, summary] as const),
-      ) as EnvironmentState["turnDiffSummaryByThreadId"][ThreadId],
+    turnDiffSummaryBySessionId: {
+      [session.id]: Object.fromEntries(
+        session.turnDiffSummaries.map((summary) => [summary.turnId, summary] as const),
+      ) as EnvironmentState["turnDiffSummaryBySessionId"][SessionId],
     },
-    sidebarThreadSummaryById: {},
+    sidebarSessionSummaryById: {},
     bootstrapComplete: true,
   };
   return withActiveEnvironmentState(environmentState, {
-    activeEnvironmentId: thread.environmentId,
+    activeEnvironmentId: session.environmentId,
   });
 }
 
@@ -185,20 +185,20 @@ function makeEmptyState(overrides: Partial<AppState & EnvironmentState> = {}): A
   const environmentState: EnvironmentState = {
     projectIds: [],
     projectById: {},
-    threadIds: [],
-    threadIdsByProjectId: {},
-    threadShellById: {},
-    threadSessionById: {},
-    threadTurnStateById: {},
-    messageIdsByThreadId: {},
-    messageByThreadId: {},
-    activityIdsByThreadId: {},
-    activityByThreadId: {},
-    proposedPlanIdsByThreadId: {},
-    proposedPlanByThreadId: {},
-    turnDiffIdsByThreadId: {},
-    turnDiffSummaryByThreadId: {},
-    sidebarThreadSummaryById: {},
+    sessionIds: [],
+    sessionIdsByProjectId: {},
+    sessionShellById: {},
+    providerRuntimeById: {},
+    sessionTurnStateById: {},
+    messageIdsBySessionId: {},
+    messageBySessionId: {},
+    activityIdsBySessionId: {},
+    activityBySessionId: {},
+    proposedPlanIdsBySessionId: {},
+    proposedPlanBySessionId: {},
+    turnDiffIdsBySessionId: {},
+    turnDiffSummaryBySessionId: {},
+    sidebarSessionSummaryById: {},
     bootstrapComplete: true,
   };
   return withActiveEnvironmentState(environmentState, overrides);
@@ -216,8 +216,8 @@ function projectsOf(state: AppState) {
   return selectProjectsAcrossEnvironments(state);
 }
 
-function threadsOf(state: AppState) {
-  return selectThreadsAcrossEnvironments(state);
+function sessionsOf(state: AppState) {
+  return selectSessionsAcrossEnvironments(state);
 }
 
 function makeEvent<T extends OrchestrationEvent["type"]>(
@@ -229,10 +229,10 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
   return {
     sequence,
     eventId: EventId.make(`event-${sequence}`),
-    aggregateKind: "thread",
+    aggregateKind: "session",
     aggregateId:
-      "threadId" in payload
-        ? payload.threadId
+      "sessionId" in payload
+        ? payload.sessionId
         : "projectId" in payload
           ? payload.projectId
           : ProjectId.make("project-1"),
@@ -249,13 +249,13 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
 
 describe("environment state removal", () => {
   it("drops local state for removed environments", () => {
-    const removedThread = makeThread({
+    const removedSession = makeSession({
       environmentId: remoteEnvironmentId,
-      id: ThreadId.make("thread-removed"),
+      id: SessionId.make("session-removed"),
     });
-    const keptThread = makeThread({ id: ThreadId.make("thread-kept") });
-    const removedState = makeState(removedThread).environmentStateById[remoteEnvironmentId]!;
-    const keptState = makeState(keptThread).environmentStateById[localEnvironmentId]!;
+    const keptSession = makeSession({ id: SessionId.make("session-kept") });
+    const removedState = makeState(removedSession).environmentStateById[remoteEnvironmentId]!;
+    const keptState = makeState(keptSession).environmentStateById[localEnvironmentId]!;
     const state: AppState = {
       activeEnvironmentId: remoteEnvironmentId,
       environmentStateById: {
@@ -272,7 +272,7 @@ describe("environment state removal", () => {
   });
 
   it("preserves active environment when removing a different environment", () => {
-    const state = makeState(makeThread());
+    const state = makeState(makeSession());
 
     const next = removeEnvironmentState(state, remoteEnvironmentId);
 
@@ -280,9 +280,9 @@ describe("environment state removal", () => {
   });
 });
 
-describe("thread selection memoization", () => {
-  it("returns stable thread references for repeated reads of the same state", () => {
-    const thread = makeThread({
+describe("session selection memoization", () => {
+  it("returns stable session references for repeated reads of the same state", () => {
+    const session = makeSession({
       messages: [
         {
           id: MessageId.make("message-1"),
@@ -309,7 +309,7 @@ describe("thread selection memoization", () => {
           turnId: null,
           planMarkdown: "plan",
           implementedAt: null,
-          implementationThreadId: null,
+          implementationSessionId: null,
           createdAt: "2026-02-13T00:02:00.000Z",
           updatedAt: "2026-02-13T00:02:00.000Z",
         },
@@ -322,11 +322,11 @@ describe("thread selection memoization", () => {
         },
       ],
     });
-    const state = makeState(thread);
-    const ref = scopeThreadRef(thread.environmentId, thread.id);
+    const state = makeState(session);
+    const ref = scopeSessionRef(session.environmentId, session.id);
 
-    const first = selectThreadByRef(state, ref);
-    const second = selectThreadByRef(state, ref);
+    const first = selectSessionByRef(state, ref);
+    const second = selectSessionByRef(state, ref);
 
     expect(first).toBeDefined();
     expect(second).toBe(first);
@@ -336,8 +336,8 @@ describe("thread selection memoization", () => {
     expect(second?.turnDiffSummaries).toBe(first?.turnDiffSummaries);
   });
 
-  it("reuses the derived thread when the app state wrapper changes but thread data does not", () => {
-    const thread = makeThread({
+  it("reuses the derived session when the app state wrapper changes but session data does not", () => {
+    const session = makeSession({
       messages: [
         {
           id: MessageId.make("message-1"),
@@ -348,25 +348,25 @@ describe("thread selection memoization", () => {
         },
       ],
     });
-    const state = makeState(thread);
-    const ref = scopeThreadRef(thread.environmentId, thread.id);
+    const state = makeState(session);
+    const ref = scopeSessionRef(session.environmentId, session.id);
     const wrappedState: AppState = {
       ...state,
       environmentStateById: { ...state.environmentStateById },
     };
 
-    const first = selectThreadByRef(state, ref);
-    const second = selectThreadByRef(wrappedState, ref);
+    const first = selectSessionByRef(state, ref);
+    const second = selectSessionByRef(wrappedState, ref);
 
     expect(second).toBe(first);
   });
 
-  it("updates the derived thread when the underlying thread data changes", () => {
-    const thread = makeThread();
-    const ref = scopeThreadRef(thread.environmentId, thread.id);
-    const firstState = makeState(thread);
+  it("updates the derived session when the underlying session data changes", () => {
+    const session = makeSession();
+    const ref = scopeSessionRef(session.environmentId, session.id);
+    const firstState = makeState(session);
     const secondState = makeState({
-      ...thread,
+      ...session,
       messages: [
         {
           id: MessageId.make("message-2"),
@@ -378,80 +378,80 @@ describe("thread selection memoization", () => {
       ],
     });
 
-    const first = selectThreadByRef(firstState, ref);
-    const second = selectThreadByRef(secondState, ref);
+    const first = selectSessionByRef(firstState, ref);
+    const second = selectSessionByRef(secondState, ref);
 
     expect(second).not.toBe(first);
     expect(second?.messages).toHaveLength(1);
     expect(second?.messages[0]?.text).toBe("new");
   });
 
-  it("checks thread existence without materializing the full thread", () => {
-    const thread = makeThread();
-    const state = makeState(thread);
-    const ref = scopeThreadRef(thread.environmentId, thread.id);
+  it("checks session existence without materializing the full session", () => {
+    const session = makeSession();
+    const state = makeState(session);
+    const ref = scopeSessionRef(session.environmentId, session.id);
 
-    expect(selectThreadExistsByRef(state, ref)).toBe(true);
+    expect(selectSessionExistsByRef(state, ref)).toBe(true);
     expect(
-      selectThreadExistsByRef(
+      selectSessionExistsByRef(
         state,
-        scopeThreadRef(thread.environmentId, ThreadId.make("missing")),
+        scopeSessionRef(session.environmentId, SessionId.make("missing")),
       ),
     ).toBe(false);
-    expect(selectThreadExistsByRef(state, null)).toBe(false);
+    expect(selectSessionExistsByRef(state, null)).toBe(false);
   });
 });
 
-describe("setThreadBranch", () => {
-  it("updates only the scoped thread environment", () => {
-    const sharedThreadId = ThreadId.make("thread-shared");
-    const localThread = makeThread({
-      id: sharedThreadId,
+describe("setSessionBranch", () => {
+  it("updates only the scoped session environment", () => {
+    const sharedSessionId = SessionId.make("session-shared");
+    const localSession = makeSession({
+      id: sharedSessionId,
       environmentId: localEnvironmentId,
       branch: "local-branch",
     });
-    const remoteThread = makeThread({
-      id: sharedThreadId,
+    const remoteSession = makeSession({
+      id: sharedSessionId,
       environmentId: remoteEnvironmentId,
       branch: "remote-branch",
     });
     const state: AppState = {
       activeEnvironmentId: localEnvironmentId,
       environmentStateById: {
-        [localEnvironmentId]: environmentStateOf(makeState(localThread), localEnvironmentId),
-        [remoteEnvironmentId]: environmentStateOf(makeState(remoteThread), remoteEnvironmentId),
+        [localEnvironmentId]: environmentStateOf(makeState(localSession), localEnvironmentId),
+        [remoteEnvironmentId]: environmentStateOf(makeState(remoteSession), remoteEnvironmentId),
       },
     };
 
-    const next = setThreadBranch(
+    const next = setSessionBranch(
       state,
-      scopeThreadRef(remoteEnvironmentId, sharedThreadId),
+      scopeSessionRef(remoteEnvironmentId, sharedSessionId),
       "remote-next",
       "/tmp/remote-worktree",
     );
 
     expect(
-      environmentStateOf(next, localEnvironmentId).threadShellById[sharedThreadId]?.branch,
+      environmentStateOf(next, localEnvironmentId).sessionShellById[sharedSessionId]?.branch,
     ).toBe("local-branch");
     expect(
-      environmentStateOf(next, remoteEnvironmentId).threadShellById[sharedThreadId]?.branch,
+      environmentStateOf(next, remoteEnvironmentId).sessionShellById[sharedSessionId]?.branch,
     ).toBe("remote-next");
     expect(
-      environmentStateOf(next, remoteEnvironmentId).threadShellById[sharedThreadId]?.worktreePath,
+      environmentStateOf(next, remoteEnvironmentId).sessionShellById[sharedSessionId]?.worktreePath,
     ).toBe("/tmp/remote-worktree");
   });
 });
 
 describe("incremental orchestration updates", () => {
   it("does not mark bootstrap complete for incremental events", () => {
-    const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(makeThread())), {
+    const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(makeSession())), {
       bootstrapComplete: false,
     });
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.meta-updated", {
-        threadId: ThreadId.make("thread-1"),
+      makeEvent("session.meta-updated", {
+        sessionId: SessionId.make("session-1"),
         title: "Updated title",
         updatedAt: "2026-02-27T00:00:01.000Z",
       }),
@@ -461,9 +461,9 @@ describe("incremental orchestration updates", () => {
     expect(localEnvironmentStateOf(next).bootstrapComplete).toBe(false);
   });
 
-  it("preserves state identity for no-op project and thread deletes", () => {
-    const thread = makeThread();
-    const state = makeState(thread);
+  it("preserves state identity for no-op project and session deletes", () => {
+    const session = makeSession();
+    const state = makeState(session);
 
     const nextAfterProjectDelete = applyOrchestrationEvent(
       state,
@@ -473,17 +473,17 @@ describe("incremental orchestration updates", () => {
       }),
       localEnvironmentId,
     );
-    const nextAfterThreadDelete = applyOrchestrationEvent(
+    const nextAfterSessionDelete = applyOrchestrationEvent(
       state,
-      makeEvent("thread.deleted", {
-        threadId: ThreadId.make("thread-missing"),
+      makeEvent("session.deleted", {
+        sessionId: SessionId.make("session-missing"),
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
       localEnvironmentId,
     );
 
     expect(nextAfterProjectDelete).toBe(state);
-    expect(nextAfterThreadDelete).toBe(state);
+    expect(nextAfterSessionDelete).toBe(state);
   });
 
   it("reuses an existing project row when project.created arrives with a new id for the same cwd", () => {
@@ -536,15 +536,15 @@ describe("incremental orchestration updates", () => {
     );
   });
 
-  it("removes stale project index entries when thread.created recreates a thread under a new project", () => {
+  it("removes stale project index entries when session.created recreates a session under a new project", () => {
     const originalProjectId = ProjectId.make("project-1");
     const recreatedProjectId = ProjectId.make("project-2");
-    const threadId = ThreadId.make("thread-1");
-    const thread = makeThread({
-      id: threadId,
+    const sessionId = SessionId.make("session-1");
+    const session = makeSession({
+      id: sessionId,
       projectId: originalProjectId,
     });
-    const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(thread)), {
+    const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(session)), {
       projectIds: [originalProjectId, recreatedProjectId],
       projectById: {
         [originalProjectId]: {
@@ -578,10 +578,10 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.created", {
-        threadId,
+      makeEvent("session.created", {
+        sessionId,
         projectId: recreatedProjectId,
-        title: "Recovered thread",
+        title: "Recovered session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: DEFAULT_MODEL,
@@ -596,17 +596,17 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)).toHaveLength(1);
-    expect(threadsOf(next)[0]?.projectId).toBe(recreatedProjectId);
-    expect(localEnvironmentStateOf(next).threadIdsByProjectId[originalProjectId]).toBeUndefined();
-    expect(localEnvironmentStateOf(next).threadIdsByProjectId[recreatedProjectId]).toEqual([
-      threadId,
+    expect(sessionsOf(next)).toHaveLength(1);
+    expect(sessionsOf(next)[0]?.projectId).toBe(recreatedProjectId);
+    expect(localEnvironmentStateOf(next).sessionIdsByProjectId[originalProjectId]).toBeUndefined();
+    expect(localEnvironmentStateOf(next).sessionIdsByProjectId[recreatedProjectId]).toEqual([
+      sessionId,
     ]);
   });
 
-  it("updates only the affected thread for message events", () => {
-    const thread1 = makeThread({
-      id: ThreadId.make("thread-1"),
+  it("updates only the affected session for message events", () => {
+    const session1 = makeSession({
+      id: SessionId.make("session-1"),
       messages: [
         {
           id: MessageId.make("message-1"),
@@ -619,84 +619,84 @@ describe("incremental orchestration updates", () => {
         },
       ],
     });
-    const thread2 = makeThread({ id: ThreadId.make("thread-2") });
-    const baseState = makeState(thread1);
+    const session2 = makeSession({ id: SessionId.make("session-2") });
+    const baseState = makeState(session1);
     const baseEnvironmentState = localEnvironmentStateOf(baseState);
     const state = withActiveEnvironmentState(baseEnvironmentState, {
-      threadIds: [thread1.id, thread2.id],
-      threadShellById: {
-        ...baseEnvironmentState.threadShellById,
-        [thread2.id]: {
-          id: thread2.id,
-          environmentId: thread2.environmentId,
-          codexThreadId: thread2.codexThreadId,
-          projectId: thread2.projectId,
-          title: thread2.title,
-          modelSelection: thread2.modelSelection,
-          runtimeMode: thread2.runtimeMode,
-          interactionMode: thread2.interactionMode,
-          error: thread2.error,
-          createdAt: thread2.createdAt,
-          archivedAt: thread2.archivedAt,
-          updatedAt: thread2.updatedAt,
-          branch: thread2.branch,
-          worktreePath: thread2.worktreePath,
+      sessionIds: [session1.id, session2.id],
+      sessionShellById: {
+        ...baseEnvironmentState.sessionShellById,
+        [session2.id]: {
+          id: session2.id,
+          environmentId: session2.environmentId,
+          codexSessionId: session2.codexSessionId,
+          projectId: session2.projectId,
+          title: session2.title,
+          modelSelection: session2.modelSelection,
+          runtimeMode: session2.runtimeMode,
+          interactionMode: session2.interactionMode,
+          error: session2.error,
+          createdAt: session2.createdAt,
+          archivedAt: session2.archivedAt,
+          updatedAt: session2.updatedAt,
+          branch: session2.branch,
+          worktreePath: session2.worktreePath,
         },
       },
-      threadSessionById: {
-        ...baseEnvironmentState.threadSessionById,
-        [thread2.id]: thread2.session,
+      providerRuntimeById: {
+        ...baseEnvironmentState.providerRuntimeById,
+        [session2.id]: session2.session,
       },
-      threadTurnStateById: {
-        ...baseEnvironmentState.threadTurnStateById,
-        [thread2.id]: {
-          latestTurn: thread2.latestTurn,
+      sessionTurnStateById: {
+        ...baseEnvironmentState.sessionTurnStateById,
+        [session2.id]: {
+          latestTurn: session2.latestTurn,
         },
       },
-      messageIdsByThreadId: {
-        ...baseEnvironmentState.messageIdsByThreadId,
-        [thread2.id]: [],
+      messageIdsBySessionId: {
+        ...baseEnvironmentState.messageIdsBySessionId,
+        [session2.id]: [],
       },
-      messageByThreadId: {
-        ...baseEnvironmentState.messageByThreadId,
-        [thread2.id]: {},
+      messageBySessionId: {
+        ...baseEnvironmentState.messageBySessionId,
+        [session2.id]: {},
       },
-      activityIdsByThreadId: {
-        ...baseEnvironmentState.activityIdsByThreadId,
-        [thread2.id]: [],
+      activityIdsBySessionId: {
+        ...baseEnvironmentState.activityIdsBySessionId,
+        [session2.id]: [],
       },
-      activityByThreadId: {
-        ...baseEnvironmentState.activityByThreadId,
-        [thread2.id]: {},
+      activityBySessionId: {
+        ...baseEnvironmentState.activityBySessionId,
+        [session2.id]: {},
       },
-      proposedPlanIdsByThreadId: {
-        ...baseEnvironmentState.proposedPlanIdsByThreadId,
-        [thread2.id]: [],
+      proposedPlanIdsBySessionId: {
+        ...baseEnvironmentState.proposedPlanIdsBySessionId,
+        [session2.id]: [],
       },
-      proposedPlanByThreadId: {
-        ...baseEnvironmentState.proposedPlanByThreadId,
-        [thread2.id]: {},
+      proposedPlanBySessionId: {
+        ...baseEnvironmentState.proposedPlanBySessionId,
+        [session2.id]: {},
       },
-      turnDiffIdsByThreadId: {
-        ...baseEnvironmentState.turnDiffIdsByThreadId,
-        [thread2.id]: [],
+      turnDiffIdsBySessionId: {
+        ...baseEnvironmentState.turnDiffIdsBySessionId,
+        [session2.id]: [],
       },
-      turnDiffSummaryByThreadId: {
-        ...baseEnvironmentState.turnDiffSummaryByThreadId,
-        [thread2.id]: {},
+      turnDiffSummaryBySessionId: {
+        ...baseEnvironmentState.turnDiffSummaryBySessionId,
+        [session2.id]: {},
       },
-      sidebarThreadSummaryById: {
-        ...baseEnvironmentState.sidebarThreadSummaryById,
+      sidebarSessionSummaryById: {
+        ...baseEnvironmentState.sidebarSessionSummaryById,
       },
-      threadIdsByProjectId: {
-        [thread1.projectId]: [thread1.id, thread2.id],
+      sessionIdsByProjectId: {
+        [session1.projectId]: [session1.id, session2.id],
       },
     });
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.message-sent", {
-        threadId: thread1.id,
+      makeEvent("session.message-sent", {
+        sessionId: session1.id,
         messageId: MessageId.make("message-1"),
         role: "assistant",
         text: " world",
@@ -708,26 +708,26 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)[0]?.messages[0]?.text).toBe("hello world");
-    expect(threadsOf(next)[0]?.latestTurn?.state).toBe("running");
+    expect(sessionsOf(next)[0]?.messages[0]?.text).toBe("hello world");
+    expect(sessionsOf(next)[0]?.latestTurn?.state).toBe("running");
     const nextEnvironmentState = next.environmentStateById[localEnvironmentId];
     const previousEnvironmentState = state.environmentStateById[localEnvironmentId];
-    expect(nextEnvironmentState?.threadShellById[thread2.id]).toBe(
-      previousEnvironmentState?.threadShellById[thread2.id],
+    expect(nextEnvironmentState?.sessionShellById[session2.id]).toBe(
+      previousEnvironmentState?.sessionShellById[session2.id],
     );
-    expect(nextEnvironmentState?.threadSessionById[thread2.id]).toBe(
-      previousEnvironmentState?.threadSessionById[thread2.id],
+    expect(nextEnvironmentState?.providerRuntimeById[session2.id]).toBe(
+      previousEnvironmentState?.providerRuntimeById[session2.id],
     );
-    expect(nextEnvironmentState?.messageIdsByThreadId[thread2.id]).toBe(
-      previousEnvironmentState?.messageIdsByThreadId[thread2.id],
+    expect(nextEnvironmentState?.messageIdsBySessionId[session2.id]).toBe(
+      previousEnvironmentState?.messageIdsBySessionId[session2.id],
     );
-    expect(nextEnvironmentState?.messageByThreadId[thread2.id]).toBe(
-      previousEnvironmentState?.messageByThreadId[thread2.id],
+    expect(nextEnvironmentState?.messageBySessionId[session2.id]).toBe(
+      previousEnvironmentState?.messageBySessionId[session2.id],
     );
   });
 
   it("applies replay batches in sequence and updates session state", () => {
-    const thread = makeThread({
+    const session = makeSession({
       latestTurn: {
         turnId: TurnId.make("turn-1"),
         state: "running",
@@ -737,17 +737,17 @@ describe("incremental orchestration updates", () => {
         assistantMessageId: null,
       },
     });
-    const state = makeState(thread);
+    const state = makeState(session);
 
     const next = applyOrchestrationEvents(
       state,
       [
         makeEvent(
-          "thread.session-set",
+          "session.session-set",
           {
-            threadId: thread.id,
+            sessionId: session.id,
             session: {
-              threadId: thread.id,
+              sessionId: session.id,
               status: "running",
               providerName: "codex",
               runtimeMode: "full-access",
@@ -759,9 +759,9 @@ describe("incremental orchestration updates", () => {
           { sequence: 2 },
         ),
         makeEvent(
-          "thread.message-sent",
+          "session.message-sent",
           {
-            threadId: thread.id,
+            sessionId: session.id,
             messageId: MessageId.make("assistant-1"),
             role: "assistant",
             text: "done",
@@ -776,14 +776,14 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)[0]?.session?.status).toBe("running");
-    expect(threadsOf(next)[0]?.latestTurn?.state).toBe("completed");
-    expect(threadsOf(next)[0]?.messages).toHaveLength(1);
+    expect(sessionsOf(next)[0]?.session?.status).toBe("running");
+    expect(sessionsOf(next)[0]?.latestTurn?.state).toBe("completed");
+    expect(sessionsOf(next)[0]?.messages).toHaveLength(1);
   });
 
   it("does not regress latestTurn when an older turn diff completes late", () => {
     const state = makeState(
-      makeThread({
+      makeSession({
         latestTurn: {
           turnId: TurnId.make("turn-2"),
           state: "running",
@@ -797,8 +797,8 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.turn-diff-completed", {
-        threadId: ThreadId.make("thread-1"),
+      makeEvent("session.turn-diff-completed", {
+        sessionId: SessionId.make("session-1"),
         turnId: TurnId.make("turn-1"),
         checkpointTurnCount: 1,
         checkpointRef: CheckpointRef.make("checkpoint-1"),
@@ -810,14 +810,14 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)[0]?.turnDiffSummaries).toHaveLength(1);
-    expect(threadsOf(next)[0]?.latestTurn).toEqual(threadsOf(state)[0]?.latestTurn);
+    expect(sessionsOf(next)[0]?.turnDiffSummaries).toHaveLength(1);
+    expect(sessionsOf(next)[0]?.latestTurn).toEqual(sessionsOf(state)[0]?.latestTurn);
   });
 
   it("rebinds live turn diffs to the authoritative assistant message when it arrives later", () => {
     const turnId = TurnId.make("turn-1");
     const state = makeState(
-      makeThread({
+      makeSession({
         latestTurn: {
           turnId,
           state: "completed",
@@ -842,8 +842,8 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.message-sent", {
-        threadId: ThreadId.make("thread-1"),
+      makeEvent("session.message-sent", {
+        sessionId: SessionId.make("session-1"),
         messageId: MessageId.make("assistant-real"),
         role: "assistant",
         text: "final answer",
@@ -855,17 +855,17 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)[0]?.turnDiffSummaries[0]?.assistantMessageId).toBe(
+    expect(sessionsOf(next)[0]?.turnDiffSummaries[0]?.assistantMessageId).toBe(
       MessageId.make("assistant-real"),
     );
-    expect(threadsOf(next)[0]?.latestTurn?.assistantMessageId).toBe(
+    expect(sessionsOf(next)[0]?.latestTurn?.assistantMessageId).toBe(
       MessageId.make("assistant-real"),
     );
   });
 
   it("reverts messages, plans, activities, and checkpoints by retained turns", () => {
     const state = makeState(
-      makeThread({
+      makeSession({
         messages: [
           {
             id: MessageId.make("user-1"),
@@ -901,7 +901,7 @@ describe("incremental orchestration updates", () => {
             turnId: TurnId.make("turn-1"),
             planMarkdown: "plan 1",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationSessionId: null,
             createdAt: "2026-02-27T00:00:00.000Z",
             updatedAt: "2026-02-27T00:00:00.000Z",
           },
@@ -910,7 +910,7 @@ describe("incremental orchestration updates", () => {
             turnId: TurnId.make("turn-2"),
             planMarkdown: "plan 2",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationSessionId: null,
             createdAt: "2026-02-27T00:00:02.000Z",
             updatedAt: "2026-02-27T00:00:02.000Z",
           },
@@ -958,28 +958,28 @@ describe("incremental orchestration updates", () => {
 
     const next = applyOrchestrationEvent(
       state,
-      makeEvent("thread.reverted", {
-        threadId: ThreadId.make("thread-1"),
+      makeEvent("session.reverted", {
+        sessionId: SessionId.make("session-1"),
         turnCount: 1,
       }),
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)[0]?.messages.map((message) => message.id)).toEqual([
+    expect(sessionsOf(next)[0]?.messages.map((message) => message.id)).toEqual([
       "user-1",
       "assistant-1",
     ]);
-    expect(threadsOf(next)[0]?.proposedPlans.map((plan) => plan.id)).toEqual(["plan-1"]);
-    expect(threadsOf(next)[0]?.activities.map((activity) => activity.id)).toEqual([
+    expect(sessionsOf(next)[0]?.proposedPlans.map((plan) => plan.id)).toEqual(["plan-1"]);
+    expect(sessionsOf(next)[0]?.activities.map((activity) => activity.id)).toEqual([
       EventId.make("activity-1"),
     ]);
-    expect(threadsOf(next)[0]?.turnDiffSummaries.map((summary) => summary.turnId)).toEqual([
+    expect(sessionsOf(next)[0]?.turnDiffSummaries.map((summary) => summary.turnId)).toEqual([
       TurnId.make("turn-1"),
     ]);
   });
 
   it("clears pending source proposed plans after revert before a new session-set event", () => {
-    const thread = makeThread({
+    const session = makeSession({
       latestTurn: {
         turnId: TurnId.make("turn-2"),
         state: "completed",
@@ -988,12 +988,12 @@ describe("incremental orchestration updates", () => {
         completedAt: "2026-02-27T00:00:03.000Z",
         assistantMessageId: MessageId.make("assistant-2"),
         sourceProposedPlan: {
-          threadId: ThreadId.make("thread-source"),
+          sessionId: SessionId.make("session-source"),
           planId: "plan-2" as never,
         },
       },
       pendingSourceProposedPlan: {
-        threadId: ThreadId.make("thread-source"),
+        sessionId: SessionId.make("session-source"),
         planId: "plan-2" as never,
       },
       turnDiffSummaries: [
@@ -1016,22 +1016,22 @@ describe("incremental orchestration updates", () => {
       ],
     });
     const reverted = applyOrchestrationEvent(
-      makeState(thread),
-      makeEvent("thread.reverted", {
-        threadId: thread.id,
+      makeState(session),
+      makeEvent("session.reverted", {
+        sessionId: session.id,
         turnCount: 1,
       }),
       localEnvironmentId,
     );
 
-    expect(threadsOf(reverted)[0]?.pendingSourceProposedPlan).toBeUndefined();
+    expect(sessionsOf(reverted)[0]?.pendingSourceProposedPlan).toBeUndefined();
 
     const next = applyOrchestrationEvent(
       reverted,
-      makeEvent("thread.session-set", {
-        threadId: thread.id,
+      makeEvent("session.session-set", {
+        sessionId: session.id,
         session: {
-          threadId: thread.id,
+          sessionId: session.id,
           status: "running",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -1043,10 +1043,10 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(threadsOf(next)[0]?.latestTurn).toMatchObject({
+    expect(sessionsOf(next)[0]?.latestTurn).toMatchObject({
       turnId: TurnId.make("turn-3"),
       state: "running",
     });
-    expect(threadsOf(next)[0]?.latestTurn?.sourceProposedPlan).toBeUndefined();
+    expect(sessionsOf(next)[0]?.latestTurn?.sourceProposedPlan).toBeUndefined();
   });
 });

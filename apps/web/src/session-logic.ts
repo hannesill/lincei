@@ -4,12 +4,12 @@ import {
   ApprovalRequestId,
   isToolLifecycleItemType,
   type OrchestrationLatestTurn,
-  type OrchestrationThreadActivity,
+  type OrchestrationSessionActivity,
   type OrchestrationProposedPlanId,
   ProviderDriverKind,
   type ToolLifecycleItemType,
   type UserInputQuestion,
-  type ThreadId,
+  type SessionId,
   type TurnId,
 } from "@t3tools/contracts";
 
@@ -17,8 +17,8 @@ import type {
   ChatMessage,
   ProposedPlan,
   SessionPhase,
-  Thread,
-  ThreadSession,
+  Session,
+  ProviderRuntime,
   TurnDiffSummary,
 } from "./types";
 
@@ -62,7 +62,7 @@ export interface WorkLogEntry {
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
-  activityKind: OrchestrationThreadActivity["kind"];
+  activityKind: OrchestrationSessionActivity["kind"];
   collapseKey?: string;
   toolCallId?: string;
 }
@@ -97,7 +97,7 @@ export interface LatestProposedPlanState {
   turnId: TurnId | null;
   planMarkdown: string;
   implementedAt: string | null;
-  implementationThreadId: ThreadId | null;
+  implementationSessionId: SessionId | null;
 }
 
 export type TimelineEntry =
@@ -143,7 +143,7 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 }
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
-type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
+type SessionActivityState = Pick<ProviderRuntime, "orchestrationStatus" | "activeTurnId">;
 
 export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
@@ -206,7 +206,7 @@ function isStalePendingRequestFailureDetail(detail: string | undefined): boolean
 }
 
 export function derivePendingApprovals(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationSessionActivity>,
 ): PendingApproval[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingApproval>();
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -312,7 +312,7 @@ function parseUserInputQuestions(
 }
 
 export function derivePendingUserInputs(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationSessionActivity>,
 ): PendingUserInput[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingUserInput>();
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -361,7 +361,7 @@ export function derivePendingUserInputs(
 }
 
 export function deriveActivePlanState(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationSessionActivity>,
   latestTurnId: TurnId | undefined,
 ): ActivePlanState | null {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -451,19 +451,19 @@ export function findLatestProposedPlan(
 }
 
 export function findSidebarProposedPlan(input: {
-  threads: ReadonlyArray<Pick<Thread, "id" | "proposedPlans">>;
+  sessions: ReadonlyArray<Pick<Session, "id" | "proposedPlans">>;
   latestTurn: Pick<OrchestrationLatestTurn, "turnId" | "sourceProposedPlan"> | null;
   latestTurnSettled: boolean;
-  threadId: ThreadId | string | null | undefined;
+  sessionId: SessionId | string | null | undefined;
 }): LatestProposedPlanState | null {
-  const activeThreadPlans =
-    input.threads.find((thread) => thread.id === input.threadId)?.proposedPlans ?? [];
+  const activeSessionPlans =
+    input.sessions.find((session) => session.id === input.sessionId)?.proposedPlans ?? [];
 
   if (!input.latestTurnSettled) {
     const sourceProposedPlan = input.latestTurn?.sourceProposedPlan;
     if (sourceProposedPlan) {
-      const sourcePlan = input.threads
-        .find((thread) => thread.id === sourceProposedPlan.threadId)
+      const sourcePlan = input.sessions
+        .find((session) => session.id === sourceProposedPlan.sessionId)
         ?.proposedPlans.find((plan) => plan.id === sourceProposedPlan.planId);
       if (sourcePlan) {
         return toLatestProposedPlanState(sourcePlan);
@@ -471,7 +471,7 @@ export function findSidebarProposedPlan(input: {
     }
   }
 
-  return findLatestProposedPlan(activeThreadPlans, input.latestTurn?.turnId ?? null);
+  return findLatestProposedPlan(activeSessionPlans, input.latestTurn?.turnId ?? null);
 }
 
 export function hasActionableProposedPlan(
@@ -481,7 +481,7 @@ export function hasActionableProposedPlan(
 }
 
 export function deriveWorkLogEntries(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationSessionActivity>,
   latestTurnId: TurnId | undefined,
 ): WorkLogEntry[] {
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
@@ -498,7 +498,7 @@ export function deriveWorkLogEntries(
   );
 }
 
-function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): boolean {
+function isPlanBoundaryToolActivity(activity: OrchestrationSessionActivity): boolean {
   if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") {
     return false;
   }
@@ -510,7 +510,7 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
   return typeof payload?.detail === "string" && payload.detail.startsWith("ExitPlanMode:");
 }
 
-function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
+function toDerivedWorkLogEntry(activity: OrchestrationSessionActivity): DerivedWorkLogEntry {
   const payload =
     activity.payload && typeof activity.payload === "object"
       ? (activity.payload as Record<string, unknown>)
@@ -692,7 +692,7 @@ function toLatestProposedPlanState(proposedPlan: ProposedPlan): LatestProposedPl
     turnId: proposedPlan.turnId,
     planMarkdown: proposedPlan.planMarkdown,
     implementedAt: proposedPlan.implementedAt,
-    implementationThreadId: proposedPlan.implementationThreadId,
+    implementationSessionId: proposedPlan.implementationSessionId,
   };
 }
 
@@ -1108,8 +1108,8 @@ function extractChangedFiles(payload: Record<string, unknown> | null): string[] 
 }
 
 function compareActivitiesByOrder(
-  left: OrchestrationThreadActivity,
-  right: OrchestrationThreadActivity,
+  left: OrchestrationSessionActivity,
+  right: OrchestrationSessionActivity,
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -1149,7 +1149,7 @@ function compareActivityLifecycleRank(kind: string): number {
 }
 
 export function hasToolActivityForTurn(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activities: ReadonlyArray<OrchestrationSessionActivity>,
   turnId: TurnId | null | undefined,
 ): boolean {
   if (!turnId) return false;
@@ -1244,7 +1244,7 @@ export function inferCheckpointTurnCountByTurnId(
   return result;
 }
 
-export function derivePhase(session: ThreadSession | null): SessionPhase {
+export function derivePhase(session: ProviderRuntime | null): SessionPhase {
   if (!session || session.status === "closed") return "disconnected";
   if (session.status === "connecting") return "connecting";
   if (session.status === "running") return "running";

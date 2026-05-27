@@ -58,13 +58,13 @@ function buildProps() {
     completionDividerBeforeEntryId: null,
     completionSummary: null,
     turnDiffSummaryByAssistantMessageId: new Map(),
-    routeThreadKey: "environment-local:thread-1",
+    routeSessionKey: "environment-local:session-1",
     onOpenTurnDiff: vi.fn(),
     revertTurnCountByUserMessageId: new Map(),
     onRevertUserMessage: vi.fn(),
     isRevertingCheckpoint: false,
     onImageExpand: vi.fn(),
-    activeThreadEnvironmentId: EnvironmentId.make("environment-local"),
+    activeSessionEnvironmentId: EnvironmentId.make("environment-local"),
     markdownCwd: undefined,
     resolvedTheme: "dark" as const,
     timestampFormat: "24-hour" as const,
@@ -102,7 +102,7 @@ describe("MessagesTimeline", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders activity rows instead of the empty placeholder when a thread has non-message timeline data", async () => {
+  it("renders activity rows instead of the empty placeholder when a session has non-message timeline data", async () => {
     const screen = await render(
       <MessagesTimeline
         {...buildProps()}

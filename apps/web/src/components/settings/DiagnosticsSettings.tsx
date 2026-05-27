@@ -875,7 +875,8 @@ export function DiagnosticsSettingsPanel() {
               toastManager.add({
                 type: "info",
                 title: "Process already exited",
-                description: "The process is not a child of the Lincei server. It might already have exited.",
+                description:
+                  "The process is not a child of the Lincei server. It might already have exited.",
               });
               return;
             }

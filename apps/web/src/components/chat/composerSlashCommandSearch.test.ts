@@ -14,7 +14,7 @@ describe("searchSlashCommandItems", () => {
         type: "slash-command",
         command: "default",
         label: "/default",
-        description: "Switch this thread back to normal build mode",
+        description: "Switch this session back to normal build mode",
       },
       {
         id: "provider-slash-command:claudeAgent:ui",

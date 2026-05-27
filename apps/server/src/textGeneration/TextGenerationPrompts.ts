@@ -187,18 +187,18 @@ export function buildBranchNamePrompt(input: BranchNamePromptInput) {
 }
 
 // ---------------------------------------------------------------------------
-// Thread title
+// Session title
 // ---------------------------------------------------------------------------
 
-export interface ThreadTitlePromptInput {
+export interface SessionTitlePromptInput {
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
   policy?: TextGenerationPolicy | undefined;
 }
 
-export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
+export function buildSessionTitlePrompt(input: SessionTitlePromptInput) {
   const prompt = buildPromptFromMessage({
-    instruction: "You write concise thread titles for coding conversations.",
+    instruction: "You write concise session titles for coding conversations.",
     responseShape: "Return a JSON object with key: title.",
     rules: [
       "Title should summarize the user's request, not restate it verbatim.",
@@ -208,7 +208,7 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
     ],
     message: input.message,
     attachments: input.attachments,
-    additionalInstructions: input.policy?.threadTitleInstructions,
+    additionalInstructions: input.policy?.sessionTitleInstructions,
   });
   const outputSchema = Schema.Struct({
     title: Schema.String,

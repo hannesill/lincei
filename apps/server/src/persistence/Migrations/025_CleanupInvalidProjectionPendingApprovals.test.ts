@@ -16,8 +16,8 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
       yield* runMigrations({ toMigrationInclusive: 24 });
 
       yield* sql`
-        INSERT INTO projection_threads (
-          thread_id,
+        INSERT INTO projection_sessions (
+          session_id,
           project_id,
           title,
           model_selection_json,
@@ -37,9 +37,9 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
         )
         VALUES
           (
-            'thread-valid',
+            'session-valid',
             'project-1',
-            'Valid thread',
+            'Valid session',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'approval-required',
             'default',
@@ -56,9 +56,9 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
             NULL
           ),
           (
-            'thread-invalid',
+            'session-invalid',
             'project-1',
-            'Invalid thread',
+            'Invalid session',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'approval-required',
             'default',
@@ -77,9 +77,9 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
       `;
 
       yield* sql`
-        INSERT INTO projection_thread_activities (
+        INSERT INTO projection_session_activities (
           activity_id,
-          thread_id,
+          session_id,
           turn_id,
           tone,
           kind,
@@ -91,7 +91,7 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
         VALUES
           (
             'activity-approval-requested',
-            'thread-valid',
+            'session-valid',
             'turn-valid',
             'approval',
             'approval.requested',
@@ -102,7 +102,7 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
           ),
           (
             'activity-user-input-requested',
-            'thread-invalid',
+            'session-invalid',
             'turn-invalid',
             'info',
             'user-input.requested',
@@ -116,7 +116,7 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
       yield* sql`
         INSERT INTO projection_pending_approvals (
           request_id,
-          thread_id,
+          session_id,
           turn_id,
           status,
           decision,
@@ -126,7 +126,7 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
         VALUES
           (
             'approval-valid',
-            'thread-valid',
+            'session-valid',
             'turn-valid',
             'pending',
             NULL,
@@ -135,7 +135,7 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
           ),
           (
             'input-invalid',
-            'thread-invalid',
+            'session-invalid',
             'turn-invalid',
             'pending',
             NULL,
@@ -144,7 +144,7 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
           ),
           (
             'input-invalid-resolved',
-            'thread-valid',
+            'session-valid',
             'turn-valid',
             'resolved',
             NULL,
@@ -172,23 +172,23 @@ layer("025_CleanupInvalidProjectionPendingApprovals", (it) => {
         },
       ]);
 
-      const threadCounts = yield* sql<{
-        readonly threadId: string;
+      const sessionCounts = yield* sql<{
+        readonly sessionId: string;
         readonly pendingApprovalCount: number;
       }>`
         SELECT
-          thread_id AS "threadId",
+          session_id AS "sessionId",
           pending_approval_count AS "pendingApprovalCount"
-        FROM projection_threads
-        ORDER BY thread_id ASC
+        FROM projection_sessions
+        ORDER BY session_id ASC
       `;
-      assert.deepStrictEqual(threadCounts, [
+      assert.deepStrictEqual(sessionCounts, [
         {
-          threadId: "thread-invalid",
+          sessionId: "session-invalid",
           pendingApprovalCount: 0,
         },
         {
-          threadId: "thread-valid",
+          sessionId: "session-valid",
           pendingApprovalCount: 1,
         },
       ]);

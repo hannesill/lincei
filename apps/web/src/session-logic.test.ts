@@ -1,9 +1,9 @@
 import {
   EventId,
   MessageId,
-  ThreadId,
+  SessionId,
   TurnId,
-  type OrchestrationThreadActivity,
+  type OrchestrationSessionActivity,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -27,11 +27,11 @@ function makeActivity(overrides: {
   createdAt?: string;
   kind?: string;
   summary?: string;
-  tone?: OrchestrationThreadActivity["tone"];
+  tone?: OrchestrationSessionActivity["tone"];
   payload?: Record<string, unknown>;
   turnId?: string;
   sequence?: number;
-}): OrchestrationThreadActivity {
+}): OrchestrationSessionActivity {
   const payload = overrides.payload ?? {};
   return {
     id: EventId.make(overrides.id ?? crypto.randomUUID()),
@@ -47,7 +47,7 @@ function makeActivity(overrides: {
 
 describe("derivePendingApprovals", () => {
   it("tracks open approvals and removes resolved ones", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "approval-open",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -89,7 +89,7 @@ describe("derivePendingApprovals", () => {
   });
 
   it("maps canonical requestType payloads into pending approvals", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "approval-open-request-type",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -115,7 +115,7 @@ describe("derivePendingApprovals", () => {
   });
 
   it("clears stale pending approvals when provider reports unknown pending request", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "approval-open-stale",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -144,7 +144,7 @@ describe("derivePendingApprovals", () => {
   });
 
   it("clears stale pending approvals when the backend marks them stale after restart", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "approval-open-stale-restart",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -176,7 +176,7 @@ describe("derivePendingApprovals", () => {
 
 describe("derivePendingUserInputs", () => {
   it("tracks open structured prompts and removes resolved ones", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "user-input-open",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -263,7 +263,7 @@ describe("derivePendingUserInputs", () => {
   });
 
   it("clears stale pending user-input prompts when the provider reports an orphaned request", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "user-input-open-stale",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -308,7 +308,7 @@ describe("derivePendingUserInputs", () => {
 
 describe("deriveActivePlanState", () => {
   it("returns the latest plan update for the active turn", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "plan-old",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -344,7 +344,7 @@ describe("deriveActivePlanState", () => {
   });
 
   it("falls back to the most recent plan from a previous turn", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "plan-from-turn-1",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -374,29 +374,29 @@ describe("findLatestProposedPlan", () => {
       findLatestProposedPlan(
         [
           {
-            id: "plan:thread-1:turn:turn-1",
+            id: "plan:session-1:turn:turn-1",
             turnId: TurnId.make("turn-1"),
             planMarkdown: "# Older",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationSessionId: null,
             createdAt: "2026-02-23T00:00:01.000Z",
             updatedAt: "2026-02-23T00:00:01.000Z",
           },
           {
-            id: "plan:thread-1:turn:turn-1",
+            id: "plan:session-1:turn:turn-1",
             turnId: TurnId.make("turn-1"),
             planMarkdown: "# Latest",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationSessionId: null,
             createdAt: "2026-02-23T00:00:01.000Z",
             updatedAt: "2026-02-23T00:00:02.000Z",
           },
           {
-            id: "plan:thread-1:turn:turn-2",
+            id: "plan:session-1:turn:turn-2",
             turnId: TurnId.make("turn-2"),
             planMarkdown: "# Different turn",
             implementedAt: null,
-            implementationThreadId: null,
+            implementationSessionId: null,
             createdAt: "2026-02-23T00:00:03.000Z",
             updatedAt: "2026-02-23T00:00:03.000Z",
           },
@@ -404,11 +404,11 @@ describe("findLatestProposedPlan", () => {
         TurnId.make("turn-1"),
       ),
     ).toEqual({
-      id: "plan:thread-1:turn:turn-1",
+      id: "plan:session-1:turn:turn-1",
       turnId: "turn-1",
       planMarkdown: "# Latest",
       implementedAt: null,
-      implementationThreadId: null,
+      implementationSessionId: null,
       createdAt: "2026-02-23T00:00:01.000Z",
       updatedAt: "2026-02-23T00:00:02.000Z",
     });
@@ -418,20 +418,20 @@ describe("findLatestProposedPlan", () => {
     const latestPlan = findLatestProposedPlan(
       [
         {
-          id: "plan:thread-1:turn:turn-1",
+          id: "plan:session-1:turn:turn-1",
           turnId: TurnId.make("turn-1"),
           planMarkdown: "# First",
           implementedAt: null,
-          implementationThreadId: null,
+          implementationSessionId: null,
           createdAt: "2026-02-23T00:00:01.000Z",
           updatedAt: "2026-02-23T00:00:01.000Z",
         },
         {
-          id: "plan:thread-1:turn:turn-2",
+          id: "plan:session-1:turn:turn-2",
           turnId: TurnId.make("turn-2"),
           planMarkdown: "# Latest",
           implementedAt: null,
-          implementationThreadId: null,
+          implementationSessionId: null,
           createdAt: "2026-02-23T00:00:02.000Z",
           updatedAt: "2026-02-23T00:00:03.000Z",
         },
@@ -451,7 +451,7 @@ describe("hasActionableProposedPlan", () => {
         turnId: TurnId.make("turn-1"),
         planMarkdown: "# Plan",
         implementedAt: null,
-        implementationThreadId: null,
+        implementationSessionId: null,
         createdAt: "2026-02-23T00:00:00.000Z",
         updatedAt: "2026-02-23T00:00:01.000Z",
       }),
@@ -465,7 +465,7 @@ describe("hasActionableProposedPlan", () => {
         turnId: TurnId.make("turn-1"),
         planMarkdown: "# Plan",
         implementedAt: "2026-02-23T00:00:02.000Z",
-        implementationThreadId: ThreadId.make("thread-implement"),
+        implementationSessionId: SessionId.make("session-implement"),
         createdAt: "2026-02-23T00:00:00.000Z",
         updatedAt: "2026-02-23T00:00:02.000Z",
       }),
@@ -474,33 +474,33 @@ describe("hasActionableProposedPlan", () => {
 });
 
 describe("findSidebarProposedPlan", () => {
-  it("prefers the running turn source proposed plan when available on the same thread", () => {
+  it("prefers the running turn source proposed plan when available on the same session", () => {
     expect(
       findSidebarProposedPlan({
-        threads: [
+        sessions: [
           {
-            id: ThreadId.make("thread-1"),
+            id: SessionId.make("session-1"),
             proposedPlans: [
               {
                 id: "plan-1",
                 turnId: TurnId.make("turn-plan"),
                 planMarkdown: "# Source plan",
                 implementedAt: "2026-02-23T00:00:03.000Z",
-                implementationThreadId: ThreadId.make("thread-2"),
+                implementationSessionId: SessionId.make("session-2"),
                 createdAt: "2026-02-23T00:00:01.000Z",
                 updatedAt: "2026-02-23T00:00:02.000Z",
               },
             ],
           },
           {
-            id: ThreadId.make("thread-2"),
+            id: SessionId.make("session-2"),
             proposedPlans: [
               {
                 id: "plan-2",
                 turnId: TurnId.make("turn-other"),
                 planMarkdown: "# Latest elsewhere",
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationSessionId: null,
                 createdAt: "2026-02-23T00:00:04.000Z",
                 updatedAt: "2026-02-23T00:00:05.000Z",
               },
@@ -510,19 +510,19 @@ describe("findSidebarProposedPlan", () => {
         latestTurn: {
           turnId: TurnId.make("turn-implementation"),
           sourceProposedPlan: {
-            threadId: ThreadId.make("thread-1"),
+            sessionId: SessionId.make("session-1"),
             planId: "plan-1",
           },
         },
         latestTurnSettled: false,
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
       }),
     ).toEqual({
       id: "plan-1",
       turnId: "turn-plan",
       planMarkdown: "# Source plan",
       implementedAt: "2026-02-23T00:00:03.000Z",
-      implementationThreadId: "thread-2",
+      implementationSessionId: "session-2",
       createdAt: "2026-02-23T00:00:01.000Z",
       updatedAt: "2026-02-23T00:00:02.000Z",
     });
@@ -531,16 +531,16 @@ describe("findSidebarProposedPlan", () => {
   it("falls back to the latest proposed plan once the turn is settled", () => {
     expect(
       findSidebarProposedPlan({
-        threads: [
+        sessions: [
           {
-            id: ThreadId.make("thread-1"),
+            id: SessionId.make("session-1"),
             proposedPlans: [
               {
                 id: "plan-1",
                 turnId: TurnId.make("turn-plan"),
                 planMarkdown: "# Older",
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationSessionId: null,
                 createdAt: "2026-02-23T00:00:01.000Z",
                 updatedAt: "2026-02-23T00:00:02.000Z",
               },
@@ -549,7 +549,7 @@ describe("findSidebarProposedPlan", () => {
                 turnId: TurnId.make("turn-latest"),
                 planMarkdown: "# Latest",
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationSessionId: null,
                 createdAt: "2026-02-23T00:00:03.000Z",
                 updatedAt: "2026-02-23T00:00:04.000Z",
               },
@@ -559,12 +559,12 @@ describe("findSidebarProposedPlan", () => {
         latestTurn: {
           turnId: TurnId.make("turn-implementation"),
           sourceProposedPlan: {
-            threadId: ThreadId.make("thread-1"),
+            sessionId: SessionId.make("session-1"),
             planId: "plan-1",
           },
         },
         latestTurnSettled: true,
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
       })?.planMarkdown,
     ).toBe("# Latest");
   });
@@ -572,7 +572,7 @@ describe("findSidebarProposedPlan", () => {
 
 describe("deriveWorkLogEntries", () => {
   it("omits tool started entries and keeps completed entries", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "tool-complete",
         createdAt: "2026-02-23T00:00:03.000Z",
@@ -592,7 +592,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("omits task.started but shows task.progress and task.completed", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "task-start",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -621,7 +621,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("uses payload summary as label for task entries when available", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "task-progress-with-summary",
         createdAt: "2026-02-23T00:00:02.000Z",
@@ -637,7 +637,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("uses payload detail as label for task.completed and preserves error tone", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "task-completed-failed",
         createdAt: "2026-02-23T00:00:03.000Z",
@@ -654,7 +654,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("filters by turn id when provided", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({ id: "turn-1", turnId: "turn-1", summary: "Tool call", kind: "tool.started" }),
       makeActivity({
         id: "turn-2",
@@ -670,7 +670,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("omits checkpoint captured info entries", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "checkpoint",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -691,7 +691,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("omits ExitPlanMode lifecycle entries once the plan card is shown", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "exit-plan-updated",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -727,7 +727,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("orders work log by activity sequence when present", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "second",
         createdAt: "2026-02-23T00:00:03.000Z",
@@ -749,7 +749,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("extracts command text for command tool activities", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "command-tool",
         kind: "tool.completed",
@@ -770,7 +770,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("unwraps PowerShell command wrappers for displayed command text", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "command-tool-windows-wrapper",
         kind: "tool.completed",
@@ -794,7 +794,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("unwraps PowerShell command wrappers from argv-style command payloads", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "command-tool-windows-wrapper-argv",
         kind: "tool.completed",
@@ -818,7 +818,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("extracts command text from command detail when structured command metadata is missing", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "command-tool-windows-detail-fallback",
         kind: "tool.completed",
@@ -839,7 +839,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("does not unwrap shell commands when no wrapper flag is present", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "command-tool-shell-script",
         kind: "tool.completed",
@@ -861,7 +861,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("keeps compact Codex tool metadata used for icons and labels", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "tool-with-metadata",
         kind: "tool.completed",
@@ -894,7 +894,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("extracts changed file paths for file-change tool activities", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "file-tool",
         kind: "tool.completed",
@@ -921,7 +921,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("drops duplicated tool detail when it only repeats the title", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "read-file-generic",
         kind: "tool.completed",
@@ -940,7 +940,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("uses grep raw output summaries instead of repeating the generic tool label", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "grep-update",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -989,7 +989,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("uses completed read-file output previews and still collapses the same tool call", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "read-update",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -1038,7 +1038,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("does not use command stdout as the detail when Cursor omits the command input", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "cursor-command-complete",
         createdAt: "2026-04-16T22:40:42.221Z",
@@ -1073,7 +1073,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("collapses legacy completed tool rows that are missing tool metadata", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "legacy-read-update",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -1114,7 +1114,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("collapses repeated lifecycle updates for the same tool call into one entry", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "tool-update-1",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -1170,7 +1170,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("keeps separate tool entries when an identical call starts after the prior one completed", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "tool-1-update",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -1223,7 +1223,7 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("collapses same-timestamp lifecycle rows even when completed sorts before updated by id", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "z-update-earlier",
         createdAt: "2026-02-23T00:00:01.000Z",
@@ -1280,11 +1280,11 @@ describe("deriveTimelineEntries", () => {
       ],
       [
         {
-          id: "plan:thread-1:turn:turn-1",
+          id: "plan:session-1:turn:turn-1",
           turnId: TurnId.make("turn-1"),
           planMarkdown: "# Ship it",
           implementedAt: null,
-          implementationThreadId: null,
+          implementationSessionId: null,
           createdAt: "2026-02-23T00:00:02.000Z",
           updatedAt: "2026-02-23T00:00:02.000Z",
         },
@@ -1305,7 +1305,7 @@ describe("deriveTimelineEntries", () => {
       proposedPlan: {
         planMarkdown: "# Ship it",
         implementedAt: null,
-        implementationThreadId: null,
+        implementationSessionId: null,
       },
     });
   });
@@ -1389,7 +1389,7 @@ describe("deriveWorkLogEntries context window handling", () => {
 
 describe("hasToolActivityForTurn", () => {
   it("returns false when turn id is missing", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({ id: "tool-1", turnId: "turn-1", kind: "tool.completed", tone: "tool" }),
     ];
 
@@ -1398,7 +1398,7 @@ describe("hasToolActivityForTurn", () => {
   });
 
   it("returns true only for matching tool activity in the target turn", () => {
-    const activities: OrchestrationThreadActivity[] = [
+    const activities: OrchestrationSessionActivity[] = [
       makeActivity({ id: "tool-1", turnId: "turn-1", kind: "tool.completed", tone: "tool" }),
       makeActivity({ id: "info-1", turnId: "turn-2", kind: "turn.completed", tone: "info" }),
     ];

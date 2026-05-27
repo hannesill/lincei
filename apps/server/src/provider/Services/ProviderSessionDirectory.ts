@@ -1,9 +1,9 @@
 import type {
   ProviderInstanceId,
   ProviderDriverKind,
-  ProviderSessionRuntimeStatus,
+  ProviderRuntimeStatus,
   RuntimeMode,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Context from "effect/Context";
@@ -15,7 +15,7 @@ import type {
 } from "../Errors.ts";
 
 export interface ProviderRuntimeBinding {
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly provider: ProviderDriverKind;
   /**
    * Routing key for the configured provider instance that owns this
@@ -24,7 +24,7 @@ export interface ProviderRuntimeBinding {
    */
   readonly providerInstanceId?: ProviderInstanceId;
   readonly adapterKey?: string;
-  readonly status?: ProviderSessionRuntimeStatus;
+  readonly status?: ProviderRuntimeStatus;
   readonly resumeCursor?: unknown | null;
   readonly runtimePayload?: unknown | null;
   readonly runtimeMode?: RuntimeMode;
@@ -46,15 +46,15 @@ export interface ProviderSessionDirectoryShape {
   ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
 
   readonly getProvider: (
-    threadId: ThreadId,
+    sessionId: SessionId,
   ) => Effect.Effect<ProviderDriverKind, ProviderSessionDirectoryReadError>;
 
   readonly getBinding: (
-    threadId: ThreadId,
+    sessionId: SessionId,
   ) => Effect.Effect<Option.Option<ProviderRuntimeBinding>, ProviderSessionDirectoryReadError>;
 
-  readonly listThreadIds: () => Effect.Effect<
-    ReadonlyArray<ThreadId>,
+  readonly listSessionIds: () => Effect.Effect<
+    ReadonlyArray<SessionId>,
     ProviderSessionDirectoryPersistenceError
   >;
 

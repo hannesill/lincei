@@ -16,7 +16,7 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const terminalManager = yield* TerminalManager;
 
-  const runForThread: ProjectSetupScriptRunnerShape["runForThread"] = (input) =>
+  const runForSession: ProjectSetupScriptRunnerShape["runForSession"] = (input) =>
     Effect.gen(function* () {
       const project =
         (input.projectId
@@ -52,14 +52,14 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
       });
 
       yield* terminalManager.open({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         terminalId,
         cwd,
         worktreePath: input.worktreePath,
         env,
       });
       yield* terminalManager.write({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         terminalId,
         data: `${script.command}\r`,
       });
@@ -93,7 +93,7 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
     );
 
   return {
-    runForThread,
+    runForSession,
   } satisfies ProjectSetupScriptRunnerShape;
 });
 

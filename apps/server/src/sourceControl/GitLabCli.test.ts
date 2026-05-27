@@ -42,10 +42,10 @@ layer("GitLabCli.layer", (it) => {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             JSON.stringify({
               iid: 42,
-              title: "Add MR thread creation",
+              title: "Add MR session creation",
               web_url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/42",
               target_branch: "main",
-              source_branch: "feature/mr-threads",
+              source_branch: "feature/mr-sessions",
               state: "opened",
               source_project_id: 101,
               target_project_id: 100,
@@ -67,10 +67,10 @@ layer("GitLabCli.layer", (it) => {
 
       assert.deepStrictEqual(result, {
         number: 42,
-        title: "Add MR thread creation",
+        title: "Add MR session creation",
         url: "https://gitlab.com/example-workspace/example-app/-/merge_requests/42",
         baseRefName: "main",
-        headRefName: "feature/mr-threads",
+        headRefName: "feature/mr-sessions",
         state: "open",
         isCrossRepository: true,
         headRepositoryNameWithOwner: "example-fork/example-app",

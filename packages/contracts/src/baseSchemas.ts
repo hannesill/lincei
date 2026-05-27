@@ -27,8 +27,8 @@ const makeEntityId = <Brand extends string>(brand: Brand) => {
   return TrimmedNonEmptyString.pipe(Schema.brand(brand));
 };
 
-export const ThreadId = makeEntityId("ThreadId");
-export type ThreadId = typeof ThreadId.Type;
+export const SessionId = makeEntityId("SessionId");
+export type SessionId = typeof SessionId.Type;
 export const ProjectId = makeEntityId("ProjectId");
 export type ProjectId = typeof ProjectId.Type;
 export const EnvironmentId = makeEntityId("EnvironmentId");

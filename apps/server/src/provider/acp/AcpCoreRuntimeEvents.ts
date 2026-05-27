@@ -7,7 +7,7 @@ import {
   type ProviderDriverKind,
   type ProviderRuntimeEvent,
   type RuntimeRequestId,
-  type ThreadId,
+  type SessionId,
   type ToolLifecycleItemType,
   type TurnId,
 } from "@t3tools/contracts";
@@ -79,7 +79,7 @@ function runtimeItemStatusFromAcpToolStatus(
 export function makeAcpRequestOpenedEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly turnId: TurnId | undefined;
   readonly requestId: RuntimeRequestId;
   readonly permissionRequest: AcpPermissionRequest;
@@ -93,7 +93,7 @@ export function makeAcpRequestOpenedEvent(input: {
     type: "request.opened",
     ...input.stamp,
     provider: input.provider,
-    threadId: input.threadId,
+    sessionId: input.sessionId,
     turnId: input.turnId,
     requestId: input.requestId,
     payload: {
@@ -112,7 +112,7 @@ export function makeAcpRequestOpenedEvent(input: {
 export function makeAcpRequestResolvedEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly turnId: TurnId | undefined;
   readonly requestId: RuntimeRequestId;
   readonly permissionRequest: AcpPermissionRequest;
@@ -122,7 +122,7 @@ export function makeAcpRequestResolvedEvent(input: {
     type: "request.resolved",
     ...input.stamp,
     provider: input.provider,
-    threadId: input.threadId,
+    sessionId: input.sessionId,
     turnId: input.turnId,
     requestId: input.requestId,
     payload: {
@@ -135,7 +135,7 @@ export function makeAcpRequestResolvedEvent(input: {
 export function makeAcpPlanUpdatedEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly turnId: TurnId | undefined;
   readonly payload: AcpPlanUpdate;
   readonly source: AcpAdapterRawSource;
@@ -146,7 +146,7 @@ export function makeAcpPlanUpdatedEvent(input: {
     type: "turn.plan.updated",
     ...input.stamp,
     provider: input.provider,
-    threadId: input.threadId,
+    sessionId: input.sessionId,
     turnId: input.turnId,
     payload: input.payload,
     raw: {
@@ -160,7 +160,7 @@ export function makeAcpPlanUpdatedEvent(input: {
 export function makeAcpToolCallEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly turnId: TurnId | undefined;
   readonly toolCall: AcpToolCallState;
   readonly rawPayload: unknown;
@@ -173,7 +173,7 @@ export function makeAcpToolCallEvent(input: {
         : "item.updated",
     ...input.stamp,
     provider: input.provider,
-    threadId: input.threadId,
+    sessionId: input.sessionId,
     turnId: input.turnId,
     itemId: RuntimeItemId.make(input.toolCall.toolCallId),
     payload: {
@@ -194,7 +194,7 @@ export function makeAcpToolCallEvent(input: {
 export function makeAcpAssistantItemEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly turnId: TurnId | undefined;
   readonly itemId: string;
   readonly lifecycle: "item.started" | "item.completed";
@@ -203,7 +203,7 @@ export function makeAcpAssistantItemEvent(input: {
     type: input.lifecycle,
     ...input.stamp,
     provider: input.provider,
-    threadId: input.threadId,
+    sessionId: input.sessionId,
     turnId: input.turnId,
     itemId: RuntimeItemId.make(input.itemId),
     payload: {
@@ -216,7 +216,7 @@ export function makeAcpAssistantItemEvent(input: {
 export function makeAcpContentDeltaEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly turnId: TurnId | undefined;
   readonly itemId?: string;
   readonly text: string;
@@ -226,7 +226,7 @@ export function makeAcpContentDeltaEvent(input: {
     type: "content.delta",
     ...input.stamp,
     provider: input.provider,
-    threadId: input.threadId,
+    sessionId: input.sessionId,
     turnId: input.turnId,
     ...(input.itemId ? { itemId: RuntimeItemId.make(input.itemId) } : {}),
     payload: {

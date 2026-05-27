@@ -13,10 +13,10 @@ import type {
   OrchestrationProjectShell,
   OrchestrationReadModel,
   OrchestrationShellSnapshot,
-  OrchestrationThread,
-  OrchestrationThreadShell,
+  OrchestrationSession,
+  OrchestrationSessionShell,
   ProjectId,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Option from "effect/Option";
@@ -26,23 +26,23 @@ import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
 
 export interface ProjectionSnapshotCounts {
   readonly projectCount: number;
-  readonly threadCount: number;
+  readonly sessionCount: number;
 }
 
 export interface ProjectionSnapshotSequence {
   readonly snapshotSequence: number;
 }
 
-export interface ProjectionThreadCheckpointContext {
-  readonly threadId: ThreadId;
+export interface ProjectionSessionCheckpointContext {
+  readonly sessionId: SessionId;
   readonly projectId: ProjectId;
   readonly workspaceRoot: string;
   readonly worktreePath: string | null;
   readonly checkpoints: ReadonlyArray<OrchestrationCheckpointSummary>;
 }
 
-export interface ProjectionFullThreadDiffContext {
-  readonly threadId: ThreadId;
+export interface ProjectionFullSessionDiffContext {
+  readonly sessionId: SessionId;
   readonly projectId: ProjectId;
   readonly workspaceRoot: string;
   readonly worktreePath: string | null;
@@ -74,8 +74,8 @@ export interface ProjectionSnapshotQueryShape {
   /**
    * Read the latest orchestration shell snapshot.
    *
-   * Returns only projects and thread shell summaries so clients can bootstrap
-   * lightweight navigation state without hydrating every thread body.
+   * Returns only projects and session shell summaries so clients can bootstrap
+   * lightweight navigation state without hydrating every session body.
    */
   readonly getShellSnapshot: () => Effect.Effect<
     OrchestrationShellSnapshot,
@@ -83,9 +83,9 @@ export interface ProjectionSnapshotQueryShape {
   >;
 
   /**
-   * Read archived thread shell summaries for the archive page.
+   * Read archived session shell summaries for the archive page.
    *
-   * This query is separate from the main shell snapshot so archived threads
+   * This query is separate from the main shell snapshot so archived sessions
    * are never bootstrapped into normal navigation state.
    */
   readonly getArchivedShellSnapshot: () => Effect.Effect<
@@ -122,41 +122,41 @@ export interface ProjectionSnapshotQueryShape {
   ) => Effect.Effect<Option.Option<OrchestrationProjectShell>, ProjectionRepositoryError>;
 
   /**
-   * Read the earliest active thread for a project.
+   * Read the earliest active session for a project.
    */
-  readonly getFirstActiveThreadIdByProjectId: (
+  readonly getFirstActiveSessionIdByProjectId: (
     projectId: ProjectId,
-  ) => Effect.Effect<Option.Option<ThreadId>, ProjectionRepositoryError>;
+  ) => Effect.Effect<Option.Option<SessionId>, ProjectionRepositoryError>;
 
   /**
-   * Read the checkpoint context needed to resolve a single thread diff.
+   * Read the checkpoint context needed to resolve a single session diff.
    */
-  readonly getThreadCheckpointContext: (
-    threadId: ThreadId,
-  ) => Effect.Effect<Option.Option<ProjectionThreadCheckpointContext>, ProjectionRepositoryError>;
+  readonly getSessionCheckpointContext: (
+    sessionId: SessionId,
+  ) => Effect.Effect<Option.Option<ProjectionSessionCheckpointContext>, ProjectionRepositoryError>;
 
   /**
-   * Read only the narrow context needed to compute a full-thread diff from
+   * Read only the narrow context needed to compute a full-session diff from
    * checkpoint 0 to a specific turn count.
    */
-  readonly getFullThreadDiffContext: (
-    threadId: ThreadId,
+  readonly getFullSessionDiffContext: (
+    sessionId: SessionId,
     toTurnCount: number,
-  ) => Effect.Effect<Option.Option<ProjectionFullThreadDiffContext>, ProjectionRepositoryError>;
+  ) => Effect.Effect<Option.Option<ProjectionFullSessionDiffContext>, ProjectionRepositoryError>;
 
   /**
-   * Read a single active thread shell row by id.
+   * Read a single active session shell row by id.
    */
-  readonly getThreadShellById: (
-    threadId: ThreadId,
-  ) => Effect.Effect<Option.Option<OrchestrationThreadShell>, ProjectionRepositoryError>;
+  readonly getSessionShellById: (
+    sessionId: SessionId,
+  ) => Effect.Effect<Option.Option<OrchestrationSessionShell>, ProjectionRepositoryError>;
 
   /**
-   * Read a single active thread detail snapshot by id.
+   * Read a single active session detail snapshot by id.
    */
-  readonly getThreadDetailById: (
-    threadId: ThreadId,
-  ) => Effect.Effect<Option.Option<OrchestrationThread>, ProjectionRepositoryError>;
+  readonly getSessionDetailById: (
+    sessionId: SessionId,
+  ) => Effect.Effect<Option.Option<OrchestrationSession>, ProjectionRepositoryError>;
 }
 
 /**

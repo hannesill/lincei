@@ -43,30 +43,30 @@ layer("019_ProjectionSnapshotLookupIndexes", (it) => {
         ["workspace_root", "deleted_at"],
       );
 
-      const threadIndexes = yield* sql<{
+      const sessionIndexes = yield* sql<{
         readonly seq: number;
         readonly name: string;
         readonly unique: number;
         readonly origin: string;
         readonly partial: number;
       }>`
-        PRAGMA index_list(projection_threads)
+        PRAGMA index_list(projection_sessions)
       `;
       assert.ok(
-        threadIndexes.some(
-          (index) => index.name === "idx_projection_threads_project_deleted_created",
+        sessionIndexes.some(
+          (index) => index.name === "idx_projection_sessions_project_deleted_created",
         ),
       );
 
-      const threadIndexColumns = yield* sql<{
+      const sessionIndexColumns = yield* sql<{
         readonly seqno: number;
         readonly cid: number;
         readonly name: string;
       }>`
-        PRAGMA index_info('idx_projection_threads_project_deleted_created')
+        PRAGMA index_info('idx_projection_sessions_project_deleted_created')
       `;
       assert.deepStrictEqual(
-        threadIndexColumns.map((column) => column.name),
+        sessionIndexColumns.map((column) => column.name),
         ["project_id", "deleted_at", "created_at"],
       );
     }),

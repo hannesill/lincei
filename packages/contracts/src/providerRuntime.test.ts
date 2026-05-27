@@ -13,7 +13,7 @@ describe("ProviderRuntimeEvent", () => {
       provider: "ollama",
       providerInstanceId: "ollama_local",
       createdAt: "2026-02-28T00:00:00.000Z",
-      threadId: "thread-1",
+      sessionId: "session-1",
       payload: {
         message: "started",
       },
@@ -28,9 +28,9 @@ describe("ProviderRuntimeEvent", () => {
       type: "turn.plan.updated",
       eventId: "event-1",
       provider: "claudeAgent",
-      sessionId: "runtime-session-1",
+      runtimeSessionId: "runtime-session-1",
       createdAt: "2026-02-28T00:00:00.000Z",
-      threadId: "thread-1",
+      sessionId: "session-1",
       turnId: "turn-1",
       payload: {
         explanation: "Implement schema updates",
@@ -55,7 +55,7 @@ describe("ProviderRuntimeEvent", () => {
       eventId: "event-proposed-plan-1",
       provider: "codex",
       createdAt: "2026-02-28T00:00:00.000Z",
-      threadId: "thread-1",
+      sessionId: "session-1",
       turnId: "turn-1",
       payload: {
         planMarkdown: "# Ship it",
@@ -74,9 +74,9 @@ describe("ProviderRuntimeEvent", () => {
       type: "user-input.requested",
       eventId: "event-2",
       provider: "claudeAgent",
-      sessionId: "runtime-session-2",
+      runtimeSessionId: "runtime-session-2",
       createdAt: "2026-02-28T00:00:01.000Z",
-      threadId: "thread-2",
+      sessionId: "session-2",
       requestId: "request-1",
       payload: {
         questions: [
@@ -112,9 +112,9 @@ describe("ProviderRuntimeEvent", () => {
       type: "user-input.resolved",
       eventId: "event-3",
       provider: "claudeAgent",
-      sessionId: "runtime-session-2",
+      runtimeSessionId: "runtime-session-2",
       createdAt: "2026-02-28T00:00:02.000Z",
-      threadId: "thread-2",
+      sessionId: "session-2",
       requestId: "request-1",
       payload: {
         answers: {
@@ -149,21 +149,21 @@ describe("ProviderRuntimeEvent", () => {
         type: "runtime.error",
         eventId: "event-5",
         provider: "codex",
-        sessionId: "runtime-session-3",
+        runtimeSessionId: "runtime-session-3",
         createdAt: "2026-02-28T00:00:03.000Z",
-        threadId: "   ",
+        sessionId: "   ",
         payload: { message: "boom" },
       }),
     ).toThrow();
   });
 
-  it("decodes normalized thread token usage snapshots", () => {
+  it("decodes normalized session token usage snapshots", () => {
     const parsed = decodeRuntimeEvent({
-      type: "thread.token-usage.updated",
+      type: "session.token-usage.updated",
       eventId: "event-token-usage-1",
       provider: "claudeAgent",
       createdAt: "2026-02-28T00:00:04.000Z",
-      threadId: "thread-1",
+      sessionId: "session-1",
       payload: {
         usage: {
           usedTokens: 31251,
@@ -174,9 +174,9 @@ describe("ProviderRuntimeEvent", () => {
       },
     });
 
-    expect(parsed.type).toBe("thread.token-usage.updated");
-    if (parsed.type !== "thread.token-usage.updated") {
-      throw new Error("expected thread.token-usage.updated");
+    expect(parsed.type).toBe("session.token-usage.updated");
+    if (parsed.type !== "session.token-usage.updated") {
+      throw new Error("expected session.token-usage.updated");
     }
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);

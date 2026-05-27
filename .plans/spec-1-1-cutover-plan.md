@@ -39,15 +39,15 @@ Work units:
 - Delete the current legacy migration files and rewrite migration loader ordering.
 - Create `001_orchestration_events.ts` with full envelope columns and required event indexes.
 - Create `002_orchestration_command_receipts.ts` with PK + lookup indexes.
-- Create `003_checkpoint_diff_blobs.ts` with uniqueness on `(thread_id, from_turn_count, to_turn_count)`.
-- Create `004_provider_session_runtime.ts` with PK and runtime lookup indexes.
+- Create `003_checkpoint_diff_blobs.ts` with uniqueness on `(session_id, from_turn_count, to_turn_count)`.
+- Create `004_provider_runtime.ts` with PK and runtime lookup indexes.
 - Create `005_projections.ts` with all projection tables:
   - `projection_projects`
-  - `projection_threads`
-  - `projection_thread_messages`
-  - `projection_thread_activities`
-  - `projection_thread_sessions`
-  - `projection_thread_turns`
+  - `projection_sessions`
+  - `projection_session_messages`
+  - `projection_session_activities`
+  - `projection_session_sessions`
+  - `projection_session_turns`
   - `projection_checkpoints`
   - `projection_pending_approvals`
   - `projection_state`
@@ -164,7 +164,7 @@ Exit criteria:
 Work units:
 
 - Implement snapshot query service reading only projection tables.
-- Build thread hydration from projection rows: messages, activities, checkpoints, session.
+- Build session hydration from projection rows: messages, activities, checkpoints, session.
 - Compute `snapshotSequence` as the minimum required projector sequence from `projection_state`.
 - Implement `getTurnDiff` query backed by `checkpoint_diff_blobs` only.
 - Remove or bypass in-memory snapshot construction for RPC responses.
@@ -186,15 +186,15 @@ Exit criteria:
 
 Work units:
 
-- Create repository/service for `provider_session_runtime`.
+- Create repository/service for `provider_runtime`.
 - Update adapter/session manager to persist runtime/resume cursor in new table.
-- Ensure domain-visible session state still flows through orchestration events to `projection_thread_sessions`.
+- Ensure domain-visible session state still flows through orchestration events to `projection_session_sessions`.
 - Remove writes to legacy provider session tables.
 - Verify restart/resume path reads runtime state from canonical table only.
 
 Deliverables:
 
-- Provider runtime state entirely backed by `provider_session_runtime`.
+- Provider runtime state entirely backed by `provider_runtime`.
 
 Breakage allowed:
 

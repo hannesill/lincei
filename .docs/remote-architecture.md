@@ -51,7 +51,7 @@ Remote support should preserve that boundary.
 │                                              │
 │ - environment identity                       │
 │ - provider state                             │
-│ - projects / threads / terminals             │
+│ - projects / sessions / terminals             │
 │ - git / filesystem / process runtime         │
 └──────────────────────────────────────────────┘
 ```
@@ -68,7 +68,7 @@ It is the unit that owns:
 
 - provider availability and auth state
 - model availability
-- projects and threads
+- projects and sessions
 - terminal processes
 - filesystem access
 - git operations
@@ -185,7 +185,7 @@ That means:
 
 - a local clone and a remote clone are different projects
 - they may share a `RepositoryIdentity`
-- threads still bind to one project in one environment
+- sessions still bind to one project in one environment
 
 ## Access methods
 

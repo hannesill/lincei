@@ -33,7 +33,7 @@ describe("sidebar interactive cursors", () => {
 
   it("uses a pointer cursor for menu actions", () => {
     const html = renderToStaticMarkup(
-      <SidebarMenuAction aria-label="Create thread">
+      <SidebarMenuAction aria-label="Create session">
         <span>+</span>
       </SidebarMenuAction>,
     );

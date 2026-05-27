@@ -3,7 +3,7 @@ import {
   EventId,
   ProjectId,
   ProviderDriverKind,
-  ThreadId,
+  SessionId,
   type OrchestrationEvent,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -28,7 +28,7 @@ function makeEvent(input: {
     aggregateId:
       input.aggregateKind === "project"
         ? ProjectId.make(input.aggregateId)
-        : ThreadId.make(input.aggregateId),
+        : SessionId.make(input.aggregateId),
     occurredAt: input.occurredAt,
     commandId: input.commandId === null ? null : CommandId.make(input.commandId),
     causationEventId: null,
@@ -39,7 +39,7 @@ function makeEvent(input: {
 }
 
 describe("orchestration projector", () => {
-  it("applies thread.created events", async () => {
+  it("applies session.created events", async () => {
     const now = "2026-01-01T00:00:00.000Z";
     const model = createEmptyReadModel(now);
 
@@ -48,13 +48,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: now,
-          commandId: "cmd-thread-create",
+          commandId: "cmd-session-create",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -72,9 +72,9 @@ describe("orchestration projector", () => {
     );
 
     expect(next.snapshotSequence).toBe(1);
-    expect(next.threads).toEqual([
+    expect(next.sessions).toEqual([
       {
-        id: "thread-1",
+        id: "session-1",
         projectId: "project-1",
         title: "demo",
         modelSelection: {
@@ -109,13 +109,13 @@ describe("orchestration projector", () => {
           model,
           makeEvent({
             sequence: 1,
-            type: "thread.created",
-            aggregateKind: "thread",
-            aggregateId: "thread-1",
+            type: "session.created",
+            aggregateKind: "session",
+            aggregateId: "session-1",
             occurredAt: now,
             commandId: "cmd-invalid",
             payload: {
-              // missing required threadId
+              // missing required sessionId
               projectId: "project-1",
               title: "demo",
               modelSelection: {
@@ -133,7 +133,7 @@ describe("orchestration projector", () => {
     ).rejects.toBeDefined();
   });
 
-  it("applies thread.archived and thread.unarchived events", async () => {
+  it("applies session.archived and session.unarchived events", async () => {
     const now = "2026-01-01T00:00:00.000Z";
     const later = "2026-01-01T00:00:01.000Z";
     const created = await Effect.runPromise(
@@ -141,13 +141,13 @@ describe("orchestration projector", () => {
         createEmptyReadModel(now),
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: now,
-          commandId: "cmd-thread-create",
+          commandId: "cmd-session-create",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -170,39 +170,39 @@ describe("orchestration projector", () => {
         created,
         makeEvent({
           sequence: 2,
-          type: "thread.archived",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.archived",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: later,
-          commandId: "cmd-thread-archive",
+          commandId: "cmd-session-archive",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             archivedAt: later,
             updatedAt: later,
           },
         }),
       ),
     );
-    expect(archived.threads[0]?.archivedAt).toBe(later);
+    expect(archived.sessions[0]?.archivedAt).toBe(later);
 
     const unarchived = await Effect.runPromise(
       projectEvent(
         archived,
         makeEvent({
           sequence: 3,
-          type: "thread.unarchived",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.unarchived",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: later,
-          commandId: "cmd-thread-unarchive",
+          commandId: "cmd-session-unarchive",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             updatedAt: later,
           },
         }),
       ),
     );
-    expect(unarchived.threads[0]?.archivedAt).toBeNull();
+    expect(unarchived.sessions[0]?.archivedAt).toBeNull();
   });
 
   it("keeps projector forward-compatible for unhandled event types", async () => {
@@ -214,13 +214,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 7,
-          type: "thread.turn-start-requested",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.turn-start-requested",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: "2026-01-01T00:00:00.000Z",
           commandId: "cmd-unhandled",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             messageId: "message-1",
             runtimeMode: "approval-required",
             createdAt: "2026-01-01T00:00:00.000Z",
@@ -231,7 +231,7 @@ describe("orchestration projector", () => {
 
     expect(next.snapshotSequence).toBe(7);
     expect(next.updatedAt).toBe("2026-01-01T00:00:00.000Z");
-    expect(next.threads).toEqual([]);
+    expect(next.sessions).toEqual([]);
   });
 
   it("tracks latest turn id from session lifecycle events", async () => {
@@ -244,13 +244,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -272,19 +272,17 @@ describe("orchestration projector", () => {
         afterCreate,
         makeEvent({
           sequence: 2,
-          type: "thread.session-set",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.session-set",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: startedAt,
           commandId: "cmd-running",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             session: {
-              threadId: "thread-1",
+              sessionId: "session-1",
               status: "running",
               providerName: "codex",
-              providerSessionId: "session-1",
-              providerThreadId: "provider-thread-1",
               runtimeMode: "approval-required",
               activeTurnId: "turn-1",
               lastError: null,
@@ -295,12 +293,12 @@ describe("orchestration projector", () => {
       ),
     );
 
-    const thread = afterRunning.threads[0];
-    expect(thread?.latestTurn?.turnId).toBe("turn-1");
-    expect(thread?.session?.status).toBe("running");
+    const session = afterRunning.sessions[0];
+    expect(session?.latestTurn?.turnId).toBe("turn-1");
+    expect(session?.session?.status).toBe("running");
   });
 
-  it("updates canonical thread runtime mode from thread.runtime-mode-set", async () => {
+  it("updates canonical session runtime mode from session.runtime-mode-set", async () => {
     const createdAt = "2026-02-23T08:00:00.000Z";
     const updatedAt = "2026-02-23T08:00:05.000Z";
     const model = createEmptyReadModel(createdAt);
@@ -310,13 +308,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -338,13 +336,13 @@ describe("orchestration projector", () => {
         afterCreate,
         makeEvent({
           sequence: 2,
-          type: "thread.runtime-mode-set",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.runtime-mode-set",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: updatedAt,
           commandId: "cmd-runtime-mode-set",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             runtimeMode: "approval-required",
             updatedAt,
           },
@@ -352,8 +350,8 @@ describe("orchestration projector", () => {
       ),
     );
 
-    expect(afterUpdate.threads[0]?.runtimeMode).toBe("approval-required");
-    expect(afterUpdate.threads[0]?.updatedAt).toBe(updatedAt);
+    expect(afterUpdate.sessions[0]?.runtimeMode).toBe("approval-required");
+    expect(afterUpdate.sessions[0]?.updatedAt).toBe(updatedAt);
   });
 
   it("marks assistant messages completed with non-streaming updates", async () => {
@@ -367,13 +365,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -395,13 +393,13 @@ describe("orchestration projector", () => {
         afterCreate,
         makeEvent({
           sequence: 2,
-          type: "thread.message-sent",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.message-sent",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: deltaAt,
           commandId: "cmd-delta",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             messageId: "assistant:msg-1",
             role: "assistant",
             text: "hello",
@@ -419,13 +417,13 @@ describe("orchestration projector", () => {
         afterDelta,
         makeEvent({
           sequence: 3,
-          type: "thread.message-sent",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.message-sent",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: completeAt,
           commandId: "cmd-complete",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             messageId: "assistant:msg-1",
             role: "assistant",
             text: "",
@@ -438,14 +436,14 @@ describe("orchestration projector", () => {
       ),
     );
 
-    const message = afterComplete.threads[0]?.messages[0];
+    const message = afterComplete.sessions[0]?.messages[0];
     expect(message?.id).toBe("assistant:msg-1");
     expect(message?.text).toBe("hello");
     expect(message?.streaming).toBe(false);
     expect(message?.updatedAt).toBe(completeAt);
   });
 
-  it("prunes reverted turn messages from in-memory thread snapshot", async () => {
+  it("prunes reverted turn messages from in-memory session snapshot", async () => {
     const createdAt = "2026-02-23T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);
 
@@ -454,13 +452,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-1",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
           occurredAt: createdAt,
           commandId: "cmd-create",
           payload: {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -480,13 +478,13 @@ describe("orchestration projector", () => {
     const events: ReadonlyArray<OrchestrationEvent> = [
       makeEvent({
         sequence: 2,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:01.000Z",
         commandId: "cmd-user-1",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           messageId: "user-msg-1",
           role: "user",
           text: "First edit",
@@ -498,13 +496,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 3,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:02.000Z",
         commandId: "cmd-assistant-1",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           messageId: "assistant-msg-1",
           role: "assistant",
           text: "Updated README to v2.\n",
@@ -516,16 +514,16 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 4,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.turn-diff-completed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:02.500Z",
         commandId: "cmd-turn-1-complete",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           turnId: "turn-1",
           checkpointTurnCount: 1,
-          checkpointRef: "refs/t3/checkpoints/thread-1/turn/1",
+          checkpointRef: "refs/t3/checkpoints/session-1/turn/1",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-msg-1",
@@ -534,13 +532,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 5,
-        type: "thread.activity-appended",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.activity-appended",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:02.750Z",
         commandId: "cmd-activity-1",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           activity: {
             id: "activity-1",
             tone: "tool",
@@ -554,13 +552,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 6,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:03.000Z",
         commandId: "cmd-user-2",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           messageId: "user-msg-2",
           role: "user",
           text: "Second edit",
@@ -572,13 +570,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 7,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:04.000Z",
         commandId: "cmd-assistant-2",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           messageId: "assistant-msg-2",
           role: "assistant",
           text: "Updated README to v3.\n",
@@ -590,16 +588,16 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 8,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.turn-diff-completed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:04.500Z",
         commandId: "cmd-turn-2-complete",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           turnId: "turn-2",
           checkpointTurnCount: 2,
-          checkpointRef: "refs/t3/checkpoints/thread-1/turn/2",
+          checkpointRef: "refs/t3/checkpoints/session-1/turn/2",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-msg-2",
@@ -608,13 +606,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 9,
-        type: "thread.activity-appended",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.activity-appended",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:04.750Z",
         commandId: "cmd-activity-2",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           activity: {
             id: "activity-2",
             tone: "tool",
@@ -628,13 +626,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 10,
-        type: "thread.reverted",
-        aggregateKind: "thread",
-        aggregateId: "thread-1",
+        type: "session.reverted",
+        aggregateKind: "session",
+        aggregateId: "session-1",
         occurredAt: "2026-02-23T10:00:05.000Z",
         commandId: "cmd-revert",
         payload: {
-          threadId: "thread-1",
+          sessionId: "session-1",
           turnCount: 1,
         },
       }),
@@ -646,18 +644,18 @@ describe("orchestration projector", () => {
       Promise.resolve(afterCreate),
     );
 
-    const thread = afterRevert.threads[0];
-    expect(thread?.messages.map((message) => ({ role: message.role, text: message.text }))).toEqual(
-      [
-        { role: "user", text: "First edit" },
-        { role: "assistant", text: "Updated README to v2.\n" },
-      ],
-    );
+    const session = afterRevert.sessions[0];
     expect(
-      thread?.activities.map((activity) => ({ id: activity.id, turnId: activity.turnId })),
+      session?.messages.map((message) => ({ role: message.role, text: message.text })),
+    ).toEqual([
+      { role: "user", text: "First edit" },
+      { role: "assistant", text: "Updated README to v2.\n" },
+    ]);
+    expect(
+      session?.activities.map((activity) => ({ id: activity.id, turnId: activity.turnId })),
     ).toEqual([{ id: "activity-1", turnId: "turn-1" }]);
-    expect(thread?.checkpoints.map((checkpoint) => checkpoint.checkpointTurnCount)).toEqual([1]);
-    expect(thread?.latestTurn?.turnId).toBe("turn-1");
+    expect(session?.checkpoints.map((checkpoint) => checkpoint.checkpointTurnCount)).toEqual([1]);
+    expect(session?.latestTurn?.turnId).toBe("turn-1");
   });
 
   it("does not fallback-retain messages tied to removed turn IDs", async () => {
@@ -669,13 +667,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-revert",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-revert",
           occurredAt: createdAt,
           commandId: "cmd-create-revert",
           payload: {
-            threadId: "thread-revert",
+            sessionId: "session-revert",
             projectId: "project-1",
             title: "demo",
             modelSelection: {
@@ -695,16 +693,16 @@ describe("orchestration projector", () => {
     const events: ReadonlyArray<OrchestrationEvent> = [
       makeEvent({
         sequence: 2,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "session.turn-diff-completed",
+        aggregateKind: "session",
+        aggregateId: "session-revert",
         occurredAt: "2026-02-26T12:00:01.000Z",
         commandId: "cmd-turn-1",
         payload: {
-          threadId: "thread-revert",
+          sessionId: "session-revert",
           turnId: "turn-1",
           checkpointTurnCount: 1,
-          checkpointRef: "refs/t3/checkpoints/thread-revert/turn/1",
+          checkpointRef: "refs/t3/checkpoints/session-revert/turn/1",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-keep",
@@ -713,13 +711,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 3,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-revert",
         occurredAt: "2026-02-26T12:00:01.100Z",
         commandId: "cmd-assistant-keep",
         payload: {
-          threadId: "thread-revert",
+          sessionId: "session-revert",
           messageId: "assistant-keep",
           role: "assistant",
           text: "kept",
@@ -731,16 +729,16 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 4,
-        type: "thread.turn-diff-completed",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "session.turn-diff-completed",
+        aggregateKind: "session",
+        aggregateId: "session-revert",
         occurredAt: "2026-02-26T12:00:02.000Z",
         commandId: "cmd-turn-2",
         payload: {
-          threadId: "thread-revert",
+          sessionId: "session-revert",
           turnId: "turn-2",
           checkpointTurnCount: 2,
-          checkpointRef: "refs/t3/checkpoints/thread-revert/turn/2",
+          checkpointRef: "refs/t3/checkpoints/session-revert/turn/2",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-remove",
@@ -749,13 +747,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 5,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-revert",
         occurredAt: "2026-02-26T12:00:02.050Z",
         commandId: "cmd-user-remove",
         payload: {
-          threadId: "thread-revert",
+          sessionId: "session-revert",
           messageId: "user-remove",
           role: "user",
           text: "removed",
@@ -767,13 +765,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 6,
-        type: "thread.message-sent",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "session.message-sent",
+        aggregateKind: "session",
+        aggregateId: "session-revert",
         occurredAt: "2026-02-26T12:00:02.100Z",
         commandId: "cmd-assistant-remove",
         payload: {
-          threadId: "thread-revert",
+          sessionId: "session-revert",
           messageId: "assistant-remove",
           role: "assistant",
           text: "removed",
@@ -785,13 +783,13 @@ describe("orchestration projector", () => {
       }),
       makeEvent({
         sequence: 7,
-        type: "thread.reverted",
-        aggregateKind: "thread",
-        aggregateId: "thread-revert",
+        type: "session.reverted",
+        aggregateKind: "session",
+        aggregateId: "session-revert",
         occurredAt: "2026-02-26T12:00:03.000Z",
         commandId: "cmd-revert",
         payload: {
-          threadId: "thread-revert",
+          sessionId: "session-revert",
           turnCount: 1,
         },
       }),
@@ -803,9 +801,9 @@ describe("orchestration projector", () => {
       Promise.resolve(afterCreate),
     );
 
-    const thread = afterRevert.threads[0];
+    const session = afterRevert.sessions[0];
     expect(
-      thread?.messages.map((message) => ({
+      session?.messages.map((message) => ({
         id: message.id,
         role: message.role,
         turnId: message.turnId,
@@ -813,7 +811,7 @@ describe("orchestration projector", () => {
     ).toEqual([{ id: "assistant-keep", role: "assistant", turnId: "turn-1" }]);
   });
 
-  it("caps message and checkpoint retention for long-lived threads", async () => {
+  it("caps message and checkpoint retention for long-lived sessions", async () => {
     const createdAt = "2026-03-01T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);
 
@@ -822,13 +820,13 @@ describe("orchestration projector", () => {
         model,
         makeEvent({
           sequence: 1,
-          type: "thread.created",
-          aggregateKind: "thread",
-          aggregateId: "thread-capped",
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-capped",
           occurredAt: createdAt,
           commandId: "cmd-create-capped",
           payload: {
-            threadId: "thread-capped",
+            sessionId: "session-capped",
             projectId: "project-1",
             title: "capped",
             modelSelection: {
@@ -850,13 +848,13 @@ describe("orchestration projector", () => {
       (_, index) =>
         makeEvent({
           sequence: index + 2,
-          type: "thread.message-sent",
-          aggregateKind: "thread",
-          aggregateId: "thread-capped",
+          type: "session.message-sent",
+          aggregateKind: "session",
+          aggregateId: "session-capped",
           occurredAt: `2026-03-01T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
           commandId: `cmd-message-${index}`,
           payload: {
-            threadId: "thread-capped",
+            sessionId: "session-capped",
             messageId: `msg-${index}`,
             role: "assistant",
             text: `message-${index}`,
@@ -880,16 +878,16 @@ describe("orchestration projector", () => {
       (_, index) =>
         makeEvent({
           sequence: index + 2_102,
-          type: "thread.turn-diff-completed",
-          aggregateKind: "thread",
-          aggregateId: "thread-capped",
+          type: "session.turn-diff-completed",
+          aggregateKind: "session",
+          aggregateId: "session-capped",
           occurredAt: `2026-03-01T10:30:${String(index % 60).padStart(2, "0")}.000Z`,
           commandId: `cmd-checkpoint-${index}`,
           payload: {
-            threadId: "thread-capped",
+            sessionId: "session-capped",
             turnId: `turn-${index}`,
             checkpointTurnCount: index + 1,
-            checkpointRef: `refs/t3/checkpoints/thread-capped/turn/${index + 1}`,
+            checkpointRef: `refs/t3/checkpoints/session-capped/turn/${index + 1}`,
             status: "ready",
             files: [],
             assistantMessageId: `msg-${index}`,
@@ -905,12 +903,12 @@ describe("orchestration projector", () => {
       Promise.resolve(afterMessages),
     );
 
-    const thread = finalState.threads[0];
-    expect(thread?.messages).toHaveLength(2_000);
-    expect(thread?.messages[0]?.id).toBe("msg-100");
-    expect(thread?.messages.at(-1)?.id).toBe("msg-2099");
-    expect(thread?.checkpoints).toHaveLength(500);
-    expect(thread?.checkpoints[0]?.turnId).toBe("turn-100");
-    expect(thread?.checkpoints.at(-1)?.turnId).toBe("turn-599");
+    const session = finalState.sessions[0];
+    expect(session?.messages).toHaveLength(2_000);
+    expect(session?.messages[0]?.id).toBe("msg-100");
+    expect(session?.messages.at(-1)?.id).toBe("msg-2099");
+    expect(session?.checkpoints).toHaveLength(500);
+    expect(session?.checkpoints[0]?.turnId).toBe("turn-100");
+    expect(session?.checkpoints.at(-1)?.turnId).toBe("turn-599");
   });
 });

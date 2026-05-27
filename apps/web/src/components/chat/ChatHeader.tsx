@@ -3,9 +3,9 @@ import {
   type EditorId,
   type ProjectScript,
   type ResolvedKeybindingsConfig,
-  type ThreadId,
+  type SessionId,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime";
+import { scopeSessionRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
@@ -19,10 +19,10 @@ import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
 
 interface ChatHeaderProps {
-  activeThreadEnvironmentId: EnvironmentId;
-  activeThreadId: ThreadId;
+  activeSessionEnvironmentId: EnvironmentId;
+  activeSessionId: SessionId;
   draftId?: DraftId;
-  activeThreadTitle: string;
+  activeSessionTitle: string;
   activeProjectName: string | undefined;
   isGitRepo: boolean;
   openInCwd: string | null;
@@ -46,21 +46,21 @@ interface ChatHeaderProps {
 
 export function shouldShowOpenInPicker(input: {
   readonly activeProjectName: string | undefined;
-  readonly activeThreadEnvironmentId: EnvironmentId;
+  readonly activeSessionEnvironmentId: EnvironmentId;
   readonly primaryEnvironmentId: EnvironmentId | null;
 }): boolean {
   return (
     Boolean(input.activeProjectName) &&
     input.primaryEnvironmentId !== null &&
-    input.activeThreadEnvironmentId === input.primaryEnvironmentId
+    input.activeSessionEnvironmentId === input.primaryEnvironmentId
   );
 }
 
 export const ChatHeader = memo(function ChatHeader({
-  activeThreadEnvironmentId,
-  activeThreadId,
+  activeSessionEnvironmentId,
+  activeSessionId,
   draftId,
-  activeThreadTitle,
+  activeSessionTitle,
   activeProjectName,
   isGitRepo,
   openInCwd,
@@ -84,7 +84,7 @@ export const ChatHeader = memo(function ChatHeader({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const showOpenInPicker = shouldShowOpenInPicker({
     activeProjectName,
-    activeThreadEnvironmentId,
+    activeSessionEnvironmentId,
     primaryEnvironmentId,
   });
 
@@ -94,9 +94,9 @@ export const ChatHeader = memo(function ChatHeader({
         <SidebarTrigger className="size-7 shrink-0 md:hidden" />
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
-          title={activeThreadTitle}
+          title={activeSessionTitle}
         >
-          {activeThreadTitle}
+          {activeSessionTitle}
         </h2>
         {activeProjectName && (
           <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
@@ -131,7 +131,7 @@ export const ChatHeader = memo(function ChatHeader({
         {activeProjectName && (
           <GitActionsControl
             gitCwd={gitCwd}
-            activeThreadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
+            activeSessionRef={scopeSessionRef(activeSessionEnvironmentId, activeSessionId)}
             {...(draftId ? { draftId } : {})}
           />
         )}
@@ -153,7 +153,7 @@ export const ChatHeader = memo(function ChatHeader({
           />
           <TooltipPopup side="bottom">
             {!terminalAvailable
-              ? "Terminal is unavailable until this thread has an active study."
+              ? "Terminal is unavailable until this session has an active study."
               : terminalToggleShortcutLabel
                 ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
                 : "Toggle terminal drawer"}

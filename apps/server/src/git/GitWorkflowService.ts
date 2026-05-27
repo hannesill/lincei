@@ -14,8 +14,8 @@ import {
   type VcsListRefsInput,
   type VcsListRefsResult,
   type GitManagerServiceError,
-  type GitPreparePullRequestThreadInput,
-  type GitPreparePullRequestThreadResult,
+  type GitPreparePullRequestSessionInput,
+  type GitPreparePullRequestSessionResult,
   type GitPullRequestRefInput,
   type VcsPullResult,
   type VcsRemoveWorktreeInput,
@@ -53,9 +53,9 @@ export interface GitWorkflowServiceShape {
   readonly resolvePullRequest: (
     input: GitPullRequestRefInput,
   ) => Effect.Effect<GitResolvePullRequestResult, GitManagerServiceError>;
-  readonly preparePullRequestThread: (
-    input: GitPreparePullRequestThreadInput,
-  ) => Effect.Effect<GitPreparePullRequestThreadResult, GitManagerServiceError>;
+  readonly preparePullRequestSession: (
+    input: GitPreparePullRequestSessionInput,
+  ) => Effect.Effect<GitPreparePullRequestSessionResult, GitManagerServiceError>;
   readonly listRefs: (input: VcsListRefsInput) => Effect.Effect<VcsListRefsResult, GitCommandError>;
   readonly createWorktree: (
     input: VcsCreateWorktreeInput,
@@ -280,9 +280,9 @@ export const make = Effect.fn("makeGitWorkflowService")(function* () {
       "GitWorkflowService.resolvePullRequest",
       gitManager.resolvePullRequest,
     ),
-    preparePullRequestThread: routeGitManager(
-      "GitWorkflowService.preparePullRequestThread",
-      gitManager.preparePullRequestThread,
+    preparePullRequestSession: routeGitManager(
+      "GitWorkflowService.preparePullRequestSession",
+      gitManager.preparePullRequestSession,
     ),
     listRefs: (input) =>
       detectGitRepositoryForCommand("GitWorkflowService.listRefs", input.cwd).pipe(

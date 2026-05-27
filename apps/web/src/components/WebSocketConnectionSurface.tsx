@@ -10,7 +10,7 @@ import {
   useWsConnectionStatus,
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "../rpc/wsConnectionState";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { stackedSessionToast, toastManager } from "./ui/toast";
 import { getPrimaryEnvironmentConnection } from "../environments/runtime";
 
 const FORCED_WS_RECONNECT_DEBOUNCE_MS = 5_000;
@@ -168,7 +168,7 @@ export function WebSocketConnectionCoordinator() {
           return;
         }
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Reconnect failed",
             description:
@@ -285,7 +285,7 @@ export function WebSocketConnectionCoordinator() {
 
     if (shouldShowReconnectToast || shouldShowOfflineToast || shouldShowExhaustedToast) {
       const toastPayload = shouldShowOfflineToast
-        ? stackedThreadToast({
+        ? stackedSessionToast({
             data: {
               hideCopyButton: true,
             },
@@ -295,7 +295,7 @@ export function WebSocketConnectionCoordinator() {
             type: "warning",
           })
         : shouldShowExhaustedToast
-          ? stackedThreadToast({
+          ? stackedSessionToast({
               actionProps: {
                 children: "Retry",
                 onClick: triggerManualReconnect,
@@ -308,7 +308,7 @@ export function WebSocketConnectionCoordinator() {
               title: buildReconnectTitle(status),
               type: "error",
             })
-          : stackedThreadToast({
+          : stackedSessionToast({
               actionProps: {
                 children: "Retry now",
                 onClick: triggerManualReconnect,

@@ -17,18 +17,18 @@ Build a deterministic `TestProviderAdapterLive` in `apps/server/src/provider/Lay
 
 - Service contract: `ProviderAdapterShape<ProviderAdapterError>`.
 - Internal state:
-  - session registry (session + cwd + threadId)
-  - thread snapshot store (`threadId`, `turns`)
+  - session registry (session + cwd + sessionId)
+  - session snapshot store (`sessionId`, `turns`)
   - event subscribers
 - Behavior:
-  - `startSession`: creates session with threadId.
+  - `startSession`: creates session with sessionId.
   - `sendTurn`: appends a deterministic turn snapshot and emits ordered events:
     - `turn/started`
     - `item/started` / `item/completed` (tool + approval variants depending on scenario)
     - `item/agentMessage/delta` chunks
     - `turn/completed`
   - optional "mutator" callback per turn to change workspace files before completion.
-  - `readThread`, `rollbackThread`, `stopSession`, `stopAll`.
+  - `readSession`, `rollbackSession`, `stopSession`, `stopAll`.
 
 Use real git-backed temporary workspaces in integration tests:
 
@@ -86,7 +86,7 @@ Use real git-backed temporary workspaces in integration tests:
   - call `revertToCheckpoint(turnCount=1)`.
 - Assert:
   - workspace content matches turn 1 state.
-  - adapter `rollbackThread` called with `numTurns=2`.
+  - adapter `rollbackSession` called with `numTurns=2`.
   - DB rows for turns >1 are removed.
   - later refs are deleted from git.
 

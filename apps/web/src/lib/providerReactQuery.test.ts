@@ -1,20 +1,20 @@
-import { EnvironmentId, ThreadId, type EnvironmentApi } from "@t3tools/contracts";
+import { EnvironmentId, SessionId, type EnvironmentApi } from "@t3tools/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkpointDiffQueryOptions, providerQueryKeys } from "./providerReactQuery";
 import * as environmentApi from "../environmentApi";
 
-const threadId = ThreadId.make("thread-id");
+const sessionId = SessionId.make("session-id");
 const environmentId = EnvironmentId.make("environment-local");
 
 function mockNativeApi(input: {
   getTurnDiff: ReturnType<typeof vi.fn>;
-  getFullThreadDiff: ReturnType<typeof vi.fn>;
+  getFullSessionDiff: ReturnType<typeof vi.fn>;
 }) {
   vi.spyOn(environmentApi, "ensureEnvironmentApi").mockReturnValue({
     orchestration: {
       getTurnDiff: input.getTurnDiff,
-      getFullThreadDiff: input.getFullThreadDiff,
+      getFullSessionDiff: input.getFullSessionDiff,
     },
   } as unknown as EnvironmentApi);
 }
@@ -27,7 +27,7 @@ describe("providerQueryKeys.checkpointDiff", () => {
   it("includes cacheScope so reused turn counts do not collide", () => {
     const baseInput = {
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 1,
       toTurnCount: 2,
       ignoreWhitespace: false,
@@ -49,7 +49,7 @@ describe("providerQueryKeys.checkpointDiff", () => {
   it("includes ignoreWhitespace so normal and whitespace-hidden diffs do not collide", () => {
     const baseInput = {
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 1,
       toTurnCount: 2,
       cacheScope: "turn:abc",
@@ -72,12 +72,12 @@ describe("providerQueryKeys.checkpointDiff", () => {
 describe("checkpointDiffQueryOptions", () => {
   it("forwards checkpoint range to the provider API by default", async () => {
     const getTurnDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    const getFullThreadDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    mockNativeApi({ getTurnDiff, getFullThreadDiff });
+    const getFullSessionDiff = vi.fn().mockResolvedValue({ diff: "patch" });
+    mockNativeApi({ getTurnDiff, getFullSessionDiff });
 
     const options = checkpointDiffQueryOptions({
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 3,
       toTurnCount: 4,
       ignoreWhitespace: false,
@@ -88,22 +88,22 @@ describe("checkpointDiffQueryOptions", () => {
     await queryClient.fetchQuery(options);
 
     expect(getTurnDiff).toHaveBeenCalledWith({
-      threadId,
+      sessionId,
       fromTurnCount: 3,
       toTurnCount: 4,
       ignoreWhitespace: false,
     });
-    expect(getFullThreadDiff).not.toHaveBeenCalled();
+    expect(getFullSessionDiff).not.toHaveBeenCalled();
   });
 
   it("forwards whitespace-hidden checkpoint range to the provider API", async () => {
     const getTurnDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    const getFullThreadDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    mockNativeApi({ getTurnDiff, getFullThreadDiff });
+    const getFullSessionDiff = vi.fn().mockResolvedValue({ diff: "patch" });
+    mockNativeApi({ getTurnDiff, getFullSessionDiff });
 
     const options = checkpointDiffQueryOptions({
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 3,
       toTurnCount: 4,
       ignoreWhitespace: true,
@@ -114,33 +114,33 @@ describe("checkpointDiffQueryOptions", () => {
     await queryClient.fetchQuery(options);
 
     expect(getTurnDiff).toHaveBeenCalledWith({
-      threadId,
+      sessionId,
       fromTurnCount: 3,
       toTurnCount: 4,
       ignoreWhitespace: true,
     });
-    expect(getFullThreadDiff).not.toHaveBeenCalled();
+    expect(getFullSessionDiff).not.toHaveBeenCalled();
   });
 
-  it("uses explicit full thread diff API when range starts from zero", async () => {
+  it("uses explicit full session diff API when range starts from zero", async () => {
     const getTurnDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    const getFullThreadDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    mockNativeApi({ getTurnDiff, getFullThreadDiff });
+    const getFullSessionDiff = vi.fn().mockResolvedValue({ diff: "patch" });
+    mockNativeApi({ getTurnDiff, getFullSessionDiff });
 
     const options = checkpointDiffQueryOptions({
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 0,
       toTurnCount: 2,
       ignoreWhitespace: true,
-      cacheScope: "thread:all",
+      cacheScope: "session:all",
     });
 
     const queryClient = new QueryClient();
     await queryClient.fetchQuery(options);
 
-    expect(getFullThreadDiff).toHaveBeenCalledWith({
-      threadId,
+    expect(getFullSessionDiff).toHaveBeenCalledWith({
+      sessionId,
       toTurnCount: 2,
       ignoreWhitespace: true,
     });
@@ -149,12 +149,12 @@ describe("checkpointDiffQueryOptions", () => {
 
   it("fails fast on invalid range and does not call provider RPC", async () => {
     const getTurnDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    const getFullThreadDiff = vi.fn().mockResolvedValue({ diff: "patch" });
-    mockNativeApi({ getTurnDiff, getFullThreadDiff });
+    const getFullSessionDiff = vi.fn().mockResolvedValue({ diff: "patch" });
+    mockNativeApi({ getTurnDiff, getFullSessionDiff });
 
     const options = checkpointDiffQueryOptions({
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 4,
       toTurnCount: 3,
       ignoreWhitespace: false,
@@ -167,13 +167,13 @@ describe("checkpointDiffQueryOptions", () => {
       "Checkpoint diff is unavailable.",
     );
     expect(getTurnDiff).not.toHaveBeenCalled();
-    expect(getFullThreadDiff).not.toHaveBeenCalled();
+    expect(getFullSessionDiff).not.toHaveBeenCalled();
   });
 
   it("retries checkpoint-not-ready errors longer than generic failures", () => {
     const options = checkpointDiffQueryOptions({
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 1,
       toTurnCount: 2,
       ignoreWhitespace: false,
@@ -187,10 +187,10 @@ describe("checkpointDiffQueryOptions", () => {
 
     expect(retry(1, new Error("Checkpoint turn count 2 exceeds current turn count 1."))).toBe(true);
     expect(
-      retry(11, new Error("Filesystem checkpoint is unavailable for turn 2 in thread thread-1.")),
+      retry(11, new Error("Filesystem checkpoint is unavailable for turn 2 in session session-1.")),
     ).toBe(true);
     expect(
-      retry(12, new Error("Filesystem checkpoint is unavailable for turn 2 in thread thread-1.")),
+      retry(12, new Error("Filesystem checkpoint is unavailable for turn 2 in session session-1.")),
     ).toBe(false);
     expect(retry(2, new Error("Something else failed."))).toBe(true);
     expect(retry(3, new Error("Something else failed."))).toBe(false);
@@ -199,7 +199,7 @@ describe("checkpointDiffQueryOptions", () => {
   it("backs off longer for checkpoint-not-ready errors", () => {
     const options = checkpointDiffQueryOptions({
       environmentId,
-      threadId,
+      sessionId,
       fromTurnCount: 1,
       toTurnCount: 2,
       ignoreWhitespace: false,

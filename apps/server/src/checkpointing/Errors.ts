@@ -8,14 +8,14 @@ import type { VcsError } from "@t3tools/contracts";
 export class CheckpointUnavailableError extends Schema.TaggedErrorClass<CheckpointUnavailableError>()(
   "CheckpointUnavailableError",
   {
-    threadId: Schema.String,
+    sessionId: Schema.String,
     turnCount: Schema.Number,
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Checkpoint unavailable for thread ${this.threadId} turn ${this.turnCount}: ${this.detail}`;
+    return `Checkpoint unavailable for session ${this.sessionId} turn ${this.turnCount}: ${this.detail}`;
   }
 }
 

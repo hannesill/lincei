@@ -17,8 +17,8 @@ import {
   GitActionProgressEvent,
   GitActionProgressPhase,
   GitCommandError,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
+  GitPreparePullRequestSessionInput,
+  GitPreparePullRequestSessionResult,
   GitPullRequestRefInput,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
@@ -77,9 +77,9 @@ export interface GitManagerShape {
   readonly resolvePullRequest: (
     input: GitPullRequestRefInput,
   ) => Effect.Effect<GitResolvePullRequestResult, GitManagerServiceError>;
-  readonly preparePullRequestThread: (
-    input: GitPreparePullRequestThreadInput,
-  ) => Effect.Effect<GitPreparePullRequestThreadResult, GitManagerServiceError>;
+  readonly preparePullRequestSession: (
+    input: GitPreparePullRequestSessionInput,
+  ) => Effect.Effect<GitPreparePullRequestSessionResult, GitManagerServiceError>;
   readonly runStackedAction: (
     input: GitRunStackedActionInput,
     options?: GitRunStackedActionOptions,
@@ -756,7 +756,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
             Effect.map((latest) => {
               if (!latest) return null;
               // On the default branch, only surface open PRs.
-              // Merged/closed matches are usually reverse-merge history, not the thread's PR context.
+              // Merged/closed matches are usually reverse-merge history, not the session's PR context.
               if (details.isDefaultBranch && latest.state !== "open") return null;
               return toStatusPr(latest);
             }),
@@ -1388,23 +1388,23 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     },
   );
 
-  const preparePullRequestThread: GitManagerShape["preparePullRequestThread"] = Effect.fn(
-    "preparePullRequestThread",
+  const preparePullRequestSession: GitManagerShape["preparePullRequestSession"] = Effect.fn(
+    "preparePullRequestSession",
   )(function* (input) {
     const maybeRunSetupScript = (worktreePath: string) => {
-      if (!input.threadId) {
+      if (!input.sessionId) {
         return Effect.void;
       }
       return projectSetupScriptRunner
-        .runForThread({
-          threadId: input.threadId,
+        .runForSession({
+          sessionId: input.sessionId,
           projectCwd: input.cwd,
           worktreePath,
         })
         .pipe(
           Effect.catch((error) =>
             Effect.logWarning(
-              `GitManager.preparePullRequestThread: failed to launch worktree setup script for thread ${input.threadId} in ${worktreePath}: ${error.message}`,
+              `GitManager.preparePullRequestSession: failed to launch worktree setup script for session ${input.sessionId} in ${worktreePath}: ${error.message}`,
             ).pipe(Effect.asVoid),
           ),
         );
@@ -1504,8 +1504,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       }
       if (existingBranchBeforeFetchPath === rootWorktreePath) {
         return yield* gitManagerError(
-          "preparePullRequestThread",
-          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree thread.",
+          "preparePullRequestSession",
+          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree session.",
         );
       }
 
@@ -1532,8 +1532,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       }
       if (existingBranchAfterFetchPath === rootWorktreePath) {
         return yield* gitManagerError(
-          "preparePullRequestThread",
-          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree thread.",
+          "preparePullRequestSession",
+          "This PR branch is already checked out in the main repo. Use Local, or switch the main repo off that branch before creating a worktree session.",
         );
       }
 
@@ -1776,7 +1776,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     invalidateRemoteStatus,
     invalidateStatus,
     resolvePullRequest,
-    preparePullRequestThread,
+    preparePullRequestSession,
     runStackedAction,
   } satisfies GitManagerShape;
 });

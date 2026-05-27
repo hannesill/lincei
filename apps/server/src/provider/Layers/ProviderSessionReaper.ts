@@ -46,7 +46,7 @@ const makeProviderSessionReaper = (options?: ProviderSessionReaperLiveOptions) =
         const lastSeenMs = Date.parse(binding.lastSeenAt);
         if (Number.isNaN(lastSeenMs)) {
           yield* Effect.logWarning("provider.session.reaper.invalid-last-seen", {
-            threadId: binding.threadId,
+            sessionId: binding.sessionId,
             provider: binding.provider,
             lastSeenAt: binding.lastSeenAt,
           });
@@ -58,22 +58,22 @@ const makeProviderSessionReaper = (options?: ProviderSessionReaperLiveOptions) =
           continue;
         }
 
-        const thread = yield* projectionSnapshotQuery
-          .getThreadShellById(binding.threadId)
+        const session = yield* projectionSnapshotQuery
+          .getSessionShellById(binding.sessionId)
           .pipe(Effect.map(Option.getOrUndefined));
-        if (thread?.session?.activeTurnId != null) {
+        if (session?.session?.activeTurnId != null) {
           yield* Effect.logDebug("provider.session.reaper.skipped-active-turn", {
-            threadId: binding.threadId,
-            activeTurnId: thread.session.activeTurnId,
+            sessionId: binding.sessionId,
+            activeTurnId: session.session.activeTurnId,
             idleDurationMs,
           });
           continue;
         }
 
-        const reaped = yield* providerService.stopSession({ threadId: binding.threadId }).pipe(
+        const reaped = yield* providerService.stopSession({ sessionId: binding.sessionId }).pipe(
           Effect.tap(() =>
             Effect.logInfo("provider.session.reaped", {
-              threadId: binding.threadId,
+              sessionId: binding.sessionId,
               provider: binding.provider,
               idleDurationMs,
               reason: "inactivity_threshold",
@@ -82,7 +82,7 @@ const makeProviderSessionReaper = (options?: ProviderSessionReaperLiveOptions) =
           Effect.as(true),
           Effect.catchCause((cause) =>
             Effect.logWarning("provider.session.reaper.stop-failed", {
-              threadId: binding.threadId,
+              sessionId: binding.sessionId,
               provider: binding.provider,
               idleDurationMs,
               cause,

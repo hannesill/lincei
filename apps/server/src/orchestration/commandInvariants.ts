@@ -2,9 +2,9 @@ import type {
   OrchestrationCommand,
   OrchestrationProject,
   OrchestrationReadModel,
-  OrchestrationThread,
+  OrchestrationSession,
   ProjectId,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
@@ -17,11 +17,11 @@ function invariantError(commandType: string, detail: string): OrchestrationComma
   });
 }
 
-export function findThreadById(
+export function findSessionById(
   readModel: OrchestrationReadModel,
-  threadId: ThreadId,
-): OrchestrationThread | undefined {
-  return readModel.threads.find((thread) => thread.id === threadId);
+  sessionId: SessionId,
+): OrchestrationSession | undefined {
+  return readModel.sessions.find((session) => session.id === sessionId);
 }
 
 export function findProjectById(
@@ -31,11 +31,11 @@ export function findProjectById(
   return readModel.projects.find((project) => project.id === projectId);
 }
 
-export function listThreadsByProjectId(
+export function listSessionsByProjectId(
   readModel: OrchestrationReadModel,
   projectId: ProjectId,
-): ReadonlyArray<OrchestrationThread> {
-  return readModel.threads.filter((thread) => thread.projectId === projectId);
+): ReadonlyArray<OrchestrationSession> {
+  return readModel.sessions.filter((session) => session.projectId === projectId);
 }
 
 export function requireProject(input: {
@@ -71,73 +71,73 @@ export function requireProjectAbsent(input: {
   );
 }
 
-export function requireThread(input: {
+export function requireSession(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
-}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
-  const thread = findThreadById(input.readModel, input.threadId);
-  if (thread) {
-    return Effect.succeed(thread);
+  readonly sessionId: SessionId;
+}): Effect.Effect<OrchestrationSession, OrchestrationCommandInvariantError> {
+  const session = findSessionById(input.readModel, input.sessionId);
+  if (session) {
+    return Effect.succeed(session);
   }
   return Effect.fail(
     invariantError(
       input.command.type,
-      `Thread '${input.threadId}' does not exist for command '${input.command.type}'.`,
+      `Session '${input.sessionId}' does not exist for command '${input.command.type}'.`,
     ),
   );
 }
 
-export function requireThreadArchived(input: {
+export function requireSessionArchived(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
-}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
-  return requireThread(input).pipe(
-    Effect.flatMap((thread) =>
-      thread.archivedAt !== null
-        ? Effect.succeed(thread)
+  readonly sessionId: SessionId;
+}): Effect.Effect<OrchestrationSession, OrchestrationCommandInvariantError> {
+  return requireSession(input).pipe(
+    Effect.flatMap((session) =>
+      session.archivedAt !== null
+        ? Effect.succeed(session)
         : Effect.fail(
             invariantError(
               input.command.type,
-              `Thread '${input.threadId}' is not archived for command '${input.command.type}'.`,
+              `Session '${input.sessionId}' is not archived for command '${input.command.type}'.`,
             ),
           ),
     ),
   );
 }
 
-export function requireThreadNotArchived(input: {
+export function requireSessionNotArchived(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
-}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
-  return requireThread(input).pipe(
-    Effect.flatMap((thread) =>
-      thread.archivedAt === null
-        ? Effect.succeed(thread)
+  readonly sessionId: SessionId;
+}): Effect.Effect<OrchestrationSession, OrchestrationCommandInvariantError> {
+  return requireSession(input).pipe(
+    Effect.flatMap((session) =>
+      session.archivedAt === null
+        ? Effect.succeed(session)
         : Effect.fail(
             invariantError(
               input.command.type,
-              `Thread '${input.threadId}' is already archived and cannot handle command '${input.command.type}'.`,
+              `Session '${input.sessionId}' is already archived and cannot handle command '${input.command.type}'.`,
             ),
           ),
     ),
   );
 }
 
-export function requireThreadAbsent(input: {
+export function requireSessionAbsent(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  if (!findThreadById(input.readModel, input.threadId)) {
+  if (!findSessionById(input.readModel, input.sessionId)) {
     return Effect.void;
   }
   return Effect.fail(
     invariantError(
       input.command.type,
-      `Thread '${input.threadId}' already exists and cannot be created twice.`,
+      `Session '${input.sessionId}' already exists and cannot be created twice.`,
     ),
   );
 }

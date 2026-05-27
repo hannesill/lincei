@@ -4,7 +4,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   MessageId,
   ProjectId,
-  ThreadId,
+  SessionId,
   TurnId,
   type OrchestrationEvent,
   ProviderInstanceId,
@@ -129,11 +129,11 @@ describe("OrchestrationEngine", () => {
           deletedAt: null,
         },
       ],
-      threads: [
+      sessions: [
         {
-          id: ThreadId.make("thread-bootstrap"),
+          id: SessionId.make("session-bootstrap"),
           projectId: asProjectId("project-bootstrap"),
-          title: "Bootstrap Thread",
+          title: "Bootstrap Session",
           modelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
@@ -157,8 +157,8 @@ describe("OrchestrationEngine", () => {
     };
     const commandReadModel = {
       ...projectionSnapshot,
-      threads: projectionSnapshot.threads.map((thread) => ({
-        ...thread,
+      sessions: projectionSnapshot.sessions.map((session) => ({
+        ...session,
         messages: [],
         proposedPlans: [],
         activities: [],
@@ -180,26 +180,26 @@ describe("OrchestrationEngine", () => {
             Effect.succeed({
               snapshotSequence: projectionSnapshot.snapshotSequence,
               projects: [],
-              threads: [],
+              sessions: [],
               updatedAt: projectionSnapshot.updatedAt,
             }),
           getArchivedShellSnapshot: () =>
             Effect.succeed({
               snapshotSequence: projectionSnapshot.snapshotSequence,
               projects: [],
-              threads: [],
+              sessions: [],
               updatedAt: projectionSnapshot.updatedAt,
             }),
           getSnapshotSequence: () =>
             Effect.succeed({ snapshotSequence: projectionSnapshot.snapshotSequence }),
-          getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 1 }),
+          getCounts: () => Effect.succeed({ projectCount: 1, sessionCount: 1 }),
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getProjectShellById: () => Effect.succeed(Option.none()),
-          getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
-          getThreadCheckpointContext: () => Effect.succeed(Option.none()),
-          getFullThreadDiffContext: () => Effect.succeed(Option.none()),
-          getThreadShellById: () => Effect.succeed(Option.none()),
-          getThreadDetailById: () => Effect.succeed(Option.none()),
+          getFirstActiveSessionIdByProjectId: () => Effect.succeed(Option.none()),
+          getSessionCheckpointContext: () => Effect.succeed(Option.none()),
+          getFullSessionDiffContext: () => Effect.succeed(Option.none()),
+          getSessionShellById: () => Effect.succeed(Option.none()),
+          getSessionDetailById: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(
@@ -218,10 +218,10 @@ describe("OrchestrationEngine", () => {
     const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
     const result = await runtime.runPromise(
       engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.make("cmd-bootstrap-thread-update"),
-        threadId: ThreadId.make("thread-bootstrap"),
-        title: "Updated Bootstrap Thread",
+        type: "session.meta.update",
+        commandId: CommandId.make("cmd-bootstrap-session-update"),
+        sessionId: SessionId.make("session-bootstrap"),
+        title: "Updated Bootstrap Session",
       }),
     );
 
@@ -252,11 +252,11 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-1-create"),
-        threadId: ThreadId.make("thread-1"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-1-create"),
+        sessionId: SessionId.make("session-1"),
         projectId: asProjectId("project-1"),
-        title: "Thread",
+        title: "Session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
@@ -270,9 +270,9 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.turn.start",
+        type: "session.turn.start",
         commandId: CommandId.make("cmd-turn-start-1"),
-        threadId: ThreadId.make("thread-1"),
+        sessionId: SessionId.make("session-1"),
         message: {
           messageId: asMessageId("msg-1"),
           role: "user",
@@ -291,7 +291,7 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 
-  it("archives and unarchives threads through orchestration commands", async () => {
+  it("archives and unarchives sessions through orchestration commands", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;
     const createdAt = now();
@@ -312,9 +312,9 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-archive-create"),
-        threadId: ThreadId.make("thread-archive"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-archive-create"),
+        sessionId: SessionId.make("session-archive"),
         projectId: asProjectId("project-archive"),
         title: "Archive me",
         modelSelection: {
@@ -331,25 +331,25 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
-        type: "thread.archive",
-        commandId: CommandId.make("cmd-thread-archive"),
-        threadId: ThreadId.make("thread-archive"),
+        type: "session.archive",
+        commandId: CommandId.make("cmd-session-archive"),
+        sessionId: SessionId.make("session-archive"),
       }),
     );
     expect(
-      (await system.readModel()).threads.find((thread) => thread.id === "thread-archive")
+      (await system.readModel()).sessions.find((session) => session.id === "session-archive")
         ?.archivedAt,
     ).not.toBeNull();
 
     await system.run(
       engine.dispatch({
-        type: "thread.unarchive",
-        commandId: CommandId.make("cmd-thread-unarchive"),
-        threadId: ThreadId.make("thread-archive"),
+        type: "session.unarchive",
+        commandId: CommandId.make("cmd-session-unarchive"),
+        sessionId: SessionId.make("session-archive"),
       }),
     );
     expect(
-      (await system.readModel()).threads.find((thread) => thread.id === "thread-archive")
+      (await system.readModel()).sessions.find((session) => session.id === "session-archive")
         ?.archivedAt,
     ).toBeNull();
 
@@ -377,9 +377,9 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-replay-create"),
-        threadId: ThreadId.make("thread-replay"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-replay-create"),
+        sessionId: SessionId.make("session-replay"),
         projectId: asProjectId("project-replay"),
         title: "replay",
         modelSelection: {
@@ -395,9 +395,9 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.delete",
-        commandId: CommandId.make("cmd-thread-replay-delete"),
-        threadId: ThreadId.make("thread-replay"),
+        type: "session.delete",
+        commandId: CommandId.make("cmd-session-replay-delete"),
+        sessionId: SessionId.make("session-replay"),
       }),
     );
 
@@ -408,8 +408,8 @@ describe("OrchestrationEngine", () => {
     );
     expect(events.map((event) => event.type)).toEqual([
       "project.created",
-      "thread.created",
-      "thread.deleted",
+      "session.created",
+      "session.deleted",
     ]);
     await system.dispose();
   });
@@ -445,9 +445,9 @@ describe("OrchestrationEngine", () => {
         );
         yield* Effect.sleep("10 millis");
         yield* engine.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make("cmd-stream-thread-create"),
-          threadId: ThreadId.make("thread-stream"),
+          type: "session.create",
+          commandId: CommandId.make("cmd-stream-session-create"),
+          sessionId: SessionId.make("session-stream"),
           projectId: asProjectId("project-stream"),
           title: "domain-stream",
           modelSelection: {
@@ -461,9 +461,9 @@ describe("OrchestrationEngine", () => {
           createdAt,
         });
         yield* engine.dispatch({
-          type: "thread.meta.update",
-          commandId: CommandId.make("cmd-stream-thread-update"),
-          threadId: ThreadId.make("thread-stream"),
+          type: "session.meta.update",
+          commandId: CommandId.make("cmd-stream-session-update"),
+          sessionId: SessionId.make("session-stream"),
           title: "domain-stream-updated",
         });
         eventTypes.push((yield* Queue.take(eventQueue)).type);
@@ -471,7 +471,7 @@ describe("OrchestrationEngine", () => {
       }).pipe(Effect.scoped),
     );
 
-    expect(eventTypes).toEqual(["thread.created", "thread.meta-updated"]);
+    expect(eventTypes).toEqual(["session.created", "session.meta-updated"]);
     await system.dispose();
   });
 
@@ -497,11 +497,11 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-ack-create"),
-        threadId: ThreadId.make("thread-ack"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-ack-create"),
+        sessionId: SessionId.make("session-ack"),
         projectId: asProjectId("project-ack"),
-        title: "Ack Thread",
+        title: "Ack Session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
@@ -517,9 +517,9 @@ describe("OrchestrationEngine", () => {
     const snapshots = await system.run(Metric.snapshot);
     expect(
       hasMetricSnapshot(snapshots, "t3_orchestration_command_ack_duration", {
-        commandType: "thread.create",
-        aggregateKind: "thread",
-        ackEventType: "thread.created",
+        commandType: "session.create",
+        aggregateKind: "session",
+        ackEventType: "session.created",
       }),
     ).toBe(true);
 
@@ -534,11 +534,11 @@ describe("OrchestrationEngine", () => {
     await expect(
       system.run(
         engine.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make("cmd-thread-missing-project"),
-          threadId: ThreadId.make("thread-missing-project"),
+          type: "session.create",
+          commandId: CommandId.make("cmd-session-missing-project"),
+          sessionId: SessionId.make("session-missing-project"),
           projectId: asProjectId("project-missing"),
-          title: "Missing Project Thread",
+          title: "Missing Project Session",
           modelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5-codex",
@@ -555,8 +555,8 @@ describe("OrchestrationEngine", () => {
     const snapshots = await system.run(Metric.snapshot);
     expect(
       hasMetricSnapshot(snapshots, "t3_orchestration_commands_total", {
-        commandType: "thread.create",
-        aggregateKind: "thread",
+        commandType: "session.create",
+        aggregateKind: "session",
         outcome: "failure",
       }),
     ).toBe(true);
@@ -585,11 +585,11 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-turn-diff-create"),
-        threadId: ThreadId.make("thread-turn-diff"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-turn-diff-create"),
+        sessionId: SessionId.make("session-turn-diff"),
         projectId: asProjectId("project-turn-diff"),
-        title: "Turn diff thread",
+        title: "Turn diff session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
@@ -603,12 +603,12 @@ describe("OrchestrationEngine", () => {
     );
     await system.run(
       engine.dispatch({
-        type: "thread.turn.diff.complete",
+        type: "session.turn.diff.complete",
         commandId: CommandId.make("cmd-turn-diff-complete"),
-        threadId: ThreadId.make("thread-turn-diff"),
+        sessionId: SessionId.make("session-turn-diff"),
         turnId: asTurnId("turn-1"),
         completedAt: createdAt,
-        checkpointRef: asCheckpointRef("refs/t3/checkpoints/thread-turn-diff/turn/1"),
+        checkpointRef: asCheckpointRef("refs/t3/checkpoints/session-turn-diff/turn/1"),
         status: "ready",
         files: [],
         checkpointTurnCount: 1,
@@ -616,14 +616,14 @@ describe("OrchestrationEngine", () => {
       }),
     );
 
-    const thread = (await system.readModel()).threads.find(
-      (entry) => entry.id === "thread-turn-diff",
+    const session = (await system.readModel()).sessions.find(
+      (entry) => entry.id === "session-turn-diff",
     );
-    expect(thread?.checkpoints).toEqual([
+    expect(session?.checkpoints).toEqual([
       {
         turnId: asTurnId("turn-1"),
         checkpointTurnCount: 1,
-        checkpointRef: asCheckpointRef("refs/t3/checkpoints/thread-turn-diff/turn/1"),
+        checkpointRef: asCheckpointRef("refs/t3/checkpoints/session-turn-diff/turn/1"),
         status: "ready",
         files: [],
         assistantMessageId: null,
@@ -706,9 +706,9 @@ describe("OrchestrationEngine", () => {
     await expect(
       runtime.runPromise(
         engine.dispatch({
-          type: "thread.create",
+          type: "session.create",
           commandId: CommandId.make("cmd-flaky-1"),
-          threadId: ThreadId.make("thread-flaky-fail"),
+          sessionId: SessionId.make("session-flaky-fail"),
           projectId: asProjectId("project-flaky"),
           title: "flaky-fail",
           modelSelection: {
@@ -726,9 +726,9 @@ describe("OrchestrationEngine", () => {
 
     const result = await runtime.runPromise(
       engine.dispatch({
-        type: "thread.create",
+        type: "session.create",
         commandId: CommandId.make("cmd-flaky-2"),
-        threadId: ThreadId.make("thread-flaky-ok"),
+        sessionId: SessionId.make("session-flaky-ok"),
         projectId: asProjectId("project-flaky"),
         title: "flaky-ok",
         modelSelection: {
@@ -751,7 +751,7 @@ describe("OrchestrationEngine", () => {
     );
     expect(eventsAfterRetry.map((event) => event.type)).toEqual([
       "project.created",
-      "thread.created",
+      "session.created",
     ]);
     await runtime.dispose();
   });
@@ -764,7 +764,7 @@ describe("OrchestrationEngine", () => {
         if (
           shouldFailRequestedProjection &&
           event.commandId === CommandId.make("cmd-turn-start-atomic") &&
-          event.type === "thread.turn-start-requested"
+          event.type === "session.turn-start-requested"
         ) {
           shouldFailRequestedProjection = false;
           return Effect.fail(
@@ -808,9 +808,9 @@ describe("OrchestrationEngine", () => {
     );
     await runtime.runPromise(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-atomic-create"),
-        threadId: ThreadId.make("thread-atomic"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-atomic-create"),
+        sessionId: SessionId.make("session-atomic"),
         projectId: asProjectId("project-atomic"),
         title: "atomic",
         modelSelection: {
@@ -826,9 +826,9 @@ describe("OrchestrationEngine", () => {
     );
 
     const turnStartCommand = {
-      type: "thread.turn.start" as const,
+      type: "session.turn.start" as const,
       commandId: CommandId.make("cmd-turn-start-atomic"),
-      threadId: ThreadId.make("thread-atomic"),
+      sessionId: SessionId.make("session-atomic"),
       message: {
         messageId: asMessageId("msg-atomic-1"),
         role: "user" as const,
@@ -851,7 +851,7 @@ describe("OrchestrationEngine", () => {
     );
     expect(eventsAfterFailure.map((event) => event.type)).toEqual([
       "project.created",
-      "thread.created",
+      "session.created",
     ]);
 
     const retryResult = await runtime.runPromise(engine.dispatch(turnStartCommand));
@@ -864,9 +864,9 @@ describe("OrchestrationEngine", () => {
     );
     expect(eventsAfterRetry.map((event) => event.type)).toEqual([
       "project.created",
-      "thread.created",
-      "thread.message-sent",
-      "thread.turn-start-requested",
+      "session.created",
+      "session.message-sent",
+      "session.turn-start-requested",
     ]);
     expect(
       eventsAfterRetry.filter((event) => event.commandId === turnStartCommand.commandId),
@@ -907,7 +907,7 @@ describe("OrchestrationEngine", () => {
       projectEvent: (event) => {
         if (
           shouldFailProjection &&
-          event.commandId === CommandId.make("cmd-thread-archive-sync-fail")
+          event.commandId === CommandId.make("cmd-session-archive-sync-fail")
         ) {
           shouldFailProjection = false;
           return Effect.fail(
@@ -951,9 +951,9 @@ describe("OrchestrationEngine", () => {
     );
     await runtime.runPromise(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-sync-create"),
-        threadId: ThreadId.make("thread-sync"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-sync-create"),
+        sessionId: SessionId.make("session-sync"),
         projectId: asProjectId("project-sync"),
         title: "sync-before",
         modelSelection: {
@@ -971,9 +971,9 @@ describe("OrchestrationEngine", () => {
     await expect(
       runtime.runPromise(
         engine.dispatch({
-          type: "thread.archive",
-          commandId: CommandId.make("cmd-thread-archive-sync-fail"),
-          threadId: ThreadId.make("thread-sync"),
+          type: "session.archive",
+          commandId: CommandId.make("cmd-session-archive-sync-fail"),
+          sessionId: SessionId.make("session-sync"),
         }),
       ),
     ).rejects.toThrow("projection failed");
@@ -981,9 +981,9 @@ describe("OrchestrationEngine", () => {
     await expect(
       runtime.runPromise(
         engine.dispatch({
-          type: "thread.archive",
-          commandId: CommandId.make("cmd-thread-archive-sync-retry"),
-          threadId: ThreadId.make("thread-sync"),
+          type: "session.archive",
+          commandId: CommandId.make("cmd-session-archive-sync-retry"),
+          sessionId: SessionId.make("session-sync"),
         }),
       ),
     ).rejects.toThrow("already archived");
@@ -998,9 +998,9 @@ describe("OrchestrationEngine", () => {
     await expect(
       system.run(
         engine.dispatch({
-          type: "thread.turn.start",
-          commandId: CommandId.make("cmd-invariant-missing-thread"),
-          threadId: ThreadId.make("thread-missing"),
+          type: "session.turn.start",
+          commandId: CommandId.make("cmd-invariant-missing-session"),
+          sessionId: SessionId.make("session-missing"),
           message: {
             messageId: asMessageId("msg-missing"),
             role: "user",
@@ -1012,12 +1012,12 @@ describe("OrchestrationEngine", () => {
           createdAt: now(),
         }),
       ),
-    ).rejects.toThrow("Thread 'thread-missing' does not exist");
+    ).rejects.toThrow("Session 'session-missing' does not exist");
 
     await system.dispose();
   });
 
-  it("rejects duplicate thread creation", async () => {
+  it("rejects duplicate session creation", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;
     const createdAt = now();
@@ -1039,9 +1039,9 @@ describe("OrchestrationEngine", () => {
 
     await system.run(
       engine.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make("cmd-thread-duplicate-1"),
-        threadId: ThreadId.make("thread-duplicate"),
+        type: "session.create",
+        commandId: CommandId.make("cmd-session-duplicate-1"),
+        sessionId: SessionId.make("session-duplicate"),
         projectId: asProjectId("project-duplicate"),
         title: "duplicate",
         modelSelection: {
@@ -1059,9 +1059,9 @@ describe("OrchestrationEngine", () => {
     await expect(
       system.run(
         engine.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make("cmd-thread-duplicate-2"),
-          threadId: ThreadId.make("thread-duplicate"),
+          type: "session.create",
+          commandId: CommandId.make("cmd-session-duplicate-2"),
+          sessionId: SessionId.make("session-duplicate"),
           projectId: asProjectId("project-duplicate"),
           title: "duplicate",
           modelSelection: {

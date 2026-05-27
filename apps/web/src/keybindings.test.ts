@@ -21,13 +21,13 @@ import {
   isTerminalToggleShortcut,
   resolveShortcutCommand,
   shouldShowModelPickerJumpHints,
-  shouldShowThreadJumpHints,
+  shouldShowSessionJumpHints,
   shortcutLabelForCommand,
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
-  threadJumpCommandForIndex,
-  threadJumpIndexFromCommand,
-  threadTraversalDirectionFromCommand,
+  sessionJumpCommandForIndex,
+  sessionJumpIndexFromCommand,
+  sessionTraversalDirectionFromCommand,
   type ShortcutEventLike,
 } from "./keybindings";
 
@@ -118,11 +118,11 @@ const DEFAULT_BINDINGS = compile([
   { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
   { shortcut: modShortcut("n", { shiftKey: true }), command: "chat.newLocal" },
   { shortcut: modShortcut("o"), command: "editor.openFavorite" },
-  { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
-  { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
-  { shortcut: modShortcut("1"), command: "thread.jump.1" },
-  { shortcut: modShortcut("2"), command: "thread.jump.2" },
-  { shortcut: modShortcut("3"), command: "thread.jump.3" },
+  { shortcut: modShortcut("[", { shiftKey: true }), command: "session.previous" },
+  { shortcut: modShortcut("]", { shiftKey: true }), command: "session.next" },
+  { shortcut: modShortcut("1"), command: "session.jump.1" },
+  { shortcut: modShortcut("2"), command: "session.jump.2" },
+  { shortcut: modShortcut("3"), command: "session.jump.3" },
   {
     shortcut: modShortcut("1"),
     command: "modelPicker.jump.1",
@@ -300,11 +300,11 @@ describe("shortcutLabelForCommand", () => {
       "Ctrl+O",
     );
     assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "thread.jump.3", "MacIntel"),
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "session.jump.3", "MacIntel"),
       "⌘3",
     );
     assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "thread.previous", "Linux"),
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "session.previous", "Linux"),
       "Ctrl+Shift+[",
     );
     assert.strictEqual(
@@ -318,12 +318,12 @@ describe("shortcutLabelForCommand", () => {
 
   it("returns null for commands shadowed by a later conflicting shortcut", () => {
     const bindings = compile([
-      { shortcut: modShortcut("1", { shiftKey: true }), command: "thread.jump.1" },
-      { shortcut: modShortcut("1", { shiftKey: true }), command: "thread.jump.7" },
+      { shortcut: modShortcut("1", { shiftKey: true }), command: "session.jump.1" },
+      { shortcut: modShortcut("1", { shiftKey: true }), command: "session.jump.7" },
     ]);
 
-    assert.isNull(shortcutLabelForCommand(bindings, "thread.jump.1", "MacIntel"));
-    assert.strictEqual(shortcutLabelForCommand(bindings, "thread.jump.7", "MacIntel"), "⇧⌘1");
+    assert.isNull(shortcutLabelForCommand(bindings, "session.jump.1", "MacIntel"));
+    assert.strictEqual(shortcutLabelForCommand(bindings, "session.jump.7", "MacIntel"), "⇧⌘1");
   });
 
   it("respects when-context while resolving labels", () => {
@@ -359,36 +359,36 @@ describe("shortcutLabelForCommand", () => {
   });
 });
 
-describe("thread navigation helpers", () => {
-  it("maps jump commands to visible thread indices", () => {
-    assert.strictEqual(threadJumpCommandForIndex(0), "thread.jump.1");
-    assert.strictEqual(threadJumpCommandForIndex(2), "thread.jump.3");
-    assert.isNull(threadJumpCommandForIndex(9));
-    assert.strictEqual(threadJumpIndexFromCommand("thread.jump.1"), 0);
-    assert.strictEqual(threadJumpIndexFromCommand("thread.jump.3"), 2);
-    assert.isNull(threadJumpIndexFromCommand("thread.next"));
+describe("session navigation helpers", () => {
+  it("maps jump commands to visible session indices", () => {
+    assert.strictEqual(sessionJumpCommandForIndex(0), "session.jump.1");
+    assert.strictEqual(sessionJumpCommandForIndex(2), "session.jump.3");
+    assert.isNull(sessionJumpCommandForIndex(9));
+    assert.strictEqual(sessionJumpIndexFromCommand("session.jump.1"), 0);
+    assert.strictEqual(sessionJumpIndexFromCommand("session.jump.3"), 2);
+    assert.isNull(sessionJumpIndexFromCommand("session.next"));
   });
 
   it("maps traversal commands to directions", () => {
-    assert.strictEqual(threadTraversalDirectionFromCommand("thread.previous"), "previous");
-    assert.strictEqual(threadTraversalDirectionFromCommand("thread.next"), "next");
-    assert.isNull(threadTraversalDirectionFromCommand("thread.jump.1"));
-    assert.isNull(threadTraversalDirectionFromCommand(null));
+    assert.strictEqual(sessionTraversalDirectionFromCommand("session.previous"), "previous");
+    assert.strictEqual(sessionTraversalDirectionFromCommand("session.next"), "next");
+    assert.isNull(sessionTraversalDirectionFromCommand("session.jump.1"));
+    assert.isNull(sessionTraversalDirectionFromCommand(null));
   });
 
   it("shows jump hints only when configured modifiers match", () => {
     assert.isTrue(
-      shouldShowThreadJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
+      shouldShowSessionJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
     );
     assert.isFalse(
-      shouldShowThreadJumpHints(event({ metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      shouldShowSessionJumpHints(event({ metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
     );
     assert.isTrue(
-      shouldShowThreadJumpHints(event({ ctrlKey: true }), DEFAULT_BINDINGS, {
+      shouldShowSessionJumpHints(event({ ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
       }),
     );
@@ -402,7 +402,7 @@ describe("model picker navigation helpers", () => {
     assert.isNull(modelPickerJumpCommandForIndex(9));
     assert.strictEqual(modelPickerJumpIndexFromCommand("modelPicker.jump.1"), 0);
     assert.strictEqual(modelPickerJumpIndexFromCommand("modelPicker.jump.3"), 2);
-    assert.isNull(modelPickerJumpIndexFromCommand("thread.jump.1"));
+    assert.isNull(modelPickerJumpIndexFromCommand("session.jump.1"));
   });
 
   it("shows jump hints only while the model picker context is active", () => {
@@ -577,7 +577,7 @@ describe("resolveShortcutCommand", () => {
           platform: "MacIntel",
         },
       ),
-      "thread.previous",
+      "session.previous",
     );
     assert.strictEqual(
       resolveShortcutCommand(
@@ -587,7 +587,7 @@ describe("resolveShortcutCommand", () => {
           platform: "Linux",
         },
       ),
-      "thread.next",
+      "session.next",
     );
   });
 });

@@ -6,9 +6,9 @@ import {
   requiresDefaultBranchConfirmation,
   resolveAutoFeatureBranchName,
   resolveDefaultBranchActionDialogCopy,
-  resolveLiveThreadBranchUpdate,
+  resolveLiveSessionBranchUpdate,
   resolveQuickAction,
-  resolveThreadBranchUpdate,
+  resolveSessionBranchUpdate,
 } from "./GitActionsControl.logic";
 
 function status(overrides: Partial<VcsStatusResult> = {}): VcsStatusResult {
@@ -1004,9 +1004,9 @@ describe("buildGitActionProgressStages", () => {
   });
 });
 
-describe("resolveThreadBranchUpdate", () => {
+describe("resolveSessionBranchUpdate", () => {
   it("returns a branch update when the action created a new branch", () => {
-    const update = resolveThreadBranchUpdate({
+    const update = resolveSessionBranchUpdate({
       action: "commit_push_pr",
       branch: {
         status: "created",
@@ -1031,7 +1031,7 @@ describe("resolveThreadBranchUpdate", () => {
   });
 
   it("returns null when the action stayed on the existing branch", () => {
-    const update = resolveThreadBranchUpdate({
+    const update = resolveSessionBranchUpdate({
       action: "commit_push",
       branch: {
         status: "skipped_not_requested",
@@ -1053,10 +1053,10 @@ describe("resolveThreadBranchUpdate", () => {
   });
 });
 
-describe("resolveLiveThreadBranchUpdate", () => {
-  it("returns a branch update when live git status differs from stored thread metadata", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "feature/old-ref",
+describe("resolveLiveSessionBranchUpdate", () => {
+  it("returns a branch update when live git status differs from stored session metadata", () => {
+    const update = resolveLiveSessionBranchUpdate({
+      sessionBranch: "feature/old-ref",
       gitStatus: status({ refName: "effect-atom" }),
     });
 
@@ -1066,35 +1066,35 @@ describe("resolveLiveThreadBranchUpdate", () => {
   });
 
   it("returns null when live git status is unavailable", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "feature/old-ref",
+    const update = resolveLiveSessionBranchUpdate({
+      sessionBranch: "feature/old-ref",
       gitStatus: null,
     });
 
     assert.equal(update, null);
   });
 
-  it("returns null when the stored thread ref already matches git status", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "effect-atom",
+  it("returns null when the stored session ref already matches git status", () => {
+    const update = resolveLiveSessionBranchUpdate({
+      sessionBranch: "effect-atom",
       gitStatus: status({ refName: "effect-atom" }),
     });
 
     assert.equal(update, null);
   });
 
-  it("returns null when git status is detached HEAD but the thread already has a ref", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "effect-atom",
+  it("returns null when git status is detached HEAD but the session already has a ref", () => {
+    const update = resolveLiveSessionBranchUpdate({
+      sessionBranch: "effect-atom",
       gitStatus: status({ refName: null }),
     });
 
     assert.equal(update, null);
   });
 
-  it("does not regress a semantic thread ref back to a temporary worktree ref", () => {
-    const update = resolveLiveThreadBranchUpdate({
-      threadBranch: "lincei/github-query-rate-limit",
+  it("does not regress a semantic session ref back to a temporary worktree ref", () => {
+    const update = resolveLiveSessionBranchUpdate({
+      sessionBranch: "lincei/github-query-rate-limit",
       gitStatus: status({ refName: "lincei/bda76797" }),
     });
 

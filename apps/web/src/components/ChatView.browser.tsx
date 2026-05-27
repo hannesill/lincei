@@ -13,14 +13,14 @@ import {
   ProviderInstanceId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
-  type ThreadId,
+  type SessionId,
   type TurnId,
   WS_METHODS,
-  OrchestrationSessionStatus,
+  OrchestrationProviderRuntimeStatus,
   DEFAULT_SERVER_SETTINGS,
   ServerConfig as ServerConfigSchema,
 } from "@t3tools/contracts";
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
+import { scopedSessionKey, scopeSessionRef } from "@t3tools/client-runtime";
 import { createModelCapabilities, createModelSelection } from "@t3tools/shared/model";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import * as Option from "effect/Option";
@@ -69,15 +69,15 @@ vi.mock("../lib/gitStatusState", () => ({
   resetGitStatusStateForTests: () => undefined,
 }));
 
-const THREAD_ID = "thread-browser-test" as ThreadId;
-const THREAD_TITLE = "Browser test thread";
-const ARCHIVED_SECONDARY_THREAD_ID = "thread-secondary-project-archived" as ThreadId;
+const THREAD_ID = "session-browser-test" as SessionId;
+const THREAD_TITLE = "Browser test session";
+const ARCHIVED_SECONDARY_THREAD_ID = "session-secondary-project-archived" as SessionId;
 const PROJECT_ID = "project-1" as ProjectId;
 const SECOND_PROJECT_ID = "project-2" as ProjectId;
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const REMOTE_ENVIRONMENT_ID = EnvironmentId.make("environment-remote");
-const THREAD_REF = scopeThreadRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
-const THREAD_KEY = scopedThreadKey(THREAD_REF);
+const THREAD_REF = scopeSessionRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
+const THREAD_KEY = scopedSessionKey(THREAD_REF);
 const UUID_ROUTE_RE = /^\/draft\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PROJECT_DRAFT_KEY = `${LOCAL_ENVIRONMENT_ID}:${PROJECT_ID}`;
 const PROJECT_LOGICAL_KEY = deriveLogicalProjectKeyFromSettings(
@@ -218,15 +218,15 @@ function createMockEnvironmentApi(input: {
       getTurnDiff: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getTurnDiff"],
-      getFullThreadDiff: (() => {
+      getFullSessionDiff: (() => {
         throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["orchestration"]["getFullThreadDiff"],
+      }) as EnvironmentApi["orchestration"]["getFullSessionDiff"],
       getArchivedShellSnapshot: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getArchivedShellSnapshot"],
       subscribeShell: (() => () => undefined) as EnvironmentApi["orchestration"]["subscribeShell"],
-      subscribeThread: (() => () =>
-        undefined) as EnvironmentApi["orchestration"]["subscribeThread"],
+      subscribeSession: (() => () =>
+        undefined) as EnvironmentApi["orchestration"]["subscribeSession"],
     },
   };
 }
@@ -276,7 +276,7 @@ function createTerminalContext(input: {
 }): TerminalContextDraft {
   return {
     id: input.id,
-    threadId: THREAD_ID,
+    sessionId: THREAD_ID,
     terminalId: `terminal-${input.id}`,
     terminalLabel: input.terminalLabel,
     lineStart: input.lineStart,
@@ -290,9 +290,9 @@ function createSnapshotForTargetUser(options: {
   targetMessageId: MessageId;
   targetText: string;
   targetAttachmentCount?: number;
-  sessionStatus?: OrchestrationSessionStatus;
+  sessionStatus?: OrchestrationProviderRuntimeStatus;
 }): OrchestrationReadModel {
-  const messages: Array<OrchestrationReadModel["threads"][number]["messages"][number]> = [];
+  const messages: Array<OrchestrationReadModel["sessions"][number]["messages"][number]> = [];
 
   for (let index = 0; index < 22; index += 1) {
     const isTarget = index === 3;
@@ -344,7 +344,7 @@ function createSnapshotForTargetUser(options: {
         deletedAt: null,
       },
     ],
-    threads: [
+    sessions: [
       {
         id: THREAD_ID,
         projectId: PROJECT_ID,
@@ -367,7 +367,7 @@ function createSnapshotForTargetUser(options: {
         proposedPlans: [],
         checkpoints: [],
         session: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           status: options.sessionStatus ?? "ready",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -396,24 +396,24 @@ function buildFixture(snapshot: OrchestrationReadModel): TestFixture {
       cwd: "/repo/project",
       projectName: "Project",
       bootstrapProjectId: PROJECT_ID,
-      bootstrapThreadId: THREAD_ID,
+      bootstrapSessionId: THREAD_ID,
     },
   };
 }
 
-function addThreadToSnapshot(
+function addSessionToSnapshot(
   snapshot: OrchestrationReadModel,
-  threadId: ThreadId,
+  sessionId: SessionId,
 ): OrchestrationReadModel {
   return {
     ...snapshot,
     snapshotSequence: snapshot.snapshotSequence + 1,
-    threads: [
-      ...snapshot.threads,
+    sessions: [
+      ...snapshot.sessions,
       {
-        id: threadId,
+        id: sessionId,
         projectId: PROJECT_ID,
-        title: "New thread",
+        title: "New session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5",
@@ -432,7 +432,7 @@ function addThreadToSnapshot(
         proposedPlans: [],
         checkpoints: [],
         session: {
-          threadId,
+          sessionId,
           status: "ready",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -445,23 +445,23 @@ function addThreadToSnapshot(
   };
 }
 
-function toShellThread(thread: OrchestrationReadModel["threads"][number]) {
+function toShellSession(session: OrchestrationReadModel["sessions"][number]) {
   return {
-    id: thread.id,
-    projectId: thread.projectId,
-    title: thread.title,
-    modelSelection: thread.modelSelection,
-    runtimeMode: thread.runtimeMode,
-    interactionMode: thread.interactionMode,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
-    latestTurn: thread.latestTurn,
-    createdAt: thread.createdAt,
-    updatedAt: thread.updatedAt,
-    archivedAt: thread.archivedAt,
-    session: thread.session,
+    id: session.id,
+    projectId: session.projectId,
+    title: session.title,
+    modelSelection: session.modelSelection,
+    runtimeMode: session.runtimeMode,
+    interactionMode: session.interactionMode,
+    branch: session.branch,
+    worktreePath: session.worktreePath,
+    latestTurn: session.latestTurn,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    archivedAt: session.archivedAt,
+    session: session.session,
     latestUserMessageAt:
-      thread.messages.findLast((message) => message.role === "user")?.createdAt ?? null,
+      session.messages.findLast((message) => message.role === "user")?.createdAt ?? null,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
     hasActionableProposedPlan: false,
@@ -481,50 +481,50 @@ function toShellSnapshot(snapshot: OrchestrationReadModel) {
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     })),
-    threads: snapshot.threads.map(toShellThread),
+    sessions: snapshot.sessions.map(toShellSession),
     updatedAt: snapshot.updatedAt,
   };
 }
 
-function updateThreadSessionInSnapshot(
+function updateProviderRuntimeInSnapshot(
   snapshot: OrchestrationReadModel,
-  threadId: ThreadId,
-  session: OrchestrationReadModel["threads"][number]["session"],
+  sessionId: SessionId,
+  providerRuntime: OrchestrationReadModel["sessions"][number]["session"],
 ): OrchestrationReadModel {
   return {
     ...snapshot,
     snapshotSequence: snapshot.snapshotSequence + 1,
-    threads: snapshot.threads.map((thread) =>
-      thread.id === threadId
+    sessions: snapshot.sessions.map((session) =>
+      session.id === sessionId
         ? {
-            ...thread,
-            session,
+            ...session,
+            session: providerRuntime,
             updatedAt: NOW_ISO,
           }
-        : thread,
+        : session,
     ),
   };
 }
 
-function sendShellThreadUpsert(
-  threadId: ThreadId,
+function sendShellSessionUpsert(
+  sessionId: SessionId,
   options?: {
-    readonly session?: OrchestrationReadModel["threads"][number]["session"];
+    readonly session?: OrchestrationReadModel["sessions"][number]["session"];
   },
 ): void {
-  const thread = fixture.snapshot.threads.find((entry) => entry.id === threadId);
-  if (!thread) {
-    throw new Error(`Expected thread ${threadId} in snapshot.`);
+  const session = fixture.snapshot.sessions.find((entry) => entry.id === sessionId);
+  if (!session) {
+    throw new Error(`Expected session ${sessionId} in snapshot.`);
   }
 
-  const shellThread =
+  const shellSession =
     options?.session !== undefined
-      ? toShellThread({ ...thread, session: options.session })
-      : toShellThread(thread);
+      ? toShellSession({ ...session, session: options.session })
+      : toShellSession(session);
   rpcHarness.emitStreamValue(ORCHESTRATION_WS_METHODS.subscribeShell, {
-    kind: "thread-upserted",
+    kind: "session-upserted",
     sequence: fixture.snapshot.snapshotSequence,
-    thread: shellThread,
+    session: shellSession,
   });
 }
 
@@ -545,38 +545,38 @@ async function waitForWsClient(): Promise<void> {
   );
 }
 
-function threadRefFor(threadId: ThreadId) {
-  return scopeThreadRef(LOCAL_ENVIRONMENT_ID, threadId);
+function sessionRefFor(sessionId: SessionId) {
+  return scopeSessionRef(LOCAL_ENVIRONMENT_ID, sessionId);
 }
 
-function threadKeyFor(threadId: ThreadId): string {
-  return scopedThreadKey(threadRefFor(threadId));
+function sessionKeyFor(sessionId: SessionId): string {
+  return scopedSessionKey(sessionRefFor(sessionId));
 }
 
 function composerDraftFor(target: string) {
-  const { draftsByThreadKey } = useComposerDraftStore.getState();
-  return draftsByThreadKey[target] ?? draftsByThreadKey[threadKeyFor(target as ThreadId)];
+  const { draftsBySessionKey } = useComposerDraftStore.getState();
+  return draftsBySessionKey[target] ?? draftsBySessionKey[sessionKeyFor(target as SessionId)];
 }
 
 function draftIdFromPath(pathname: string) {
   const segments = pathname.split("/");
   const draftId = segments[segments.length - 1];
   if (!draftId) {
-    throw new Error(`Expected thread path, received "${pathname}".`);
+    throw new Error(`Expected session path, received "${pathname}".`);
   }
   return DraftId.make(draftId);
 }
 
-function draftThreadIdFor(draftId: ReturnType<typeof draftIdFromPath>): ThreadId {
+function draftSessionIdFor(draftId: ReturnType<typeof draftIdFromPath>): SessionId {
   const draftSession = useComposerDraftStore.getState().getDraftSession(draftId);
   if (!draftSession) {
     throw new Error(`Expected draft session for "${draftId}".`);
   }
-  return draftSession.threadId;
+  return draftSession.sessionId;
 }
 
-function serverThreadPath(threadId: ThreadId): string {
-  return `/${LOCAL_ENVIRONMENT_ID}/${threadId}`;
+function serverSessionPath(sessionId: SessionId): string {
+  return `/${LOCAL_ENVIRONMENT_ID}/${sessionId}`;
 }
 
 async function waitForAppBootstrap(): Promise<void> {
@@ -589,34 +589,34 @@ async function waitForAppBootstrap(): Promise<void> {
   );
 }
 
-async function materializePromotedDraftThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
+async function materializePromotedDraftSessionViaDomainEvent(sessionId: SessionId): Promise<void> {
   await waitForWsClient();
-  fixture.snapshot = addThreadToSnapshot(fixture.snapshot, threadId);
-  fixture.snapshot = updateThreadSessionInSnapshot(fixture.snapshot, threadId, null);
-  sendShellThreadUpsert(threadId, { session: null });
+  fixture.snapshot = addSessionToSnapshot(fixture.snapshot, sessionId);
+  fixture.snapshot = updateProviderRuntimeInSnapshot(fixture.snapshot, sessionId, null);
+  sendShellSessionUpsert(sessionId, { session: null });
 }
 
-async function startPromotedServerThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
-  fixture.snapshot = updateThreadSessionInSnapshot(fixture.snapshot, threadId, {
-    threadId,
+async function startPromotedServerSessionViaDomainEvent(sessionId: SessionId): Promise<void> {
+  fixture.snapshot = updateProviderRuntimeInSnapshot(fixture.snapshot, sessionId, {
+    sessionId,
     status: "running",
     providerName: "codex",
     runtimeMode: "full-access",
-    activeTurnId: `turn-${threadId}` as TurnId,
+    activeTurnId: `turn-${sessionId}` as TurnId,
     lastError: null,
     updatedAt: NOW_ISO,
   });
-  sendShellThreadUpsert(threadId);
+  sendShellSessionUpsert(sessionId);
 }
 
-async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
-  await materializePromotedDraftThreadViaDomainEvent(threadId);
-  await startPromotedServerThreadViaDomainEvent(threadId);
+async function promoteDraftSessionViaDomainEvent(sessionId: SessionId): Promise<void> {
+  await materializePromotedDraftSessionViaDomainEvent(sessionId);
+  await startPromotedServerSessionViaDomainEvent(sessionId);
   await vi.waitFor(
     () => {
-      expect(useComposerDraftStore.getState().draftThreadsByThreadKey[threadKeyFor(threadId)]).toBe(
-        undefined,
-      );
+      expect(
+        useComposerDraftStore.getState().draftSessionsBySessionKey[sessionKeyFor(sessionId)],
+      ).toBe(undefined);
     },
     { timeout: 8_000, interval: 16 },
   );
@@ -625,11 +625,11 @@ async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<voi
 function createDraftOnlySnapshot(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-draft-target" as MessageId,
-    targetText: "draft thread",
+    targetText: "draft session",
   });
   return {
     ...snapshot,
-    threads: [],
+    sessions: [],
   };
 }
 
@@ -641,7 +641,7 @@ function createProjectlessSnapshot(): OrchestrationReadModel {
   return {
     ...snapshot,
     projects: [],
-    threads: [],
+    sessions: [],
   };
 }
 
@@ -657,11 +657,11 @@ function withProjectScripts(
   };
 }
 
-function setDraftThreadWithoutWorktree(): void {
+function setDraftSessionWithoutWorktree(): void {
   useComposerDraftStore.setState({
-    draftThreadsByThreadKey: {
+    draftSessionsBySessionKey: {
       [THREAD_KEY]: {
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         environmentId: LOCAL_ENVIRONMENT_ID,
         projectId: PROJECT_ID,
         logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -673,7 +673,7 @@ function setDraftThreadWithoutWorktree(): void {
         envMode: "local",
       },
     },
-    logicalProjectDraftThreadKeyByLogicalProjectKey: {
+    logicalProjectDraftSessionKeyByLogicalProjectKey: {
       [PROJECT_DRAFT_KEY]: THREAD_KEY,
     },
   });
@@ -682,13 +682,13 @@ function setDraftThreadWithoutWorktree(): void {
 function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-plan-target" as MessageId,
-    targetText: "plan thread",
+    targetText: "plan session",
   });
   const planMarkdown = [
     "# Ship plan mode follow-up",
     "",
-    "- Step 1: capture the thread-open trace",
-    "- Step 2: identify the main-thread bottleneck",
+    "- Step 1: capture the session-open trace",
+    "- Step 2: identify the main-session bottleneck",
     "- Step 3: keep collapsed cards cheap",
     "- Step 4: render the full markdown only on demand",
     "- Step 5: preserve export and save actions",
@@ -715,41 +715,41 @@ function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
 
   return {
     ...snapshot,
-    threads: snapshot.threads.map((thread) =>
-      thread.id === THREAD_ID
-        ? Object.assign({}, thread, {
+    sessions: snapshot.sessions.map((session) =>
+      session.id === THREAD_ID
+        ? Object.assign({}, session, {
             proposedPlans: [
               {
                 id: "plan-browser-test",
                 turnId: null,
                 planMarkdown,
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationSessionId: null,
                 createdAt: isoAt(1_000),
                 updatedAt: isoAt(1_001),
               },
             ],
             updatedAt: isoAt(1_001),
           })
-        : thread,
+        : session,
     ),
   };
 }
 
 function createSnapshotWithSecondaryProject(options?: {
-  includeSecondaryThread?: boolean;
-  includeArchivedSecondaryThread?: boolean;
+  includeSecondarySession?: boolean;
+  includeArchivedSecondarySession?: boolean;
 }): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-secondary-project-target" as MessageId,
     targetText: "secondary project",
   });
-  const includeSecondaryThread = options?.includeSecondaryThread ?? true;
-  const includeArchivedSecondaryThread = options?.includeArchivedSecondaryThread ?? true;
-  const secondaryThreads: OrchestrationReadModel["threads"] = includeSecondaryThread
+  const includeSecondarySession = options?.includeSecondarySession ?? true;
+  const includeArchivedSecondarySession = options?.includeArchivedSecondarySession ?? true;
+  const secondarySessions: OrchestrationReadModel["sessions"] = includeSecondarySession
     ? [
         {
-          id: "thread-secondary-project" as ThreadId,
+          id: "session-secondary-project" as SessionId,
           projectId: SECOND_PROJECT_ID,
           title: "Release checklist",
           modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
@@ -766,7 +766,7 @@ function createSnapshotWithSecondaryProject(options?: {
           proposedPlans: [],
           checkpoints: [],
           session: {
-            threadId: "thread-secondary-project" as ThreadId,
+            sessionId: "session-secondary-project" as SessionId,
             status: "ready",
             providerName: "codex",
             runtimeMode: "full-access",
@@ -778,38 +778,39 @@ function createSnapshotWithSecondaryProject(options?: {
         },
       ]
     : [];
-  const archivedSecondaryThreads: OrchestrationReadModel["threads"] = includeArchivedSecondaryThread
-    ? [
-        {
-          id: ARCHIVED_SECONDARY_THREAD_ID,
-          projectId: SECOND_PROJECT_ID,
-          title: "Archived Docs Notes",
-          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
-          interactionMode: "default",
-          runtimeMode: "full-access",
-          branch: "release/docs-archive",
-          worktreePath: null,
-          latestTurn: null,
-          createdAt: isoAt(24),
-          updatedAt: isoAt(25),
-          deletedAt: null,
-          messages: [],
-          activities: [],
-          proposedPlans: [],
-          checkpoints: [],
-          session: {
-            threadId: ARCHIVED_SECONDARY_THREAD_ID,
-            status: "ready",
-            providerName: "codex",
+  const archivedSecondarySessions: OrchestrationReadModel["sessions"] =
+    includeArchivedSecondarySession
+      ? [
+          {
+            id: ARCHIVED_SECONDARY_THREAD_ID,
+            projectId: SECOND_PROJECT_ID,
+            title: "Archived Docs Notes",
+            modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+            interactionMode: "default",
             runtimeMode: "full-access",
-            activeTurnId: null,
-            lastError: null,
+            branch: "release/docs-archive",
+            worktreePath: null,
+            latestTurn: null,
+            createdAt: isoAt(24),
             updatedAt: isoAt(25),
+            deletedAt: null,
+            messages: [],
+            activities: [],
+            proposedPlans: [],
+            checkpoints: [],
+            session: {
+              sessionId: ARCHIVED_SECONDARY_THREAD_ID,
+              status: "ready",
+              providerName: "codex",
+              runtimeMode: "full-access",
+              activeTurnId: null,
+              lastError: null,
+              updatedAt: isoAt(25),
+            },
+            archivedAt: isoAt(26),
           },
-          archivedAt: isoAt(26),
-        },
-      ]
-    : [];
+        ]
+      : [];
 
   return {
     ...snapshot,
@@ -826,21 +827,21 @@ function createSnapshotWithSecondaryProject(options?: {
         deletedAt: null,
       },
     ],
-    threads: [...snapshot.threads, ...secondaryThreads, ...archivedSecondaryThreads],
+    sessions: [...snapshot.sessions, ...secondarySessions, ...archivedSecondarySessions],
   };
 }
 
 function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-pending-input-target" as MessageId,
-    targetText: "question thread",
+    targetText: "question session",
   });
 
   return {
     ...snapshot,
-    threads: snapshot.threads.map((thread) =>
-      thread.id === THREAD_ID
-        ? Object.assign({}, thread, {
+    sessions: snapshot.sessions.map((session) =>
+      session.id === THREAD_ID
+        ? Object.assign({}, session, {
             interactionMode: "plan",
             activities: [
               {
@@ -890,7 +891,7 @@ function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
             ],
             updatedAt: isoAt(1_000),
           })
-        : thread,
+        : session,
     ),
   };
 }
@@ -901,7 +902,7 @@ function createSnapshotWithPlanFollowUpPrompt(options?: {
 }): OrchestrationReadModel {
   const snapshot = createSnapshotForTargetUser({
     targetMessageId: "msg-user-plan-follow-up-target" as MessageId,
-    targetText: "plan follow-up thread",
+    targetText: "plan follow-up session",
   });
   const modelSelection = options?.modelSelection ?? {
     instanceId: ProviderInstanceId.make("codex"),
@@ -915,9 +916,9 @@ function createSnapshotWithPlanFollowUpPrompt(options?: {
     projects: snapshot.projects.map((project) =>
       project.id === PROJECT_ID ? { ...project, defaultModelSelection: modelSelection } : project,
     ),
-    threads: snapshot.threads.map((thread) =>
-      thread.id === THREAD_ID
-        ? Object.assign({}, thread, {
+    sessions: snapshot.sessions.map((session) =>
+      session.id === THREAD_ID
+        ? Object.assign({}, session, {
             modelSelection,
             interactionMode: "plan",
             latestTurn: {
@@ -934,19 +935,19 @@ function createSnapshotWithPlanFollowUpPrompt(options?: {
                 turnId: "turn-plan-follow-up" as TurnId,
                 planMarkdown,
                 implementedAt: null,
-                implementationThreadId: null,
+                implementationSessionId: null,
                 createdAt: isoAt(1_002),
                 updatedAt: isoAt(1_003),
               },
             ],
             session: {
-              ...thread.session,
+              ...session.session,
               status: "ready",
               updatedAt: isoAt(1_010),
             },
             updatedAt: isoAt(1_010),
           })
-        : thread,
+        : session,
     ),
   };
 }
@@ -1054,7 +1055,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
   }
   if (tag === WS_METHODS.terminalOpen) {
     return {
-      threadId: typeof body.threadId === "string" ? body.threadId : THREAD_ID,
+      sessionId: typeof body.sessionId === "string" ? body.sessionId : THREAD_ID,
       terminalId: typeof body.terminalId === "string" ? body.terminalId : "default",
       cwd: typeof body.cwd === "string" ? body.cwd : "/repo/project",
       worktreePath:
@@ -1245,7 +1246,7 @@ async function pressComposerUndo(): Promise<void> {
 async function waitForComposerText(expectedText: string): Promise<void> {
   await vi.waitFor(
     () => {
-      expect(useComposerDraftStore.getState().draftsByThreadKey[THREAD_KEY]?.prompt ?? "").toBe(
+      expect(useComposerDraftStore.getState().draftsBySessionKey[THREAD_KEY]?.prompt ?? "").toBe(
         expectedText,
       );
     },
@@ -1504,13 +1505,13 @@ async function openCommandPaletteFromTrigger(): Promise<void> {
   );
 }
 
-async function waitForNewThreadShortcutLabel(): Promise<void> {
-  const newThreadButton = page.getByTestId("new-thread-button");
-  await expect.element(newThreadButton).toBeInTheDocument();
-  await newThreadButton.hover();
+async function waitForNewSessionShortcutLabel(): Promise<void> {
+  const newSessionButton = page.getByTestId("new-session-button");
+  await expect.element(newSessionButton).toBeInTheDocument();
+  await newSessionButton.hover();
   const shortcutLabel = isMacPlatform(navigator.platform)
-    ? "New thread (⇧⌘O)"
-    : "New thread (Ctrl+Shift+O)";
+    ? "New session (⇧⌘O)"
+    : "New session (Ctrl+Shift+O)";
   await expect.element(page.getByText(shortcutLabel)).toBeInTheDocument();
 }
 
@@ -1677,15 +1678,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
             },
           ];
         }
-        if (request._tag === ORCHESTRATION_WS_METHODS.subscribeThread) {
-          const thread = fixture.snapshot.threads.find((entry) => entry.id === request.threadId);
-          return thread
+        if (request._tag === ORCHESTRATION_WS_METHODS.subscribeSession) {
+          const session = fixture.snapshot.sessions.find((entry) => entry.id === request.sessionId);
+          return session
             ? [
                 {
                   kind: "snapshot",
                   snapshot: {
                     snapshotSequence: fixture.snapshot.snapshotSequence,
-                    thread,
+                    session,
                   },
                 },
               ]
@@ -1705,9 +1706,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     resetSavedEnvironmentRuntimeStoreForTests();
     Reflect.deleteProperty(window, "desktopBridge");
     useComposerDraftStore.setState({
-      draftsByThreadKey: {},
-      draftThreadsByThreadKey: {},
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
+      draftsBySessionKey: {},
+      draftSessionsBySessionKey: {},
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
     });
@@ -1722,12 +1723,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     useUiStateStore.setState({
       projectExpandedById: {},
       projectOrder: [],
-      threadLastVisitedAtById: {},
+      sessionLastVisitedAtById: {},
     });
     useTerminalStateStore.persist.clearStorage();
     useTerminalStateStore.setState({
-      terminalStateByThreadKey: {},
-      terminalLaunchContextByThreadKey: {},
+      terminalStateBySessionKey: {},
+      terminalLaunchContextBySessionKey: {},
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
     });
@@ -1811,7 +1812,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         [PROJECT_LOGICAL_KEY]: false,
       },
       projectOrder: [PROJECT_LOGICAL_KEY],
-      threadLastVisitedAtById: {},
+      sessionLastVisitedAtById: {},
     });
 
     const mounted = await mountChatView({
@@ -1834,21 +1835,21 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("shows an explicit empty state for projects without threads in the sidebar", async () => {
+  it("shows an explicit empty state for projects without sessions in the sidebar", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createDraftOnlySnapshot(),
     });
 
     try {
-      await expect.element(page.getByText("No threads yet")).toBeInTheDocument();
+      await expect.element(page.getByText("No sessions yet")).toBeInTheDocument();
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("opens the project cwd for draft threads without a worktree path", async () => {
-    setDraftThreadWithoutWorktree();
+  it("opens the project cwd for draft sessions without a worktree path", async () => {
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -1898,16 +1899,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
       targetMessageId: "msg-user-launch-context-target" as MessageId,
       targetText: "launch context worktree override",
     });
-    const targetThread = snapshot.threads.find((thread) => thread.id === THREAD_ID);
-    if (targetThread) {
-      Object.assign(targetThread, {
+    const targetSession = snapshot.sessions.find((session) => session.id === THREAD_ID);
+    if (targetSession) {
+      Object.assign(targetSession, {
         branch: "feature/branch",
         worktreePath: "/repo/worktrees/feature-branch",
       });
     }
 
     useTerminalStateStore.setState({
-      terminalStateByThreadKey: {
+      terminalStateBySessionKey: {
         [THREAD_KEY]: {
           terminalOpen: true,
           terminalHeight: 280,
@@ -1918,7 +1919,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           activeTerminalGroupId: "group-default",
         },
       },
-      terminalLaunchContextByThreadKey: {
+      terminalLaunchContextBySessionKey: {
         [THREAD_KEY]: {
           cwd: "/repo/project",
           worktreePath: null,
@@ -1962,7 +1963,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("opens the project cwd with VS Code Insiders when it is the only available editor", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2008,7 +2009,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("opens the project cwd with Trae when it is the only available editor", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2054,7 +2055,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("shows Kiro in the open picker menu and opens the project cwd with it", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2103,7 +2104,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("filters the open picker menu and opens VSCodium from the menu", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2167,7 +2168,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("falls back to the first installed editor when the stored favorite is unavailable", async () => {
     localStorage.setItem("lincei:last-editor", JSON.stringify("vscodium"));
-    setDraftThreadWithoutWorktree();
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2212,11 +2213,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("runs project scripts from local draft threads at the project cwd", async () => {
+  it("runs project scripts from local draft sessions at the project cwd", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [THREAD_KEY]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -2228,7 +2229,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -2263,7 +2264,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(openRequest).toMatchObject({
             _tag: WS_METHODS.terminalOpen,
-            threadId: THREAD_ID,
+            sessionId: THREAD_ID,
             cwd: "/repo/project",
             env: {
               T3CODE_PROJECT_ROOT: "/repo/project",
@@ -2280,7 +2281,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(writeRequest).toMatchObject({
             _tag: WS_METHODS.terminalWrite,
-            threadId: THREAD_ID,
+            sessionId: THREAD_ID,
             data: "bun run lint\r",
           });
         },
@@ -2291,11 +2292,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("runs project scripts from worktree draft threads at the worktree cwd", async () => {
+  it("runs project scripts from worktree draft sessions at the worktree cwd", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [THREAD_KEY]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -2307,7 +2308,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -2342,7 +2343,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(openRequest).toMatchObject({
             _tag: WS_METHODS.terminalOpen,
-            threadId: THREAD_ID,
+            sessionId: THREAD_ID,
             cwd: "/repo/worktrees/feature-draft",
             env: {
               T3CODE_PROJECT_ROOT: "/repo/project",
@@ -2357,11 +2358,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("lets the server own setup after preparing a pull request worktree thread", async () => {
+  it("lets the server own setup after preparing a pull request worktree session", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [THREAD_KEY]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -2373,7 +2374,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -2394,7 +2395,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           return {
             pullRequest: {
               number: 1359,
-              title: "Add thread archiving and settings navigation",
+              title: "Add session archiving and settings navigation",
               url: "https://github.com/pingdotgg/t3code/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
@@ -2402,11 +2403,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
             },
           };
         }
-        if (body._tag === WS_METHODS.gitPreparePullRequestThread) {
+        if (body._tag === WS_METHODS.gitPreparePullRequestSession) {
           return {
             pullRequest: {
               number: 1359,
-              title: "Add thread archiving and settings navigation",
+              title: "Add session archiving and settings navigation",
               url: "https://github.com/pingdotgg/t3code/pull/1359",
               baseBranch: "main",
               headBranch: "archive-settings-overhaul",
@@ -2458,14 +2459,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           const prepareRequest = wsRequests.find(
-            (request) => request._tag === WS_METHODS.gitPreparePullRequestThread,
+            (request) => request._tag === WS_METHODS.gitPreparePullRequestSession,
           );
           expect(prepareRequest).toMatchObject({
-            _tag: WS_METHODS.gitPreparePullRequestThread,
+            _tag: WS_METHODS.gitPreparePullRequestSession,
             cwd: "/repo/project",
             reference: "1359",
             mode: "worktree",
-            threadId: THREAD_ID,
+            sessionId: THREAD_ID,
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -2484,12 +2485,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("sends bootstrap turn-starts and waits for server setup on first-send worktree drafts", async () => {
     useTerminalStateStore.setState({
-      terminalStateByThreadKey: {},
+      terminalStateBySessionKey: {},
     });
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [THREAD_KEY]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -2501,7 +2502,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -2544,7 +2545,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
                 _tag: string;
                 type?: string;
                 bootstrap?: {
-                  createThread?: { projectId?: string };
+                  createSession?: { projectId?: string };
                   prepareWorktree?: { projectCwd?: string; baseBranch?: string; branch?: string };
                   runSetupScript?: boolean;
                 };
@@ -2552,9 +2553,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
             | undefined;
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.turn.start",
+            type: "session.turn.start",
             bootstrap: {
-              createThread: {
+              createSession: {
                 projectId: PROJECT_ID,
               },
               prepareWorktree: {
@@ -2576,7 +2577,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         wsRequests.some(
           (request) =>
             request._tag === WS_METHODS.terminalWrite &&
-            request.threadId === THREAD_ID &&
+            request.sessionId === THREAD_ID &&
             request.data === "bun install\r",
         ),
       ).toBe(false);
@@ -2585,8 +2586,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("keeps custom provider instance ids when bootstrapping a local draft thread", async () => {
-    setDraftThreadWithoutWorktree();
+  it("keeps custom provider instance ids when bootstrapping a local draft session", async () => {
+    setDraftSessionWithoutWorktree();
     const openRouterInstanceId = ProviderInstanceId.make("claude_openrouter");
     const openRouterSelection = createModelSelection(openRouterInstanceId, "openai/gpt-5.5");
     useComposerDraftStore.getState().setModelSelection(THREAD_REF, openRouterSelection);
@@ -2677,12 +2678,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const turnStartRequest = wsRequests.find(
             (request) =>
               request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
-              request.type === "thread.turn.start",
+              request.type === "session.turn.start",
           ) as
             | {
                 modelSelection?: { instanceId?: string; model?: string };
                 bootstrap?: {
-                  createThread?: {
+                  createSession?: {
                     modelSelection?: { instanceId?: string; model?: string };
                   };
                 };
@@ -2693,7 +2694,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             instanceId: openRouterInstanceId,
             model: "openai/gpt-5.5",
           });
-          expect(turnStartRequest?.bootstrap?.createThread?.modelSelection).toMatchObject({
+          expect(turnStartRequest?.bootstrap?.createSession?.modelSelection).toMatchObject({
             instanceId: openRouterInstanceId,
             model: "openai/gpt-5.5",
           });
@@ -2705,14 +2706,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("keeps new-worktree mode on empty server threads and bootstraps the first send", async () => {
-    const snapshot = addThreadToSnapshot(createDraftOnlySnapshot(), THREAD_ID);
+  it("keeps new-worktree mode on empty server sessions and bootstraps the first send", async () => {
+    const snapshot = addSessionToSnapshot(createDraftOnlySnapshot(), THREAD_ID);
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: {
         ...snapshot,
-        threads: snapshot.threads.map((thread) =>
-          thread.id === THREAD_ID ? Object.assign({}, thread, { session: null }) : thread,
+        sessions: snapshot.sessions.map((session) =>
+          session.id === THREAD_ID ? Object.assign({}, session, { session: null }) : session,
         ),
       },
       resolveRpc: (body) => {
@@ -2764,13 +2765,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const turnStartRequest = wsRequests.find(
             (request) =>
               request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
-              request.type === "thread.turn.start",
+              request.type === "session.turn.start",
           ) as
             | {
                 _tag: string;
                 type?: string;
                 bootstrap?: {
-                  createThread?: { projectId?: string };
+                  createSession?: { projectId?: string };
                   prepareWorktree?: { projectCwd?: string; baseBranch?: string; branch?: string };
                   runSetupScript?: boolean;
                 };
@@ -2779,7 +2780,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
           expect(turnStartRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.turn.start",
+            type: "session.turn.start",
             bootstrap: {
               prepareWorktree: {
                 projectCwd: "/repo/project",
@@ -2789,7 +2790,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               runSetupScript: true,
             },
           });
-          expect(turnStartRequest?.bootstrap?.createThread).toBeUndefined();
+          expect(turnStartRequest?.bootstrap?.createSession).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -2798,14 +2799,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("updates the selected worktree base branch on empty server threads", async () => {
-    const snapshot = addThreadToSnapshot(createDraftOnlySnapshot(), THREAD_ID);
+  it("updates the selected worktree base branch on empty server sessions", async () => {
+    const snapshot = addSessionToSnapshot(createDraftOnlySnapshot(), THREAD_ID);
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: {
         ...snapshot,
-        threads: snapshot.threads.map((thread) =>
-          thread.id === THREAD_ID ? Object.assign({}, thread, { session: null }) : thread,
+        sessions: snapshot.sessions.map((session) =>
+          session.id === THREAD_ID ? Object.assign({}, session, { session: null }) : session,
         ),
       },
       resolveRpc: (body) => {
@@ -2865,7 +2866,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const turnStartRequest = wsRequests.find(
             (request) =>
               request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
-              request.type === "thread.turn.start",
+              request.type === "session.turn.start",
           ) as
             | {
                 _tag: string;
@@ -2885,25 +2886,25 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("clears pending worktree overrides when switching empty server threads", async () => {
-    const secondThreadId = "thread-browser-test-second" as ThreadId;
-    const snapshot = addThreadToSnapshot(createDraftOnlySnapshot(), THREAD_ID);
-    const snapshotWithSecondThread = addThreadToSnapshot(snapshot, secondThreadId);
-    const snapshotWithTwoThreads = {
-      ...snapshotWithSecondThread,
-      threads: snapshotWithSecondThread.threads.map((thread) => {
-        if (thread.id === THREAD_ID) {
-          return Object.assign({}, thread, { session: null, title: "Thread alpha" });
+  it("clears pending worktree overrides when switching empty server sessions", async () => {
+    const secondSessionId = "session-browser-test-second" as SessionId;
+    const snapshot = addSessionToSnapshot(createDraftOnlySnapshot(), THREAD_ID);
+    const snapshotWithSecondSession = addSessionToSnapshot(snapshot, secondSessionId);
+    const snapshotWithTwoSessions = {
+      ...snapshotWithSecondSession,
+      sessions: snapshotWithSecondSession.sessions.map((session) => {
+        if (session.id === THREAD_ID) {
+          return Object.assign({}, session, { session: null, title: "Session alpha" });
         }
-        if (thread.id === secondThreadId) {
-          return Object.assign({}, thread, { session: null, title: "Thread beta" });
+        if (session.id === secondSessionId) {
+          return Object.assign({}, session, { session: null, title: "Session beta" });
         }
-        return thread;
+        return session;
       }),
     };
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
-      snapshot: snapshotWithTwoThreads,
+      snapshot: snapshotWithTwoSessions,
       resolveRpc: (body) => {
         if (body._tag === WS_METHODS.vcsListRefs) {
           return {
@@ -2950,17 +2951,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await mounted.router.navigate({
-        to: "/$environmentId/$threadId",
+        to: "/$environmentId/$sessionId",
         params: {
           environmentId: LOCAL_ENVIRONMENT_ID,
-          threadId: secondThreadId,
+          sessionId: secondSessionId,
         },
       });
 
       await waitForURL(
         mounted.router,
-        (path) => path === serverThreadPath(secondThreadId),
-        "Route should switch to the second empty server thread.",
+        (path) => path === serverSessionPath(secondSessionId),
+        "Route should switch to the second empty server session.",
       );
 
       await vi.waitFor(
@@ -2988,12 +2989,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("shows the send state once bootstrap dispatch is in flight", async () => {
     useTerminalStateStore.setState({
-      terminalStateByThreadKey: {},
+      terminalStateBySessionKey: {},
     });
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [THREAD_KEY]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -3005,7 +3006,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -3128,9 +3129,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const activeDraftId = draftIdFromPath("/draft/draft-active-branch-session");
 
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [staleDraftId]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: `${PROJECT_DRAFT_KEY}:stale`,
@@ -3142,7 +3143,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
         [activeDraftId]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -3154,7 +3155,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [`${PROJECT_DRAFT_KEY}:stale`]: staleDraftId,
         [PROJECT_DRAFT_KEY]: activeDraftId,
       },
@@ -3266,9 +3267,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     ];
 
     useComposerDraftStore.setState({
-      draftThreadsByThreadKey: {
+      draftSessionsBySessionKey: {
         [draftId]: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           logicalProjectKey: PROJECT_DRAFT_KEY,
@@ -3280,7 +3281,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: draftId,
       },
     });
@@ -3535,7 +3536,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("shows runtime mode descriptions in the desktop composer access select", async () => {
-    setDraftThreadWithoutWorktree();
+    setDraftSessionWithoutWorktree();
 
     const mounted = await mountChatView({
       viewport: WIDE_FOOTER_VIEWPORT,
@@ -3591,14 +3592,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       const store = useComposerDraftStore.getState();
-      const currentPrompt = store.draftsByThreadKey[THREAD_KEY]?.prompt ?? "";
+      const currentPrompt = store.draftsBySessionKey[THREAD_KEY]?.prompt ?? "";
       const nextPrompt = removeInlineTerminalContextPlaceholder(currentPrompt, 0);
       store.setPrompt(THREAD_REF, nextPrompt.prompt);
       store.removeTerminalContext(THREAD_REF, "ctx-removed");
 
       await vi.waitFor(
         () => {
-          expect(useComposerDraftStore.getState().draftsByThreadKey[THREAD_KEY]).toBeUndefined();
+          expect(useComposerDraftStore.getState().draftsBySessionKey[THREAD_KEY]).toBeUndefined();
           expect(document.body.textContent).not.toContain(removedLabel);
         },
         { timeout: 8_000, interval: 16 },
@@ -3617,7 +3618,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          const draft = useComposerDraftStore.getState().draftsByThreadKey[THREAD_KEY];
+          const draft = useComposerDraftStore.getState().draftsBySessionKey[THREAD_KEY];
           expect(draft?.terminalContexts.map((context) => context.id)).toEqual(["ctx-added"]);
           expect(document.body.textContent).toContain(addedLabel);
           expect(document.body.textContent).not.toContain(removedLabel);
@@ -3738,7 +3739,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("hides the archive action when the pointer leaves a thread row", async () => {
+  it("hides the archive action when the pointer leaves a session row", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -3748,12 +3749,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const threadRow = page.getByTestId(`thread-row-${THREAD_ID}`);
+      const sessionRow = page.getByTestId(`session-row-${THREAD_ID}`);
 
-      await expect.element(threadRow).toBeInTheDocument();
+      await expect.element(sessionRow).toBeInTheDocument();
       const archiveButton = await waitForElement(
         () =>
-          document.querySelector<HTMLButtonElement>(`[data-testid="thread-archive-${THREAD_ID}"]`),
+          document.querySelector<HTMLButtonElement>(`[data-testid="session-archive-${THREAD_ID}"]`),
         "Unable to find archive button.",
       );
       const archiveAction = archiveButton.parentElement;
@@ -3763,7 +3764,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       ).not.toBeNull();
       expect(getComputedStyle(archiveAction!).opacity).toBe("0");
 
-      await threadRow.hover();
+      await sessionRow.hover();
       await vi.waitFor(
         () => {
           expect(getComputedStyle(archiveAction!).opacity).toBe("1");
@@ -3783,20 +3784,20 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("exposes the full thread title on the sidebar row tooltip", async () => {
+  it("exposes the full session title on the sidebar row tooltip", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-thread-tooltip-target" as MessageId,
-        targetText: "thread tooltip target",
+        targetMessageId: "msg-user-session-tooltip-target" as MessageId,
+        targetText: "session tooltip target",
       }),
     });
 
     try {
-      const threadTitle = page.getByTestId(`thread-title-${THREAD_ID}`);
+      const sessionTitle = page.getByTestId(`session-title-${THREAD_ID}`);
 
-      await expect.element(threadTitle).toBeInTheDocument();
-      await threadTitle.hover();
+      await expect.element(sessionTitle).toBeInTheDocument();
+      await sessionTitle.hover();
 
       await vi.waitFor(
         () => {
@@ -3816,7 +3817,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       "lincei:client-settings:v1",
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
-        confirmThreadArchive: true,
+        confirmSessionArchive: true,
       }),
     );
 
@@ -3829,16 +3830,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const threadRow = page.getByTestId(`thread-row-${THREAD_ID}`);
+      const sessionRow = page.getByTestId(`session-row-${THREAD_ID}`);
 
-      await expect.element(threadRow).toBeInTheDocument();
-      await threadRow.hover();
+      await expect.element(sessionRow).toBeInTheDocument();
+      await sessionRow.hover();
 
-      const archiveButton = page.getByTestId(`thread-archive-${THREAD_ID}`);
+      const archiveButton = page.getByTestId(`session-archive-${THREAD_ID}`);
       await expect.element(archiveButton).toBeInTheDocument();
       await archiveButton.click();
 
-      const confirmButton = page.getByTestId(`thread-archive-confirm-${THREAD_ID}`);
+      const confirmButton = page.getByTestId(`session-archive-confirm-${THREAD_ID}`);
       await expect.element(confirmButton).toBeInTheDocument();
       await expect.element(confirmButton).toBeVisible();
     } finally {
@@ -3847,60 +3848,60 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("canonicalizes promoted draft threads to the server thread route", async () => {
+  it("canonicalizes promoted draft sessions to the server session route", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-new-thread-test" as MessageId,
-        targetText: "new thread selection test",
+        targetMessageId: "msg-user-new-session-test" as MessageId,
+        targetText: "new session selection test",
       }),
     });
 
     try {
       // Wait for the sidebar to render with the project.
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      // The route should change to a new draft thread ID.
-      const newThreadPath = await waitForURL(
+      // The route should change to a new draft session ID.
+      const newSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft session UUID.",
       );
-      const newDraftId = draftIdFromPath(newThreadPath);
-      const newThreadId = draftThreadIdFor(newDraftId);
+      const newDraftId = draftIdFromPath(newSessionPath);
+      const newSessionId = draftSessionIdFor(newDraftId);
 
-      // The composer editor should be present for the new draft thread.
+      // The composer editor should be present for the new draft session.
       await waitForComposerEditor();
 
-      // `thread.created` should only mark the draft as promoting; it should
-      // not navigate away until the server thread has actual runtime state.
-      await materializePromotedDraftThreadViaDomainEvent(newThreadId);
-      expect(mounted.router.state.location.pathname).toBe(newThreadPath);
+      // `session.created` should only mark the draft as promoting; it should
+      // not navigate away until the server session has actual runtime state.
+      await materializePromotedDraftSessionViaDomainEvent(newSessionId);
+      expect(mounted.router.state.location.pathname).toBe(newSessionPath);
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
 
-      // Once the server thread starts, the route should canonicalize.
-      await startPromotedServerThreadViaDomainEvent(newThreadId);
+      // Once the server session starts, the route should canonicalize.
+      await startPromotedServerSessionViaDomainEvent(newSessionId);
       await vi.waitFor(
         () => {
-          expect(useComposerDraftStore.getState().draftThreadsByThreadKey[newDraftId]).toBe(
+          expect(useComposerDraftStore.getState().draftSessionsBySessionKey[newDraftId]).toBe(
             undefined,
           );
         },
         { timeout: 8_000, interval: 16 },
       );
 
-      // The route should switch to the canonical server thread path.
+      // The route should switch to the canonical server session path.
       await waitForURL(
         mounted.router,
-        (path) => path === serverThreadPath(newThreadId),
-        "Promoted drafts should canonicalize to the server thread route.",
+        (path) => path === serverSessionPath(newSessionId),
+        "Promoted drafts should canonicalize to the server session route.",
       );
 
       // The composer should remain usable after canonicalization, regardless of
-      // whether the promoted thread is still visibly empty or has already
+      // whether the promoted session is still visibly empty or has already
       // entered the running state.
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
     } finally {
@@ -3908,7 +3909,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("canonicalizes stale promoted draft routes to the server thread route", async () => {
+  it("canonicalizes stale promoted draft routes to the server session route", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -3918,20 +3919,20 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft session UUID.",
       );
-      const newDraftId = draftIdFromPath(newThreadPath);
-      const newThreadId = draftThreadIdFor(newDraftId);
+      const newDraftId = draftIdFromPath(newSessionPath);
+      const newSessionId = draftSessionIdFor(newDraftId);
 
-      await promoteDraftThreadViaDomainEvent(newThreadId);
+      await promoteDraftSessionViaDomainEvent(newSessionId);
 
       await mounted.router.navigate({
         to: "/draft/$draftId",
@@ -3940,8 +3941,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await waitForURL(
         mounted.router,
-        (path) => path === serverThreadPath(newThreadId),
-        "Stale promoted draft routes should canonicalize to the server thread path.",
+        (path) => path === serverSessionPath(newSessionId),
+        "Stale promoted draft routes should canonicalize to the server session path.",
       );
 
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
@@ -3950,24 +3951,24 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a fresh worktree draft from an existing worktree thread when the default mode is worktree", async () => {
+  it("creates a fresh worktree draft from an existing worktree session when the default mode is worktree", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: {
         ...createSnapshotForTargetUser({
-          targetMessageId: "msg-user-new-thread-worktree-default-test" as MessageId,
-          targetText: "new thread worktree default test",
+          targetMessageId: "msg-user-new-session-worktree-default-test" as MessageId,
+          targetText: "new session worktree default test",
         }),
-        threads: createSnapshotForTargetUser({
-          targetMessageId: "msg-user-new-thread-worktree-default-test" as MessageId,
-          targetText: "new thread worktree default test",
-        }).threads.map((thread) =>
-          thread.id === THREAD_ID
-            ? Object.assign({}, thread, {
+        sessions: createSnapshotForTargetUser({
+          targetMessageId: "msg-user-new-session-worktree-default-test" as MessageId,
+          targetText: "new session worktree default test",
+        }).sessions.map((session) =>
+          session.id === THREAD_ID
+            ? Object.assign({}, session, {
                 branch: "feature/existing",
                 worktreePath: "/repo/.t3/worktrees/existing",
               })
-            : thread,
+            : session,
         ),
       },
       configureFixture: (nextFixture) => {
@@ -3975,24 +3976,24 @@ describe("ChatView timeline estimator parity (full app)", () => {
           ...nextFixture.serverConfig,
           settings: {
             ...nextFixture.serverConfig.settings,
-            defaultThreadEnvMode: "worktree",
+            defaultSessionEnvMode: "worktree",
           },
         };
       },
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should change to a new draft thread.",
+        "Route should change to a new draft session.",
       );
-      const newDraftId = draftIdFromPath(newThreadPath);
+      const newDraftId = draftIdFromPath(newSessionPath);
 
       expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
         envMode: "worktree",
@@ -4003,38 +4004,38 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a new draft instead of reusing a promoting draft thread", async () => {
+  it("creates a new draft instead of reusing a promoting draft session", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-promoting-draft-new-thread-test" as MessageId,
-        targetText: "promoting draft new thread test",
+        targetMessageId: "msg-user-promoting-draft-new-session-test" as MessageId,
+        targetText: "promoting draft new session test",
       }),
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
       const firstDraftPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should change to the first draft thread.",
+        "Route should change to the first draft session.",
       );
       const firstDraftId = draftIdFromPath(firstDraftPath);
-      const firstThreadId = draftThreadIdFor(firstDraftId);
+      const firstSessionId = draftSessionIdFor(firstDraftId);
 
-      await materializePromotedDraftThreadViaDomainEvent(firstThreadId);
+      await materializePromotedDraftSessionViaDomainEvent(firstSessionId);
       expect(mounted.router.state.location.pathname).toBe(firstDraftPath);
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
       const secondDraftPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path) && path !== firstDraftPath,
-        "Route should change to a second draft thread instead of reusing the promoting draft.",
+        "Route should change to a second draft session instead of reusing the promoting draft.",
       );
       expect(draftIdFromPath(secondDraftPath)).not.toBe(firstDraftId);
     } finally {
@@ -4042,7 +4043,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("snapshots sticky codex settings into a new draft thread", async () => {
+  it("snapshots sticky codex settings into a new draft session", async () => {
     useComposerDraftStore.setState({
       stickyModelSelectionByProvider: {
         [ProviderInstanceId.make("codex")]: createModelSelection(
@@ -4066,17 +4067,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft session UUID.",
       );
-      const newDraftId = draftIdFromPath(newThreadPath);
+      const newDraftId = draftIdFromPath(newSessionPath);
 
       // `toMatchObject` matches objects loosely (extras ignored) but compares
       // arrays strictly, so wrap `options` in `arrayContaining` to keep the
@@ -4121,17 +4122,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new sticky claude draft thread UUID.",
+        "Route should have changed to a new sticky claude draft session UUID.",
       );
-      const newDraftId = draftIdFromPath(newThreadPath);
+      const newDraftId = draftIdFromPath(newSessionPath);
 
       expect(composerDraftFor(newDraftId)).toMatchObject({
         modelSelectionByProvider: {
@@ -4161,17 +4162,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const newThreadPath = await waitForURL(
+      const newSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID.",
+        "Route should have changed to a new draft session UUID.",
       );
-      const newDraftId = draftIdFromPath(newThreadPath);
+      const newDraftId = draftIdFromPath(newSessionPath);
 
       expect(composerDraftFor(newDraftId)).toBe(undefined);
     } finally {
@@ -4203,17 +4204,17 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const threadPath = await waitForURL(
+      const sessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a sticky draft thread UUID.",
+        "Route should have changed to a sticky draft session UUID.",
       );
-      const draftId = draftIdFromPath(threadPath);
+      const draftId = draftIdFromPath(sessionPath);
 
       // See the note on the sibling sticky-codex test: arrays match strictly
       // under `toMatchObject`, so use `arrayContaining` to keep the assertion
@@ -4237,12 +4238,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
         ]),
       );
 
-      await newThreadButton.click();
+      await newSessionButton.click();
 
       await waitForURL(
         mounted.router,
-        (path) => path === threadPath,
-        "New-thread should reuse the existing project draft thread.",
+        (path) => path === sessionPath,
+        "New-session should reuse the existing project draft session.",
       );
       expect(composerDraftFor(draftId)).toMatchObject({
         modelSelectionByProvider: {
@@ -4258,7 +4259,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a new thread from the global chat.new shortcut", async () => {
+  it("creates a new session from the global chat.new shortcut", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -4285,7 +4286,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               },
             },
             {
-              command: "thread.jump.1",
+              command: "session.jump.1",
               shortcut: {
                 key: "1",
                 metaKey: true,
@@ -4313,7 +4314,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      await waitForNewThreadShortcutLabel();
+      await waitForNewSessionShortcutLabel();
       await waitForServerConfigToApply();
       const composerEditor = await waitForComposerEditor();
       composerEditor.focus();
@@ -4321,7 +4322,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await triggerChatNewShortcutUntilPath(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID from the shortcut.",
+        "Route should have changed to a new draft session UUID from the shortcut.",
       );
     } finally {
       await mounted.cleanup();
@@ -4361,8 +4362,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       dispatchChatNewShortcut();
       await waitForLayout();
 
-      expect(mounted.router.state.location.pathname).toBe(serverThreadPath(THREAD_ID));
-      expect(Object.keys(useComposerDraftStore.getState().draftThreadsByThreadKey)).toHaveLength(0);
+      expect(mounted.router.state.location.pathname).toBe(serverSessionPath(THREAD_ID));
+      expect(Object.keys(useComposerDraftStore.getState().draftSessionsBySessionKey)).toHaveLength(
+        0,
+      );
     } finally {
       await mounted.cleanup();
     }
@@ -4406,14 +4409,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await expect.element(palette).toBeInTheDocument();
       await expect
-        .element(palette.getByText("New thread in Study", { exact: true }))
+        .element(palette.getByText("New session in Study", { exact: true }))
         .toBeInTheDocument();
-      await palette.getByText("New thread in Study", { exact: true }).click();
+      await palette.getByText("New session in Study", { exact: true }).click();
 
       await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID from the command palette.",
+        "Route should have changed to a new draft session UUID from the command palette.",
       );
     } finally {
       await mounted.cleanup();
@@ -4457,10 +4460,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and threads...").fill("settings");
+      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("settings");
       await expect.element(palette.getByText("Open settings", { exact: true })).toBeInTheDocument();
       await expect
-        .element(palette.getByText("New thread in Study", { exact: true }))
+        .element(palette.getByText("New session in Study", { exact: true }))
         .not.toBeInTheDocument();
     } finally {
       await mounted.cleanup();
@@ -4571,7 +4574,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread after adding a project with Enter.",
+        "Route should have changed to a new draft session after adding a project with Enter.",
       );
     } finally {
       await mounted.cleanup();
@@ -5101,7 +5104,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread after adding a remote project.",
+        "Route should have changed to a new draft session after adding a remote project.",
       );
     } finally {
       await mounted.cleanup();
@@ -5199,7 +5202,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread after adding a project from the native file manager.",
+        "Route should have changed to a new draft session after adding a project from the native file manager.",
       );
     } finally {
       await mounted.cleanup();
@@ -5327,14 +5330,14 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread after adding a project with Mod+Enter.",
+        "Route should have changed to a new draft session after adding a project with Mod+Enter.",
       );
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("keeps project-context thread matches available when searching by project name", async () => {
+  it("keeps project-context session matches available when searching by project name", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithSecondaryProject(),
@@ -5369,7 +5372,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and threads...").fill("docs");
+      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("Release checklist", { exact: true }))
@@ -5379,7 +5382,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("searches projects by path and opens the latest thread for that project", async () => {
+  it("searches projects by path and opens the latest session for that project", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithSecondaryProject(),
@@ -5388,7 +5391,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           ...nextFixture.serverConfig,
           settings: {
             ...nextFixture.serverConfig.settings,
-            defaultThreadEnvMode: "worktree",
+            defaultSessionEnvMode: "worktree",
           },
           keybindings: [
             {
@@ -5418,7 +5421,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and threads...").fill("clients/docs");
+      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("clients/docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("/repo/clients/docs-portal", { exact: true }))
@@ -5427,30 +5430,30 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       const nextPath = await waitForURL(
         mounted.router,
-        (path) => path === serverThreadPath("thread-secondary-project" as ThreadId),
-        "Route should have changed to the latest thread for the selected project.",
+        (path) => path === serverSessionPath("session-secondary-project" as SessionId),
+        "Route should have changed to the latest session for the selected project.",
       );
-      expect(nextPath).toBe(serverThreadPath("thread-secondary-project" as ThreadId));
+      expect(nextPath).toBe(serverSessionPath("session-secondary-project" as SessionId));
       expect(
         useComposerDraftStore
           .getState()
-          .getDraftThread(threadRefFor("thread-secondary-project" as ThreadId)),
+          .getDraftSession(sessionRefFor("session-secondary-project" as SessionId)),
       ).toBeNull();
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("creates a new thread from project search when no active study thread exists", async () => {
+  it("creates a new session from project search when no active study session exists", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
-      snapshot: createSnapshotWithSecondaryProject({ includeSecondaryThread: false }),
+      snapshot: createSnapshotWithSecondaryProject({ includeSecondarySession: false }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
           settings: {
             ...nextFixture.serverConfig.settings,
-            defaultThreadEnvMode: "worktree",
+            defaultSessionEnvMode: "worktree",
           },
           keybindings: [
             {
@@ -5480,7 +5483,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and threads...").fill("clients/docs");
+      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("clients/docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("/repo/clients/docs-portal", { exact: true }))
@@ -5490,18 +5493,18 @@ describe("ChatView timeline estimator parity (full app)", () => {
       const nextPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a new draft thread UUID from the project search result.",
+        "Route should have changed to a new draft session UUID from the project search result.",
       );
       const nextDraftId = draftIdFromPath(nextPath);
-      const draftThread = useComposerDraftStore.getState().getDraftSession(nextDraftId);
-      expect(draftThread?.projectId).toBe(SECOND_PROJECT_ID);
-      expect(draftThread?.envMode).toBe("worktree");
+      const draftSession = useComposerDraftStore.getState().getDraftSession(nextDraftId);
+      expect(draftSession?.projectId).toBe(SECOND_PROJECT_ID);
+      expect(draftSession?.envMode).toBe("worktree");
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("filters archived threads out of command palette search results", async () => {
+  it("filters archived sessions out of command palette search results", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithSecondaryProject(),
@@ -5536,7 +5539,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and threads...").fill("docs-archive");
+      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("docs-archive");
       await expect
         .element(palette.getByText("Archived Docs Notes", { exact: true }))
         .not.toBeInTheDocument();
@@ -5545,7 +5548,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a fresh draft after the previous draft thread is promoted", async () => {
+  it("creates a fresh draft after the previous draft session is promoted", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -5577,28 +5580,28 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const newThreadButton = page.getByTestId("new-thread-button");
-      await expect.element(newThreadButton).toBeInTheDocument();
+      const newSessionButton = page.getByTestId("new-session-button");
+      await expect.element(newSessionButton).toBeInTheDocument();
       await waitForServerConfigToApply();
-      await newThreadButton.click();
+      await newSessionButton.click();
 
-      const promotedThreadPath = await waitForURL(
+      const promotedSessionPath = await waitForURL(
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
-        "Route should have changed to a promoted draft thread UUID.",
+        "Route should have changed to a promoted draft session UUID.",
       );
-      const promotedDraftId = draftIdFromPath(promotedThreadPath);
-      const promotedThreadId = draftThreadIdFor(promotedDraftId);
+      const promotedDraftId = draftIdFromPath(promotedSessionPath);
+      const promotedSessionId = draftSessionIdFor(promotedDraftId);
 
-      await promoteDraftThreadViaDomainEvent(promotedThreadId);
+      await promoteDraftSessionViaDomainEvent(promotedSessionId);
       await waitForURL(
         mounted.router,
-        (path) => path === serverThreadPath(promotedThreadId),
-        "Promoted drafts should canonicalize to the server thread route before a fresh draft is created.",
+        (path) => path === serverSessionPath(promotedSessionId),
+        "Promoted drafts should canonicalize to the server session route before a fresh draft is created.",
       );
       await vi.waitFor(
         () => {
-          expect(useComposerDraftStore.getState().getDraftThread(promotedDraftId)).toBeNull();
+          expect(useComposerDraftStore.getState().getDraftSession(promotedDraftId)).toBeNull();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -5606,12 +5609,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
       composerEditor.focus();
       await waitForLayout();
 
-      const freshThreadPath = await triggerChatNewShortcutUntilPath(
+      const freshSessionPath = await triggerChatNewShortcutUntilPath(
         mounted.router,
-        (path) => UUID_ROUTE_RE.test(path) && path !== promotedThreadPath,
-        "Shortcut should create a fresh draft instead of reusing the promoted thread.",
+        (path) => UUID_ROUTE_RE.test(path) && path !== promotedSessionPath,
+        "Shortcut should create a fresh draft instead of reusing the promoted session.",
       );
-      expect(freshThreadPath).not.toBe(promotedThreadPath);
+      expect(freshSessionPath).not.toBe(promotedSessionPath);
     } finally {
       await mounted.cleanup();
     }
@@ -5656,13 +5659,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("uses the active worktree path when saving a proposed plan to the workspace", async () => {
     const snapshot = createSnapshotWithLongProposedPlan();
-    const threads = snapshot.threads.slice();
-    const targetThreadIndex = threads.findIndex((thread) => thread.id === THREAD_ID);
-    const targetThread = targetThreadIndex >= 0 ? threads[targetThreadIndex] : undefined;
-    if (targetThread) {
-      threads[targetThreadIndex] = {
-        ...targetThread,
-        worktreePath: "/repo/worktrees/plan-thread",
+    const sessions = snapshot.sessions.slice();
+    const targetSessionIndex = sessions.findIndex((session) => session.id === THREAD_ID);
+    const targetSession = targetSessionIndex >= 0 ? sessions[targetSessionIndex] : undefined;
+    if (targetSession) {
+      sessions[targetSessionIndex] = {
+        ...targetSession,
+        worktreePath: "/repo/worktrees/plan-session",
       };
     }
 
@@ -5670,7 +5673,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: {
         ...snapshot,
-        threads,
+        sessions,
       },
     });
 
@@ -5693,7 +5696,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           expect(document.body.textContent).toContain(
-            "Enter a path relative to /repo/worktrees/plan-thread.",
+            "Enter a path relative to /repo/worktrees/plan-session.",
           );
         },
         { timeout: 8_000, interval: 16 },
@@ -5749,7 +5752,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const dispatchRequest = wsRequests.find(
             (request) =>
               request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
-              request.type === "thread.user-input.respond",
+              request.type === "session.user-input.respond",
           ) as
             | {
                 _tag: string;
@@ -5761,7 +5764,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
-            type: "thread.user-input.respond",
+            type: "session.user-input.respond",
             requestId: "req-browser-user-input",
             answers: {
               scope: "Tight",
@@ -5917,7 +5920,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-menu-target" as MessageId,
-        targetText: "command menu thread",
+        targetText: "command menu session",
       }),
     });
 
@@ -5957,7 +5960,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-model-command-target" as MessageId,
-        targetText: "model command thread",
+        targetText: "model command session",
       }),
     });
 
@@ -5994,7 +5997,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("toggles the model picker and shows jump keys immediately from the shortcut", async () => {
     const snapshot = createSnapshotForTargetUser({
       targetMessageId: "msg-user-model-picker-shortcut-target" as MessageId,
-      targetText: "model picker shortcut thread",
+      targetText: "model picker shortcut session",
     });
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -6010,12 +6013,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
               })
             : project,
         ),
-        threads: snapshot.threads.map((thread) =>
-          thread.id === THREAD_ID
-            ? Object.assign({}, thread, {
+        sessions: snapshot.sessions.map((session) =>
+          session.id === THREAD_ID
+            ? Object.assign({}, session, {
                 modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
               })
-            : thread,
+            : session,
         ),
       },
       configureFixture: (nextFixture) => {
@@ -6038,7 +6041,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               },
             },
             {
-              command: "thread.jump.1",
+              command: "session.jump.1",
               shortcut: {
                 key: "1",
                 metaKey: false,
@@ -6155,7 +6158,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-skill-tooltip-target" as MessageId,
-        targetText: "skill tooltip thread",
+        targetText: "skill tooltip session",
       }),
       configureFixture: (nextFixture) => {
         const provider = nextFixture.serverConfig.providers[0];

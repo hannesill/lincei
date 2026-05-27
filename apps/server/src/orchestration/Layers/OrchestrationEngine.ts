@@ -2,7 +2,7 @@ import type {
   OrchestrationEvent,
   OrchestrationReadModel,
   ProjectId,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import { OrchestrationCommand } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -56,8 +56,8 @@ interface CommandEnvelope {
 }
 
 function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "project" | "thread";
-  readonly aggregateId: ProjectId | ThreadId;
+  readonly aggregateKind: "project" | "session";
+  readonly aggregateId: ProjectId | SessionId;
 } {
   switch (command.type) {
     case "project.create":
@@ -69,8 +69,8 @@ function commandToAggregateRef(command: OrchestrationCommand): {
       };
     default:
       return {
-        aggregateKind: "thread",
-        aggregateId: command.threadId,
+        aggregateKind: "session",
+        aggregateId: command.sessionId,
       };
   }
 }

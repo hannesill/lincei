@@ -8,25 +8,25 @@ import {
   type OrchestrationShellStreamEvent,
   type ServerConfig,
   type TerminalEvent,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import { type QueryClient } from "@tanstack/react-query";
 import { Throttler } from "@tanstack/react-pacer";
 import {
   createKnownEnvironment,
   getKnownEnvironmentWsBaseUrl,
-  scopedThreadKey,
+  scopedSessionKey,
   scopeProjectRef,
-  scopeThreadRef,
+  scopeSessionRef,
 } from "@t3tools/client-runtime";
 
 import {
-  markPromotedDraftThreadByRef,
-  markPromotedDraftThreadsByRef,
+  markPromotedDraftSessionByRef,
+  markPromotedDraftSessionsByRef,
   useComposerDraftStore,
 } from "~/composerDraftStore";
 import { ensureLocalApi } from "~/localApi";
-import { collectActiveTerminalThreadIds } from "~/lib/terminalStateCleanup";
+import { collectActiveTerminalSessionIds } from "~/lib/terminalStateCleanup";
 import { deriveOrchestrationBatchEffects } from "~/orchestrationEventEffects";
 import { projectQueryKeys } from "~/lib/projectReactQuery";
 import { providerQueryKeys } from "~/lib/providerReactQuery";
@@ -57,9 +57,9 @@ import { createEnvironmentConnection, type EnvironmentConnection } from "./conne
 import {
   useStore,
   selectProjectsAcrossEnvironments,
-  selectSidebarThreadSummaryByRef,
-  selectThreadByRef,
-  selectThreadsAcrossEnvironments,
+  selectSidebarSessionSummaryByRef,
+  selectSessionByRef,
+  selectSessionsAcrossEnvironments,
 } from "~/store";
 import { useTerminalStateStore } from "~/terminalStateStore";
 import { useUiStateStore } from "~/uiStateStore";
@@ -81,9 +81,9 @@ type EnvironmentServiceState = {
   stop: () => void;
 };
 
-type ThreadDetailSubscriptionEntry = {
+type SessionDetailSubscriptionEntry = {
   readonly environmentId: EnvironmentId;
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   unsubscribe: () => void;
   unsubscribeConnectionListener: (() => void) | null;
   refCount: number;
@@ -115,7 +115,7 @@ const pendingSavedEnvironmentConnections = new Map<
   PendingSavedEnvironmentConnection
 >();
 const environmentConnectionListeners = new Set<() => void>();
-const threadDetailSubscriptions = new Map<string, ThreadDetailSubscriptionEntry>();
+const sessionDetailSubscriptions = new Map<string, SessionDetailSubscriptionEntry>();
 const lastAppliedProjectionVersionByEnvironment = new Map<
   EnvironmentId,
   {
@@ -129,11 +129,11 @@ let needsProviderInvalidation = false;
 let lastBrowserHiddenAt: number | null = null;
 let lastBrowserResumeReconnectAt = Number.NEGATIVE_INFINITY;
 
-// Thread detail subscription cache policy:
+// Session detail subscription cache policy:
 // - Active consumers keep a subscription retained via refCount.
 // - Released subscriptions stay warm for a longer idle TTL to avoid churn
 //   while moving around the UI.
-// - Threads with active work or pending user action are sticky and are never
+// - Sessions with active work or pending user action are sticky and are never
 //   evicted while they remain non-idle.
 // - Capacity eviction only targets idle cached subscriptions.
 const THREAD_DETAIL_SUBSCRIPTION_IDLE_EVICTION_MS = 15 * 60 * 1000;
@@ -294,13 +294,16 @@ function markAppliedProjectionEvent(environmentId: EnvironmentId, sequence: numb
     updatedAt: currentVersion?.updatedAt ?? null,
   });
 }
-function getThreadDetailSubscriptionKey(environmentId: EnvironmentId, threadId: ThreadId): string {
-  return scopedThreadKey(scopeThreadRef(environmentId, threadId));
+function getSessionDetailSubscriptionKey(
+  environmentId: EnvironmentId,
+  sessionId: SessionId,
+): string {
+  return scopedSessionKey(scopeSessionRef(environmentId, sessionId));
 }
 
-function clearThreadDetailSubscriptionEviction(
-  entry: ThreadDetailSubscriptionEntry,
-): ThreadDetailSubscriptionEntry {
+function clearSessionDetailSubscriptionEviction(
+  entry: SessionDetailSubscriptionEntry,
+): SessionDetailSubscriptionEntry {
   if (entry.evictionTimeoutId !== null) {
     clearTimeout(entry.evictionTimeoutId);
     entry.evictionTimeoutId = null;
@@ -308,23 +311,23 @@ function clearThreadDetailSubscriptionEviction(
   return entry;
 }
 
-function isNonIdleThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): boolean {
-  const threadRef = scopeThreadRef(entry.environmentId, entry.threadId);
+function isNonIdleSessionDetailSubscription(entry: SessionDetailSubscriptionEntry): boolean {
+  const sessionRef = scopeSessionRef(entry.environmentId, entry.sessionId);
   const state = useStore.getState();
-  const sidebarThread = selectSidebarThreadSummaryByRef(state, threadRef);
+  const sidebarSession = selectSidebarSessionSummaryByRef(state, sessionRef);
 
-  // Prefer shell/sidebar state first because it carries the coarse thread
+  // Prefer shell/sidebar state first because it carries the coarse session
   // readiness flags used throughout the UI (pending approvals/input/plan).
-  if (sidebarThread) {
+  if (sidebarSession) {
     if (
-      sidebarThread.hasPendingApprovals ||
-      sidebarThread.hasPendingUserInput ||
-      sidebarThread.hasActionableProposedPlan
+      sidebarSession.hasPendingApprovals ||
+      sidebarSession.hasPendingUserInput ||
+      sidebarSession.hasActionableProposedPlan
     ) {
       return true;
     }
 
-    const orchestrationStatus = sidebarThread.session?.orchestrationStatus;
+    const orchestrationStatus = sidebarSession.session?.orchestrationStatus;
     if (
       orchestrationStatus &&
       orchestrationStatus !== "idle" &&
@@ -333,31 +336,31 @@ function isNonIdleThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry)
       return true;
     }
 
-    if (sidebarThread.latestTurn?.state === "running") {
+    if (sidebarSession.latestTurn?.state === "running") {
       return true;
     }
   }
 
-  const thread = selectThreadByRef(state, threadRef);
-  if (!thread) {
+  const session = selectSessionByRef(state, sessionRef);
+  if (!session) {
     return false;
   }
 
-  const orchestrationStatus = thread.session?.orchestrationStatus;
+  const orchestrationStatus = session.session?.orchestrationStatus;
   return (
     Boolean(
       orchestrationStatus && orchestrationStatus !== "idle" && orchestrationStatus !== "stopped",
     ) ||
-    thread.latestTurn?.state === "running" ||
-    thread.pendingSourceProposedPlan !== undefined
+    session.latestTurn?.state === "running" ||
+    session.pendingSourceProposedPlan !== undefined
   );
 }
 
-function shouldEvictThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): boolean {
-  return entry.refCount === 0 && !isNonIdleThreadDetailSubscription(entry);
+function shouldEvictSessionDetailSubscription(entry: SessionDetailSubscriptionEntry): boolean {
+  return entry.refCount === 0 && !isNonIdleSessionDetailSubscription(entry);
 }
 
-function attachThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): boolean {
+function attachSessionDetailSubscription(entry: SessionDetailSubscriptionEntry): boolean {
   if (entry.unsubscribeConnectionListener !== null) {
     entry.unsubscribeConnectionListener();
     entry.unsubscribeConnectionListener = null;
@@ -371,175 +374,175 @@ function attachThreadDetailSubscription(entry: ThreadDetailSubscriptionEntry): b
     return false;
   }
 
-  entry.unsubscribe = connection.client.orchestration.subscribeThread(
-    { threadId: entry.threadId },
+  entry.unsubscribe = connection.client.orchestration.subscribeSession(
+    { sessionId: entry.sessionId },
     (item) => {
       if (item.kind === "snapshot") {
-        useStore.getState().syncServerThreadDetail(item.snapshot.thread, entry.environmentId);
+        useStore.getState().syncServerSessionDetail(item.snapshot.session, entry.environmentId);
         return;
       }
-      applyEnvironmentThreadDetailEvent(item.event, entry.environmentId);
+      applyEnvironmentSessionDetailEvent(item.event, entry.environmentId);
     },
   );
   return true;
 }
 
-function watchThreadDetailSubscriptionConnection(entry: ThreadDetailSubscriptionEntry): void {
+function watchSessionDetailSubscriptionConnection(entry: SessionDetailSubscriptionEntry): void {
   if (entry.unsubscribeConnectionListener !== null) {
     return;
   }
 
   entry.unsubscribeConnectionListener = subscribeEnvironmentConnections(() => {
-    if (attachThreadDetailSubscription(entry)) {
+    if (attachSessionDetailSubscription(entry)) {
       entry.lastAccessedAt = Date.now();
     }
   });
-  attachThreadDetailSubscription(entry);
+  attachSessionDetailSubscription(entry);
 }
 
-function disposeThreadDetailSubscriptionByKey(key: string): boolean {
-  const entry = threadDetailSubscriptions.get(key);
+function disposeSessionDetailSubscriptionByKey(key: string): boolean {
+  const entry = sessionDetailSubscriptions.get(key);
   if (!entry) {
     return false;
   }
 
-  clearThreadDetailSubscriptionEviction(entry);
+  clearSessionDetailSubscriptionEviction(entry);
   entry.unsubscribeConnectionListener?.();
   entry.unsubscribeConnectionListener = null;
-  threadDetailSubscriptions.delete(key);
+  sessionDetailSubscriptions.delete(key);
   entry.unsubscribe();
   entry.unsubscribe = NOOP;
   return true;
 }
 
-function disposeThreadDetailSubscriptionsForEnvironment(environmentId: EnvironmentId): void {
-  for (const [key, entry] of threadDetailSubscriptions) {
+function disposeSessionDetailSubscriptionsForEnvironment(environmentId: EnvironmentId): void {
+  for (const [key, entry] of sessionDetailSubscriptions) {
     if (entry.environmentId === environmentId) {
-      disposeThreadDetailSubscriptionByKey(key);
+      disposeSessionDetailSubscriptionByKey(key);
     }
   }
 }
 
-function detachThreadDetailSubscriptionsForEnvironment(environmentId: EnvironmentId): void {
-  for (const entry of threadDetailSubscriptions.values()) {
+function detachSessionDetailSubscriptionsForEnvironment(environmentId: EnvironmentId): void {
+  for (const entry of sessionDetailSubscriptions.values()) {
     if (entry.environmentId !== environmentId) {
       continue;
     }
     entry.unsubscribe();
     entry.unsubscribe = NOOP;
-    watchThreadDetailSubscriptionConnection(entry);
+    watchSessionDetailSubscriptionConnection(entry);
   }
 }
 
-function attachThreadDetailSubscriptionsForEnvironment(environmentId: EnvironmentId): void {
-  for (const entry of threadDetailSubscriptions.values()) {
+function attachSessionDetailSubscriptionsForEnvironment(environmentId: EnvironmentId): void {
+  for (const entry of sessionDetailSubscriptions.values()) {
     if (entry.environmentId === environmentId) {
-      attachThreadDetailSubscription(entry);
+      attachSessionDetailSubscription(entry);
     }
   }
 }
 
-function reconcileThreadDetailSubscriptionsForEnvironment(
+function reconcileSessionDetailSubscriptionsForEnvironment(
   environmentId: EnvironmentId,
-  threadIds: ReadonlyArray<ThreadId>,
+  sessionIds: ReadonlyArray<SessionId>,
 ): void {
-  const activeThreadIds = new Set(threadIds);
-  for (const [key, entry] of threadDetailSubscriptions) {
-    if (entry.environmentId === environmentId && !activeThreadIds.has(entry.threadId)) {
-      disposeThreadDetailSubscriptionByKey(key);
+  const activeSessionIds = new Set(sessionIds);
+  for (const [key, entry] of sessionDetailSubscriptions) {
+    if (entry.environmentId === environmentId && !activeSessionIds.has(entry.sessionId)) {
+      disposeSessionDetailSubscriptionByKey(key);
     }
   }
 }
 
-function scheduleThreadDetailSubscriptionEviction(entry: ThreadDetailSubscriptionEntry): void {
-  clearThreadDetailSubscriptionEviction(entry);
-  if (!shouldEvictThreadDetailSubscription(entry)) {
+function scheduleSessionDetailSubscriptionEviction(entry: SessionDetailSubscriptionEntry): void {
+  clearSessionDetailSubscriptionEviction(entry);
+  if (!shouldEvictSessionDetailSubscription(entry)) {
     return;
   }
 
   entry.evictionTimeoutId = setTimeout(() => {
-    const currentEntry = threadDetailSubscriptions.get(
-      getThreadDetailSubscriptionKey(entry.environmentId, entry.threadId),
+    const currentEntry = sessionDetailSubscriptions.get(
+      getSessionDetailSubscriptionKey(entry.environmentId, entry.sessionId),
     );
     if (!currentEntry) {
       return;
     }
 
     currentEntry.evictionTimeoutId = null;
-    if (!shouldEvictThreadDetailSubscription(currentEntry)) {
+    if (!shouldEvictSessionDetailSubscription(currentEntry)) {
       return;
     }
-    disposeThreadDetailSubscriptionByKey(
-      getThreadDetailSubscriptionKey(entry.environmentId, entry.threadId),
+    disposeSessionDetailSubscriptionByKey(
+      getSessionDetailSubscriptionKey(entry.environmentId, entry.sessionId),
     );
   }, THREAD_DETAIL_SUBSCRIPTION_IDLE_EVICTION_MS);
 }
 
-function evictIdleThreadDetailSubscriptionsToCapacity(): void {
-  if (threadDetailSubscriptions.size <= MAX_CACHED_THREAD_DETAIL_SUBSCRIPTIONS) {
+function evictIdleSessionDetailSubscriptionsToCapacity(): void {
+  if (sessionDetailSubscriptions.size <= MAX_CACHED_THREAD_DETAIL_SUBSCRIPTIONS) {
     return;
   }
 
-  const idleEntries = [...threadDetailSubscriptions.entries()]
-    .filter(([, entry]) => shouldEvictThreadDetailSubscription(entry))
+  const idleEntries = [...sessionDetailSubscriptions.entries()]
+    .filter(([, entry]) => shouldEvictSessionDetailSubscription(entry))
     .toSorted(([, left], [, right]) => left.lastAccessedAt - right.lastAccessedAt);
 
   for (const [key] of idleEntries) {
-    if (threadDetailSubscriptions.size <= MAX_CACHED_THREAD_DETAIL_SUBSCRIPTIONS) {
+    if (sessionDetailSubscriptions.size <= MAX_CACHED_THREAD_DETAIL_SUBSCRIPTIONS) {
       return;
     }
-    disposeThreadDetailSubscriptionByKey(key);
+    disposeSessionDetailSubscriptionByKey(key);
   }
 }
 
-function reconcileThreadDetailSubscriptionEvictionState(
-  entry: ThreadDetailSubscriptionEntry,
+function reconcileSessionDetailSubscriptionEvictionState(
+  entry: SessionDetailSubscriptionEntry,
 ): void {
-  clearThreadDetailSubscriptionEviction(entry);
-  if (!shouldEvictThreadDetailSubscription(entry)) {
+  clearSessionDetailSubscriptionEviction(entry);
+  if (!shouldEvictSessionDetailSubscription(entry)) {
     return;
   }
 
-  scheduleThreadDetailSubscriptionEviction(entry);
+  scheduleSessionDetailSubscriptionEviction(entry);
 }
 
-function reconcileThreadDetailSubscriptionEvictionForThread(
+function reconcileSessionDetailSubscriptionEvictionForSession(
   environmentId: EnvironmentId,
-  threadId: ThreadId,
+  sessionId: SessionId,
 ): void {
-  const entry = threadDetailSubscriptions.get(
-    getThreadDetailSubscriptionKey(environmentId, threadId),
+  const entry = sessionDetailSubscriptions.get(
+    getSessionDetailSubscriptionKey(environmentId, sessionId),
   );
   if (!entry) {
     return;
   }
 
-  reconcileThreadDetailSubscriptionEvictionState(entry);
+  reconcileSessionDetailSubscriptionEvictionState(entry);
 }
 
-function reconcileThreadDetailSubscriptionEvictionForEnvironment(
+function reconcileSessionDetailSubscriptionEvictionForEnvironment(
   environmentId: EnvironmentId,
 ): void {
-  for (const entry of threadDetailSubscriptions.values()) {
+  for (const entry of sessionDetailSubscriptions.values()) {
     if (entry.environmentId === environmentId) {
-      reconcileThreadDetailSubscriptionEvictionState(entry);
+      reconcileSessionDetailSubscriptionEvictionState(entry);
     }
   }
-  evictIdleThreadDetailSubscriptionsToCapacity();
+  evictIdleSessionDetailSubscriptionsToCapacity();
 }
 
-export function retainThreadDetailSubscription(
+export function retainSessionDetailSubscription(
   environmentId: EnvironmentId,
-  threadId: ThreadId,
+  sessionId: SessionId,
 ): () => void {
-  const key = getThreadDetailSubscriptionKey(environmentId, threadId);
-  const existing = threadDetailSubscriptions.get(key);
+  const key = getSessionDetailSubscriptionKey(environmentId, sessionId);
+  const existing = sessionDetailSubscriptions.get(key);
   if (existing) {
-    clearThreadDetailSubscriptionEviction(existing);
+    clearSessionDetailSubscriptionEviction(existing);
     existing.refCount += 1;
     existing.lastAccessedAt = Date.now();
-    if (!attachThreadDetailSubscription(existing)) {
-      watchThreadDetailSubscriptionConnection(existing);
+    if (!attachSessionDetailSubscription(existing)) {
+      watchSessionDetailSubscriptionConnection(existing);
     }
     let released = false;
     return () => {
@@ -550,26 +553,26 @@ export function retainThreadDetailSubscription(
       existing.refCount = Math.max(0, existing.refCount - 1);
       existing.lastAccessedAt = Date.now();
       if (existing.refCount === 0) {
-        reconcileThreadDetailSubscriptionEvictionState(existing);
-        evictIdleThreadDetailSubscriptionsToCapacity();
+        reconcileSessionDetailSubscriptionEvictionState(existing);
+        evictIdleSessionDetailSubscriptionsToCapacity();
       }
     };
   }
 
-  const entry: ThreadDetailSubscriptionEntry = {
+  const entry: SessionDetailSubscriptionEntry = {
     environmentId,
-    threadId,
+    sessionId,
     unsubscribe: NOOP,
     unsubscribeConnectionListener: null,
     refCount: 1,
     lastAccessedAt: Date.now(),
     evictionTimeoutId: null,
   };
-  threadDetailSubscriptions.set(key, entry);
-  if (!attachThreadDetailSubscription(entry)) {
-    watchThreadDetailSubscriptionConnection(entry);
+  sessionDetailSubscriptions.set(key, entry);
+  if (!attachSessionDetailSubscription(entry)) {
+    watchSessionDetailSubscriptionConnection(entry);
   }
-  evictIdleThreadDetailSubscriptionsToCapacity();
+  evictIdleSessionDetailSubscriptionsToCapacity();
 
   let released = false;
   return () => {
@@ -580,8 +583,8 @@ export function retainThreadDetailSubscription(
     entry.refCount = Math.max(0, entry.refCount - 1);
     entry.lastAccessedAt = Date.now();
     if (entry.refCount === 0) {
-      reconcileThreadDetailSubscriptionEvictionState(entry);
-      evictIdleThreadDetailSubscriptionsToCapacity();
+      reconcileSessionDetailSubscriptionEvictionState(entry);
+      evictIdleSessionDetailSubscriptionsToCapacity();
     }
   };
 }
@@ -876,9 +879,9 @@ function coalesceOrchestrationUiEvents(
   for (const event of events) {
     const previous = coalesced.at(-1);
     if (
-      previous?.type === "thread.message-sent" &&
-      event.type === "thread.message-sent" &&
-      previous.payload.threadId === event.payload.threadId &&
+      previous?.type === "session.message-sent" &&
+      event.type === "session.message-sent" &&
+      previous.payload.sessionId === event.payload.sessionId &&
       previous.payload.messageId === event.payload.messageId
     ) {
       coalesced[coalesced.length - 1] = {
@@ -914,44 +917,44 @@ function syncProjectUiFromStore() {
   );
 }
 
-function syncThreadUiFromStore() {
-  const threads = selectThreadsAcrossEnvironments(useStore.getState());
-  useUiStateStore.getState().syncThreads(
-    threads.map((thread) => ({
-      key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      seedVisitedAt: thread.updatedAt ?? thread.createdAt,
+function syncSessionUiFromStore() {
+  const sessions = selectSessionsAcrossEnvironments(useStore.getState());
+  useUiStateStore.getState().syncSessions(
+    sessions.map((session) => ({
+      key: scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+      seedVisitedAt: session.updatedAt ?? session.createdAt,
     })),
   );
-  markPromotedDraftThreadsByRef(
-    threads.map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
+  markPromotedDraftSessionsByRef(
+    sessions.map((session) => scopeSessionRef(session.environmentId, session.id)),
   );
 }
 
 function reconcileSnapshotDerivedState() {
   syncProjectUiFromStore();
-  syncThreadUiFromStore();
+  syncSessionUiFromStore();
 
-  const threads = selectThreadsAcrossEnvironments(useStore.getState());
-  const activeThreadKeys = collectActiveTerminalThreadIds({
-    snapshotThreads: threads.map((thread) => ({
-      key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+  const sessions = selectSessionsAcrossEnvironments(useStore.getState());
+  const activeSessionKeys = collectActiveTerminalSessionIds({
+    snapshotSessions: sessions.map((session) => ({
+      key: scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
       deletedAt: null,
-      archivedAt: thread.archivedAt,
+      archivedAt: session.archivedAt,
     })),
-    draftThreadKeys: useComposerDraftStore.getState().listDraftThreadKeys(),
+    draftSessionKeys: useComposerDraftStore.getState().listDraftSessionKeys(),
   });
-  useTerminalStateStore.getState().removeOrphanedTerminalStates(activeThreadKeys);
+  useTerminalStateStore.getState().removeOrphanedTerminalStates(activeSessionKeys);
 }
 
 export function shouldApplyTerminalEvent(input: {
-  serverThreadArchivedAt: string | null | undefined;
-  hasDraftThread: boolean;
+  serverSessionArchivedAt: string | null | undefined;
+  hasDraftSession: boolean;
 }): boolean {
-  if (input.serverThreadArchivedAt !== undefined) {
-    return input.serverThreadArchivedAt === null;
+  if (input.serverSessionArchivedAt !== undefined) {
+    return input.serverSessionArchivedAt === null;
   }
 
-  return input.hasDraftThread;
+  return input.hasDraftSession;
 }
 
 function applyRecoveredEventBatch(
@@ -989,42 +992,44 @@ function applyRecoveredEventBatch(
     );
   }
 
-  const needsThreadUiSync = events.some(
-    (event) => event.type === "thread.created" || event.type === "thread.deleted",
+  const needsSessionUiSync = events.some(
+    (event) => event.type === "session.created" || event.type === "session.deleted",
   );
-  if (needsThreadUiSync) {
-    const threads = selectThreadsAcrossEnvironments(useStore.getState());
-    useUiStateStore.getState().syncThreads(
-      threads.map((thread) => ({
-        key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        seedVisitedAt: thread.updatedAt ?? thread.createdAt,
+  if (needsSessionUiSync) {
+    const sessions = selectSessionsAcrossEnvironments(useStore.getState());
+    useUiStateStore.getState().syncSessions(
+      sessions.map((session) => ({
+        key: scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+        seedVisitedAt: session.updatedAt ?? session.createdAt,
       })),
     );
   }
 
   const draftStore = useComposerDraftStore.getState();
-  for (const threadId of batchEffects.promoteDraftThreadIds) {
-    markPromotedDraftThreadByRef(scopeThreadRef(environmentId, threadId));
+  for (const sessionId of batchEffects.promoteDraftSessionIds) {
+    markPromotedDraftSessionByRef(scopeSessionRef(environmentId, sessionId));
   }
-  for (const threadId of batchEffects.clearDeletedThreadIds) {
-    draftStore.clearDraftThread(scopeThreadRef(environmentId, threadId));
+  for (const sessionId of batchEffects.clearDeletedSessionIds) {
+    draftStore.clearDraftSession(scopeSessionRef(environmentId, sessionId));
     useUiStateStore
       .getState()
-      .clearThreadUi(scopedThreadKey(scopeThreadRef(environmentId, threadId)));
+      .clearSessionUi(scopedSessionKey(scopeSessionRef(environmentId, sessionId)));
   }
   for (const event of events) {
     if (event.type === "project.deleted") {
-      draftStore.clearProjectDraftThreadId(scopeProjectRef(environmentId, event.payload.projectId));
+      draftStore.clearProjectDraftSessionId(
+        scopeProjectRef(environmentId, event.payload.projectId),
+      );
     }
   }
-  for (const threadId of batchEffects.removeTerminalStateThreadIds) {
-    useTerminalStateStore.getState().removeTerminalState(scopeThreadRef(environmentId, threadId));
+  for (const sessionId of batchEffects.removeTerminalStateSessionIds) {
+    useTerminalStateStore.getState().removeTerminalState(scopeSessionRef(environmentId, sessionId));
   }
 
-  reconcileThreadDetailSubscriptionEvictionForEnvironment(environmentId);
+  reconcileSessionDetailSubscriptionEvictionForEnvironment(environmentId);
 }
 
-export function applyEnvironmentThreadDetailEvent(
+export function applyEnvironmentSessionDetailEvent(
   event: OrchestrationEvent,
   environmentId: EnvironmentId,
 ) {
@@ -1041,14 +1046,16 @@ function applyShellEvent(event: OrchestrationShellStreamEvent, environmentId: En
     return;
   }
 
-  const threadId =
-    event.kind === "thread-upserted"
-      ? event.thread.id
-      : event.kind === "thread-removed"
-        ? event.threadId
+  const sessionId =
+    event.kind === "session-upserted"
+      ? event.session.id
+      : event.kind === "session-removed"
+        ? event.sessionId
         : null;
-  const threadRef = threadId ? scopeThreadRef(environmentId, threadId) : null;
-  const previousThread = threadRef ? selectThreadByRef(useStore.getState(), threadRef) : undefined;
+  const sessionRef = sessionId ? scopeSessionRef(environmentId, sessionId) : null;
+  const previousSession = sessionRef
+    ? selectSessionByRef(useStore.getState(), sessionRef)
+    : undefined;
 
   useStore.getState().applyShellEvent(event, environmentId);
   markAppliedProjectionEvent(environmentId, event.sequence);
@@ -1058,25 +1065,25 @@ function applyShellEvent(event: OrchestrationShellStreamEvent, environmentId: En
     case "project-removed":
       syncProjectUiFromStore();
       return;
-    case "thread-upserted":
-      syncThreadUiFromStore();
-      if (!previousThread && threadRef) {
-        markPromotedDraftThreadByRef(threadRef);
+    case "session-upserted":
+      syncSessionUiFromStore();
+      if (!previousSession && sessionRef) {
+        markPromotedDraftSessionByRef(sessionRef);
       }
-      if (previousThread?.archivedAt === null && event.thread.archivedAt !== null && threadRef) {
-        useTerminalStateStore.getState().removeTerminalState(threadRef);
+      if (previousSession?.archivedAt === null && event.session.archivedAt !== null && sessionRef) {
+        useTerminalStateStore.getState().removeTerminalState(sessionRef);
       }
-      reconcileThreadDetailSubscriptionEvictionForThread(environmentId, event.thread.id);
-      evictIdleThreadDetailSubscriptionsToCapacity();
+      reconcileSessionDetailSubscriptionEvictionForSession(environmentId, event.session.id);
+      evictIdleSessionDetailSubscriptionsToCapacity();
       return;
-    case "thread-removed":
-      if (threadRef) {
-        disposeThreadDetailSubscriptionByKey(scopedThreadKey(threadRef));
-        useComposerDraftStore.getState().clearDraftThread(threadRef);
-        useUiStateStore.getState().clearThreadUi(scopedThreadKey(threadRef));
-        useTerminalStateStore.getState().removeTerminalState(threadRef);
+    case "session-removed":
+      if (sessionRef) {
+        disposeSessionDetailSubscriptionByKey(scopedSessionKey(sessionRef));
+        useComposerDraftStore.getState().clearDraftSession(sessionRef);
+        useUiStateStore.getState().clearSessionUi(scopedSessionKey(sessionRef));
+        useTerminalStateStore.getState().removeTerminalState(sessionRef);
       }
-      syncThreadUiFromStore();
+      syncSessionUiFromStore();
       return;
   }
 }
@@ -1096,27 +1103,27 @@ function createEnvironmentConnectionHandlers() {
 
       useStore.getState().syncServerShellSnapshot(snapshot, environmentId);
       markAppliedProjectionSnapshot(environmentId, snapshot);
-      reconcileThreadDetailSubscriptionsForEnvironment(
+      reconcileSessionDetailSubscriptionsForEnvironment(
         environmentId,
-        snapshot.threads.map((thread) => thread.id),
+        snapshot.sessions.map((session) => session.id),
       );
-      reconcileThreadDetailSubscriptionEvictionForEnvironment(environmentId);
+      reconcileSessionDetailSubscriptionEvictionForEnvironment(environmentId);
       reconcileSnapshotDerivedState();
     },
     applyTerminalEvent: (event: TerminalEvent, environmentId: EnvironmentId) => {
-      const threadRef = scopeThreadRef(environmentId, ThreadId.make(event.threadId));
-      const serverThread = selectThreadByRef(useStore.getState(), threadRef);
-      const hasDraftThread =
-        useComposerDraftStore.getState().getDraftThreadByRef(threadRef) !== null;
+      const sessionRef = scopeSessionRef(environmentId, SessionId.make(event.sessionId));
+      const serverSession = selectSessionByRef(useStore.getState(), sessionRef);
+      const hasDraftSession =
+        useComposerDraftStore.getState().getDraftSessionByRef(sessionRef) !== null;
       if (
         !shouldApplyTerminalEvent({
-          serverThreadArchivedAt: serverThread?.archivedAt,
-          hasDraftThread,
+          serverSessionArchivedAt: serverSession?.archivedAt,
+          hasDraftSession,
         })
       ) {
         return;
       }
-      useTerminalStateStore.getState().applyTerminalEvent(threadRef, event);
+      useTerminalStateStore.getState().applyTerminalEvent(sessionRef, event);
     },
   };
 }
@@ -1249,7 +1256,7 @@ function registerConnection(connection: EnvironmentConnection): EnvironmentConne
     throw new Error(`Environment ${connection.environmentId} already has an active connection.`);
   }
   environmentConnections.set(connection.environmentId, connection);
-  attachThreadDetailSubscriptionsForEnvironment(connection.environmentId);
+  attachSessionDetailSubscriptionsForEnvironment(connection.environmentId);
   emitEnvironmentConnectionRegistryChange();
   return connection;
 }
@@ -1263,7 +1270,7 @@ async function removeConnection(environmentId: EnvironmentId): Promise<boolean> 
   lastAppliedProjectionVersionByEnvironment.delete(environmentId);
   environmentConnections.delete(environmentId);
   emitEnvironmentConnectionRegistryChange();
-  detachThreadDetailSubscriptionsForEnvironment(environmentId);
+  detachSessionDetailSubscriptionsForEnvironment(environmentId);
   await connection.dispose();
   return true;
 }
@@ -1632,7 +1639,7 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
 
 export async function removeSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
   await disconnectSavedEnvironment(environmentId);
-  disposeThreadDetailSubscriptionsForEnvironment(environmentId);
+  disposeSessionDetailSubscriptionsForEnvironment(environmentId);
   useSavedEnvironmentRegistryStore.getState().remove(environmentId);
   useSavedEnvironmentRuntimeStore.getState().clear(environmentId);
   useStore.getState().removeEnvironmentState(environmentId);
@@ -1815,8 +1822,8 @@ export async function resetEnvironmentServiceForTests(): Promise<void> {
   lastBrowserResumeReconnectAt = Number.NEGATIVE_INFINITY;
   lastAppliedProjectionVersionByEnvironment.clear();
   pendingSavedEnvironmentConnections.clear();
-  for (const key of Array.from(threadDetailSubscriptions.keys())) {
-    disposeThreadDetailSubscriptionByKey(key);
+  for (const key of Array.from(sessionDetailSubscriptions.keys())) {
+    disposeSessionDetailSubscriptionByKey(key);
   }
   await Promise.all(
     [...environmentConnections.keys()].map((environmentId) => removeConnection(environmentId)),

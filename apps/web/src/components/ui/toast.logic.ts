@@ -1,11 +1,11 @@
-import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import type { ScopedSessionRef, SessionId } from "@t3tools/contracts";
 
 export function shouldHideCollapsedToastContent(
   visibleToastIndex: number,
   visibleToastCount: number,
 ): boolean {
   // Keep the front-most toast readable even if Base UI marks it as "behind"
-  // due to toasts hidden by thread filtering.
+  // due to toasts hidden by session filtering.
   if (visibleToastCount <= 1) return false;
   return visibleToastIndex > 0;
 }
@@ -89,27 +89,27 @@ function normalizeToastHeight(height: number | null | undefined): number {
   return typeof height === "number" && Number.isFinite(height) && height > 0 ? height : 0;
 }
 
-export function shouldRenderThreadScopedToast(
+export function shouldRenderSessionScopedToast(
   data:
     | {
-        threadRef?: ScopedThreadRef | null;
-        threadId?: ThreadId | null;
+        sessionRef?: ScopedSessionRef | null;
+        sessionId?: SessionId | null;
       }
     | undefined,
-  activeThreadRef: ScopedThreadRef | null,
+  activeSessionRef: ScopedSessionRef | null,
 ): boolean {
-  if (data?.threadRef) {
+  if (data?.sessionRef) {
     return (
-      activeThreadRef !== null &&
-      data.threadRef.environmentId === activeThreadRef.environmentId &&
-      data.threadRef.threadId === activeThreadRef.threadId
+      activeSessionRef !== null &&
+      data.sessionRef.environmentId === activeSessionRef.environmentId &&
+      data.sessionRef.sessionId === activeSessionRef.sessionId
     );
   }
 
-  const toastThreadId = data?.threadId;
-  if (!toastThreadId) {
+  const toastSessionId = data?.sessionId;
+  if (!toastSessionId) {
     return true;
   }
 
-  return activeThreadRef?.threadId === toastThreadId;
+  return activeSessionRef?.sessionId === toastSessionId;
 }

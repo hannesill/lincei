@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_MODEL, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { DEFAULT_MODEL, ProjectId, ProviderInstanceId, SessionId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -91,16 +91,16 @@ it.effect("launchStartupHeartbeat does not block the caller while counts are loa
             Deferred.await(releaseCounts).pipe(
               Effect.as({
                 projectCount: 2,
-                threadCount: 3,
+                sessionCount: 3,
               }),
             ),
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getProjectShellById: () => Effect.succeed(Option.none()),
-          getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
-          getThreadCheckpointContext: () => Effect.succeed(Option.none()),
-          getFullThreadDiffContext: () => Effect.succeed(Option.none()),
-          getThreadShellById: () => Effect.succeed(Option.none()),
-          getThreadDetailById: () => Effect.succeed(Option.none()),
+          getFirstActiveSessionIdByProjectId: () => Effect.succeed(Option.none()),
+          getSessionCheckpointContext: () => Effect.succeed(Option.none()),
+          getFullSessionDiffContext: () => Effect.succeed(Option.none()),
+          getSessionShellById: () => Effect.succeed(Option.none()),
+          getSessionDetailById: () => Effect.succeed(Option.none()),
         }),
         Effect.provideService(AnalyticsService, {
           record: () => Effect.void,
@@ -126,9 +126,9 @@ it.effect("resolveWelcomeBase derives cwd and project name from server config", 
   }),
 );
 
-it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and thread ids", () => {
+it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and session ids", () => {
   const bootstrapProjectId = ProjectId.make("project-startup-bootstrap");
-  const bootstrapThreadId = ThreadId.make("thread-startup-bootstrap");
+  const bootstrapSessionId = SessionId.make("session-startup-bootstrap");
 
   return Effect.gen(function* () {
     const dispatchCalls = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -158,11 +158,11 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and threa
             }),
           ),
         getProjectShellById: () => Effect.die("unused"),
-        getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.some(bootstrapThreadId)),
-        getThreadCheckpointContext: () => Effect.succeed(Option.none()),
-        getFullThreadDiffContext: () => Effect.succeed(Option.none()),
-        getThreadShellById: () => Effect.die("unused"),
-        getThreadDetailById: () => Effect.die("unused"),
+        getFirstActiveSessionIdByProjectId: () => Effect.succeed(Option.some(bootstrapSessionId)),
+        getSessionCheckpointContext: () => Effect.succeed(Option.none()),
+        getFullSessionDiffContext: () => Effect.succeed(Option.none()),
+        getSessionShellById: () => Effect.die("unused"),
+        getSessionDetailById: () => Effect.die("unused"),
       }),
       Effect.provideService(OrchestrationEngineService, {
         readEvents: () => Stream.empty,
@@ -177,13 +177,13 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and threa
 
     assert.deepStrictEqual(targets, {
       bootstrapProjectId,
-      bootstrapThreadId,
+      bootstrapSessionId,
     });
     assert.deepStrictEqual(yield* Ref.get(dispatchCalls), []);
   });
 });
 
-it.effect("resolveAutoBootstrapWelcomeTargets creates a project and thread when missing", () =>
+it.effect("resolveAutoBootstrapWelcomeTargets creates a project and session when missing", () =>
   Effect.gen(function* () {
     const dispatchCalls = yield* Ref.make<ReadonlyArray<string>>([]);
     const targets = yield* resolveAutoBootstrapWelcomeTargets.pipe(
@@ -200,11 +200,11 @@ it.effect("resolveAutoBootstrapWelcomeTargets creates a project and thread when 
         getCounts: () => Effect.die("unused"),
         getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
         getProjectShellById: () => Effect.die("unused"),
-        getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
-        getThreadCheckpointContext: () => Effect.succeed(Option.none()),
-        getFullThreadDiffContext: () => Effect.succeed(Option.none()),
-        getThreadShellById: () => Effect.die("unused"),
-        getThreadDetailById: () => Effect.die("unused"),
+        getFirstActiveSessionIdByProjectId: () => Effect.succeed(Option.none()),
+        getSessionCheckpointContext: () => Effect.succeed(Option.none()),
+        getFullSessionDiffContext: () => Effect.succeed(Option.none()),
+        getSessionShellById: () => Effect.die("unused"),
+        getSessionDetailById: () => Effect.die("unused"),
       }),
       Effect.provideService(OrchestrationEngineService, {
         readEvents: () => Stream.empty,
@@ -218,7 +218,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets creates a project and thread when 
     );
 
     assert.equal(typeof targets.bootstrapProjectId, "string");
-    assert.equal(typeof targets.bootstrapThreadId, "string");
-    assert.deepStrictEqual(yield* Ref.get(dispatchCalls), ["project.create", "thread.create"]);
+    assert.equal(typeof targets.bootstrapSessionId, "string");
+    assert.deepStrictEqual(yield* Ref.get(dispatchCalls), ["project.create", "session.create"]);
   }),
 );

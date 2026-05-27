@@ -4,10 +4,10 @@ import type {
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
   RepositoryIdentity,
-  OrchestrationSessionStatus,
-  OrchestrationThreadActivity,
+  OrchestrationProviderRuntimeStatus,
+  OrchestrationSessionActivity,
   ProjectScript as ContractProjectScript,
-  ThreadId,
+  SessionId,
   ProjectId,
   TurnId,
   MessageId,
@@ -27,7 +27,7 @@ export const DEFAULT_THREAD_TERMINAL_ID = "default";
 export const MAX_TERMINALS_PER_GROUP = 4;
 export type ProjectScript = ContractProjectScript;
 
-export interface ThreadTerminalGroup {
+export interface SessionTerminalGroup {
   id: string;
   terminalIds: string[];
 }
@@ -59,7 +59,7 @@ export interface ProposedPlan {
   turnId: TurnId | null;
   planMarkdown: string;
   implementedAt: string | null;
-  implementationThreadId: ThreadId | null;
+  implementationSessionId: SessionId | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,16 +93,16 @@ export interface Project {
   scripts: ProjectScript[];
 }
 
-export interface Thread {
-  id: ThreadId;
+export interface Session {
+  id: SessionId;
   environmentId: EnvironmentId;
-  codexThreadId: string | null;
+  codexSessionId: string | null;
   projectId: ProjectId;
   title: string;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
-  session: ThreadSession | null;
+  session: ProviderRuntime | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
   error: string | null;
@@ -114,13 +114,13 @@ export interface Thread {
   branch: string | null;
   worktreePath: string | null;
   turnDiffSummaries: TurnDiffSummary[];
-  activities: OrchestrationThreadActivity[];
+  activities: OrchestrationSessionActivity[];
 }
 
-export interface ThreadShell {
-  id: ThreadId;
+export interface SessionShell {
+  id: SessionId;
   environmentId: EnvironmentId;
-  codexThreadId: string | null;
+  codexSessionId: string | null;
   projectId: ProjectId;
   title: string;
   modelSelection: ModelSelection;
@@ -134,18 +134,18 @@ export interface ThreadShell {
   worktreePath: string | null;
 }
 
-export interface ThreadTurnState {
+export interface SessionTurnState {
   latestTurn: OrchestrationLatestTurn | null;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
 }
 
-export interface SidebarThreadSummary {
-  id: ThreadId;
+export interface SidebarSessionSummary {
+  id: SessionId;
   environmentId: EnvironmentId;
   projectId: ProjectId;
   title: string;
   interactionMode: ProviderInteractionMode;
-  session: ThreadSession | null;
+  session: ProviderRuntime | null;
   createdAt: string;
   archivedAt: string | null;
   updatedAt?: string | undefined;
@@ -158,7 +158,7 @@ export interface SidebarThreadSummary {
   hasActionableProposedPlan: boolean;
 }
 
-export interface ThreadSession {
+export interface ProviderRuntime {
   provider: ProviderDriverKind;
   providerInstanceId?: ProviderInstanceId | undefined;
   status: SessionPhase | "error" | "closed";
@@ -166,5 +166,5 @@ export interface ThreadSession {
   createdAt: string;
   updatedAt: string;
   lastError?: string;
-  orchestrationStatus: OrchestrationSessionStatus;
+  orchestrationStatus: OrchestrationProviderRuntimeStatus;
 }

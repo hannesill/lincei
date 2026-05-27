@@ -6,7 +6,7 @@ import {
   type ResolvedKeybindingsConfig,
   THREAD_JUMP_KEYBINDING_COMMANDS,
   type ModelPickerJumpKeybindingCommand,
-  type ThreadJumpKeybindingCommand,
+  type SessionJumpKeybindingCommand,
 } from "@t3tools/contracts";
 import { isMacPlatform } from "./lib/utils";
 
@@ -257,32 +257,32 @@ export function shortcutLabelForCommand(
   return shortcut ? formatShortcutLabel(shortcut, platform) : null;
 }
 
-export function threadJumpCommandForIndex(index: number): ThreadJumpKeybindingCommand | null {
+export function sessionJumpCommandForIndex(index: number): SessionJumpKeybindingCommand | null {
   return THREAD_JUMP_KEYBINDING_COMMANDS[index] ?? null;
 }
 
-export function threadJumpIndexFromCommand(command: string): number | null {
-  const index = THREAD_JUMP_KEYBINDING_COMMANDS.indexOf(command as ThreadJumpKeybindingCommand);
+export function sessionJumpIndexFromCommand(command: string): number | null {
+  const index = THREAD_JUMP_KEYBINDING_COMMANDS.indexOf(command as SessionJumpKeybindingCommand);
   return index === -1 ? null : index;
 }
 
-export function threadTraversalDirectionFromCommand(
+export function sessionTraversalDirectionFromCommand(
   command: string | null,
 ): "previous" | "next" | null {
-  if (command === "thread.previous") return "previous";
-  if (command === "thread.next") return "next";
+  if (command === "session.previous") return "previous";
+  if (command === "session.next") return "next";
   return null;
 }
 
-export function shouldShowThreadJumpHints(
+export function shouldShowSessionJumpHints(
   event: ShortcutEventLike,
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): boolean {
-  return shouldShowThreadJumpHintsForModifiers(event, keybindings, options);
+  return shouldShowSessionJumpHintsForModifiers(event, keybindings, options);
 }
 
-export function shouldShowThreadJumpHintsForModifiers(
+export function shouldShowSessionJumpHintsForModifiers(
   modifiers: ShortcutModifierStateLike,
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,

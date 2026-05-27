@@ -1,9 +1,9 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedSessionRef } from "@t3tools/contracts";
 import { assert, describe, it } from "vitest";
 import {
   buildVisibleToastLayout,
   shouldHideCollapsedToastContent,
-  shouldRenderThreadScopedToast,
+  shouldRenderSessionScopedToast,
 } from "./toast.logic";
 
 describe("shouldHideCollapsedToastContent", () => {
@@ -123,19 +123,19 @@ describe("buildVisibleToastLayout", () => {
   });
 });
 
-describe("shouldRenderThreadScopedToast", () => {
-  const activeThreadRef = {
+describe("shouldRenderSessionScopedToast", () => {
+  const activeSessionRef = {
     environmentId: "environment-a",
-    threadId: "thread-1",
-  } as ScopedThreadRef;
+    sessionId: "session-1",
+  } as ScopedSessionRef;
 
-  it("renders a toast scoped to the active thread ref", () => {
+  it("renders a toast scoped to the active session ref", () => {
     assert.equal(
-      shouldRenderThreadScopedToast(
+      shouldRenderSessionScopedToast(
         {
-          threadRef: activeThreadRef,
+          sessionRef: activeSessionRef,
         },
-        activeThreadRef,
+        activeSessionRef,
       ),
       true,
     );
@@ -143,26 +143,26 @@ describe("shouldRenderThreadScopedToast", () => {
 
   it("hides a scoped toast when the environment differs", () => {
     assert.equal(
-      shouldRenderThreadScopedToast(
+      shouldRenderSessionScopedToast(
         {
-          threadRef: {
+          sessionRef: {
             environmentId: "environment-b",
-            threadId: "thread-1",
-          } as ScopedThreadRef,
+            sessionId: "session-1",
+          } as ScopedSessionRef,
         },
-        activeThreadRef,
+        activeSessionRef,
       ),
       false,
     );
   });
 
-  it("keeps legacy thread-id scoped toasts working", () => {
+  it("keeps legacy session-id scoped toasts working", () => {
     assert.equal(
-      shouldRenderThreadScopedToast(
+      shouldRenderSessionScopedToast(
         {
-          threadId: "thread-1" as never,
+          sessionId: "session-1" as never,
         },
-        activeThreadRef,
+        activeSessionRef,
       ),
       true,
     );

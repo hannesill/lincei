@@ -1,20 +1,20 @@
-import type { OrchestrationEvent, ThreadId } from "@t3tools/contracts";
+import type { OrchestrationEvent, SessionId } from "@t3tools/contracts";
 
 export interface OrchestrationBatchEffects {
-  promoteDraftThreadIds: ThreadId[];
-  clearDeletedThreadIds: ThreadId[];
-  removeTerminalStateThreadIds: ThreadId[];
+  promoteDraftSessionIds: SessionId[];
+  clearDeletedSessionIds: SessionId[];
+  removeTerminalStateSessionIds: SessionId[];
   needsProviderInvalidation: boolean;
 }
 
 export function deriveOrchestrationBatchEffects(
   events: readonly OrchestrationEvent[],
 ): OrchestrationBatchEffects {
-  const threadLifecycleEffects = new Map<
-    ThreadId,
+  const sessionLifecycleEffects = new Map<
+    SessionId,
     {
       clearPromotedDraft: boolean;
-      clearDeletedThread: boolean;
+      clearDeletedSession: boolean;
       removeTerminalState: boolean;
     }
   >();
@@ -22,43 +22,43 @@ export function deriveOrchestrationBatchEffects(
 
   for (const event of events) {
     switch (event.type) {
-      case "thread.turn-diff-completed":
-      case "thread.reverted": {
+      case "session.turn-diff-completed":
+      case "session.reverted": {
         needsProviderInvalidation = true;
         break;
       }
 
-      case "thread.created": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "session.created": {
+        sessionLifecycleEffects.set(event.payload.sessionId, {
           clearPromotedDraft: true,
-          clearDeletedThread: false,
+          clearDeletedSession: false,
           removeTerminalState: false,
         });
         break;
       }
 
-      case "thread.deleted": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "session.deleted": {
+        sessionLifecycleEffects.set(event.payload.sessionId, {
           clearPromotedDraft: false,
-          clearDeletedThread: true,
+          clearDeletedSession: true,
           removeTerminalState: true,
         });
         break;
       }
 
-      case "thread.archived": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "session.archived": {
+        sessionLifecycleEffects.set(event.payload.sessionId, {
           clearPromotedDraft: false,
-          clearDeletedThread: false,
+          clearDeletedSession: false,
           removeTerminalState: true,
         });
         break;
       }
 
-      case "thread.unarchived": {
-        threadLifecycleEffects.set(event.payload.threadId, {
+      case "session.unarchived": {
+        sessionLifecycleEffects.set(event.payload.sessionId, {
           clearPromotedDraft: false,
-          clearDeletedThread: false,
+          clearDeletedSession: false,
           removeTerminalState: false,
         });
         break;
@@ -70,25 +70,25 @@ export function deriveOrchestrationBatchEffects(
     }
   }
 
-  const promoteDraftThreadIds: ThreadId[] = [];
-  const clearDeletedThreadIds: ThreadId[] = [];
-  const removeTerminalStateThreadIds: ThreadId[] = [];
-  for (const [threadId, effect] of threadLifecycleEffects) {
+  const promoteDraftSessionIds: SessionId[] = [];
+  const clearDeletedSessionIds: SessionId[] = [];
+  const removeTerminalStateSessionIds: SessionId[] = [];
+  for (const [sessionId, effect] of sessionLifecycleEffects) {
     if (effect.clearPromotedDraft) {
-      promoteDraftThreadIds.push(threadId);
+      promoteDraftSessionIds.push(sessionId);
     }
-    if (effect.clearDeletedThread) {
-      clearDeletedThreadIds.push(threadId);
+    if (effect.clearDeletedSession) {
+      clearDeletedSessionIds.push(sessionId);
     }
     if (effect.removeTerminalState) {
-      removeTerminalStateThreadIds.push(threadId);
+      removeTerminalStateSessionIds.push(sessionId);
     }
   }
 
   return {
-    promoteDraftThreadIds,
-    clearDeletedThreadIds,
-    removeTerminalStateThreadIds,
+    promoteDraftSessionIds,
+    clearDeletedSessionIds,
+    removeTerminalStateSessionIds,
     needsProviderInvalidation,
   };
 }

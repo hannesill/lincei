@@ -1,9 +1,9 @@
 import { type KeybindingCommand, type FilesystemBrowseEntry } from "@t3tools/contracts";
-import type { SidebarThreadSortOrder } from "@t3tools/contracts/settings";
+import type { SidebarSessionSortOrder } from "@t3tools/contracts/settings";
 import { type ReactNode } from "react";
-import { sortThreads } from "../lib/threadSort";
+import { sortSessions } from "../lib/sessionSort";
 import { formatRelativeTimeLabel } from "../timestampFormat";
-import { type Project, type SidebarThreadSummary, type Thread } from "../types";
+import { type Project, type SidebarSessionSummary, type Session } from "../types";
 
 export const RECENT_THREAD_LIMIT = 12;
 export const ITEM_ICON_CLASS = "size-4 text-muted-foreground/80";
@@ -107,60 +107,60 @@ export function buildProjectActionItems(input: {
   }));
 }
 
-export type BuildThreadActionItemsThread = Pick<
-  SidebarThreadSummary,
+export type BuildSessionActionItemsSession = Pick<
+  SidebarSessionSummary,
   "archivedAt" | "branch" | "createdAt" | "environmentId" | "id" | "projectId" | "title"
 > & {
   updatedAt?: string | undefined;
   latestUserMessageAt?: string | null;
 };
 
-export function buildThreadActionItems<TThread extends BuildThreadActionItemsThread>(input: {
-  threads: ReadonlyArray<TThread>;
-  activeThreadId?: Thread["id"];
+export function buildSessionActionItems<TSession extends BuildSessionActionItemsSession>(input: {
+  sessions: ReadonlyArray<TSession>;
+  activeSessionId?: Session["id"];
   projectTitleById: ReadonlyMap<Project["id"], string>;
-  sortOrder: SidebarThreadSortOrder;
+  sortOrder: SidebarSessionSortOrder;
   icon: ReactNode;
-  /** Optional content rendered inline before the title text per-thread. */
-  renderLeadingContent?: (thread: TThread) => ReactNode;
-  /** Optional content rendered inline after the title text per-thread. */
-  renderTrailingContent?: (thread: TThread) => ReactNode;
-  runThread: (thread: Pick<SidebarThreadSummary, "environmentId" | "id">) => Promise<void>;
+  /** Optional content rendered inline before the title text per-session. */
+  renderLeadingContent?: (session: TSession) => ReactNode;
+  /** Optional content rendered inline after the title text per-session. */
+  renderTrailingContent?: (session: TSession) => ReactNode;
+  runSession: (session: Pick<SidebarSessionSummary, "environmentId" | "id">) => Promise<void>;
   limit?: number;
 }): CommandPaletteActionItem[] {
-  const sortedThreads = sortThreads(
-    input.threads.filter((thread) => thread.archivedAt === null),
+  const sortedSessions = sortSessions(
+    input.sessions.filter((session) => session.archivedAt === null),
     input.sortOrder,
   );
-  const visibleThreads =
-    input.limit === undefined ? sortedThreads : sortedThreads.slice(0, input.limit);
+  const visibleSessions =
+    input.limit === undefined ? sortedSessions : sortedSessions.slice(0, input.limit);
 
-  return visibleThreads.map((thread) => {
-    const projectTitle = input.projectTitleById.get(thread.projectId);
+  return visibleSessions.map((session) => {
+    const projectTitle = input.projectTitleById.get(session.projectId);
     const descriptionParts: string[] = [];
 
     if (projectTitle) {
       descriptionParts.push(projectTitle);
     }
-    if (thread.branch) {
-      descriptionParts.push(`#${thread.branch}`);
+    if (session.branch) {
+      descriptionParts.push(`#${session.branch}`);
     }
-    if (thread.id === input.activeThreadId) {
-      descriptionParts.push("Current thread");
+    if (session.id === input.activeSessionId) {
+      descriptionParts.push("Current session");
     }
 
-    const leadingContent = input.renderLeadingContent?.(thread);
-    const trailingContent = input.renderTrailingContent?.(thread);
+    const leadingContent = input.renderLeadingContent?.(session);
+    const trailingContent = input.renderTrailingContent?.(session);
 
     return Object.assign(
       {
         kind: "action" as const,
-        value: `thread:${thread.id}`,
-        searchTerms: [thread.title, projectTitle ?? ``, thread.branch ?? ``],
-        title: thread.title,
+        value: `session:${session.id}`,
+        searchTerms: [session.title, projectTitle ?? ``, session.branch ?? ``],
+        title: session.title,
         description: descriptionParts.join(` · `),
         timestamp: formatRelativeTimeLabel(
-          thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
+          session.latestUserMessageAt ?? session.updatedAt ?? session.createdAt,
         ),
         icon: input.icon,
       },
@@ -168,7 +168,7 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
       trailingContent ? { titleTrailingContent: trailingContent } : {},
       {
         run: async () => {
-          await input.runThread(thread);
+          await input.runSession(session);
         },
       },
     );
@@ -213,7 +213,7 @@ export function filterCommandPaletteGroups(input: {
   query: string;
   isInSubmenu: boolean;
   projectSearchItems: ReadonlyArray<CommandPaletteActionItem>;
-  threadSearchItems: ReadonlyArray<CommandPaletteActionItem>;
+  sessionSearchItems: ReadonlyArray<CommandPaletteActionItem>;
 }): CommandPaletteGroup[] {
   const isActionsFilter = input.query.startsWith(">");
   const searchQuery = isActionsFilter ? input.query.slice(1) : input.query;
@@ -230,7 +230,7 @@ export function filterCommandPaletteGroups(input: {
   if (isActionsFilter) {
     baseGroups = baseGroups.filter((group) => group.value === "actions");
   } else if (!input.isInSubmenu) {
-    baseGroups = baseGroups.filter((group) => group.value !== "recent-threads");
+    baseGroups = baseGroups.filter((group) => group.value !== "recent-sessions");
   }
 
   const searchableGroups = [...baseGroups];
@@ -242,11 +242,11 @@ export function filterCommandPaletteGroups(input: {
         items: input.projectSearchItems,
       });
     }
-    if (input.threadSearchItems.length > 0) {
+    if (input.sessionSearchItems.length > 0) {
       searchableGroups.push({
-        value: "threads-search",
-        label: "Threads",
-        items: input.threadSearchItems,
+        value: "sessions-search",
+        label: "Sessions",
+        items: input.sessionSearchItems,
       });
     }
   }
@@ -334,17 +334,17 @@ export function getCommandPaletteMode(input: {
 
 export function buildRootGroups(input: {
   actionItems: ReadonlyArray<CommandPaletteActionItem | CommandPaletteSubmenuItem>;
-  recentThreadItems: ReadonlyArray<CommandPaletteActionItem>;
+  recentSessionItems: ReadonlyArray<CommandPaletteActionItem>;
 }): CommandPaletteGroup[] {
   const groups: CommandPaletteGroup[] = [];
   if (input.actionItems.length > 0) {
     groups.push({ value: "actions", label: "Actions", items: input.actionItems });
   }
-  if (input.recentThreadItems.length > 0) {
+  if (input.recentSessionItems.length > 0) {
     groups.push({
-      value: "recent-threads",
-      label: "Recent Threads",
-      items: input.recentThreadItems,
+      value: "recent-sessions",
+      label: "Recent Sessions",
+      items: input.recentSessionItems,
     });
   }
   return groups;
@@ -353,7 +353,7 @@ export function buildRootGroups(input: {
 export function getCommandPaletteInputPlaceholder(mode: CommandPaletteMode): string {
   switch (mode) {
     case "root":
-      return "Search commands, studies, and threads...";
+      return "Search commands, studies, and sessions...";
     case "root-browse":
       return "Enter study path (e.g. ~/Studies/heart-failure)";
     case "submenu":

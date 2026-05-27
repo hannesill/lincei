@@ -1,4 +1,4 @@
-import { type ScopedThreadRef } from "@t3tools/contracts";
+import { type ScopedSessionRef } from "@t3tools/contracts";
 import type {
   GitActionProgressEvent,
   GitRunStackedActionResult,
@@ -39,9 +39,9 @@ import {
   type DefaultBranchConfirmableAction,
   requiresDefaultBranchConfirmation,
   resolveDefaultBranchActionDialogCopy,
-  resolveLiveThreadBranchUpdate,
+  resolveLiveSessionBranchUpdate,
   resolveQuickAction,
-  resolveThreadBranchUpdate,
+  resolveSessionBranchUpdate,
 } from "./GitActionsControl.logic";
 import { AnimatedHeight } from "./AnimatedHeight";
 import { Button } from "~/components/ui/button";
@@ -61,7 +61,7 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Textarea } from "~/components/ui/textarea";
-import { stackedThreadToast, toastManager, type ThreadToastData } from "~/components/ui/toast";
+import { stackedSessionToast, toastManager, type SessionToastData } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { openInPreferredEditor } from "~/editorPreferences";
 import {
@@ -80,11 +80,11 @@ import { readEnvironmentApi } from "~/environmentApi";
 import { readLocalApi } from "~/localApi";
 import { getSourceControlPresentation } from "~/sourceControlPresentation";
 import { useStore } from "~/store";
-import { createThreadSelectorByRef } from "~/storeSelectors";
+import { createSessionSelectorByRef } from "~/storeSelectors";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
-  activeThreadRef: ScopedThreadRef | null;
+  activeSessionRef: ScopedSessionRef | null;
   draftId?: DraftId;
 }
 
@@ -106,7 +106,7 @@ type GitActionToastId = ReturnType<typeof toastManager.add>;
 
 interface ActiveGitActionProgress {
   toastId: GitActionToastId;
-  toastData: ThreadToastData | undefined;
+  toastData: SessionToastData | undefined;
   actionId: string;
   title: string;
   phaseStartedAtMs: number | null;
@@ -341,7 +341,7 @@ function GitQuickActionIcon({
 interface PublishRepositoryDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly environmentId: ScopedThreadRef["environmentId"] | null;
+  readonly environmentId: ScopedSessionRef["environmentId"] | null;
   readonly gitCwd: string;
 }
 
@@ -947,28 +947,28 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
 
 export default function GitActionsControl({
   gitCwd,
-  activeThreadRef,
+  activeSessionRef,
   draftId,
 }: GitActionsControlProps) {
-  const activeEnvironmentId = activeThreadRef?.environmentId ?? null;
-  const threadToastData = useMemo(
-    () => (activeThreadRef ? { threadRef: activeThreadRef } : undefined),
-    [activeThreadRef],
+  const activeEnvironmentId = activeSessionRef?.environmentId ?? null;
+  const sessionToastData = useMemo(
+    () => (activeSessionRef ? { sessionRef: activeSessionRef } : undefined),
+    [activeSessionRef],
   );
-  const activeServerThreadSelector = useMemo(
-    () => createThreadSelectorByRef(activeThreadRef),
-    [activeThreadRef],
+  const activeServerSessionSelector = useMemo(
+    () => createSessionSelectorByRef(activeSessionRef),
+    [activeSessionRef],
   );
-  const activeServerThread = useStore(activeServerThreadSelector);
-  const activeDraftThread = useComposerDraftStore((store) =>
+  const activeServerSession = useStore(activeServerSessionSelector);
+  const activeDraftSession = useComposerDraftStore((store) =>
     draftId
       ? store.getDraftSession(draftId)
-      : activeThreadRef
-        ? store.getDraftThreadByRef(activeThreadRef)
+      : activeSessionRef
+        ? store.getDraftSessionByRef(activeSessionRef)
         : null,
   );
-  const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
-  const setThreadBranch = useStore((store) => store.setThreadBranch);
+  const setDraftSessionContext = useComposerDraftStore((store) => store.setDraftSessionContext);
+  const setSessionBranch = useStore((store) => store.setSessionBranch);
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [dialogCommitMessage, setDialogCommitMessage] = useState("");
@@ -994,64 +994,64 @@ export default function GitActionsControl({
     });
   }, []);
 
-  const persistThreadBranchSync = useCallback(
+  const persistSessionBranchSync = useCallback(
     (branch: string | null) => {
-      if (!activeThreadRef) {
+      if (!activeSessionRef) {
         return;
       }
 
-      if (activeServerThread) {
-        if (activeServerThread.branch === branch) {
+      if (activeServerSession) {
+        if (activeServerSession.branch === branch) {
           return;
         }
 
-        const worktreePath = activeServerThread.worktreePath;
-        const api = readEnvironmentApi(activeThreadRef.environmentId);
+        const worktreePath = activeServerSession.worktreePath;
+        const api = readEnvironmentApi(activeSessionRef.environmentId);
         if (api) {
           void api.orchestration
             .dispatchCommand({
-              type: "thread.meta.update",
+              type: "session.meta.update",
               commandId: newCommandId(),
-              threadId: activeThreadRef.threadId,
+              sessionId: activeSessionRef.sessionId,
               branch,
               worktreePath,
             })
             .catch(() => undefined);
         }
 
-        setThreadBranch(activeThreadRef, branch, worktreePath);
+        setSessionBranch(activeSessionRef, branch, worktreePath);
         return;
       }
 
-      if (!activeDraftThread || activeDraftThread.branch === branch) {
+      if (!activeDraftSession || activeDraftSession.branch === branch) {
         return;
       }
 
-      setDraftThreadContext(draftId ?? activeThreadRef, {
+      setDraftSessionContext(draftId ?? activeSessionRef, {
         branch,
-        worktreePath: activeDraftThread.worktreePath,
+        worktreePath: activeDraftSession.worktreePath,
       });
     },
     [
-      activeDraftThread,
-      activeServerThread,
-      activeThreadRef,
+      activeDraftSession,
+      activeServerSession,
+      activeSessionRef,
       draftId,
-      setDraftThreadContext,
-      setThreadBranch,
+      setDraftSessionContext,
+      setSessionBranch,
     ],
   );
 
-  const syncThreadBranchAfterGitAction = useCallback(
+  const syncSessionBranchAfterGitAction = useCallback(
     (result: GitRunStackedActionResult) => {
-      const branchUpdate = resolveThreadBranchUpdate(result);
+      const branchUpdate = resolveSessionBranchUpdate(result);
       if (!branchUpdate) {
         return;
       }
 
-      persistThreadBranchSync(branchUpdate.branch);
+      persistSessionBranchSync(branchUpdate.branch);
     },
-    [persistThreadBranchSync],
+    [persistSessionBranchSync],
   );
 
   const { data: gitStatus = null, error: gitStatusError } = useGitStatus({
@@ -1101,31 +1101,31 @@ export default function GitActionsControl({
     }) > 0;
   const isGitActionRunning = isRunStackedActionRunning || isPullRunning || isPublishRunning;
   const isSelectingWorktreeBase =
-    !activeServerThread &&
-    activeDraftThread?.envMode === "worktree" &&
-    activeDraftThread.worktreePath === null;
+    !activeServerSession &&
+    activeDraftSession?.envMode === "worktree" &&
+    activeDraftSession.worktreePath === null;
 
   useEffect(() => {
     if (isGitActionRunning || isSelectingWorktreeBase) {
       return;
     }
 
-    const branchUpdate = resolveLiveThreadBranchUpdate({
-      threadBranch: activeServerThread?.branch ?? activeDraftThread?.branch ?? null,
+    const branchUpdate = resolveLiveSessionBranchUpdate({
+      sessionBranch: activeServerSession?.branch ?? activeDraftSession?.branch ?? null,
       gitStatus: gitStatusForActions,
     });
     if (!branchUpdate) {
       return;
     }
 
-    persistThreadBranchSync(branchUpdate.branch);
+    persistSessionBranchSync(branchUpdate.branch);
   }, [
-    activeServerThread?.branch,
-    activeDraftThread?.branch,
+    activeServerSession?.branch,
+    activeDraftSession?.branch,
     gitStatusForActions,
     isGitActionRunning,
     isSelectingWorktreeBase,
-    persistThreadBranchSync,
+    persistSessionBranchSync,
   ]);
 
   const isDefaultRef = useMemo(() => {
@@ -1207,7 +1207,7 @@ export default function GitActionsControl({
       toastManager.add({
         type: "error",
         title: "Link opening is unavailable.",
-        data: threadToastData,
+        data: sessionToastData,
       });
       return;
     }
@@ -1216,21 +1216,21 @@ export default function GitActionsControl({
       toastManager.add({
         type: "error",
         title: "No open pull request found.",
-        data: threadToastData,
+        data: sessionToastData,
       });
       return;
     }
     void api.shell.openExternal(prUrl).catch((err: unknown) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Unable to open pull request link",
           description: err instanceof Error ? err.message : "An error occurred.",
-          ...(threadToastData !== undefined ? { data: threadToastData } : {}),
+          ...(sessionToastData !== undefined ? { data: sessionToastData } : {}),
         }),
       );
     });
-  }, [gitStatusForActions, threadToastData]);
+  }, [gitStatusForActions, sessionToastData]);
 
   runGitActionWithToast = useEffectEvent(
     async ({
@@ -1286,7 +1286,7 @@ export default function GitActionsControl({
           action === "create_pr" &&
           (!actionStatus?.hasUpstream || (actionStatus?.aheadCount ?? 0) > 0),
       });
-      const scopedToastData = threadToastData ? { ...threadToastData } : undefined;
+      const scopedToastData = sessionToastData ? { ...sessionToastData } : undefined;
       const actionId = randomUUID();
       const resolvedProgressToastId =
         progressToastId ??
@@ -1388,7 +1388,7 @@ export default function GitActionsControl({
       try {
         const result = await promise;
         activeGitActionProgressRef.current = null;
-        syncThreadBranchAfterGitAction(result);
+        syncSessionBranchAfterGitAction(result);
         const closeResultToast = () => {
           toastManager.close(resolvedProgressToastId);
         };
@@ -1428,7 +1428,7 @@ export default function GitActionsControl({
         if (toastActionProps) {
           toastManager.update(
             resolvedProgressToastId,
-            stackedThreadToast({
+            stackedSessionToast({
               type: "success",
               title: result.toast.title,
               description: result.toast.description,
@@ -1450,7 +1450,7 @@ export default function GitActionsControl({
         activeGitActionProgressRef.current = null;
         toastManager.update(
           resolvedProgressToastId,
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Action failed",
             description: err instanceof Error ? err.message : "An error occurred.",
@@ -1519,21 +1519,21 @@ export default function GitActionsControl({
       const promise = pullMutation.mutateAsync();
       void toastManager.promise<
         Awaited<ReturnType<typeof pullMutation.mutateAsync>>,
-        ThreadToastData
+        SessionToastData
       >(promise, {
-        loading: { title: "Pulling...", data: threadToastData },
+        loading: { title: "Pulling...", data: sessionToastData },
         success: (result) => ({
           title: result.status === "pulled" ? "Pulled" : "Already up to date",
           description:
             result.status === "pulled"
               ? `Updated ${result.refName} from ${result.upstreamRef ?? "upstream"}`
               : `${result.refName} is already synchronized.`,
-          data: threadToastData,
+          data: sessionToastData,
         }),
         error: (err) => ({
           title: "Pull failed",
           description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
+          data: sessionToastData,
         }),
       });
       void promise.catch(() => undefined);
@@ -1544,7 +1544,7 @@ export default function GitActionsControl({
         type: "info",
         title: quickAction.label,
         description: quickAction.hint,
-        data: threadToastData,
+        data: sessionToastData,
       });
       return;
     }
@@ -1593,23 +1593,23 @@ export default function GitActionsControl({
         toastManager.add({
           type: "error",
           title: "Editor opening is unavailable.",
-          data: threadToastData,
+          data: sessionToastData,
         });
         return;
       }
       const target = resolvePathLinkTarget(filePath, gitCwd);
       void openInPreferredEditor(api, target).catch((error) => {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Unable to open file",
             description: error instanceof Error ? error.message : "An error occurred.",
-            ...(threadToastData !== undefined ? { data: threadToastData } : {}),
+            ...(sessionToastData !== undefined ? { data: sessionToastData } : {}),
           }),
         );
       });
     },
-    [gitCwd, threadToastData],
+    [gitCwd, sessionToastData],
   );
 
   const canPublishRepository = isRepo && gitStatusForActions !== null && !hasPrimaryRemote;

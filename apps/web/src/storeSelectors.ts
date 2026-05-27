@@ -1,7 +1,7 @@
-import { type ScopedProjectRef, type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
+import { type ScopedProjectRef, type ScopedSessionRef, type SessionId } from "@t3tools/contracts";
 import { selectEnvironmentState, type AppState, type EnvironmentState } from "./store";
-import { type Project, type Thread } from "./types";
-import { getThreadFromEnvironmentState } from "./threadDerivation";
+import { type Project, type Session } from "./types";
+import { getSessionFromEnvironmentState } from "./sessionDerivation";
 
 export function createProjectSelectorByRef(
   ref: ScopedProjectRef | null | undefined,
@@ -10,12 +10,12 @@ export function createProjectSelectorByRef(
     ref ? selectEnvironmentState(state, ref.environmentId).projectById[ref.projectId] : undefined;
 }
 
-function createScopedThreadSelector(
-  resolveRef: (state: AppState) => ScopedThreadRef | null | undefined,
-): (state: AppState) => Thread | undefined {
+function createScopedSessionSelector(
+  resolveRef: (state: AppState) => ScopedSessionRef | null | undefined,
+): (state: AppState) => Session | undefined {
   let previousEnvironmentState: EnvironmentState | undefined;
-  let previousThreadId: ThreadId | undefined;
-  let previousThread: Thread | undefined;
+  let previousSessionId: SessionId | undefined;
+  let previousSession: Session | undefined;
 
   return (state) => {
     const ref = resolveRef(state);
@@ -25,41 +25,41 @@ function createScopedThreadSelector(
 
     const environmentState = selectEnvironmentState(state, ref.environmentId);
     if (
-      previousThread &&
+      previousSession &&
       previousEnvironmentState === environmentState &&
-      previousThreadId === ref.threadId
+      previousSessionId === ref.sessionId
     ) {
-      return previousThread;
+      return previousSession;
     }
 
     previousEnvironmentState = environmentState;
-    previousThreadId = ref.threadId;
-    previousThread = getThreadFromEnvironmentState(environmentState, ref.threadId);
-    return previousThread;
+    previousSessionId = ref.sessionId;
+    previousSession = getSessionFromEnvironmentState(environmentState, ref.sessionId);
+    return previousSession;
   };
 }
 
-export function createThreadSelectorByRef(
-  ref: ScopedThreadRef | null | undefined,
-): (state: AppState) => Thread | undefined {
-  return createScopedThreadSelector(() => ref);
+export function createSessionSelectorByRef(
+  ref: ScopedSessionRef | null | undefined,
+): (state: AppState) => Session | undefined {
+  return createScopedSessionSelector(() => ref);
 }
 
-export function createThreadSelectorAcrossEnvironments(
-  threadId: ThreadId | null | undefined,
-): (state: AppState) => Thread | undefined {
-  return createScopedThreadSelector((state) => {
-    if (!threadId) {
+export function createSessionSelectorAcrossEnvironments(
+  sessionId: SessionId | null | undefined,
+): (state: AppState) => Session | undefined {
+  return createScopedSessionSelector((state) => {
+    if (!sessionId) {
       return undefined;
     }
 
     for (const [environmentId, environmentState] of Object.entries(
       state.environmentStateById,
-    ) as Array<[ScopedThreadRef["environmentId"], EnvironmentState]>) {
-      if (environmentState.threadShellById[threadId]) {
+    ) as Array<[ScopedSessionRef["environmentId"], EnvironmentState]>) {
+      if (environmentState.sessionShellById[sessionId]) {
         return {
           environmentId,
-          threadId,
+          sessionId,
         };
       }
     }

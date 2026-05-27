@@ -21,7 +21,7 @@ export interface PersistedUiState {
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
-  threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  sessionChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
 }
 
 export interface UiProjectState {
@@ -29,16 +29,16 @@ export interface UiProjectState {
   projectOrder: string[];
 }
 
-export interface UiThreadState {
-  threadLastVisitedAtById: Record<string, string>;
-  threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
+export interface UiSessionState {
+  sessionLastVisitedAtById: Record<string, string>;
+  sessionChangedFilesExpandedById: Record<string, Record<string, boolean>>;
 }
 
 export interface UiEndpointState {
   defaultAdvertisedEndpointKey: string | null;
 }
 
-export interface UiState extends UiProjectState, UiThreadState, UiEndpointState {}
+export interface UiState extends UiProjectState, UiSessionState, UiEndpointState {}
 
 export interface SyncProjectInput {
   /** Physical project key (env + cwd). Used for manual sort order. */
@@ -48,7 +48,7 @@ export interface SyncProjectInput {
   cwd: string;
 }
 
-export interface SyncThreadInput {
+export interface SyncSessionInput {
   key: string;
   seedVisitedAt?: string | undefined;
 }
@@ -56,8 +56,8 @@ export interface SyncThreadInput {
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
-  threadLastVisitedAtById: {},
-  threadChangedFilesExpandedById: {},
+  sessionLastVisitedAtById: {},
+  sessionChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
 };
 
@@ -100,8 +100,8 @@ function readPersistedState(): UiState {
         parsed.defaultAdvertisedEndpointKey.length > 0
           ? parsed.defaultAdvertisedEndpointKey
           : null,
-      threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
-        parsed.threadChangedFilesExpandedById,
+      sessionChangedFilesExpandedById: sanitizePersistedSessionChangedFilesExpanded(
+        parsed.sessionChangedFilesExpandedById,
       ),
     };
   } catch {
@@ -109,16 +109,16 @@ function readPersistedState(): UiState {
   }
 }
 
-function sanitizePersistedThreadChangedFilesExpanded(
-  value: PersistedUiState["threadChangedFilesExpandedById"],
+function sanitizePersistedSessionChangedFilesExpanded(
+  value: PersistedUiState["sessionChangedFilesExpandedById"],
 ): Record<string, Record<string, boolean>> {
   if (!value || typeof value !== "object") {
     return {};
   }
 
   const nextState: Record<string, Record<string, boolean>> = {};
-  for (const [threadId, turns] of Object.entries(value)) {
-    if (!threadId || !turns || typeof turns !== "object") {
+  for (const [sessionId, turns] of Object.entries(value)) {
+    if (!sessionId || !turns || typeof turns !== "object") {
       continue;
     }
 
@@ -130,7 +130,7 @@ function sanitizePersistedThreadChangedFilesExpanded(
     }
 
     if (Object.keys(nextTurns).length > 0) {
-      nextState[threadId] = nextTurns;
+      nextState[sessionId] = nextTurns;
     }
   }
 
@@ -177,12 +177,12 @@ export function persistState(state: UiState): void {
       const cwd = currentProjectCwdById.get(projectId);
       return cwd ? [cwd] : [];
     });
-    const threadChangedFilesExpandedById = Object.fromEntries(
-      Object.entries(state.threadChangedFilesExpandedById).flatMap(([threadId, turns]) => {
+    const sessionChangedFilesExpandedById = Object.fromEntries(
+      Object.entries(state.sessionChangedFilesExpandedById).flatMap(([sessionId, turns]) => {
         const nextTurns = Object.fromEntries(
           Object.entries(turns).filter(([, expanded]) => expanded === false),
         );
-        return Object.keys(nextTurns).length > 0 ? [[threadId, nextTurns]] : [];
+        return Object.keys(nextTurns).length > 0 ? [[sessionId, nextTurns]] : [];
       }),
     );
     window.localStorage.setItem(
@@ -192,7 +192,7 @@ export function persistState(state: UiState): void {
         expandedProjectCwds,
         projectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
-        threadChangedFilesExpandedById,
+        sessionChangedFilesExpandedById,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -396,47 +396,47 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
   };
 }
 
-export function syncThreads(state: UiState, threads: readonly SyncThreadInput[]): UiState {
-  const retainedThreadIds = new Set(threads.map((thread) => thread.key));
-  const nextThreadLastVisitedAtById = Object.fromEntries(
-    Object.entries(state.threadLastVisitedAtById).filter(([threadId]) =>
-      retainedThreadIds.has(threadId),
+export function syncSessions(state: UiState, sessions: readonly SyncSessionInput[]): UiState {
+  const retainedSessionIds = new Set(sessions.map((session) => session.key));
+  const nextSessionLastVisitedAtById = Object.fromEntries(
+    Object.entries(state.sessionLastVisitedAtById).filter(([sessionId]) =>
+      retainedSessionIds.has(sessionId),
     ),
   );
-  for (const thread of threads) {
+  for (const session of sessions) {
     if (
-      nextThreadLastVisitedAtById[thread.key] === undefined &&
-      thread.seedVisitedAt !== undefined &&
-      thread.seedVisitedAt.length > 0
+      nextSessionLastVisitedAtById[session.key] === undefined &&
+      session.seedVisitedAt !== undefined &&
+      session.seedVisitedAt.length > 0
     ) {
-      nextThreadLastVisitedAtById[thread.key] = thread.seedVisitedAt;
+      nextSessionLastVisitedAtById[session.key] = session.seedVisitedAt;
     }
   }
-  const nextThreadChangedFilesExpandedById = Object.fromEntries(
-    Object.entries(state.threadChangedFilesExpandedById).filter(([threadId]) =>
-      retainedThreadIds.has(threadId),
+  const nextSessionChangedFilesExpandedById = Object.fromEntries(
+    Object.entries(state.sessionChangedFilesExpandedById).filter(([sessionId]) =>
+      retainedSessionIds.has(sessionId),
     ),
   );
   if (
-    recordsEqual(state.threadLastVisitedAtById, nextThreadLastVisitedAtById) &&
+    recordsEqual(state.sessionLastVisitedAtById, nextSessionLastVisitedAtById) &&
     nestedBooleanRecordsEqual(
-      state.threadChangedFilesExpandedById,
-      nextThreadChangedFilesExpandedById,
+      state.sessionChangedFilesExpandedById,
+      nextSessionChangedFilesExpandedById,
     )
   ) {
     return state;
   }
   return {
     ...state,
-    threadLastVisitedAtById: nextThreadLastVisitedAtById,
-    threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
+    sessionLastVisitedAtById: nextSessionLastVisitedAtById,
+    sessionChangedFilesExpandedById: nextSessionChangedFilesExpandedById,
   };
 }
 
-export function markThreadVisited(state: UiState, threadId: string, visitedAt?: string): UiState {
+export function markSessionVisited(state: UiState, sessionId: string, visitedAt?: string): UiState {
   const at = visitedAt ?? new Date().toISOString();
   const visitedAtMs = Date.parse(at);
-  const previousVisitedAt = state.threadLastVisitedAtById[threadId];
+  const previousVisitedAt = state.sessionLastVisitedAtById[sessionId];
   const previousVisitedAtMs = previousVisitedAt ? Date.parse(previousVisitedAt) : NaN;
   if (
     Number.isFinite(previousVisitedAtMs) &&
@@ -447,16 +447,16 @@ export function markThreadVisited(state: UiState, threadId: string, visitedAt?: 
   }
   return {
     ...state,
-    threadLastVisitedAtById: {
-      ...state.threadLastVisitedAtById,
-      [threadId]: at,
+    sessionLastVisitedAtById: {
+      ...state.sessionLastVisitedAtById,
+      [sessionId]: at,
     },
   };
 }
 
-export function markThreadUnread(
+export function markSessionUnread(
   state: UiState,
-  threadId: string,
+  sessionId: string,
   latestTurnCompletedAt: string | null | undefined,
 ): UiState {
   if (!latestTurnCompletedAt) {
@@ -467,78 +467,78 @@ export function markThreadUnread(
     return state;
   }
   const unreadVisitedAt = new Date(latestTurnCompletedAtMs - 1).toISOString();
-  if (state.threadLastVisitedAtById[threadId] === unreadVisitedAt) {
+  if (state.sessionLastVisitedAtById[sessionId] === unreadVisitedAt) {
     return state;
   }
   return {
     ...state,
-    threadLastVisitedAtById: {
-      ...state.threadLastVisitedAtById,
-      [threadId]: unreadVisitedAt,
+    sessionLastVisitedAtById: {
+      ...state.sessionLastVisitedAtById,
+      [sessionId]: unreadVisitedAt,
     },
   };
 }
 
-export function clearThreadUi(state: UiState, threadId: string): UiState {
-  const hasVisitedState = threadId in state.threadLastVisitedAtById;
-  const hasChangedFilesState = threadId in state.threadChangedFilesExpandedById;
+export function clearSessionUi(state: UiState, sessionId: string): UiState {
+  const hasVisitedState = sessionId in state.sessionLastVisitedAtById;
+  const hasChangedFilesState = sessionId in state.sessionChangedFilesExpandedById;
   if (!hasVisitedState && !hasChangedFilesState) {
     return state;
   }
-  const nextThreadLastVisitedAtById = { ...state.threadLastVisitedAtById };
-  const nextThreadChangedFilesExpandedById = { ...state.threadChangedFilesExpandedById };
-  delete nextThreadLastVisitedAtById[threadId];
-  delete nextThreadChangedFilesExpandedById[threadId];
+  const nextSessionLastVisitedAtById = { ...state.sessionLastVisitedAtById };
+  const nextSessionChangedFilesExpandedById = { ...state.sessionChangedFilesExpandedById };
+  delete nextSessionLastVisitedAtById[sessionId];
+  delete nextSessionChangedFilesExpandedById[sessionId];
   return {
     ...state,
-    threadLastVisitedAtById: nextThreadLastVisitedAtById,
-    threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
+    sessionLastVisitedAtById: nextSessionLastVisitedAtById,
+    sessionChangedFilesExpandedById: nextSessionChangedFilesExpandedById,
   };
 }
 
-export function setThreadChangedFilesExpanded(
+export function setSessionChangedFilesExpanded(
   state: UiState,
-  threadId: string,
+  sessionId: string,
   turnId: string,
   expanded: boolean,
 ): UiState {
-  const currentThreadState = state.threadChangedFilesExpandedById[threadId] ?? {};
-  const currentExpanded = currentThreadState[turnId] ?? true;
+  const currentSessionState = state.sessionChangedFilesExpandedById[sessionId] ?? {};
+  const currentExpanded = currentSessionState[turnId] ?? true;
   if (currentExpanded === expanded) {
     return state;
   }
 
   if (expanded) {
-    if (!(turnId in currentThreadState)) {
+    if (!(turnId in currentSessionState)) {
       return state;
     }
 
-    const nextThreadState = { ...currentThreadState };
-    delete nextThreadState[turnId];
-    if (Object.keys(nextThreadState).length === 0) {
-      const nextState = { ...state.threadChangedFilesExpandedById };
-      delete nextState[threadId];
+    const nextSessionState = { ...currentSessionState };
+    delete nextSessionState[turnId];
+    if (Object.keys(nextSessionState).length === 0) {
+      const nextState = { ...state.sessionChangedFilesExpandedById };
+      delete nextState[sessionId];
       return {
         ...state,
-        threadChangedFilesExpandedById: nextState,
+        sessionChangedFilesExpandedById: nextState,
       };
     }
 
     return {
       ...state,
-      threadChangedFilesExpandedById: {
-        ...state.threadChangedFilesExpandedById,
-        [threadId]: nextThreadState,
+      sessionChangedFilesExpandedById: {
+        ...state.sessionChangedFilesExpandedById,
+        [sessionId]: nextSessionState,
       },
     };
   }
 
   return {
     ...state,
-    threadChangedFilesExpandedById: {
-      ...state.threadChangedFilesExpandedById,
-      [threadId]: {
-        ...currentThreadState,
+    sessionChangedFilesExpandedById: {
+      ...state.sessionChangedFilesExpandedById,
+      [sessionId]: {
+        ...currentSessionState,
         [turnId]: false,
       },
     },
@@ -625,11 +625,11 @@ export function reorderProjects(
 
 interface UiStateStore extends UiState {
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
-  syncThreads: (threads: readonly SyncThreadInput[]) => void;
-  markThreadVisited: (threadId: string, visitedAt?: string) => void;
-  markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
-  clearThreadUi: (threadId: string) => void;
-  setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
+  syncSessions: (sessions: readonly SyncSessionInput[]) => void;
+  markSessionVisited: (sessionId: string, visitedAt?: string) => void;
+  markSessionUnread: (sessionId: string, latestTurnCompletedAt: string | null | undefined) => void;
+  clearSessionUi: (sessionId: string) => void;
+  setSessionChangedFilesExpanded: (sessionId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   toggleProject: (projectId: string) => void;
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
@@ -642,14 +642,14 @@ interface UiStateStore extends UiState {
 export const useUiStateStore = create<UiStateStore>((set) => ({
   ...readPersistedState(),
   syncProjects: (projects) => set((state) => syncProjects(state, projects)),
-  syncThreads: (threads) => set((state) => syncThreads(state, threads)),
-  markThreadVisited: (threadId, visitedAt) =>
-    set((state) => markThreadVisited(state, threadId, visitedAt)),
-  markThreadUnread: (threadId, latestTurnCompletedAt) =>
-    set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
-  clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
-  setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
-    set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  syncSessions: (sessions) => set((state) => syncSessions(state, sessions)),
+  markSessionVisited: (sessionId, visitedAt) =>
+    set((state) => markSessionVisited(state, sessionId, visitedAt)),
+  markSessionUnread: (sessionId, latestTurnCompletedAt) =>
+    set((state) => markSessionUnread(state, sessionId, latestTurnCompletedAt)),
+  clearSessionUi: (sessionId) => set((state) => clearSessionUi(state, sessionId)),
+  setSessionChangedFilesExpanded: (sessionId, turnId, expanded) =>
+    set((state) => setSessionChangedFilesExpanded(state, sessionId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),

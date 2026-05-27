@@ -9,7 +9,7 @@
 
 - Source: GitHub review comments on PR #89 (`Add server-side orchestration engine with event sourcing`).
 - Triage baseline used here:
-  - Total threads: 185
+  - Total sessions: 185
   - Outdated: 94 (excluded)
   - Active unresolved: 85
   - Invalid/false-positive: 3 (excluded)
@@ -20,12 +20,12 @@
 ## Phase 0: Canonical Triage Lock
 
 - Create a single tracking checklist for the 53 currently actionable findings.
-- Map every duplicate thread to its canonical item.
+- Map every duplicate session to its canonical item.
 - Mark invalid/false-positive items with explicit rationale.
 
 Exit criteria:
 
-- Every open thread is mapped to one canonical fix item or marked invalid.
+- Every open session is mapped to one canonical fix item or marked invalid.
 
 ## Phase 1: Runtime Survival and Critical Event Wiring
 
@@ -53,7 +53,7 @@ Related bug groups solved together:
 
 - Fire-and-forget revert completion causing consistency windows.
 - Non-atomic append/projection paths and retry behavior.
-- Race-sensitive thread/event association issues.
+- Race-sensitive session/event association issues.
 
 Primary files:
 
@@ -66,7 +66,7 @@ Exit criteria:
 
 - Revert flow is deterministically reflected in read model updates.
 - Append/project failure mode is explicit and safe under retry.
-- No cross-thread misassociation under concurrent runtime events.
+- No cross-session misassociation under concurrent runtime events.
 
 ## Phase 3: Checkpointing Correctness Bundle
 
@@ -156,10 +156,10 @@ Exit criteria:
 
 - Add backend tests for all behavioral fixes (integration-focused; external services may be layered/mocked, core business logic not mocked out).
 - Run lint and backend tests for all touched packages.
-- Resolve threads with fix references per canonical checklist item.
+- Resolve sessions with fix references per canonical checklist item.
 
 Exit criteria:
 
 - Lint passes.
 - Backend tests pass.
-- All actionable review threads are resolved or explicitly justified.
+- All actionable review sessions are resolved or explicitly justified.

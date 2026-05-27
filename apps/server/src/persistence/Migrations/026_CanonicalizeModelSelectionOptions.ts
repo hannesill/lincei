@@ -18,10 +18,10 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
  *     matching the permissive client-side normalizer in composerDraftStore.
  *
  * Touched storage:
- *   - `projection_threads.model_selection_json.options`
+ *   - `projection_sessions.model_selection_json.options`
  *   - `projection_projects.default_model_selection_json.options`
  *   - `orchestration_events.payload_json.$.modelSelection.options`
- *     (thread.created | thread.meta-updated | thread.turn-start-requested)
+ *     (session.created | session.meta-updated | session.turn-start-requested)
  *   - `orchestration_events.payload_json.$.defaultModelSelection.options`
  *     (project.created | project.meta-updated)
  */
@@ -29,7 +29,7 @@ export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    UPDATE projection_threads
+    UPDATE projection_sessions
     SET model_selection_json = json_set(
       model_selection_json,
       '$.options',
@@ -103,9 +103,9 @@ export default Effect.gen(function* () {
       )
     )
     WHERE event_type IN (
-      'thread.created',
-      'thread.meta-updated',
-      'thread.turn-start-requested'
+      'session.created',
+      'session.meta-updated',
+      'session.turn-start-requested'
     )
       AND json_type(payload_json, '$.modelSelection.options') = 'object'
   `;

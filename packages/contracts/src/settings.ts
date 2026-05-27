@@ -17,9 +17,9 @@ export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_a
 export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
 export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
 
-export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at"]);
-export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
-export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
+export const SidebarSessionSortOrder = Schema.Literals(["updated_at", "created_at"]);
+export type SidebarSessionSortOrder = typeof SidebarSessionSortOrder.Type;
+export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarSessionSortOrder = "updated_at";
 
 export const SidebarProjectGroupingMode = Schema.Literals([
   "repository",
@@ -30,19 +30,19 @@ export type SidebarProjectGroupingMode = typeof SidebarProjectGroupingMode.Type;
 export const DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE: SidebarProjectGroupingMode = "repository";
 export const MIN_SIDEBAR_THREAD_PREVIEW_COUNT = 1;
 export const MAX_SIDEBAR_THREAD_PREVIEW_COUNT = 15;
-export const SidebarThreadPreviewCount = Schema.Int.check(
+export const SidebarSessionPreviewCount = Schema.Int.check(
   Schema.isBetween({
     minimum: MIN_SIDEBAR_THREAD_PREVIEW_COUNT,
     maximum: MAX_SIDEBAR_THREAD_PREVIEW_COUNT,
   }),
 );
-export type SidebarThreadPreviewCount = typeof SidebarThreadPreviewCount.Type;
-export const DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT: SidebarThreadPreviewCount = 6;
+export type SidebarSessionPreviewCount = typeof SidebarSessionPreviewCount.Type;
+export const DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT: SidebarSessionPreviewCount = 6;
 
 export const ClientSettingsSchema = Schema.Struct({
   autoOpenPlanSidebar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  confirmSessionArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  confirmSessionDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   dismissedProviderUpdateNotificationKeys: Schema.Array(TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
@@ -83,10 +83,10 @@ export const ClientSettingsSchema = Schema.Struct({
   sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_SORT_ORDER)),
   ),
-  sidebarThreadSortOrder: SidebarThreadSortOrder.pipe(
+  sidebarSessionSortOrder: SidebarSessionSortOrder.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_THREAD_SORT_ORDER)),
   ),
-  sidebarThreadPreviewCount: SidebarThreadPreviewCount.pipe(
+  sidebarSessionPreviewCount: SidebarSessionPreviewCount.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT)),
   ),
   timestampFormat: TimestampFormat.pipe(
@@ -99,8 +99,8 @@ export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientS
 
 // ── Server Settings (server-authoritative) ────────────────────
 
-export const ThreadEnvMode = Schema.Literals(["local", "worktree"]);
-export type ThreadEnvMode = typeof ThreadEnvMode.Type;
+export const SessionEnvMode = Schema.Literals(["local", "worktree"]);
+export type SessionEnvMode = typeof SessionEnvMode.Type;
 
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
@@ -346,8 +346,8 @@ export const ServerSettings = Schema.Struct({
       Effect.succeed(Duration.toMillis(DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL)),
     ),
   ),
-  defaultThreadEnvMode: ThreadEnvMode.pipe(
-    Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
+  defaultSessionEnvMode: SessionEnvMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed("local" as const satisfies SessionEnvMode)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   textGenerationModelSelection: ModelSelection.pipe(
@@ -449,7 +449,7 @@ export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   automaticGitFetchInterval: Schema.optionalKey(Schema.DurationFromMillis),
-  defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
+  defaultSessionEnvMode: Schema.optionalKey(SessionEnvMode),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
@@ -476,8 +476,8 @@ export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
   autoOpenPlanSidebar: Schema.optionalKey(Schema.Boolean),
-  confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
-  confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
+  confirmSessionArchive: Schema.optionalKey(Schema.Boolean),
+  confirmSessionDelete: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   diffWordWrap: Schema.optionalKey(Schema.Boolean),
   favorites: Schema.optionalKey(
@@ -506,8 +506,8 @@ export const ClientSettingsPatch = Schema.Struct({
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),
   ),
   sidebarProjectSortOrder: Schema.optionalKey(SidebarProjectSortOrder),
-  sidebarThreadSortOrder: Schema.optionalKey(SidebarThreadSortOrder),
-  sidebarThreadPreviewCount: Schema.optionalKey(SidebarThreadPreviewCount),
+  sidebarSessionSortOrder: Schema.optionalKey(SidebarSessionSortOrder),
+  sidebarSessionPreviewCount: Schema.optionalKey(SidebarSessionPreviewCount),
   timestampFormat: Schema.optionalKey(TimestampFormat),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;

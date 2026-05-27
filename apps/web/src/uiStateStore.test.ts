@@ -1,20 +1,20 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, SessionId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  clearThreadUi,
+  clearSessionUi,
   hydratePersistedProjectState,
-  markThreadVisited,
-  markThreadUnread,
+  markSessionVisited,
+  markSessionUnread,
   PERSISTED_STATE_KEY,
   type PersistedUiState,
   persistState,
   reorderProjects,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
-  setThreadChangedFilesExpanded,
+  setSessionChangedFilesExpanded,
   syncProjects,
-  syncThreads,
+  syncSessions,
   type UiState,
 } from "./uiStateStore";
 
@@ -22,59 +22,59 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
-    threadLastVisitedAtById: {},
-    threadChangedFilesExpandedById: {},
+    sessionLastVisitedAtById: {},
+    sessionChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
     ...overrides,
   };
 }
 
 describe("uiStateStore pure functions", () => {
-  it("markThreadVisited stores the provided server timestamp", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("markSessionVisited stores the provided server timestamp", () => {
+    const sessionId = SessionId.make("session-1");
     const initialState = makeUiState();
 
-    const next = markThreadVisited(initialState, threadId, "2026-02-25T12:30:00.700Z");
+    const next = markSessionVisited(initialState, sessionId, "2026-02-25T12:30:00.700Z");
 
-    expect(next.threadLastVisitedAtById[threadId]).toBe("2026-02-25T12:30:00.700Z");
+    expect(next.sessionLastVisitedAtById[sessionId]).toBe("2026-02-25T12:30:00.700Z");
   });
 
-  it("markThreadVisited does not move visit state backwards under clock skew", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("markSessionVisited does not move visit state backwards under clock skew", () => {
+    const sessionId = SessionId.make("session-1");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [threadId]: "2026-02-25T12:30:00.700Z",
+      sessionLastVisitedAtById: {
+        [sessionId]: "2026-02-25T12:30:00.700Z",
       },
     });
 
-    const next = markThreadVisited(initialState, threadId, "2026-02-25T12:30:00.000Z");
+    const next = markSessionVisited(initialState, sessionId, "2026-02-25T12:30:00.000Z");
 
     expect(next).toBe(initialState);
   });
 
-  it("markThreadUnread moves lastVisitedAt before completion for a completed thread", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("markSessionUnread moves lastVisitedAt before completion for a completed session", () => {
+    const sessionId = SessionId.make("session-1");
     const latestTurnCompletedAt = "2026-02-25T12:30:00.000Z";
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [threadId]: "2026-02-25T12:35:00.000Z",
+      sessionLastVisitedAtById: {
+        [sessionId]: "2026-02-25T12:35:00.000Z",
       },
     });
 
-    const next = markThreadUnread(initialState, threadId, latestTurnCompletedAt);
+    const next = markSessionUnread(initialState, sessionId, latestTurnCompletedAt);
 
-    expect(next.threadLastVisitedAtById[threadId]).toBe("2026-02-25T12:29:59.999Z");
+    expect(next.sessionLastVisitedAtById[sessionId]).toBe("2026-02-25T12:29:59.999Z");
   });
 
-  it("markThreadUnread does not change a thread without a completed turn", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("markSessionUnread does not change a session without a completed turn", () => {
+    const sessionId = SessionId.make("session-1");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [threadId]: "2026-02-25T12:35:00.000Z",
+      sessionLastVisitedAtById: {
+        [sessionId]: "2026-02-25T12:35:00.000Z",
       },
     });
 
-    const next = markThreadUnread(initialState, threadId, null);
+    const next = markSessionUnread(initialState, sessionId, null);
 
     expect(next).toBe(initialState);
   });
@@ -336,49 +336,49 @@ describe("uiStateStore pure functions", () => {
     expect(next.projectExpandedById[nextLogicalKey]).toBe(false);
   });
 
-  it("syncThreads prunes missing thread UI state", () => {
-    const thread1 = ThreadId.make("thread-1");
-    const thread2 = ThreadId.make("thread-2");
+  it("syncSessions prunes missing session UI state", () => {
+    const session1 = SessionId.make("session-1");
+    const session2 = SessionId.make("session-2");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [thread1]: "2026-02-25T12:35:00.000Z",
-        [thread2]: "2026-02-25T12:36:00.000Z",
+      sessionLastVisitedAtById: {
+        [session1]: "2026-02-25T12:35:00.000Z",
+        [session2]: "2026-02-25T12:36:00.000Z",
       },
-      threadChangedFilesExpandedById: {
-        [thread1]: {
+      sessionChangedFilesExpandedById: {
+        [session1]: {
           "turn-1": false,
         },
-        [thread2]: {
+        [session2]: {
           "turn-2": false,
         },
       },
     });
 
-    const next = syncThreads(initialState, [{ key: thread1 }]);
+    const next = syncSessions(initialState, [{ key: session1 }]);
 
-    expect(next.threadLastVisitedAtById).toEqual({
-      [thread1]: "2026-02-25T12:35:00.000Z",
+    expect(next.sessionLastVisitedAtById).toEqual({
+      [session1]: "2026-02-25T12:35:00.000Z",
     });
-    expect(next.threadChangedFilesExpandedById).toEqual({
-      [thread1]: {
+    expect(next.sessionChangedFilesExpandedById).toEqual({
+      [session1]: {
         "turn-1": false,
       },
     });
   });
 
-  it("syncThreads seeds visit state for unseen snapshot threads", () => {
-    const thread1 = ThreadId.make("thread-1");
+  it("syncSessions seeds visit state for unseen snapshot sessions", () => {
+    const session1 = SessionId.make("session-1");
     const initialState = makeUiState();
 
-    const next = syncThreads(initialState, [
+    const next = syncSessions(initialState, [
       {
-        key: thread1,
+        key: session1,
         seedVisitedAt: "2026-02-25T12:35:00.000Z",
       },
     ]);
 
-    expect(next.threadLastVisitedAtById).toEqual({
-      [thread1]: "2026-02-25T12:35:00.000Z",
+    expect(next.sessionLastVisitedAtById).toEqual({
+      [session1]: "2026-02-25T12:35:00.000Z",
     });
   });
 
@@ -397,51 +397,51 @@ describe("uiStateStore pure functions", () => {
     expect(next.projectOrder).toEqual([project1]);
   });
 
-  it("clearThreadUi removes visit state for deleted threads", () => {
-    const thread1 = ThreadId.make("thread-1");
+  it("clearSessionUi removes visit state for deleted sessions", () => {
+    const session1 = SessionId.make("session-1");
     const initialState = makeUiState({
-      threadLastVisitedAtById: {
-        [thread1]: "2026-02-25T12:35:00.000Z",
+      sessionLastVisitedAtById: {
+        [session1]: "2026-02-25T12:35:00.000Z",
       },
-      threadChangedFilesExpandedById: {
-        [thread1]: {
+      sessionChangedFilesExpandedById: {
+        [session1]: {
           "turn-1": false,
         },
       },
     });
 
-    const next = clearThreadUi(initialState, thread1);
+    const next = clearSessionUi(initialState, session1);
 
-    expect(next.threadLastVisitedAtById).toEqual({});
-    expect(next.threadChangedFilesExpandedById).toEqual({});
+    expect(next.sessionLastVisitedAtById).toEqual({});
+    expect(next.sessionChangedFilesExpandedById).toEqual({});
   });
 
-  it("setThreadChangedFilesExpanded stores collapsed turns per thread", () => {
-    const thread1 = ThreadId.make("thread-1");
+  it("setSessionChangedFilesExpanded stores collapsed turns per session", () => {
+    const session1 = SessionId.make("session-1");
     const initialState = makeUiState();
 
-    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", false);
+    const next = setSessionChangedFilesExpanded(initialState, session1, "turn-1", false);
 
-    expect(next.threadChangedFilesExpandedById).toEqual({
-      [thread1]: {
+    expect(next.sessionChangedFilesExpandedById).toEqual({
+      [session1]: {
         "turn-1": false,
       },
     });
   });
 
-  it("setThreadChangedFilesExpanded removes thread overrides when expanded again", () => {
-    const thread1 = ThreadId.make("thread-1");
+  it("setSessionChangedFilesExpanded removes session overrides when expanded again", () => {
+    const session1 = SessionId.make("session-1");
     const initialState = makeUiState({
-      threadChangedFilesExpandedById: {
-        [thread1]: {
+      sessionChangedFilesExpandedById: {
+        [session1]: {
           "turn-1": false,
         },
       },
     });
 
-    const next = setThreadChangedFilesExpanded(initialState, thread1, "turn-1", true);
+    const next = setSessionChangedFilesExpanded(initialState, session1, "turn-1", true);
 
-    expect(next.threadChangedFilesExpandedById).toEqual({});
+    expect(next.sessionChangedFilesExpandedById).toEqual({});
   });
 });
 

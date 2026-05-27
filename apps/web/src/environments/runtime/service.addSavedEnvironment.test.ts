@@ -115,7 +115,7 @@ vi.mock("../../rpc/wsRpcClient", () => ({
       getConfig: mockClientGetConfig,
     },
     orchestration: {
-      subscribeThread: vi.fn(() => () => {}),
+      subscribeSession: vi.fn(() => () => {}),
     },
   })),
 }));

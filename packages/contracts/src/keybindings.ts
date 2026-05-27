@@ -8,17 +8,17 @@ export const MAX_SCRIPT_ID_LENGTH = 24;
 export const MAX_KEYBINDINGS_COUNT = 256;
 
 export const THREAD_JUMP_KEYBINDING_COMMANDS = [
-  "thread.jump.1",
-  "thread.jump.2",
-  "thread.jump.3",
-  "thread.jump.4",
-  "thread.jump.5",
-  "thread.jump.6",
-  "thread.jump.7",
-  "thread.jump.8",
-  "thread.jump.9",
+  "session.jump.1",
+  "session.jump.2",
+  "session.jump.3",
+  "session.jump.4",
+  "session.jump.5",
+  "session.jump.6",
+  "session.jump.7",
+  "session.jump.8",
+  "session.jump.9",
 ] as const;
-export type ThreadJumpKeybindingCommand = (typeof THREAD_JUMP_KEYBINDING_COMMANDS)[number];
+export type SessionJumpKeybindingCommand = (typeof THREAD_JUMP_KEYBINDING_COMMANDS)[number];
 
 export const MODEL_PICKER_JUMP_KEYBINDING_COMMANDS = [
   "modelPicker.jump.1",
@@ -35,11 +35,11 @@ export type ModelPickerJumpKeybindingCommand =
   (typeof MODEL_PICKER_JUMP_KEYBINDING_COMMANDS)[number];
 
 export const THREAD_KEYBINDING_COMMANDS = [
-  "thread.previous",
-  "thread.next",
+  "session.previous",
+  "session.next",
   ...THREAD_JUMP_KEYBINDING_COMMANDS,
 ] as const;
-export type ThreadKeybindingCommand = (typeof THREAD_KEYBINDING_COMMANDS)[number];
+export type SessionKeybindingCommand = (typeof THREAD_KEYBINDING_COMMANDS)[number];
 
 export const MODEL_PICKER_KEYBINDING_COMMANDS = [
   "modelPicker.toggle",

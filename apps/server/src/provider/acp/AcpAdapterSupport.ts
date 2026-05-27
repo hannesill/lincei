@@ -1,7 +1,7 @@
 import {
   type ProviderApprovalDecision,
   type ProviderDriverKind,
-  type ThreadId,
+  type SessionId,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as EffectAcpErrors from "effect-acp/errors";
@@ -16,14 +16,14 @@ const isAcpRequestError = Schema.is(EffectAcpErrors.AcpRequestError);
 
 export function mapAcpToAdapterError(
   provider: ProviderDriverKind,
-  threadId: ThreadId,
+  sessionId: SessionId,
   method: string,
   error: EffectAcpErrors.AcpError,
 ): ProviderAdapterError {
   if (isAcpProcessExitedError(error)) {
     return new ProviderAdapterSessionClosedError({
       provider,
-      threadId,
+      sessionId,
       cause: error,
     });
   }

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
-import type { Thread } from "../types";
+import { EnvironmentId, ProjectId, ProviderInstanceId, SessionId } from "@t3tools/contracts";
+import type { Session } from "../types";
 import {
-  buildThreadActionItems,
+  buildSessionActionItems,
   filterCommandPaletteGroups,
   type CommandPaletteGroup,
 } from "./CommandPalette.logic";
@@ -10,13 +10,13 @@ import {
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeSession(overrides: Partial<Session> = {}): Session {
   return {
-    id: ThreadId.make("thread-1"),
+    id: SessionId.make("session-1"),
     environmentId: LOCAL_ENVIRONMENT_ID,
-    codexThreadId: null,
+    codexSessionId: null,
     projectId: PROJECT_ID,
-    title: "Thread",
+    title: "Session",
     modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
     runtimeMode: "full-access",
     interactionMode: "default",
@@ -36,22 +36,22 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-describe("buildThreadActionItems", () => {
-  it("orders threads by most recent activity and formats timestamps from updatedAt", () => {
+describe("buildSessionActionItems", () => {
+  it("orders sessions by most recent activity and formats timestamps from updatedAt", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-25T12:00:00.000Z"));
 
     try {
-      const items = buildThreadActionItems({
-        threads: [
-          makeThread({
-            id: ThreadId.make("thread-older"),
-            title: "Older thread",
+      const items = buildSessionActionItems({
+        sessions: [
+          makeSession({
+            id: SessionId.make("session-older"),
+            title: "Older session",
             updatedAt: "2026-03-24T12:00:00.000Z",
           }),
-          makeThread({
-            id: ThreadId.make("thread-newer"),
-            title: "Newer thread",
+          makeSession({
+            id: SessionId.make("session-newer"),
+            title: "Newer session",
             createdAt: "2026-03-20T00:00:00.000Z",
             updatedAt: "2026-03-20T00:00:00.000Z",
           }),
@@ -59,12 +59,12 @@ describe("buildThreadActionItems", () => {
         projectTitleById: new Map([[PROJECT_ID, "Project"]]),
         sortOrder: "updated_at",
         icon: null,
-        runThread: async (_thread) => undefined,
+        runSession: async (_session) => undefined,
       });
 
       expect(items.map((item) => item.value)).toEqual([
-        "thread:thread-older",
-        "thread:thread-newer",
+        "session:session-older",
+        "session:session-newer",
       ]);
       expect(items[0]?.timestamp).toBe("1d ago");
       expect(items[1]?.timestamp).toBe("5d ago");
@@ -73,16 +73,16 @@ describe("buildThreadActionItems", () => {
     }
   });
 
-  it("ranks thread title matches ahead of contextual project-name matches", () => {
-    const threadItems = buildThreadActionItems({
-      threads: [
-        makeThread({
-          id: ThreadId.make("thread-context-match"),
+  it("ranks session title matches ahead of contextual project-name matches", () => {
+    const sessionItems = buildSessionActionItems({
+      sessions: [
+        makeSession({
+          id: SessionId.make("session-context-match"),
           title: "Fix navbar spacing",
           updatedAt: "2026-03-20T00:00:00.000Z",
         }),
-        makeThread({
-          id: ThreadId.make("thread-title-match"),
+        makeSession({
+          id: SessionId.make("session-title-match"),
           title: "Project kickoff notes",
           createdAt: "2026-03-02T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
@@ -91,7 +91,7 @@ describe("buildThreadActionItems", () => {
       projectTitleById: new Map([[PROJECT_ID, "Project"]]),
       sortOrder: "updated_at",
       icon: null,
-      runThread: async (_thread) => undefined,
+      runSession: async (_session) => undefined,
     });
 
     const groups = filterCommandPaletteGroups({
@@ -99,25 +99,25 @@ describe("buildThreadActionItems", () => {
       query: "project",
       isInSubmenu: false,
       projectSearchItems: [],
-      threadSearchItems: threadItems,
+      sessionSearchItems: sessionItems,
     });
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.value).toBe("threads-search");
+    expect(groups[0]?.value).toBe("sessions-search");
     expect(groups[0]?.items.map((item) => item.value)).toEqual([
-      "thread:thread-title-match",
-      "thread:thread-context-match",
+      "session:session-title-match",
+      "session:session-context-match",
     ]);
   });
 
-  it("preserves thread project-name matches when there is no stronger title match", () => {
+  it("preserves session project-name matches when there is no stronger title match", () => {
     const group: CommandPaletteGroup = {
-      value: "threads-search",
-      label: "Threads",
+      value: "sessions-search",
+      label: "Sessions",
       items: [
         {
           kind: "action",
-          value: "thread:project-context-only",
+          value: "session:project-context-only",
           searchTerms: ["Fix navbar spacing", "Project"],
           title: "Fix navbar spacing",
           description: "Project",
@@ -132,25 +132,25 @@ describe("buildThreadActionItems", () => {
       query: "project",
       isInSubmenu: false,
       projectSearchItems: [],
-      threadSearchItems: [],
+      sessionSearchItems: [],
     });
 
     expect(groups).toHaveLength(1);
-    expect(groups[0]?.items.map((item) => item.value)).toEqual(["thread:project-context-only"]);
+    expect(groups[0]?.items.map((item) => item.value)).toEqual(["session:project-context-only"]);
   });
 
-  it("filters archived threads out of thread search items", () => {
-    const items = buildThreadActionItems({
-      threads: [
-        makeThread({
-          id: ThreadId.make("thread-active"),
-          title: "Active thread",
+  it("filters archived sessions out of session search items", () => {
+    const items = buildSessionActionItems({
+      sessions: [
+        makeSession({
+          id: SessionId.make("session-active"),
+          title: "Active session",
           createdAt: "2026-03-02T00:00:00.000Z",
           updatedAt: "2026-03-19T00:00:00.000Z",
         }),
-        makeThread({
-          id: ThreadId.make("thread-archived"),
-          title: "Archived thread",
+        makeSession({
+          id: SessionId.make("session-archived"),
+          title: "Archived session",
           archivedAt: "2026-03-20T00:00:00.000Z",
           updatedAt: "2026-03-20T00:00:00.000Z",
         }),
@@ -158,9 +158,9 @@ describe("buildThreadActionItems", () => {
       projectTitleById: new Map([[PROJECT_ID, "Project"]]),
       sortOrder: "updated_at",
       icon: null,
-      runThread: async (_thread) => undefined,
+      runSession: async (_session) => undefined,
     });
 
-    expect(items.map((item) => item.value)).toEqual(["thread:thread-active"]);
+    expect(items.map((item) => item.value)).toEqual(["session:session-active"]);
   });
 });

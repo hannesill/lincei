@@ -38,10 +38,10 @@ describe("GitHubCli.layer", () => {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             JSON.stringify({
               number: 42,
-              title: "Add PR thread creation",
+              title: "Add PR session creation",
               url: "https://github.com/example-workspace/example-app/pull/42",
               baseRefName: "main",
-              headRefName: "feature/pr-threads",
+              headRefName: "feature/pr-sessions",
               state: "OPEN",
               mergedAt: null,
               isCrossRepository: true,
@@ -64,10 +64,10 @@ describe("GitHubCli.layer", () => {
 
       assert.deepStrictEqual(result, {
         number: 42,
-        title: "Add PR thread creation",
+        title: "Add PR session creation",
         url: "https://github.com/example-workspace/example-app/pull/42",
         baseRefName: "main",
-        headRefName: "feature/pr-threads",
+        headRefName: "feature/pr-sessions",
         state: "open",
         isCrossRepository: true,
         headRepositoryNameWithOwner: "example-fork/example-app",
@@ -97,10 +97,10 @@ describe("GitHubCli.layer", () => {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             JSON.stringify({
               number: 42,
-              title: "  Add PR thread creation  \n",
+              title: "  Add PR session creation  \n",
               url: " https://github.com/example-workspace/example-app/pull/42 ",
               baseRefName: " main ",
-              headRefName: "\tfeature/pr-threads\t",
+              headRefName: "\tfeature/pr-sessions\t",
               state: "OPEN",
               mergedAt: null,
               isCrossRepository: true,
@@ -123,10 +123,10 @@ describe("GitHubCli.layer", () => {
 
       assert.deepStrictEqual(result, {
         number: 42,
-        title: "Add PR thread creation",
+        title: "Add PR session creation",
         url: "https://github.com/example-workspace/example-app/pull/42",
         baseRefName: "main",
-        headRefName: "feature/pr-threads",
+        headRefName: "feature/pr-sessions",
         state: "open",
         isCrossRepository: true,
         headRepositoryNameWithOwner: "example-fork/example-app",

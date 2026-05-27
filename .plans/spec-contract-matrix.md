@@ -16,7 +16,7 @@ Status legend:
 - SQL contract:
   - `sequence INTEGER PRIMARY KEY` (global monotonic)
   - `event_id TEXT UNIQUE NOT NULL`
-  - `aggregate_kind TEXT NOT NULL CHECK IN ('project','thread')`
+  - `aggregate_kind TEXT NOT NULL CHECK IN ('project','session')`
   - `stream_id TEXT NOT NULL`
   - `stream_version INTEGER NOT NULL`
   - `event_type TEXT NOT NULL`
@@ -39,7 +39,7 @@ Status legend:
 - Requirement: command idempotency + ack replay receipts table.
 - SQL contract:
   - `command_id TEXT PRIMARY KEY`
-  - `aggregate_kind TEXT NOT NULL CHECK IN ('project','thread')`
+  - `aggregate_kind TEXT NOT NULL CHECK IN ('project','session')`
   - `aggregate_id TEXT NOT NULL`
   - `accepted_at TEXT NOT NULL`
   - `result_sequence INTEGER NOT NULL`
@@ -56,12 +56,12 @@ Status legend:
 - Spec ref: `7.1.3 checkpoint_diff_blobs`
 - Requirement: store large plaintext diffs separate from checkpoint summaries.
 - SQL contract:
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `from_turn_count INTEGER NOT NULL`
   - `to_turn_count INTEGER NOT NULL`
   - `diff TEXT NOT NULL`
   - `created_at TEXT NOT NULL`
-  - `UNIQUE(thread_id, from_turn_count, to_turn_count)`
+  - `UNIQUE(session_id, from_turn_count, to_turn_count)`
 - Current writer path: none
 - Current reader path: none
 - Owner module: `apps/server/src/persistence` + turn diff query service
@@ -70,14 +70,14 @@ Status legend:
 
 ### W4
 
-- Spec ref: `7.1.4 provider_session_runtime`
+- Spec ref: `7.1.4 provider_runtime`
 - Requirement: server-internal provider runtime/resume state.
 - SQL contract:
   - `provider_session_id TEXT PRIMARY KEY`
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `provider_name TEXT NOT NULL`
   - `adapter_key TEXT NOT NULL`
-  - `provider_thread_id TEXT NULL`
+  - `provider_session_id TEXT NULL`
   - `status TEXT NOT NULL CHECK IN ('starting','running','stopped','error')`
   - `last_seen_at TEXT NOT NULL`
   - `resume_cursor_json TEXT NULL`
@@ -115,8 +115,8 @@ Status legend:
 ### E3
 
 - Spec ref: `7.2 Rules/provider ids scope`
-- Requirement: provider ids live in metadata/provider payload, not as thread identity replacement.
-- SQL contract: provider fields persisted inside `metadata_json`; `stream_id` remains project/thread id.
+- Requirement: provider ids live in metadata/provider payload, not as session identity replacement.
+- SQL contract: provider fields persisted inside `metadata_json`; `stream_id` remains project/session id.
 - Current writer path: `apps/server/src/orchestration/decider.ts` (metadata mostly empty)
 - Current reader path: projector/event consumers
 - Owner module: decider + provider ingestion + event store
@@ -156,10 +156,10 @@ Status legend:
 
 ### P2
 
-- Spec ref: `7.3.2 projection_threads`
-- Requirement: persisted thread projection table.
+- Spec ref: `7.3.2 projection_sessions`
+- Requirement: persisted session projection table.
 - SQL contract:
-  - `thread_id TEXT PRIMARY KEY`
+  - `session_id TEXT PRIMARY KEY`
   - `project_id TEXT NOT NULL`
   - `title TEXT NOT NULL`
   - `model TEXT NOT NULL`
@@ -177,11 +177,11 @@ Status legend:
 
 ### P3
 
-- Spec ref: `7.3.3 projection_thread_messages`
-- Requirement: persisted thread message projection table.
+- Spec ref: `7.3.3 projection_session_messages`
+- Requirement: persisted session message projection table.
 - SQL contract:
   - `message_id TEXT PRIMARY KEY`
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `turn_id TEXT NULL`
   - `role TEXT NOT NULL CHECK IN ('user','assistant','system')`
   - `text TEXT NOT NULL`
@@ -196,11 +196,11 @@ Status legend:
 
 ### P4
 
-- Spec ref: `7.3.4 projection_thread_activities`
-- Requirement: persisted thread activity projection table.
+- Spec ref: `7.3.4 projection_session_activities`
+- Requirement: persisted session activity projection table.
 - SQL contract:
   - `activity_id TEXT PRIMARY KEY`
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `turn_id TEXT NULL`
   - `tone TEXT NOT NULL CHECK IN ('info','tool','approval','error')`
   - `kind TEXT NOT NULL`
@@ -215,14 +215,14 @@ Status legend:
 
 ### P5
 
-- Spec ref: `7.3.5 projection_thread_sessions`
-- Requirement: persisted thread session projection table.
+- Spec ref: `7.3.5 projection_session_sessions`
+- Requirement: persisted session session projection table.
 - SQL contract:
-  - `thread_id TEXT PRIMARY KEY`
+  - `session_id TEXT PRIMARY KEY`
   - `status TEXT NOT NULL CHECK IN ('idle','starting','running','ready','interrupted','stopped','error')`
   - `provider_name TEXT NULL`
   - `provider_session_id TEXT NULL`
-  - `provider_thread_id TEXT NULL`
+  - `provider_session_id TEXT NULL`
   - `active_turn_id TEXT NULL`
   - `last_error TEXT NULL`
   - `updated_at TEXT NOT NULL`
@@ -234,11 +234,11 @@ Status legend:
 
 ### P6
 
-- Spec ref: `7.3.6 projection_thread_turns`
-- Requirement: persisted thread turn projection table.
+- Spec ref: `7.3.6 projection_session_turns`
+- Requirement: persisted session turn projection table.
 - SQL contract:
   - `turn_id TEXT PRIMARY KEY`
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `turn_count INTEGER NOT NULL`
   - `status TEXT NOT NULL CHECK IN ('running','completed','interrupted','error')`
   - `user_message_id TEXT NULL`
@@ -256,7 +256,7 @@ Status legend:
 - Spec ref: `7.3.7 projection_checkpoints`
 - Requirement: persisted checkpoint summary projection table.
 - SQL contract:
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `turn_id TEXT NOT NULL`
   - `checkpoint_turn_count INTEGER NOT NULL`
   - `checkpoint_ref TEXT NOT NULL`
@@ -264,7 +264,7 @@ Status legend:
   - `files_json TEXT NOT NULL`
   - `assistant_message_id TEXT NULL`
   - `completed_at TEXT NOT NULL`
-  - `UNIQUE(thread_id, checkpoint_turn_count)`
+  - `UNIQUE(session_id, checkpoint_turn_count)`
 - Current writer path: legacy `provider_checkpoints` writes in `apps/server/src/persistence/Layers/Checkpoints.ts`
 - Current reader path: legacy checkpoint repository
 - Owner module: projector pipeline + checkpoint query layer
@@ -277,7 +277,7 @@ Status legend:
 - Requirement: persisted pending-approval projection table.
 - SQL contract:
   - `request_id TEXT PRIMARY KEY`
-  - `thread_id TEXT NOT NULL`
+  - `session_id TEXT NOT NULL`
   - `turn_id TEXT NULL`
   - `status TEXT NOT NULL CHECK IN ('pending','resolved')`
   - `decision TEXT NULL CHECK IN ('accept','acceptForSession','decline','cancel')`
@@ -344,7 +344,7 @@ Status legend:
 - Requirement: snapshot `projects[]` source is `projection_projects`.
 - SQL contract: `projects` collection assembled from `projection_projects` rows.
 - Current writer path: none
-- Current reader path: in-memory thread/project arrays
+- Current reader path: in-memory session/project arrays
 - Owner module: snapshot query service
 - Status: `to-replace`
 - Notes: no DB project projection reader exists yet.
@@ -352,7 +352,7 @@ Status legend:
 ### R3
 
 - Spec ref: `7.4.3`
-- Requirement: thread snapshot `checkpoints[]` source is `projection_checkpoints` with required fields.
+- Requirement: session snapshot `checkpoints[]` source is `projection_checkpoints` with required fields.
 - SQL contract: fields `turnId`, `completedAt`, `status`, `files[]`, `checkpointRef`, optional `assistantMessageId`, `checkpointTurnCount`.
 - Current writer path: legacy checkpoint repo data model
 - Current reader path: in-memory checkpoints from orchestration events
@@ -374,8 +374,8 @@ Status legend:
 ### R5
 
 - Spec ref: `7.4.5`
-- Requirement: client acts on `ThreadId`; server resolves provider session via `projection_thread_sessions`.
-- SQL contract: session lookup by `thread_id` from projection table.
+- Requirement: client acts on `SessionId`; server resolves provider session via `projection_session_sessions`.
+- SQL contract: session lookup by `session_id` from projection table.
 - Current writer path: mixed provider/session handling paths
 - Current reader path: legacy provider session persistence lookups
 - Owner module: provider dispatch/session resolution
@@ -419,7 +419,7 @@ Status legend:
 ### A3
 
 - Topic: `snapshotSequence` dependency set for min-sequence computation.
-- Decision: include all projectors used to construct snapshot payload (`projects`, `threads`, `messages`, `activities`, `sessions`, `turns`, `checkpoints`, `pending_approvals`).
+- Decision: include all projectors used to construct snapshot payload (`projects`, `sessions`, `messages`, `activities`, `sessions`, `turns`, `checkpoints`, `pending_approvals`).
 
 ### A4
 

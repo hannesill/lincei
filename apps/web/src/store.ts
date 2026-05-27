@@ -9,17 +9,17 @@ import type {
   OrchestrationReadModel,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
+  OrchestrationProviderRuntime,
+  OrchestrationProviderRuntimeStatus,
   OrchestrationSession,
-  OrchestrationSessionStatus,
-  OrchestrationThread,
-  OrchestrationThreadShell,
-  OrchestrationThreadActivity,
+  OrchestrationSessionShell,
+  OrchestrationSessionActivity,
   ProjectId,
   ScopedProjectRef,
-  ScopedThreadRef,
+  ScopedSessionRef,
 } from "@t3tools/contracts";
 import { isProviderDriverKind, ProviderDriverKind } from "@t3tools/contracts";
-import type { ThreadId, TurnId } from "@t3tools/contracts";
+import type { SessionId, TurnId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
 import { create } from "zustand";
@@ -27,16 +27,16 @@ import {
   type ChatMessage,
   type Project,
   type ProposedPlan,
-  type SidebarThreadSummary,
-  type Thread,
-  type ThreadSession,
-  type ThreadShell,
-  type ThreadTurnState,
+  type SidebarSessionSummary,
+  type Session,
+  type ProviderRuntime,
+  type SessionShell,
+  type SessionTurnState,
   type TurnDiffSummary,
 } from "./types";
 import { resolveEnvironmentHttpUrl } from "./environments/runtime";
-import { sanitizeThreadErrorMessage } from "./rpc/transportError";
-import { getThreadFromEnvironmentState } from "./threadDerivation";
+import { sanitizeSessionErrorMessage } from "./rpc/transportError";
+import { getSessionFromEnvironmentState } from "./sessionDerivation";
 const isProviderDriverKindValue = Schema.is(ProviderDriverKind);
 
 export interface EnvironmentState {
@@ -44,48 +44,48 @@ export interface EnvironmentState {
   projectById: Record<ProjectId, Project>;
 
   // ---------------------------------------------------------------------------
-  // Thread bookkeeping — written by BOTH shell stream and detail stream.
-  // Both streams ensure the thread is registered here; the bookkeeping is
+  // Session bookkeeping — written by BOTH shell stream and detail stream.
+  // Both streams ensure the session is registered here; the bookkeeping is
   // additive (append-only IDs) so concurrent writes are safe.
   // ---------------------------------------------------------------------------
-  threadIds: ThreadId[];
-  threadIdsByProjectId: Record<ProjectId, ThreadId[]>;
+  sessionIds: SessionId[];
+  sessionIdsByProjectId: Record<ProjectId, SessionId[]>;
 
   // ---------------------------------------------------------------------------
-  // Thread shell / session / turn — written by BOTH shell stream and detail
+  // Session shell / session / turn — written by BOTH shell stream and detail
   // stream.  The shell stream is the *authoritative* source (server pre-
   // computes these from the projection pipeline), but the detail stream also
-  // writes them so the active thread has up-to-date state even if the shell
+  // writes them so the active session has up-to-date state even if the shell
   // event hasn't arrived yet.  Structural equality checks in both write
   // functions prevent unnecessary React re-renders when both streams deliver
   // equivalent data.
   // ---------------------------------------------------------------------------
-  threadShellById: Record<ThreadId, ThreadShell>;
-  threadSessionById: Record<ThreadId, ThreadSession | null>;
-  threadTurnStateById: Record<ThreadId, ThreadTurnState>;
+  sessionShellById: Record<SessionId, SessionShell>;
+  providerRuntimeById: Record<SessionId, ProviderRuntime | null>;
+  sessionTurnStateById: Record<SessionId, SessionTurnState>;
 
   // ---------------------------------------------------------------------------
-  // Thread detail content — written ONLY by the detail stream
-  // (writeThreadState / syncServerThreadDetail).  The shell stream never
+  // Session detail content — written ONLY by the detail stream
+  // (writeSessionState / syncServerSessionDetail).  The shell stream never
   // touches these.
   // ---------------------------------------------------------------------------
-  messageIdsByThreadId: Record<ThreadId, MessageId[]>;
-  messageByThreadId: Record<ThreadId, Record<MessageId, ChatMessage>>;
-  activityIdsByThreadId: Record<ThreadId, string[]>;
-  activityByThreadId: Record<ThreadId, Record<string, OrchestrationThreadActivity>>;
-  proposedPlanIdsByThreadId: Record<ThreadId, string[]>;
-  proposedPlanByThreadId: Record<ThreadId, Record<string, ProposedPlan>>;
-  turnDiffIdsByThreadId: Record<ThreadId, TurnId[]>;
-  turnDiffSummaryByThreadId: Record<ThreadId, Record<TurnId, TurnDiffSummary>>;
+  messageIdsBySessionId: Record<SessionId, MessageId[]>;
+  messageBySessionId: Record<SessionId, Record<MessageId, ChatMessage>>;
+  activityIdsBySessionId: Record<SessionId, string[]>;
+  activityBySessionId: Record<SessionId, Record<string, OrchestrationSessionActivity>>;
+  proposedPlanIdsBySessionId: Record<SessionId, string[]>;
+  proposedPlanBySessionId: Record<SessionId, Record<string, ProposedPlan>>;
+  turnDiffIdsBySessionId: Record<SessionId, TurnId[]>;
+  turnDiffSummaryBySessionId: Record<SessionId, Record<TurnId, TurnDiffSummary>>;
 
   // ---------------------------------------------------------------------------
   // Sidebar summary — written ONLY by the shell stream
-  // (writeThreadShellState / mapThreadShell).  Pre-computed server-side with
+  // (writeSessionShellState / mapSessionShell).  Pre-computed server-side with
   // fields like latestUserMessageAt, hasPendingApprovals, etc.  The detail
   // stream must NOT write here; the shell stream is the single source of
   // truth for sidebar data.
   // ---------------------------------------------------------------------------
-  sidebarThreadSummaryById: Record<ThreadId, SidebarThreadSummary>;
+  sidebarSessionSummaryById: Record<SessionId, SidebarSessionSummary>;
 
   bootstrapComplete: boolean;
 }
@@ -98,20 +98,20 @@ export interface AppState {
 const initialEnvironmentState: EnvironmentState = {
   projectIds: [],
   projectById: {},
-  threadIds: [],
-  threadIdsByProjectId: {},
-  threadShellById: {},
-  threadSessionById: {},
-  threadTurnStateById: {},
-  messageIdsByThreadId: {},
-  messageByThreadId: {},
-  activityIdsByThreadId: {},
-  activityByThreadId: {},
-  proposedPlanIdsByThreadId: {},
-  proposedPlanByThreadId: {},
-  turnDiffIdsByThreadId: {},
-  turnDiffSummaryByThreadId: {},
-  sidebarThreadSummaryById: {},
+  sessionIds: [],
+  sessionIdsByProjectId: {},
+  sessionShellById: {},
+  providerRuntimeById: {},
+  sessionTurnStateById: {},
+  messageIdsBySessionId: {},
+  messageBySessionId: {},
+  activityIdsBySessionId: {},
+  activityBySessionId: {},
+  proposedPlanIdsBySessionId: {},
+  proposedPlanBySessionId: {},
+  turnDiffIdsBySessionId: {},
+  turnDiffSummaryBySessionId: {},
+  sidebarSessionSummaryById: {},
   bootstrapComplete: false,
 };
 
@@ -124,7 +124,7 @@ const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
 const MAX_THREAD_PROPOSED_PLANS = 200;
 const MAX_THREAD_ACTIVITIES = 500;
-const EMPTY_THREAD_IDS: ThreadId[] = [];
+const EMPTY_THREAD_IDS: SessionId[] = [];
 
 function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
@@ -147,7 +147,7 @@ function mapProjectScripts(scripts: ReadonlyArray<Project["scripts"][number]>): 
   return scripts.map((script) => ({ ...script }));
 }
 
-function mapSession(session: OrchestrationSession): ThreadSession {
+function mapProviderRuntime(session: OrchestrationProviderRuntime): ProviderRuntime {
   return {
     provider: toLegacyProvider(session.providerName),
     providerInstanceId: session.providerInstanceId ?? undefined,
@@ -191,7 +191,7 @@ function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): ProposedPlan 
     turnId: proposedPlan.turnId,
     planMarkdown: proposedPlan.planMarkdown,
     implementedAt: proposedPlan.implementedAt,
-    implementationThreadId: proposedPlan.implementationThreadId,
+    implementationSessionId: proposedPlan.implementationSessionId,
     createdAt: proposedPlan.createdAt,
     updatedAt: proposedPlan.updatedAt,
   };
@@ -230,112 +230,112 @@ function mapProject(
   };
 }
 
-function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): Thread {
+function mapSession(session: OrchestrationSession, environmentId: EnvironmentId): Session {
   return {
-    id: thread.id,
+    id: session.id,
     environmentId,
-    codexThreadId: null,
-    projectId: thread.projectId,
-    title: thread.title,
-    modelSelection: normalizeModelSelection(thread.modelSelection),
-    runtimeMode: thread.runtimeMode,
-    interactionMode: thread.interactionMode,
-    session: thread.session ? mapSession(thread.session) : null,
-    messages: thread.messages.map((message) => mapMessage(environmentId, message)),
-    proposedPlans: thread.proposedPlans.map(mapProposedPlan),
-    error: sanitizeThreadErrorMessage(thread.session?.lastError),
-    createdAt: thread.createdAt,
-    archivedAt: thread.archivedAt,
-    updatedAt: thread.updatedAt,
-    latestTurn: thread.latestTurn,
-    pendingSourceProposedPlan: thread.latestTurn?.sourceProposedPlan,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
-    turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
-    activities: thread.activities.map((activity) => ({ ...activity })),
+    codexSessionId: null,
+    projectId: session.projectId,
+    title: session.title,
+    modelSelection: normalizeModelSelection(session.modelSelection),
+    runtimeMode: session.runtimeMode,
+    interactionMode: session.interactionMode,
+    session: session.session ? mapProviderRuntime(session.session) : null,
+    messages: session.messages.map((message) => mapMessage(environmentId, message)),
+    proposedPlans: session.proposedPlans.map(mapProposedPlan),
+    error: sanitizeSessionErrorMessage(session.session?.lastError),
+    createdAt: session.createdAt,
+    archivedAt: session.archivedAt,
+    updatedAt: session.updatedAt,
+    latestTurn: session.latestTurn,
+    pendingSourceProposedPlan: session.latestTurn?.sourceProposedPlan,
+    branch: session.branch,
+    worktreePath: session.worktreePath,
+    turnDiffSummaries: session.checkpoints.map(mapTurnDiffSummary),
+    activities: session.activities.map((activity) => ({ ...activity })),
   };
 }
 
-function mapThreadShell(
-  thread: OrchestrationThreadShell,
+function mapSessionShell(
+  session: OrchestrationSessionShell,
   environmentId: EnvironmentId,
 ): {
-  shell: ThreadShell;
-  session: ThreadSession | null;
-  turnState: ThreadTurnState;
-  summary: SidebarThreadSummary;
+  shell: SessionShell;
+  session: ProviderRuntime | null;
+  turnState: SessionTurnState;
+  summary: SidebarSessionSummary;
 } {
-  const shell: ThreadShell = {
-    id: thread.id,
+  const shell: SessionShell = {
+    id: session.id,
     environmentId,
-    codexThreadId: null,
-    projectId: thread.projectId,
-    title: thread.title,
-    modelSelection: normalizeModelSelection(thread.modelSelection),
-    runtimeMode: thread.runtimeMode,
-    interactionMode: thread.interactionMode,
-    error: sanitizeThreadErrorMessage(thread.session?.lastError),
-    createdAt: thread.createdAt,
-    archivedAt: thread.archivedAt,
-    updatedAt: thread.updatedAt,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
+    codexSessionId: null,
+    projectId: session.projectId,
+    title: session.title,
+    modelSelection: normalizeModelSelection(session.modelSelection),
+    runtimeMode: session.runtimeMode,
+    interactionMode: session.interactionMode,
+    error: sanitizeSessionErrorMessage(session.session?.lastError),
+    createdAt: session.createdAt,
+    archivedAt: session.archivedAt,
+    updatedAt: session.updatedAt,
+    branch: session.branch,
+    worktreePath: session.worktreePath,
   };
-  const session = thread.session ? mapSession(thread.session) : null;
-  const turnState: ThreadTurnState = {
-    latestTurn: thread.latestTurn,
-    pendingSourceProposedPlan: thread.latestTurn?.sourceProposedPlan,
+  const providerRuntime = session.session ? mapProviderRuntime(session.session) : null;
+  const turnState: SessionTurnState = {
+    latestTurn: session.latestTurn,
+    pendingSourceProposedPlan: session.latestTurn?.sourceProposedPlan,
   };
-  const summary: SidebarThreadSummary = {
-    id: thread.id,
+  const summary: SidebarSessionSummary = {
+    id: session.id,
     environmentId,
-    projectId: thread.projectId,
-    title: thread.title,
-    interactionMode: thread.interactionMode,
-    session,
-    createdAt: thread.createdAt,
-    archivedAt: thread.archivedAt,
-    updatedAt: thread.updatedAt,
-    latestTurn: thread.latestTurn,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
-    latestUserMessageAt: thread.latestUserMessageAt,
-    hasPendingApprovals: thread.hasPendingApprovals,
-    hasPendingUserInput: thread.hasPendingUserInput,
-    hasActionableProposedPlan: thread.hasActionableProposedPlan,
+    projectId: session.projectId,
+    title: session.title,
+    interactionMode: session.interactionMode,
+    session: providerRuntime,
+    createdAt: session.createdAt,
+    archivedAt: session.archivedAt,
+    updatedAt: session.updatedAt,
+    latestTurn: session.latestTurn,
+    branch: session.branch,
+    worktreePath: session.worktreePath,
+    latestUserMessageAt: session.latestUserMessageAt,
+    hasPendingApprovals: session.hasPendingApprovals,
+    hasPendingUserInput: session.hasPendingUserInput,
+    hasActionableProposedPlan: session.hasActionableProposedPlan,
   };
   return {
     shell,
-    session,
+    session: providerRuntime,
     turnState,
     summary,
   };
 }
 
-function toThreadShell(thread: Thread): ThreadShell {
+function toSessionShell(session: Session): SessionShell {
   return {
-    id: thread.id,
-    environmentId: thread.environmentId,
-    codexThreadId: thread.codexThreadId,
-    projectId: thread.projectId,
-    title: thread.title,
-    modelSelection: thread.modelSelection,
-    runtimeMode: thread.runtimeMode,
-    interactionMode: thread.interactionMode,
-    error: thread.error,
-    createdAt: thread.createdAt,
-    archivedAt: thread.archivedAt,
-    updatedAt: thread.updatedAt,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
+    id: session.id,
+    environmentId: session.environmentId,
+    codexSessionId: session.codexSessionId,
+    projectId: session.projectId,
+    title: session.title,
+    modelSelection: session.modelSelection,
+    runtimeMode: session.runtimeMode,
+    interactionMode: session.interactionMode,
+    error: session.error,
+    createdAt: session.createdAt,
+    archivedAt: session.archivedAt,
+    updatedAt: session.updatedAt,
+    branch: session.branch,
+    worktreePath: session.worktreePath,
   };
 }
 
-function toThreadTurnState(thread: Thread): ThreadTurnState {
+function toSessionTurnState(session: Session): SessionTurnState {
   return {
-    latestTurn: thread.latestTurn,
-    ...(thread.pendingSourceProposedPlan
-      ? { pendingSourceProposedPlan: thread.pendingSourceProposedPlan }
+    latestTurn: session.latestTurn,
+    ...(session.pendingSourceProposedPlan
+      ? { pendingSourceProposedPlan: session.pendingSourceProposedPlan }
       : {}),
   };
 }
@@ -346,7 +346,7 @@ function sourceProposedPlansEqual(
 ): boolean {
   if (left === right) return true;
   if (left === undefined || right === undefined) return false;
-  return left.threadId === right.threadId && left.planId === right.planId;
+  return left.sessionId === right.sessionId && left.planId === right.planId;
 }
 
 function latestTurnsEqual(
@@ -366,9 +366,9 @@ function latestTurnsEqual(
   );
 }
 
-function threadSessionsEqual(
-  left: ThreadSession | null | undefined,
-  right: ThreadSession | null | undefined,
+function providerRuntimesEqual(
+  left: ProviderRuntime | null | undefined,
+  right: ProviderRuntime | null | undefined,
 ): boolean {
   if (left === right) return true;
   if (left == null || right == null) return false;
@@ -383,9 +383,9 @@ function threadSessionsEqual(
   );
 }
 
-function sidebarThreadSummariesEqual(
-  left: SidebarThreadSummary | undefined,
-  right: SidebarThreadSummary,
+function sidebarSessionSummariesEqual(
+  left: SidebarSessionSummary | undefined,
+  right: SidebarSessionSummary,
 ): boolean {
   return (
     left !== undefined &&
@@ -393,7 +393,7 @@ function sidebarThreadSummariesEqual(
     left.projectId === right.projectId &&
     left.title === right.title &&
     left.interactionMode === right.interactionMode &&
-    threadSessionsEqual(left.session, right.session) &&
+    providerRuntimesEqual(left.session, right.session) &&
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&
     left.updatedAt === right.updatedAt &&
@@ -407,12 +407,12 @@ function sidebarThreadSummariesEqual(
   );
 }
 
-function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): boolean {
+function sessionShellsEqual(left: SessionShell | undefined, right: SessionShell): boolean {
   return (
     left !== undefined &&
     left.id === right.id &&
     left.environmentId === right.environmentId &&
-    left.codexThreadId === right.codexThreadId &&
+    left.codexSessionId === right.codexSessionId &&
     left.projectId === right.projectId &&
     left.title === right.title &&
     left.modelSelection === right.modelSelection &&
@@ -427,7 +427,10 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
   );
 }
 
-function threadTurnStatesEqual(left: ThreadTurnState | undefined, right: ThreadTurnState): boolean {
+function sessionTurnStatesEqual(
+  left: SessionTurnState | undefined,
+  right: SessionTurnState,
+): boolean {
   return (
     left !== undefined &&
     latestTurnsEqual(left.latestTurn, right.latestTurn) &&
@@ -443,50 +446,50 @@ function removeId<T extends string>(ids: readonly T[], id: T): T[] {
   return ids.filter((value) => value !== id);
 }
 
-function buildMessageSlice(thread: Thread): {
+function buildMessageSlice(session: Session): {
   ids: MessageId[];
   byId: Record<MessageId, ChatMessage>;
 } {
   return {
-    ids: thread.messages.map((message) => message.id),
+    ids: session.messages.map((message) => message.id),
     byId: Object.fromEntries(
-      thread.messages.map((message) => [message.id, message] as const),
+      session.messages.map((message) => [message.id, message] as const),
     ) as Record<MessageId, ChatMessage>,
   };
 }
 
-function buildActivitySlice(thread: Thread): {
+function buildActivitySlice(session: Session): {
   ids: string[];
-  byId: Record<string, OrchestrationThreadActivity>;
+  byId: Record<string, OrchestrationSessionActivity>;
 } {
   return {
-    ids: thread.activities.map((activity) => activity.id),
+    ids: session.activities.map((activity) => activity.id),
     byId: Object.fromEntries(
-      thread.activities.map((activity) => [activity.id, activity] as const),
-    ) as Record<string, OrchestrationThreadActivity>,
+      session.activities.map((activity) => [activity.id, activity] as const),
+    ) as Record<string, OrchestrationSessionActivity>,
   };
 }
 
-function buildProposedPlanSlice(thread: Thread): {
+function buildProposedPlanSlice(session: Session): {
   ids: string[];
   byId: Record<string, ProposedPlan>;
 } {
   return {
-    ids: thread.proposedPlans.map((plan) => plan.id),
+    ids: session.proposedPlans.map((plan) => plan.id),
     byId: Object.fromEntries(
-      thread.proposedPlans.map((plan) => [plan.id, plan] as const),
+      session.proposedPlans.map((plan) => [plan.id, plan] as const),
     ) as Record<string, ProposedPlan>,
   };
 }
 
-function buildTurnDiffSlice(thread: Thread): {
+function buildTurnDiffSlice(session: Session): {
   ids: TurnId[];
   byId: Record<TurnId, TurnDiffSummary>;
 } {
   return {
-    ids: thread.turnDiffSummaries.map((summary) => summary.turnId),
+    ids: session.turnDiffSummaries.map((summary) => summary.turnId),
     byId: Object.fromEntries(
-      thread.turnDiffSummaries.map((summary) => [summary.turnId, summary] as const),
+      session.turnDiffSummaries.map((summary) => [summary.turnId, summary] as const),
     ) as Record<TurnId, TurnDiffSummary>,
   };
 }
@@ -498,61 +501,61 @@ function getProjects(state: EnvironmentState): Project[] {
   });
 }
 
-function getThreads(state: EnvironmentState): Thread[] {
-  return state.threadIds.flatMap((threadId) => {
-    const thread = getThreadFromEnvironmentState(state, threadId);
-    return thread ? [thread] : [];
+function getSessions(state: EnvironmentState): Session[] {
+  return state.sessionIds.flatMap((sessionId) => {
+    const session = getSessionFromEnvironmentState(state, sessionId);
+    return session ? [session] : [];
   });
 }
 
 /**
- * Ensure a thread is registered in the bookkeeping indices (threadIds,
- * threadIdsByProjectId).  Shared by both the shell stream and detail stream
+ * Ensure a session is registered in the bookkeeping indices (sessionIds,
+ * sessionIdsByProjectId).  Shared by both the shell stream and detail stream
  * write paths — the bookkeeping is additive (append-only IDs) so concurrent
  * writes from both streams are safe.
  */
-function ensureThreadRegistered(
+function ensureSessionRegistered(
   state: EnvironmentState,
-  threadId: ThreadId,
+  sessionId: SessionId,
   nextProjectId: ProjectId,
   previousProjectId: ProjectId | undefined,
 ): EnvironmentState {
   let nextState = state;
 
-  if (!state.threadIds.includes(threadId)) {
+  if (!state.sessionIds.includes(sessionId)) {
     nextState = {
       ...nextState,
-      threadIds: [...nextState.threadIds, threadId],
+      sessionIds: [...nextState.sessionIds, sessionId],
     };
   }
 
   if (previousProjectId !== nextProjectId) {
-    let threadIdsByProjectId = nextState.threadIdsByProjectId;
+    let sessionIdsByProjectId = nextState.sessionIdsByProjectId;
     if (previousProjectId) {
-      const previousIds = threadIdsByProjectId[previousProjectId] ?? EMPTY_THREAD_IDS;
-      const nextIds = removeId(previousIds, threadId);
+      const previousIds = sessionIdsByProjectId[previousProjectId] ?? EMPTY_THREAD_IDS;
+      const nextIds = removeId(previousIds, sessionId);
       if (nextIds.length === 0) {
-        const { [previousProjectId]: _removed, ...rest } = threadIdsByProjectId;
-        threadIdsByProjectId = rest as Record<ProjectId, ThreadId[]>;
+        const { [previousProjectId]: _removed, ...rest } = sessionIdsByProjectId;
+        sessionIdsByProjectId = rest as Record<ProjectId, SessionId[]>;
       } else if (!arraysEqual(previousIds, nextIds)) {
-        threadIdsByProjectId = {
-          ...threadIdsByProjectId,
+        sessionIdsByProjectId = {
+          ...sessionIdsByProjectId,
           [previousProjectId]: nextIds,
         };
       }
     }
-    const projectThreadIds = threadIdsByProjectId[nextProjectId] ?? EMPTY_THREAD_IDS;
-    const nextProjectThreadIds = appendId(projectThreadIds, threadId);
-    if (!arraysEqual(projectThreadIds, nextProjectThreadIds)) {
-      threadIdsByProjectId = {
-        ...threadIdsByProjectId,
-        [nextProjectId]: nextProjectThreadIds,
+    const projectSessionIds = sessionIdsByProjectId[nextProjectId] ?? EMPTY_THREAD_IDS;
+    const nextProjectSessionIds = appendId(projectSessionIds, sessionId);
+    if (!arraysEqual(projectSessionIds, nextProjectSessionIds)) {
+      sessionIdsByProjectId = {
+        ...sessionIdsByProjectId,
+        [nextProjectId]: nextProjectSessionIds,
       };
     }
-    if (threadIdsByProjectId !== nextState.threadIdsByProjectId) {
+    if (sessionIdsByProjectId !== nextState.sessionIdsByProjectId) {
       nextState = {
         ...nextState,
-        threadIdsByProjectId,
+        sessionIdsByProjectId,
       };
     }
   }
@@ -561,118 +564,118 @@ function ensureThreadRegistered(
 }
 
 /**
- * Write thread state from the **detail stream** (per-thread subscription).
+ * Write session state from the **detail stream** (per-session subscription).
  *
  * Owns: messages, activities, proposed plans, turn diff summaries.
- * Also writes threadShellById / threadSessionById / threadTurnStateById so
- * the active thread has up-to-date state even if the shell stream event
+ * Also writes sessionShellById / providerRuntimeById / sessionTurnStateById so
+ * the active session has up-to-date state even if the shell stream event
  * hasn't arrived yet (both streams use structural equality checks to avoid
  * unnecessary re-renders when delivering equivalent data).
- * Does NOT write sidebarThreadSummaryById — that is shell-stream-only.
+ * Does NOT write sidebarSessionSummaryById — that is shell-stream-only.
  */
-function writeThreadState(
+function writeSessionState(
   state: EnvironmentState,
-  nextThread: Thread,
-  previousThread?: Thread,
+  nextSession: Session,
+  previousSession?: Session,
 ): EnvironmentState {
-  const nextShell = toThreadShell(nextThread);
-  const nextTurnState = toThreadTurnState(nextThread);
-  const previousShell = state.threadShellById[nextThread.id];
-  const previousTurnState = state.threadTurnStateById[nextThread.id];
+  const nextShell = toSessionShell(nextSession);
+  const nextTurnState = toSessionTurnState(nextSession);
+  const previousShell = state.sessionShellById[nextSession.id];
+  const previousTurnState = state.sessionTurnStateById[nextSession.id];
 
-  let nextState = ensureThreadRegistered(
+  let nextState = ensureSessionRegistered(
     state,
-    nextThread.id,
-    nextThread.projectId,
-    previousThread?.projectId,
+    nextSession.id,
+    nextSession.projectId,
+    previousSession?.projectId,
   );
 
-  if (!threadShellsEqual(previousShell, nextShell)) {
+  if (!sessionShellsEqual(previousShell, nextShell)) {
     nextState = {
       ...nextState,
-      threadShellById: {
-        ...nextState.threadShellById,
-        [nextThread.id]: nextShell,
+      sessionShellById: {
+        ...nextState.sessionShellById,
+        [nextSession.id]: nextShell,
       },
     };
   }
 
-  if (!threadSessionsEqual(previousThread?.session ?? null, nextThread.session)) {
+  if (!providerRuntimesEqual(previousSession?.session ?? null, nextSession.session)) {
     nextState = {
       ...nextState,
-      threadSessionById: {
-        ...nextState.threadSessionById,
-        [nextThread.id]: nextThread.session,
+      providerRuntimeById: {
+        ...nextState.providerRuntimeById,
+        [nextSession.id]: nextSession.session,
       },
     };
   }
 
-  if (!threadTurnStatesEqual(previousTurnState, nextTurnState)) {
+  if (!sessionTurnStatesEqual(previousTurnState, nextTurnState)) {
     nextState = {
       ...nextState,
-      threadTurnStateById: {
-        ...nextState.threadTurnStateById,
-        [nextThread.id]: nextTurnState,
+      sessionTurnStateById: {
+        ...nextState.sessionTurnStateById,
+        [nextSession.id]: nextTurnState,
       },
     };
   }
 
-  if (previousThread?.messages !== nextThread.messages) {
-    const nextMessageSlice = buildMessageSlice(nextThread);
+  if (previousSession?.messages !== nextSession.messages) {
+    const nextMessageSlice = buildMessageSlice(nextSession);
     nextState = {
       ...nextState,
-      messageIdsByThreadId: {
-        ...nextState.messageIdsByThreadId,
-        [nextThread.id]: nextMessageSlice.ids,
+      messageIdsBySessionId: {
+        ...nextState.messageIdsBySessionId,
+        [nextSession.id]: nextMessageSlice.ids,
       },
-      messageByThreadId: {
-        ...nextState.messageByThreadId,
-        [nextThread.id]: nextMessageSlice.byId,
+      messageBySessionId: {
+        ...nextState.messageBySessionId,
+        [nextSession.id]: nextMessageSlice.byId,
       },
     };
   }
 
-  if (previousThread?.activities !== nextThread.activities) {
-    const nextActivitySlice = buildActivitySlice(nextThread);
+  if (previousSession?.activities !== nextSession.activities) {
+    const nextActivitySlice = buildActivitySlice(nextSession);
     nextState = {
       ...nextState,
-      activityIdsByThreadId: {
-        ...nextState.activityIdsByThreadId,
-        [nextThread.id]: nextActivitySlice.ids,
+      activityIdsBySessionId: {
+        ...nextState.activityIdsBySessionId,
+        [nextSession.id]: nextActivitySlice.ids,
       },
-      activityByThreadId: {
-        ...nextState.activityByThreadId,
-        [nextThread.id]: nextActivitySlice.byId,
+      activityBySessionId: {
+        ...nextState.activityBySessionId,
+        [nextSession.id]: nextActivitySlice.byId,
       },
     };
   }
 
-  if (previousThread?.proposedPlans !== nextThread.proposedPlans) {
-    const nextProposedPlanSlice = buildProposedPlanSlice(nextThread);
+  if (previousSession?.proposedPlans !== nextSession.proposedPlans) {
+    const nextProposedPlanSlice = buildProposedPlanSlice(nextSession);
     nextState = {
       ...nextState,
-      proposedPlanIdsByThreadId: {
-        ...nextState.proposedPlanIdsByThreadId,
-        [nextThread.id]: nextProposedPlanSlice.ids,
+      proposedPlanIdsBySessionId: {
+        ...nextState.proposedPlanIdsBySessionId,
+        [nextSession.id]: nextProposedPlanSlice.ids,
       },
-      proposedPlanByThreadId: {
-        ...nextState.proposedPlanByThreadId,
-        [nextThread.id]: nextProposedPlanSlice.byId,
+      proposedPlanBySessionId: {
+        ...nextState.proposedPlanBySessionId,
+        [nextSession.id]: nextProposedPlanSlice.byId,
       },
     };
   }
 
-  if (previousThread?.turnDiffSummaries !== nextThread.turnDiffSummaries) {
-    const nextTurnDiffSlice = buildTurnDiffSlice(nextThread);
+  if (previousSession?.turnDiffSummaries !== nextSession.turnDiffSummaries) {
+    const nextTurnDiffSlice = buildTurnDiffSlice(nextSession);
     nextState = {
       ...nextState,
-      turnDiffIdsByThreadId: {
-        ...nextState.turnDiffIdsByThreadId,
-        [nextThread.id]: nextTurnDiffSlice.ids,
+      turnDiffIdsBySessionId: {
+        ...nextState.turnDiffIdsBySessionId,
+        [nextSession.id]: nextTurnDiffSlice.ids,
       },
-      turnDiffSummaryByThreadId: {
-        ...nextState.turnDiffSummaryByThreadId,
-        [nextThread.id]: nextTurnDiffSlice.byId,
+      turnDiffSummaryBySessionId: {
+        ...nextState.turnDiffSummaryBySessionId,
+        [nextSession.id]: nextTurnDiffSlice.byId,
       },
     };
   }
@@ -681,79 +684,82 @@ function writeThreadState(
 }
 
 /**
- * Write thread state from the **shell stream** (all-threads subscription).
+ * Write session state from the **shell stream** (all-sessions subscription).
  *
- * Owns: sidebarThreadSummaryById (pre-computed server-side sidebar data).
- * Also writes threadShellById / threadSessionById / threadTurnStateById as
+ * Owns: sidebarSessionSummaryById (pre-computed server-side sidebar data).
+ * Also writes sessionShellById / providerRuntimeById / sessionTurnStateById as
  * the authoritative source for these fields.  The detail stream may also
- * write them for the focused thread (see writeThreadState); structural
+ * write them for the focused session (see writeSessionState); structural
  * equality checks prevent unnecessary re-renders.
  * Does NOT write message/activity/proposedPlan/turnDiff content — that is
  * detail-stream-only.
  */
-function writeThreadShellState(
+function writeSessionShellState(
   state: EnvironmentState,
-  nextThread: {
-    shell: ThreadShell;
-    session: ThreadSession | null;
-    turnState: ThreadTurnState;
-    summary: SidebarThreadSummary;
+  nextSession: {
+    shell: SessionShell;
+    session: ProviderRuntime | null;
+    turnState: SessionTurnState;
+    summary: SidebarSessionSummary;
   },
 ): EnvironmentState {
-  const previousShell = state.threadShellById[nextThread.shell.id];
+  const previousShell = state.sessionShellById[nextSession.shell.id];
 
-  let nextState = ensureThreadRegistered(
+  let nextState = ensureSessionRegistered(
     state,
-    nextThread.shell.id,
-    nextThread.shell.projectId,
+    nextSession.shell.id,
+    nextSession.shell.projectId,
     previousShell?.projectId,
   );
 
-  if (!threadShellsEqual(previousShell, nextThread.shell)) {
+  if (!sessionShellsEqual(previousShell, nextSession.shell)) {
     nextState = {
       ...nextState,
-      threadShellById: {
-        ...nextState.threadShellById,
-        [nextThread.shell.id]: nextThread.shell,
+      sessionShellById: {
+        ...nextState.sessionShellById,
+        [nextSession.shell.id]: nextSession.shell,
       },
     };
   }
 
   if (
-    !threadSessionsEqual(state.threadSessionById[nextThread.shell.id] ?? null, nextThread.session)
-  ) {
-    nextState = {
-      ...nextState,
-      threadSessionById: {
-        ...nextState.threadSessionById,
-        [nextThread.shell.id]: nextThread.session,
-      },
-    };
-  }
-
-  if (
-    !threadTurnStatesEqual(state.threadTurnStateById[nextThread.shell.id], nextThread.turnState)
-  ) {
-    nextState = {
-      ...nextState,
-      threadTurnStateById: {
-        ...nextState.threadTurnStateById,
-        [nextThread.shell.id]: nextThread.turnState,
-      },
-    };
-  }
-
-  if (
-    !sidebarThreadSummariesEqual(
-      state.sidebarThreadSummaryById[nextThread.shell.id],
-      nextThread.summary,
+    !providerRuntimesEqual(
+      state.providerRuntimeById[nextSession.shell.id] ?? null,
+      nextSession.session,
     )
   ) {
     nextState = {
       ...nextState,
-      sidebarThreadSummaryById: {
-        ...nextState.sidebarThreadSummaryById,
-        [nextThread.shell.id]: nextThread.summary,
+      providerRuntimeById: {
+        ...nextState.providerRuntimeById,
+        [nextSession.shell.id]: nextSession.session,
+      },
+    };
+  }
+
+  if (
+    !sessionTurnStatesEqual(state.sessionTurnStateById[nextSession.shell.id], nextSession.turnState)
+  ) {
+    nextState = {
+      ...nextState,
+      sessionTurnStateById: {
+        ...nextState.sessionTurnStateById,
+        [nextSession.shell.id]: nextSession.turnState,
+      },
+    };
+  }
+
+  if (
+    !sidebarSessionSummariesEqual(
+      state.sidebarSessionSummaryById[nextSession.shell.id],
+      nextSession.summary,
+    )
+  ) {
+    nextState = {
+      ...nextState,
+      sidebarSessionSummaryById: {
+        ...nextState.sidebarSessionSummaryById,
+        [nextSession.shell.id]: nextSession.summary,
       },
     };
   }
@@ -761,69 +767,71 @@ function writeThreadShellState(
   return nextState;
 }
 
-function retainThreadScopedRecord<T>(
-  record: Record<ThreadId, T>,
-  nextThreadIds: ReadonlySet<ThreadId>,
-): Record<ThreadId, T> {
+function retainSessionScopedRecord<T>(
+  record: Record<SessionId, T>,
+  nextSessionIds: ReadonlySet<SessionId>,
+): Record<SessionId, T> {
   return Object.fromEntries(
-    Object.entries(record).flatMap(([threadId, value]) =>
-      nextThreadIds.has(threadId as ThreadId) ? [[threadId, value] as const] : [],
+    Object.entries(record).flatMap(([sessionId, value]) =>
+      nextSessionIds.has(sessionId as SessionId) ? [[sessionId, value] as const] : [],
     ),
-  ) as Record<ThreadId, T>;
+  ) as Record<SessionId, T>;
 }
 
-function removeThreadState(state: EnvironmentState, threadId: ThreadId): EnvironmentState {
-  const shell = state.threadShellById[threadId];
+function removeSessionState(state: EnvironmentState, sessionId: SessionId): EnvironmentState {
+  const shell = state.sessionShellById[sessionId];
   if (!shell) {
     return state;
   }
 
-  const nextThreadIds = removeId(state.threadIds, threadId);
-  const currentProjectThreadIds = state.threadIdsByProjectId[shell.projectId] ?? EMPTY_THREAD_IDS;
-  const nextProjectThreadIds = removeId(currentProjectThreadIds, threadId);
-  const nextThreadIdsByProjectId =
-    nextProjectThreadIds.length === 0
+  const nextSessionIds = removeId(state.sessionIds, sessionId);
+  const currentProjectSessionIds = state.sessionIdsByProjectId[shell.projectId] ?? EMPTY_THREAD_IDS;
+  const nextProjectSessionIds = removeId(currentProjectSessionIds, sessionId);
+  const nextSessionIdsByProjectId =
+    nextProjectSessionIds.length === 0
       ? (() => {
-          const { [shell.projectId]: _removed, ...rest } = state.threadIdsByProjectId;
-          return rest as Record<ProjectId, ThreadId[]>;
+          const { [shell.projectId]: _removed, ...rest } = state.sessionIdsByProjectId;
+          return rest as Record<ProjectId, SessionId[]>;
         })()
       : {
-          ...state.threadIdsByProjectId,
-          [shell.projectId]: nextProjectThreadIds,
+          ...state.sessionIdsByProjectId,
+          [shell.projectId]: nextProjectSessionIds,
         };
 
-  const { [threadId]: _removedShell, ...threadShellById } = state.threadShellById;
-  const { [threadId]: _removedSession, ...threadSessionById } = state.threadSessionById;
-  const { [threadId]: _removedTurnState, ...threadTurnStateById } = state.threadTurnStateById;
-  const { [threadId]: _removedMessageIds, ...messageIdsByThreadId } = state.messageIdsByThreadId;
-  const { [threadId]: _removedMessages, ...messageByThreadId } = state.messageByThreadId;
-  const { [threadId]: _removedActivityIds, ...activityIdsByThreadId } = state.activityIdsByThreadId;
-  const { [threadId]: _removedActivities, ...activityByThreadId } = state.activityByThreadId;
-  const { [threadId]: _removedPlanIds, ...proposedPlanIdsByThreadId } =
-    state.proposedPlanIdsByThreadId;
-  const { [threadId]: _removedPlans, ...proposedPlanByThreadId } = state.proposedPlanByThreadId;
-  const { [threadId]: _removedTurnDiffIds, ...turnDiffIdsByThreadId } = state.turnDiffIdsByThreadId;
-  const { [threadId]: _removedTurnDiffs, ...turnDiffSummaryByThreadId } =
-    state.turnDiffSummaryByThreadId;
-  const { [threadId]: _removedSidebarSummary, ...sidebarThreadSummaryById } =
-    state.sidebarThreadSummaryById;
+  const { [sessionId]: _removedShell, ...sessionShellById } = state.sessionShellById;
+  const { [sessionId]: _removedSession, ...providerRuntimeById } = state.providerRuntimeById;
+  const { [sessionId]: _removedTurnState, ...sessionTurnStateById } = state.sessionTurnStateById;
+  const { [sessionId]: _removedMessageIds, ...messageIdsBySessionId } = state.messageIdsBySessionId;
+  const { [sessionId]: _removedMessages, ...messageBySessionId } = state.messageBySessionId;
+  const { [sessionId]: _removedActivityIds, ...activityIdsBySessionId } =
+    state.activityIdsBySessionId;
+  const { [sessionId]: _removedActivities, ...activityBySessionId } = state.activityBySessionId;
+  const { [sessionId]: _removedPlanIds, ...proposedPlanIdsBySessionId } =
+    state.proposedPlanIdsBySessionId;
+  const { [sessionId]: _removedPlans, ...proposedPlanBySessionId } = state.proposedPlanBySessionId;
+  const { [sessionId]: _removedTurnDiffIds, ...turnDiffIdsBySessionId } =
+    state.turnDiffIdsBySessionId;
+  const { [sessionId]: _removedTurnDiffs, ...turnDiffSummaryBySessionId } =
+    state.turnDiffSummaryBySessionId;
+  const { [sessionId]: _removedSidebarSummary, ...sidebarSessionSummaryById } =
+    state.sidebarSessionSummaryById;
 
   return {
     ...state,
-    threadIds: nextThreadIds,
-    threadIdsByProjectId: nextThreadIdsByProjectId,
-    threadShellById,
-    threadSessionById,
-    threadTurnStateById,
-    messageIdsByThreadId,
-    messageByThreadId,
-    activityIdsByThreadId,
-    activityByThreadId,
-    proposedPlanIdsByThreadId,
-    proposedPlanByThreadId,
-    turnDiffIdsByThreadId,
-    turnDiffSummaryByThreadId,
-    sidebarThreadSummaryById,
+    sessionIds: nextSessionIds,
+    sessionIdsByProjectId: nextSessionIdsByProjectId,
+    sessionShellById,
+    providerRuntimeById,
+    sessionTurnStateById,
+    messageIdsBySessionId,
+    messageBySessionId,
+    activityIdsBySessionId,
+    activityBySessionId,
+    proposedPlanIdsBySessionId,
+    proposedPlanBySessionId,
+    turnDiffIdsBySessionId,
+    turnDiffSummaryBySessionId,
+    sidebarSessionSummaryById,
   };
 }
 
@@ -838,8 +846,8 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
 }
 
 function compareActivities(
-  left: Thread["activities"][number],
-  right: Thread["activities"][number],
+  left: Session["activities"][number],
+  right: Session["activities"][number],
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -855,15 +863,15 @@ function compareActivities(
 }
 
 function buildLatestTurn(params: {
-  previous: Thread["latestTurn"];
-  turnId: NonNullable<Thread["latestTurn"]>["turnId"];
-  state: NonNullable<Thread["latestTurn"]>["state"];
+  previous: Session["latestTurn"];
+  turnId: NonNullable<Session["latestTurn"]>["turnId"];
+  state: NonNullable<Session["latestTurn"]>["state"];
   requestedAt: string;
   startedAt: string | null;
   completedAt: string | null;
-  assistantMessageId: NonNullable<Thread["latestTurn"]>["assistantMessageId"];
-  sourceProposedPlan?: Thread["pendingSourceProposedPlan"];
-}): NonNullable<Thread["latestTurn"]> {
+  assistantMessageId: NonNullable<Session["latestTurn"]>["assistantMessageId"];
+  sourceProposedPlan?: Session["pendingSourceProposedPlan"];
+}): NonNullable<Session["latestTurn"]> {
   const resolvedPlan =
     params.previous?.turnId === params.turnId
       ? params.previous.sourceProposedPlan
@@ -882,7 +890,7 @@ function buildLatestTurn(params: {
 function rebindTurnDiffSummariesForAssistantMessage(
   turnDiffSummaries: ReadonlyArray<TurnDiffSummary>,
   turnId: TurnId,
-  assistantMessageId: NonNullable<Thread["latestTurn"]>["assistantMessageId"],
+  assistantMessageId: NonNullable<Session["latestTurn"]>["assistantMessageId"],
 ): TurnDiffSummary[] {
   let changed = false;
   const nextSummaries = turnDiffSummaries.map((summary) => {
@@ -898,7 +906,7 @@ function rebindTurnDiffSummariesForAssistantMessage(
   return changed ? nextSummaries : [...turnDiffSummaries];
 }
 
-function retainThreadMessagesAfterRevert(
+function retainSessionMessagesAfterRevert(
   messages: ReadonlyArray<ChatMessage>,
   retainedTurnIds: ReadonlySet<string>,
   turnCount: number,
@@ -969,16 +977,16 @@ function retainThreadMessagesAfterRevert(
   return messages.filter((message) => retainedMessageIds.has(message.id));
 }
 
-function retainThreadActivitiesAfterRevert(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+function retainSessionActivitiesAfterRevert(
+  activities: ReadonlyArray<OrchestrationSessionActivity>,
   retainedTurnIds: ReadonlySet<string>,
-): OrchestrationThreadActivity[] {
+): OrchestrationSessionActivity[] {
   return activities.filter(
     (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
   );
 }
 
-function retainThreadProposedPlansAfterRevert(
+function retainSessionProposedPlansAfterRevert(
   proposedPlans: ReadonlyArray<ProposedPlan>,
   retainedTurnIds: ReadonlySet<string>,
 ): ProposedPlan[] {
@@ -988,7 +996,7 @@ function retainThreadProposedPlansAfterRevert(
 }
 
 function toLegacySessionStatus(
-  status: OrchestrationSessionStatus,
+  status: OrchestrationProviderRuntimeStatus,
 ): "connecting" | "ready" | "running" | "error" | "closed" {
   switch (status) {
     case "starting":
@@ -1017,20 +1025,20 @@ function attachmentPreviewRoutePath(attachmentId: string): string {
   return `/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
-function updateThreadState(
+function updateSessionState(
   state: EnvironmentState,
-  threadId: ThreadId,
-  updater: (thread: Thread) => Thread,
+  sessionId: SessionId,
+  updater: (session: Session) => Session,
 ): EnvironmentState {
-  const currentThread = getThreadFromEnvironmentState(state, threadId);
-  if (!currentThread) {
+  const currentSession = getSessionFromEnvironmentState(state, sessionId);
+  if (!currentSession) {
     return state;
   }
-  const nextThread = updater(currentThread);
-  if (nextThread === currentThread) {
+  const nextSession = updater(currentSession);
+  if (nextSession === currentSession) {
     return state;
   }
-  return writeThreadState(state, nextThread, currentThread);
+  return writeSessionState(state, nextSession, currentSession);
 }
 
 function buildProjectState(
@@ -1081,35 +1089,38 @@ function syncEnvironmentShellSnapshot(
   environmentId: EnvironmentId,
 ): EnvironmentState {
   const nextProjects = snapshot.projects.map((project) => mapProject(project, environmentId));
-  const nextThreadIds = new Set(snapshot.threads.map((thread) => thread.id));
+  const nextSessionIds = new Set(snapshot.sessions.map((session) => session.id));
   let nextState: EnvironmentState = {
     ...state,
     ...buildProjectState(nextProjects),
-    threadIds: [],
-    threadIdsByProjectId: {},
-    threadShellById: {},
-    threadSessionById: {},
-    threadTurnStateById: {},
-    sidebarThreadSummaryById: {},
-    messageIdsByThreadId: retainThreadScopedRecord(state.messageIdsByThreadId, nextThreadIds),
-    messageByThreadId: retainThreadScopedRecord(state.messageByThreadId, nextThreadIds),
-    activityIdsByThreadId: retainThreadScopedRecord(state.activityIdsByThreadId, nextThreadIds),
-    activityByThreadId: retainThreadScopedRecord(state.activityByThreadId, nextThreadIds),
-    proposedPlanIdsByThreadId: retainThreadScopedRecord(
-      state.proposedPlanIdsByThreadId,
-      nextThreadIds,
+    sessionIds: [],
+    sessionIdsByProjectId: {},
+    sessionShellById: {},
+    providerRuntimeById: {},
+    sessionTurnStateById: {},
+    sidebarSessionSummaryById: {},
+    messageIdsBySessionId: retainSessionScopedRecord(state.messageIdsBySessionId, nextSessionIds),
+    messageBySessionId: retainSessionScopedRecord(state.messageBySessionId, nextSessionIds),
+    activityIdsBySessionId: retainSessionScopedRecord(state.activityIdsBySessionId, nextSessionIds),
+    activityBySessionId: retainSessionScopedRecord(state.activityBySessionId, nextSessionIds),
+    proposedPlanIdsBySessionId: retainSessionScopedRecord(
+      state.proposedPlanIdsBySessionId,
+      nextSessionIds,
     ),
-    proposedPlanByThreadId: retainThreadScopedRecord(state.proposedPlanByThreadId, nextThreadIds),
-    turnDiffIdsByThreadId: retainThreadScopedRecord(state.turnDiffIdsByThreadId, nextThreadIds),
-    turnDiffSummaryByThreadId: retainThreadScopedRecord(
-      state.turnDiffSummaryByThreadId,
-      nextThreadIds,
+    proposedPlanBySessionId: retainSessionScopedRecord(
+      state.proposedPlanBySessionId,
+      nextSessionIds,
+    ),
+    turnDiffIdsBySessionId: retainSessionScopedRecord(state.turnDiffIdsBySessionId, nextSessionIds),
+    turnDiffSummaryBySessionId: retainSessionScopedRecord(
+      state.turnDiffSummaryBySessionId,
+      nextSessionIds,
     ),
     bootstrapComplete: true,
   };
 
-  for (const thread of snapshot.threads) {
-    nextState = writeThreadShellState(nextState, mapThreadShell(thread, environmentId));
+  for (const session of snapshot.sessions) {
+    nextState = writeSessionShellState(nextState, mapSessionShell(session, environmentId));
   }
 
   return nextState;
@@ -1131,17 +1142,17 @@ export function syncServerShellSnapshot(
   );
 }
 
-export function syncServerThreadDetail(
+export function syncServerSessionDetail(
   state: AppState,
-  thread: OrchestrationThread,
+  session: OrchestrationSession,
   environmentId: EnvironmentId,
 ): AppState {
   const environmentState = getStoredEnvironmentState(state, environmentId);
-  const previousThread = getThreadFromEnvironmentState(environmentState, thread.id);
+  const previousSession = getSessionFromEnvironmentState(environmentState, session.id);
   return commitEnvironmentState(
     state,
     environmentId,
-    writeThreadState(environmentState, mapThread(thread, environmentId), previousThread),
+    writeSessionState(environmentState, mapSession(session, environmentId), previousSession),
   );
 }
 
@@ -1247,11 +1258,11 @@ function applyEnvironmentOrchestrationEvent(
       };
     }
 
-    case "thread.created": {
-      const previousThread = getThreadFromEnvironmentState(state, event.payload.threadId);
-      const nextThread = mapThread(
+    case "session.created": {
+      const previousSession = getSessionFromEnvironmentState(state, event.payload.sessionId);
+      const nextSession = mapSession(
         {
-          id: event.payload.threadId,
+          id: event.payload.sessionId,
           projectId: event.payload.projectId,
           title: event.payload.title,
           modelSelection: event.payload.modelSelection,
@@ -1272,29 +1283,29 @@ function applyEnvironmentOrchestrationEvent(
         },
         environmentId,
       );
-      return writeThreadState(state, nextThread, previousThread);
+      return writeSessionState(state, nextSession, previousSession);
     }
 
-    case "thread.deleted":
-      return removeThreadState(state, event.payload.threadId);
+    case "session.deleted":
+      return removeSessionState(state, event.payload.sessionId);
 
-    case "thread.archived":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "session.archived":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
         archivedAt: event.payload.archivedAt,
         updatedAt: event.payload.updatedAt,
       }));
 
-    case "thread.unarchived":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "session.unarchived":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
         archivedAt: null,
         updatedAt: event.payload.updatedAt,
       }));
 
-    case "thread.meta-updated":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "session.meta-updated":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
         ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
@@ -1306,23 +1317,23 @@ function applyEnvironmentOrchestrationEvent(
         updatedAt: event.payload.updatedAt,
       }));
 
-    case "thread.runtime-mode-set":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "session.runtime-mode-set":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
         runtimeMode: event.payload.runtimeMode,
         updatedAt: event.payload.updatedAt,
       }));
 
-    case "thread.interaction-mode-set":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "session.interaction-mode-set":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
         interactionMode: event.payload.interactionMode,
         updatedAt: event.payload.updatedAt,
       }));
 
-    case "thread.turn-start-requested":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
+    case "session.turn-start-requested":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSelection(event.payload.modelSelection) }
           : {}),
@@ -1332,17 +1343,17 @@ function applyEnvironmentOrchestrationEvent(
         updatedAt: event.occurredAt,
       }));
 
-    case "thread.turn-interrupt-requested": {
+    case "session.turn-interrupt-requested": {
       if (event.payload.turnId === undefined) {
         return state;
       }
-      return updateThreadState(state, event.payload.threadId, (thread) => {
-        const latestTurn = thread.latestTurn;
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const latestTurn = session.latestTurn;
         if (latestTurn === null || latestTurn.turnId !== event.payload.turnId) {
-          return thread;
+          return session;
         }
         return {
-          ...thread,
+          ...session,
           latestTurn: buildLatestTurn({
             previous: latestTurn,
             turnId: event.payload.turnId,
@@ -1357,9 +1368,9 @@ function applyEnvironmentOrchestrationEvent(
       });
     }
 
-    case "thread.message-sent":
-      return updateThreadState(state, event.payload.threadId, (thread) => {
-        const message = mapMessage(thread.environmentId, {
+    case "session.message-sent":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const message = mapMessage(session.environmentId, {
           id: event.payload.messageId,
           role: event.payload.role,
           text: event.payload.text,
@@ -1371,9 +1382,9 @@ function applyEnvironmentOrchestrationEvent(
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
         });
-        const existingMessage = thread.messages.find((entry) => entry.id === message.id);
+        const existingMessage = session.messages.find((entry) => entry.id === message.id);
         const messages = existingMessage
-          ? thread.messages.map((entry) =>
+          ? session.messages.map((entry) =>
               entry.id !== message.id
                 ? entry
                 : {
@@ -1397,49 +1408,49 @@ function applyEnvironmentOrchestrationEvent(
                       : {}),
                   },
             )
-          : [...thread.messages, message];
+          : [...session.messages, message];
         const cappedMessages = messages.slice(-MAX_THREAD_MESSAGES);
         const turnDiffSummaries =
           event.payload.role === "assistant" && event.payload.turnId !== null
             ? rebindTurnDiffSummariesForAssistantMessage(
-                thread.turnDiffSummaries,
+                session.turnDiffSummaries,
                 event.payload.turnId,
                 event.payload.messageId,
               )
-            : thread.turnDiffSummaries;
-        const latestTurn: Thread["latestTurn"] =
+            : session.turnDiffSummaries;
+        const latestTurn: Session["latestTurn"] =
           event.payload.role === "assistant" &&
           event.payload.turnId !== null &&
-          (thread.latestTurn === null || thread.latestTurn.turnId === event.payload.turnId)
+          (session.latestTurn === null || session.latestTurn.turnId === event.payload.turnId)
             ? buildLatestTurn({
-                previous: thread.latestTurn,
+                previous: session.latestTurn,
                 turnId: event.payload.turnId,
                 state: event.payload.streaming
                   ? "running"
-                  : thread.latestTurn?.state === "interrupted"
+                  : session.latestTurn?.state === "interrupted"
                     ? "interrupted"
-                    : thread.latestTurn?.state === "error"
+                    : session.latestTurn?.state === "error"
                       ? "error"
                       : "completed",
                 requestedAt:
-                  thread.latestTurn?.turnId === event.payload.turnId
-                    ? thread.latestTurn.requestedAt
+                  session.latestTurn?.turnId === event.payload.turnId
+                    ? session.latestTurn.requestedAt
                     : event.payload.createdAt,
                 startedAt:
-                  thread.latestTurn?.turnId === event.payload.turnId
-                    ? (thread.latestTurn.startedAt ?? event.payload.createdAt)
+                  session.latestTurn?.turnId === event.payload.turnId
+                    ? (session.latestTurn.startedAt ?? event.payload.createdAt)
                     : event.payload.createdAt,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
+                sourceProposedPlan: session.pendingSourceProposedPlan,
                 completedAt: event.payload.streaming
-                  ? thread.latestTurn?.turnId === event.payload.turnId
-                    ? (thread.latestTurn.completedAt ?? null)
+                  ? session.latestTurn?.turnId === event.payload.turnId
+                    ? (session.latestTurn.completedAt ?? null)
                     : null
                   : event.payload.updatedAt,
                 assistantMessageId: event.payload.messageId,
               })
-            : thread.latestTurn;
+            : session.latestTurn;
         return {
-          ...thread,
+          ...session,
           messages: cappedMessages,
           turnDiffSummaries,
           latestTurn,
@@ -1447,44 +1458,44 @@ function applyEnvironmentOrchestrationEvent(
         };
       });
 
-    case "thread.session-set":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
-        session: mapSession(event.payload.session),
-        error: sanitizeThreadErrorMessage(event.payload.session.lastError),
+    case "session.session-set":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
+        session: mapProviderRuntime(event.payload.session),
+        error: sanitizeSessionErrorMessage(event.payload.session.lastError),
         latestTurn:
           event.payload.session.status === "running" && event.payload.session.activeTurnId !== null
             ? buildLatestTurn({
-                previous: thread.latestTurn,
+                previous: session.latestTurn,
                 turnId: event.payload.session.activeTurnId,
                 state: "running",
                 requestedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.requestedAt
+                  session.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? session.latestTurn.requestedAt
                     : event.payload.session.updatedAt,
                 startedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? (thread.latestTurn.startedAt ?? event.payload.session.updatedAt)
+                  session.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? (session.latestTurn.startedAt ?? event.payload.session.updatedAt)
                     : event.payload.session.updatedAt,
                 completedAt: null,
                 assistantMessageId:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.assistantMessageId
+                  session.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? session.latestTurn.assistantMessageId
                     : null,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
+                sourceProposedPlan: session.pendingSourceProposedPlan,
               })
-            : thread.latestTurn,
+            : session.latestTurn,
         updatedAt: event.occurredAt,
       }));
 
-    case "thread.session-stop-requested":
-      return updateThreadState(state, event.payload.threadId, (thread) =>
-        thread.session === null
-          ? thread
+    case "session.session-stop-requested":
+      return updateSessionState(state, event.payload.sessionId, (session) =>
+        session.session === null
+          ? session
           : {
-              ...thread,
+              ...session,
               session: {
-                ...thread.session,
+                ...session.session,
                 status: "closed",
                 orchestrationStatus: "stopped",
                 activeTurnId: undefined,
@@ -1494,11 +1505,11 @@ function applyEnvironmentOrchestrationEvent(
             },
       );
 
-    case "thread.proposed-plan-upserted":
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "session.proposed-plan-upserted":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
         const proposedPlan = mapProposedPlan(event.payload.proposedPlan);
         const proposedPlans = [
-          ...thread.proposedPlans.filter((entry) => entry.id !== proposedPlan.id),
+          ...session.proposedPlans.filter((entry) => entry.id !== proposedPlan.id),
           proposedPlan,
         ]
           .toSorted(
@@ -1507,14 +1518,14 @@ function applyEnvironmentOrchestrationEvent(
           )
           .slice(-MAX_THREAD_PROPOSED_PLANS);
         return {
-          ...thread,
+          ...session,
           proposedPlans,
           updatedAt: event.occurredAt,
         };
       });
 
-    case "thread.turn-diff-completed":
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "session.turn-diff-completed":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
         const checkpoint = mapTurnDiffSummary({
           turnId: event.payload.turnId,
           checkpointTurnCount: event.payload.checkpointTurnCount,
@@ -1524,14 +1535,14 @@ function applyEnvironmentOrchestrationEvent(
           assistantMessageId: event.payload.assistantMessageId,
           completedAt: event.payload.completedAt,
         });
-        const existing = thread.turnDiffSummaries.find(
+        const existing = session.turnDiffSummaries.find(
           (entry) => entry.turnId === checkpoint.turnId,
         );
         if (existing && existing.status !== "missing" && checkpoint.status === "missing") {
-          return thread;
+          return session;
         }
         const turnDiffSummaries = [
-          ...thread.turnDiffSummaries.filter((entry) => entry.turnId !== checkpoint.turnId),
+          ...session.turnDiffSummaries.filter((entry) => entry.turnId !== checkpoint.turnId),
           checkpoint,
         ]
           .toSorted(
@@ -1541,29 +1552,29 @@ function applyEnvironmentOrchestrationEvent(
           )
           .slice(-MAX_THREAD_CHECKPOINTS);
         const latestTurn =
-          thread.latestTurn === null || thread.latestTurn.turnId === event.payload.turnId
+          session.latestTurn === null || session.latestTurn.turnId === event.payload.turnId
             ? buildLatestTurn({
-                previous: thread.latestTurn,
+                previous: session.latestTurn,
                 turnId: event.payload.turnId,
                 state: checkpointStatusToLatestTurnState(event.payload.status),
-                requestedAt: thread.latestTurn?.requestedAt ?? event.payload.completedAt,
-                startedAt: thread.latestTurn?.startedAt ?? event.payload.completedAt,
+                requestedAt: session.latestTurn?.requestedAt ?? event.payload.completedAt,
+                startedAt: session.latestTurn?.startedAt ?? event.payload.completedAt,
                 completedAt: event.payload.completedAt,
                 assistantMessageId: event.payload.assistantMessageId,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
+                sourceProposedPlan: session.pendingSourceProposedPlan,
               })
-            : thread.latestTurn;
+            : session.latestTurn;
         return {
-          ...thread,
+          ...session,
           turnDiffSummaries,
           latestTurn,
           updatedAt: event.occurredAt,
         };
       });
 
-    case "thread.reverted":
-      return updateThreadState(state, event.payload.threadId, (thread) => {
-        const turnDiffSummaries = thread.turnDiffSummaries
+    case "session.reverted":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const turnDiffSummaries = session.turnDiffSummaries
           .filter(
             (entry) =>
               entry.checkpointTurnCount !== undefined &&
@@ -1576,20 +1587,20 @@ function applyEnvironmentOrchestrationEvent(
           )
           .slice(-MAX_THREAD_CHECKPOINTS);
         const retainedTurnIds = new Set(turnDiffSummaries.map((entry) => entry.turnId));
-        const messages = retainThreadMessagesAfterRevert(
-          thread.messages,
+        const messages = retainSessionMessagesAfterRevert(
+          session.messages,
           retainedTurnIds,
           event.payload.turnCount,
         ).slice(-MAX_THREAD_MESSAGES);
-        const proposedPlans = retainThreadProposedPlansAfterRevert(
-          thread.proposedPlans,
+        const proposedPlans = retainSessionProposedPlansAfterRevert(
+          session.proposedPlans,
           retainedTurnIds,
         ).slice(-MAX_THREAD_PROPOSED_PLANS);
-        const activities = retainThreadActivitiesAfterRevert(thread.activities, retainedTurnIds);
+        const activities = retainSessionActivitiesAfterRevert(session.activities, retainedTurnIds);
         const latestCheckpoint = turnDiffSummaries.at(-1) ?? null;
 
         return {
-          ...thread,
+          ...session,
           turnDiffSummaries,
           messages,
           proposedPlans,
@@ -1612,23 +1623,23 @@ function applyEnvironmentOrchestrationEvent(
         };
       });
 
-    case "thread.activity-appended":
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+    case "session.activity-appended":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
         const activities = [
-          ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
+          ...session.activities.filter((activity) => activity.id !== event.payload.activity.id),
           { ...event.payload.activity },
         ]
           .toSorted(compareActivities)
           .slice(-MAX_THREAD_ACTIVITIES);
         return {
-          ...thread,
+          ...session,
           activities,
           updatedAt: event.occurredAt,
         };
       });
 
-    case "thread.approval-response-requested":
-    case "thread.user-input-response-requested":
+    case "session.approval-response-requested":
+    case "session.user-input-response-requested":
       return state;
   }
 
@@ -1689,10 +1700,10 @@ function applyEnvironmentShellEvent(
         projectIds: removeId(state.projectIds, event.projectId),
       };
     }
-    case "thread-upserted":
-      return writeThreadShellState(state, mapThreadShell(event.thread, environmentId));
-    case "thread-removed":
-      return removeThreadState(state, event.threadId);
+    case "session-upserted":
+      return writeSessionShellState(state, mapSessionShell(event.session, environmentId));
+    case "session-removed":
+      return removeSessionState(state, event.sessionId);
   }
 }
 
@@ -1734,11 +1745,11 @@ export function selectProjectsForEnvironment(
   return getProjects(selectEnvironmentState(state, environmentId));
 }
 
-export function selectThreadsForEnvironment(
+export function selectSessionsForEnvironment(
   state: AppState,
   environmentId: EnvironmentId | null | undefined,
-): Thread[] {
-  return getThreads(selectEnvironmentState(state, environmentId));
+): Session[] {
+  return getSessions(selectEnvironmentState(state, environmentId));
 }
 
 export function selectProjectsAcrossEnvironments(state: AppState): Project[] {
@@ -1747,54 +1758,54 @@ export function selectProjectsAcrossEnvironments(state: AppState): Project[] {
   );
 }
 
-export function selectThreadsAcrossEnvironments(state: AppState): Thread[] {
+export function selectSessionsAcrossEnvironments(state: AppState): Session[] {
   return getEnvironmentEntries(state).flatMap(([, environmentState]) =>
-    getThreads(environmentState),
+    getSessions(environmentState),
   );
 }
 
-/** Like `selectThreadsAcrossEnvironments` but returns stable `ThreadShell` references from the store (no derived data). */
-export function selectThreadShellsAcrossEnvironments(state: AppState): ThreadShell[] {
+/** Like `selectSessionsAcrossEnvironments` but returns stable `SessionShell` references from the store (no derived data). */
+export function selectSessionShellsAcrossEnvironments(state: AppState): SessionShell[] {
   return getEnvironmentEntries(state).flatMap(([, environmentState]) =>
-    environmentState.threadIds.flatMap((threadId) => {
-      const shell = environmentState.threadShellById[threadId];
+    environmentState.sessionIds.flatMap((sessionId) => {
+      const shell = environmentState.sessionShellById[sessionId];
       return shell ? [shell] : [];
     }),
   );
 }
 
-export function selectSidebarThreadsAcrossEnvironments(state: AppState): SidebarThreadSummary[] {
+export function selectSidebarSessionsAcrossEnvironments(state: AppState): SidebarSessionSummary[] {
   return getEnvironmentEntries(state).flatMap(([environmentId, environmentState]) =>
-    environmentState.threadIds.flatMap((threadId) => {
-      const thread = environmentState.sidebarThreadSummaryById[threadId];
-      return thread && thread.environmentId === environmentId ? [thread] : [];
+    environmentState.sessionIds.flatMap((sessionId) => {
+      const session = environmentState.sidebarSessionSummaryById[sessionId];
+      return session && session.environmentId === environmentId ? [session] : [];
     }),
   );
 }
 
-export function selectSidebarThreadsForProjectRef(
+export function selectSidebarSessionsForProjectRef(
   state: AppState,
   ref: ScopedProjectRef | null | undefined,
-): SidebarThreadSummary[] {
+): SidebarSessionSummary[] {
   if (!ref) {
     return [];
   }
 
   const environmentState = selectEnvironmentState(state, ref.environmentId);
-  const threadIds = environmentState.threadIdsByProjectId[ref.projectId] ?? EMPTY_THREAD_IDS;
-  return threadIds.flatMap((threadId) => {
-    const thread = environmentState.sidebarThreadSummaryById[threadId];
-    return thread ? [thread] : [];
+  const sessionIds = environmentState.sessionIdsByProjectId[ref.projectId] ?? EMPTY_THREAD_IDS;
+  return sessionIds.flatMap((sessionId) => {
+    const session = environmentState.sidebarSessionSummaryById[sessionId];
+    return session ? [session] : [];
   });
 }
 
-export function selectSidebarThreadsForProjectRefs(
+export function selectSidebarSessionsForProjectRefs(
   state: AppState,
   refs: readonly ScopedProjectRef[],
-): SidebarThreadSummary[] {
+): SidebarSessionSummary[] {
   if (refs.length === 0) return [];
-  if (refs.length === 1) return selectSidebarThreadsForProjectRef(state, refs[0]);
-  return refs.flatMap((ref) => selectSidebarThreadsForProjectRef(state, ref));
+  if (refs.length === 1) return selectSidebarSessionsForProjectRef(state, refs[0]);
+  return refs.flatMap((ref) => selectSidebarSessionsForProjectRef(state, ref));
 }
 
 export function selectBootstrapCompleteForActiveEnvironment(state: AppState): boolean {
@@ -1810,54 +1821,57 @@ export function selectProjectByRef(
     : undefined;
 }
 
-export function selectThreadByRef(
+export function selectSessionByRef(
   state: AppState,
-  ref: ScopedThreadRef | null | undefined,
-): Thread | undefined {
+  ref: ScopedSessionRef | null | undefined,
+): Session | undefined {
   return ref
-    ? getThreadFromEnvironmentState(selectEnvironmentState(state, ref.environmentId), ref.threadId)
+    ? getSessionFromEnvironmentState(
+        selectEnvironmentState(state, ref.environmentId),
+        ref.sessionId,
+      )
     : undefined;
 }
 
-export function selectThreadExistsByRef(
+export function selectSessionExistsByRef(
   state: AppState,
-  ref: ScopedThreadRef | null | undefined,
+  ref: ScopedSessionRef | null | undefined,
 ): boolean {
   return ref
-    ? selectEnvironmentState(state, ref.environmentId).threadShellById[ref.threadId] !== undefined
+    ? selectEnvironmentState(state, ref.environmentId).sessionShellById[ref.sessionId] !== undefined
     : false;
 }
 
-export function selectSidebarThreadSummaryByRef(
+export function selectSidebarSessionSummaryByRef(
   state: AppState,
-  ref: ScopedThreadRef | null | undefined,
-): SidebarThreadSummary | undefined {
+  ref: ScopedSessionRef | null | undefined,
+): SidebarSessionSummary | undefined {
   return ref
-    ? selectEnvironmentState(state, ref.environmentId).sidebarThreadSummaryById[ref.threadId]
+    ? selectEnvironmentState(state, ref.environmentId).sidebarSessionSummaryById[ref.sessionId]
     : undefined;
 }
 
-export function selectThreadIdsByProjectRef(
+export function selectSessionIdsByProjectRef(
   state: AppState,
   ref: ScopedProjectRef | null | undefined,
-): ThreadId[] {
+): SessionId[] {
   return ref
-    ? (selectEnvironmentState(state, ref.environmentId).threadIdsByProjectId[ref.projectId] ??
+    ? (selectEnvironmentState(state, ref.environmentId).sessionIdsByProjectId[ref.projectId] ??
         EMPTY_THREAD_IDS)
     : EMPTY_THREAD_IDS;
 }
 
-export function setError(state: AppState, threadId: ThreadId, error: string | null): AppState {
+export function setError(state: AppState, sessionId: SessionId, error: string | null): AppState {
   if (state.activeEnvironmentId === null) {
     return state;
   }
 
-  const nextEnvironmentState = updateThreadState(
+  const nextEnvironmentState = updateSessionState(
     getStoredEnvironmentState(state, state.activeEnvironmentId),
-    threadId,
-    (thread) => {
-      if (thread.error === error) return thread;
-      return { ...thread, error };
+    sessionId,
+    (session) => {
+      if (session.error === error) return session;
+      return { ...session, error };
     },
   );
   return commitEnvironmentState(state, state.activeEnvironmentId, nextEnvironmentState);
@@ -1920,27 +1934,27 @@ export function removeEnvironmentState(state: AppState, environmentId: Environme
   };
 }
 
-export function setThreadBranch(
+export function setSessionBranch(
   state: AppState,
-  threadRef: ScopedThreadRef,
+  sessionRef: ScopedSessionRef,
   branch: string | null,
   worktreePath: string | null,
 ): AppState {
-  const nextEnvironmentState = updateThreadState(
-    getStoredEnvironmentState(state, threadRef.environmentId),
-    threadRef.threadId,
-    (thread) => {
-      if (thread.branch === branch && thread.worktreePath === worktreePath) return thread;
-      const cwdChanged = thread.worktreePath !== worktreePath;
+  const nextEnvironmentState = updateSessionState(
+    getStoredEnvironmentState(state, sessionRef.environmentId),
+    sessionRef.sessionId,
+    (session) => {
+      if (session.branch === branch && session.worktreePath === worktreePath) return session;
+      const cwdChanged = session.worktreePath !== worktreePath;
       return {
-        ...thread,
+        ...session,
         branch,
         worktreePath,
         ...(cwdChanged ? { session: null } : {}),
       };
     },
   );
-  return commitEnvironmentState(state, threadRef.environmentId, nextEnvironmentState);
+  return commitEnvironmentState(state, sessionRef.environmentId, nextEnvironmentState);
 }
 
 interface AppStore extends AppState {
@@ -1950,16 +1964,16 @@ interface AppStore extends AppState {
     snapshot: OrchestrationShellSnapshot,
     environmentId: EnvironmentId,
   ) => void;
-  syncServerThreadDetail: (thread: OrchestrationThread, environmentId: EnvironmentId) => void;
+  syncServerSessionDetail: (session: OrchestrationSession, environmentId: EnvironmentId) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent, environmentId: EnvironmentId) => void;
   applyOrchestrationEvents: (
     events: ReadonlyArray<OrchestrationEvent>,
     environmentId: EnvironmentId,
   ) => void;
   applyShellEvent: (event: OrchestrationShellStreamEvent, environmentId: EnvironmentId) => void;
-  setError: (threadId: ThreadId, error: string | null) => void;
-  setThreadBranch: (
-    threadRef: ScopedThreadRef,
+  setError: (sessionId: SessionId, error: string | null) => void;
+  setSessionBranch: (
+    sessionRef: ScopedSessionRef,
     branch: string | null,
     worktreePath: string | null,
   ) => void;
@@ -1973,15 +1987,15 @@ export const useStore = create<AppStore>((set) => ({
     set((state) => removeEnvironmentState(state, environmentId)),
   syncServerShellSnapshot: (snapshot, environmentId) =>
     set((state) => syncServerShellSnapshot(state, snapshot, environmentId)),
-  syncServerThreadDetail: (thread, environmentId) =>
-    set((state) => syncServerThreadDetail(state, thread, environmentId)),
+  syncServerSessionDetail: (session, environmentId) =>
+    set((state) => syncServerSessionDetail(state, session, environmentId)),
   applyOrchestrationEvent: (event, environmentId) =>
     set((state) => applyOrchestrationEvent(state, event, environmentId)),
   applyOrchestrationEvents: (events, environmentId) =>
     set((state) => applyOrchestrationEvents(state, events, environmentId)),
   applyShellEvent: (event, environmentId) =>
     set((state) => applyShellEvent(state, event, environmentId)),
-  setError: (threadId, error) => set((state) => setError(state, threadId, error)),
-  setThreadBranch: (threadRef, branch, worktreePath) =>
-    set((state) => setThreadBranch(state, threadRef, branch, worktreePath)),
+  setError: (sessionId, error) => set((state) => setError(state, sessionId, error)),
+  setSessionBranch: (sessionRef, branch, worktreePath) =>
+    set((state) => setSessionBranch(state, sessionRef, branch, worktreePath)),
 }));

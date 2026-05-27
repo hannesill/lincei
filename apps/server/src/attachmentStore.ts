@@ -19,8 +19,8 @@ const ATTACHMENT_ID_PATTERN = new RegExp(
   "i",
 );
 
-export function toSafeThreadAttachmentSegment(threadId: string): string | null {
-  const segment = threadId
+export function toSafeSessionAttachmentSegment(sessionId: string): string | null {
+  const segment = sessionId
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
@@ -34,15 +34,15 @@ export function toSafeThreadAttachmentSegment(threadId: string): string | null {
   return segment;
 }
 
-export function createAttachmentId(threadId: string): string | null {
-  const threadSegment = toSafeThreadAttachmentSegment(threadId);
-  if (!threadSegment) {
+export function createAttachmentId(sessionId: string): string | null {
+  const sessionSegment = toSafeSessionAttachmentSegment(sessionId);
+  if (!sessionSegment) {
     return null;
   }
-  return `${threadSegment}-${randomUUID()}`;
+  return `${sessionSegment}-${randomUUID()}`;
 }
 
-export function parseThreadSegmentFromAttachmentId(attachmentId: string): string | null {
+export function parseSessionSegmentFromAttachmentId(attachmentId: string): string | null {
   const normalizedId = normalizeAttachmentRelativePath(attachmentId);
   if (!normalizedId || normalizedId.includes("/") || normalizedId.includes(".")) {
     return null;

@@ -10,7 +10,7 @@ export default Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE INDEX IF NOT EXISTS idx_projection_threads_project_deleted_created
-    ON projection_threads(project_id, deleted_at, created_at)
+    CREATE INDEX IF NOT EXISTS idx_projection_sessions_project_deleted_created
+    ON projection_sessions(project_id, deleted_at, created_at)
   `;
 });

@@ -8,13 +8,13 @@ import * as Effect from "effect/Effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
-  listThreadsByProjectId,
+  listSessionsByProjectId,
   requireProject,
   requireProjectAbsent,
-  requireThread,
-  requireThreadArchived,
-  requireThreadAbsent,
-  requireThreadNotArchived,
+  requireSession,
+  requireSessionArchived,
+  requireSessionAbsent,
+  requireSessionNotArchived,
 } from "./commandInvariants.ts";
 import { projectEvent } from "./projector.ts";
 
@@ -145,24 +145,24 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         projectId: command.projectId,
       });
-      const activeThreads = listThreadsByProjectId(readModel, command.projectId).filter(
-        (thread) => thread.deletedAt === null,
+      const activeSessions = listSessionsByProjectId(readModel, command.projectId).filter(
+        (session) => session.deletedAt === null,
       );
-      if (activeThreads.length > 0 && command.force !== true) {
+      if (activeSessions.length > 0 && command.force !== true) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
           detail: `Project '${command.projectId}' is not empty and cannot be deleted without force=true.`,
         });
       }
-      if (activeThreads.length > 0) {
+      if (activeSessions.length > 0) {
         return yield* decideCommandSequence({
           readModel,
           commands: [
-            ...activeThreads.map(
-              (thread): Extract<OrchestrationCommand, { type: "thread.delete" }> => ({
-                type: "thread.delete",
+            ...activeSessions.map(
+              (session): Extract<OrchestrationCommand, { type: "session.delete" }> => ({
+                type: "session.delete",
                 commandId: command.commandId,
-                threadId: thread.id,
+                sessionId: session.id,
               }),
             ),
             {
@@ -190,27 +190,27 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.create": {
+    case "session.create": {
       yield* requireProject({
         readModel,
         command,
         projectId: command.projectId,
       });
-      yield* requireThreadAbsent({
+      yield* requireSessionAbsent({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.created",
+        type: "session.created",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           projectId: command.projectId,
           title: command.title,
           modelSelection: command.modelSelection,
@@ -224,90 +224,90 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.delete": {
-      yield* requireThread({
+    case "session.delete": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.deleted",
+        type: "session.deleted",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           deletedAt: occurredAt,
         },
       };
     }
 
-    case "thread.archive": {
-      yield* requireThreadNotArchived({
+    case "session.archive": {
+      yield* requireSessionNotArchived({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.archived",
+        type: "session.archived",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           archivedAt: occurredAt,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.unarchive": {
-      yield* requireThreadArchived({
+    case "session.unarchive": {
+      yield* requireSessionArchived({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.unarchived",
+        type: "session.unarchived",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.meta.update": {
-      yield* requireThread({
+    case "session.meta.update": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.meta-updated",
+        type: "session.meta-updated",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           ...(command.title !== undefined ? { title: command.title } : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
@@ -319,92 +319,92 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.runtime-mode.set": {
-      yield* requireThread({
+    case "session.runtime-mode.set": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.runtime-mode-set",
+        type: "session.runtime-mode-set",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           runtimeMode: command.runtimeMode,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.interaction-mode.set": {
-      yield* requireThread({
+    case "session.interaction-mode.set": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
         }),
-        type: "thread.interaction-mode-set",
+        type: "session.interaction-mode-set",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           interactionMode: command.interactionMode,
           updatedAt: occurredAt,
         },
       };
     }
 
-    case "thread.turn.start": {
-      const targetThread = yield* requireThread({
+    case "session.turn.start": {
+      const targetSession = yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const sourceProposedPlan = command.sourceProposedPlan;
-      const sourceThread = sourceProposedPlan
-        ? yield* requireThread({
+      const sourceSession = sourceProposedPlan
+        ? yield* requireSession({
             readModel,
             command,
-            threadId: sourceProposedPlan.threadId,
+            sessionId: sourceProposedPlan.sessionId,
           })
         : null;
       const sourcePlan =
-        sourceProposedPlan && sourceThread
-          ? sourceThread.proposedPlans.find((entry) => entry.id === sourceProposedPlan.planId)
+        sourceProposedPlan && sourceSession
+          ? sourceSession.proposedPlans.find((entry) => entry.id === sourceProposedPlan.planId)
           : null;
       if (sourceProposedPlan && !sourcePlan) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Proposed plan '${sourceProposedPlan.planId}' does not exist on thread '${sourceProposedPlan.threadId}'.`,
+          detail: `Proposed plan '${sourceProposedPlan.planId}' does not exist on session '${sourceProposedPlan.sessionId}'.`,
         });
       }
-      if (sourceThread && sourceThread.projectId !== targetThread.projectId) {
+      if (sourceSession && sourceSession.projectId !== targetSession.projectId) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to thread '${sourceThread.id}' in a different project.`,
+          detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to session '${sourceSession.id}' in a different project.`,
         });
       }
       const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.message-sent",
+        type: "session.message-sent",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           messageId: command.message.messageId,
           role: "user",
           text: command.message.text,
@@ -417,22 +417,22 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
       const turnStartRequestedEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
         causationEventId: userMessageEvent.eventId,
-        type: "thread.turn-start-requested",
+        type: "session.turn-start-requested",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           messageId: command.message.messageId,
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
             : {}),
           ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
-          runtimeMode: targetThread.runtimeMode,
-          interactionMode: targetThread.interactionMode,
+          runtimeMode: targetSession.runtimeMode,
+          interactionMode: targetSession.interactionMode,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
           createdAt: command.createdAt,
         },
@@ -440,47 +440,47 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       return [userMessageEvent, turnStartRequestedEvent];
     }
 
-    case "thread.turn.interrupt": {
-      yield* requireThread({
+    case "session.turn.interrupt": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.turn-interrupt-requested",
+        type: "session.turn-interrupt-requested",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           ...(command.turnId !== undefined ? { turnId: command.turnId } : {}),
           createdAt: command.createdAt,
         },
       };
     }
 
-    case "thread.approval.respond": {
-      yield* requireThread({
+    case "session.approval.respond": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {
             requestId: command.requestId,
           },
         }),
-        type: "thread.approval-response-requested",
+        type: "session.approval-response-requested",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           requestId: command.requestId,
           decision: command.decision,
           createdAt: command.createdAt,
@@ -488,25 +488,25 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.user-input.respond": {
-      yield* requireThread({
+    case "session.user-input.respond": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {
             requestId: command.requestId,
           },
         }),
-        type: "thread.user-input-response-requested",
+        type: "session.user-input-response-requested",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           requestId: command.requestId,
           answers: command.answers,
           createdAt: command.createdAt,
@@ -514,87 +514,87 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.checkpoint.revert": {
-      yield* requireThread({
+    case "session.checkpoint.revert": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.checkpoint-revert-requested",
+        type: "session.checkpoint-revert-requested",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           turnCount: command.turnCount,
           createdAt: command.createdAt,
         },
       };
     }
 
-    case "thread.session.stop": {
-      yield* requireThread({
+    case "session.session.stop": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.session-stop-requested",
+        type: "session.session-stop-requested",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           createdAt: command.createdAt,
         },
       };
     }
 
-    case "thread.session.set": {
-      yield* requireThread({
+    case "session.session.set": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {},
         }),
-        type: "thread.session-set",
+        type: "session.session-set",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           session: command.session,
         },
       };
     }
 
-    case "thread.message.assistant.delta": {
-      yield* requireThread({
+    case "session.message.assistant.delta": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.message-sent",
+        type: "session.message-sent",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           messageId: command.messageId,
           role: "assistant",
           text: command.delta,
@@ -606,22 +606,22 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.message.assistant.complete": {
-      yield* requireThread({
+    case "session.message.assistant.complete": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.message-sent",
+        type: "session.message-sent",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           messageId: command.messageId,
           role: "assistant",
           text: "",
@@ -633,43 +633,43 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.proposed-plan.upsert": {
-      yield* requireThread({
+    case "session.proposed-plan.upsert": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.proposed-plan-upserted",
+        type: "session.proposed-plan-upserted",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           proposedPlan: command.proposedPlan,
         },
       };
     }
 
-    case "thread.turn.diff.complete": {
-      yield* requireThread({
+    case "session.turn.diff.complete": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.turn-diff-completed",
+        type: "session.turn-diff-completed",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           turnId: command.turnId,
           checkpointTurnCount: command.checkpointTurnCount,
           checkpointRef: command.checkpointRef,
@@ -681,32 +681,32 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
-    case "thread.revert.complete": {
-      yield* requireThread({
+    case "session.revert.complete": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         }),
-        type: "thread.reverted",
+        type: "session.reverted",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           turnCount: command.turnCount,
         },
       };
     }
 
-    case "thread.activity.append": {
-      yield* requireThread({
+    case "session.activity.append": {
+      yield* requireSession({
         readModel,
         command,
-        threadId: command.threadId,
+        sessionId: command.sessionId,
       });
       const requestId =
         typeof command.activity.payload === "object" &&
@@ -718,15 +718,15 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           : undefined;
       return {
         ...withEventBase({
-          aggregateKind: "thread",
-          aggregateId: command.threadId,
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           ...(requestId !== undefined ? { metadata: { requestId } } : {}),
         }),
-        type: "thread.activity-appended",
+        type: "session.activity-appended",
         payload: {
-          threadId: command.threadId,
+          sessionId: command.sessionId,
           activity: command.activity,
         },
       };

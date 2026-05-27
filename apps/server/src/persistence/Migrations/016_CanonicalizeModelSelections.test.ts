@@ -41,8 +41,8 @@ layer("016_CanonicalizeModelSelections", (it) => {
         WHERE project_id = 'project-claude'
       `;
           yield* sql`
-        INSERT INTO projection_threads (
-          thread_id,
+        INSERT INTO projection_sessions (
+          session_id,
           project_id,
           title,
           model,
@@ -56,29 +56,27 @@ layer("016_CanonicalizeModelSelections", (it) => {
           interaction_mode
         )
         VALUES
-          ('thread-session', 'project-codex', 'Session thread', 'gpt-5.4', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default'),
-          ('thread-claude', 'project-claude', 'Claude thread', 'claude-opus-4-6', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default'),
-          ('thread-codex', 'project-codex', 'Codex thread', 'gpt-5.4', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default'),
-          ('thread-legacy-options', 'project-claude', 'Legacy options thread', 'claude-opus-4-6', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default')
+          ('session-session', 'project-codex', 'Session session', 'gpt-5.4', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default'),
+          ('session-claude', 'project-claude', 'Claude session', 'claude-opus-4-6', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default'),
+          ('session-codex', 'project-codex', 'Codex session', 'gpt-5.4', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default'),
+          ('session-legacy-options', 'project-claude', 'Legacy options session', 'claude-opus-4-6', NULL, NULL, NULL, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, 'full-access', 'default')
       `;
           yield* sql`
-        INSERT INTO projection_thread_sessions (
-          thread_id,
+        INSERT INTO projection_session_sessions (
+          session_id,
           status,
           provider_name,
           provider_session_id,
-          provider_thread_id,
           active_turn_id,
           last_error,
           updated_at,
           runtime_mode
         )
         VALUES (
-          'thread-session',
+          'session-session',
           'running',
           'claudeAgent',
           'provider-session-1',
-          'provider-thread-1',
           NULL,
           NULL,
           '2026-01-01T00:00:00.000Z',
@@ -144,59 +142,59 @@ layer("016_CanonicalizeModelSelections", (it) => {
           '{}'
         ),
         (
-          'event-thread-created',
-          'thread',
-          'thread-1',
+          'event-session-created',
+          'session',
+          'session-1',
           1,
-          'thread.created',
+          'session.created',
           '2026-01-01T00:00:00.000Z',
-          'command-thread-created',
+          'command-session-created',
           NULL,
-          'correlation-thread-created',
+          'correlation-session-created',
           'user',
-          '{"threadId":"thread-1","projectId":"project-1","title":"Thread","model":"claude-opus-4-6","modelOptions":{"codex":{"reasoningEffort":"high"},"claudeAgent":{"effort":"max","thinking":false}},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
+          '{"sessionId":"session-1","projectId":"project-1","title":"Session","model":"claude-opus-4-6","modelOptions":{"codex":{"reasoningEffort":"high"},"claudeAgent":{"effort":"max","thinking":false}},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
           '{}'
         ),
         (
-          'event-thread-created-fallback',
-          'thread',
-          'thread-2',
+          'event-session-created-fallback',
+          'session',
+          'session-2',
           1,
-          'thread.created',
+          'session.created',
           '2026-01-01T00:00:00.000Z',
-          'command-thread-created-fallback',
+          'command-session-created-fallback',
           NULL,
-          'correlation-thread-created-fallback',
+          'correlation-session-created-fallback',
           'user',
-          '{"threadId":"thread-2","projectId":"project-1","title":"Fallback Thread","model":"gpt-5.4","modelOptions":{"claudeAgent":{"effort":"max"}},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
+          '{"sessionId":"session-2","projectId":"project-1","title":"Fallback Session","model":"gpt-5.4","modelOptions":{"claudeAgent":{"effort":"max"}},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
           '{}'
         ),
         (
           'event-turn-start-requested',
-          'thread',
-          'thread-1',
+          'session',
+          'session-1',
           2,
-          'thread.turn-start-requested',
+          'session.turn-start-requested',
           '2026-01-01T00:00:00.000Z',
           'command-turn-start-requested',
           NULL,
           'correlation-turn-start-requested',
           'user',
-          '{"threadId":"thread-1","turnId":"turn-1","input":"hi","model":"gpt-5.4","modelOptions":{"codex":{"fastMode":true},"claudeAgent":{"effort":"max"}},"deliveryMode":"buffered"}',
+          '{"sessionId":"session-1","turnId":"turn-1","input":"hi","model":"gpt-5.4","modelOptions":{"codex":{"fastMode":true},"claudeAgent":{"effort":"max"}},"deliveryMode":"buffered"}',
           '{}'
         ),
         (
-          'event-thread-created-no-model',
-          'thread',
-          'thread-3',
+          'event-session-created-no-model',
+          'session',
+          'session-3',
           1,
-          'thread.created',
+          'session.created',
           '2026-01-01T00:00:00.000Z',
-          'command-thread-created-no-model',
+          'command-session-created-no-model',
           NULL,
-          'correlation-thread-created-no-model',
+          'correlation-session-created-no-model',
           'user',
-          '{"threadId":"thread-3","projectId":"project-1","title":"Ancient Thread","runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
+          '{"sessionId":"session-3","projectId":"project-1","title":"Ancient Session","runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
           '{}'
         )
       `;
@@ -229,31 +227,31 @@ layer("016_CanonicalizeModelSelections", (it) => {
             { projectId: "project-null", defaultModelSelection: null },
           ]);
 
-          const threadRows = yield* sql<{
-            readonly threadId: string;
+          const sessionRows = yield* sql<{
+            readonly sessionId: string;
             readonly modelSelection: string | null;
           }>`
         SELECT
-          thread_id AS "threadId",
+          session_id AS "sessionId",
           model_selection_json AS "modelSelection"
-        FROM projection_threads
-        ORDER BY thread_id
+        FROM projection_sessions
+        ORDER BY session_id
       `;
-          assert.deepStrictEqual(threadRows, [
+          assert.deepStrictEqual(sessionRows, [
             {
-              threadId: "thread-claude",
+              sessionId: "session-claude",
               modelSelection: '{"provider":"claudeAgent","model":"claude-opus-4-6"}',
             },
             {
-              threadId: "thread-codex",
+              sessionId: "session-codex",
               modelSelection: '{"provider":"codex","model":"gpt-5.4"}',
             },
             {
-              threadId: "thread-legacy-options",
+              sessionId: "session-legacy-options",
               modelSelection: '{"provider":"claudeAgent","model":"claude-opus-4-6"}',
             },
             {
-              threadId: "thread-session",
+              sessionId: "session-session",
               modelSelection: '{"provider":"claudeAgent","model":"gpt-5.4"}',
             },
           ]);
@@ -309,9 +307,9 @@ layer("016_CanonicalizeModelSelections", (it) => {
           });
           // @effect-diagnostics-next-line preferSchemaOverJson:off
           assert.deepStrictEqual(JSON.parse(eventRows[3]!.payloadJson), {
-            threadId: "thread-1",
+            sessionId: "session-1",
             projectId: "project-1",
-            title: "Thread",
+            title: "Session",
             modelSelection: {
               provider: "claudeAgent",
               model: "claude-opus-4-6",
@@ -329,9 +327,9 @@ layer("016_CanonicalizeModelSelections", (it) => {
           });
           // @effect-diagnostics-next-line preferSchemaOverJson:off
           assert.deepStrictEqual(JSON.parse(eventRows[4]!.payloadJson), {
-            threadId: "thread-2",
+            sessionId: "session-2",
             projectId: "project-1",
-            title: "Fallback Thread",
+            title: "Fallback Session",
             modelSelection: {
               provider: "codex",
               model: "gpt-5.4",
@@ -348,7 +346,7 @@ layer("016_CanonicalizeModelSelections", (it) => {
           });
           // @effect-diagnostics-next-line preferSchemaOverJson:off
           assert.deepStrictEqual(JSON.parse(eventRows[5]!.payloadJson), {
-            threadId: "thread-1",
+            sessionId: "session-1",
             turnId: "turn-1",
             input: "hi",
             modelSelection: {
@@ -362,9 +360,9 @@ layer("016_CanonicalizeModelSelections", (it) => {
           });
           // @effect-diagnostics-next-line preferSchemaOverJson:off
           assert.deepStrictEqual(JSON.parse(eventRows[6]!.payloadJson), {
-            threadId: "thread-3",
+            sessionId: "session-3",
             projectId: "project-1",
-            title: "Ancient Thread",
+            title: "Ancient Session",
             modelSelection: {
               provider: "codex",
               model: "gpt-5.4",

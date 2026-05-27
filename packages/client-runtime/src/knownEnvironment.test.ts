@@ -1,15 +1,15 @@
-import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, SessionId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import { createKnownEnvironment, getKnownEnvironmentHttpBaseUrl } from "./knownEnvironment.ts";
 import {
   parseScopedProjectKey,
-  parseScopedThreadKey,
+  parseScopedSessionKey,
   scopedProjectKey,
   scopedRefKey,
-  scopedThreadKey,
+  scopedSessionKey,
   scopeProjectRef,
-  scopeThreadRef,
+  scopeSessionRef,
 } from "./scoped.ts";
 
 describe("known environment bootstrap helpers", () => {
@@ -63,13 +63,13 @@ describe("known environment bootstrap helpers", () => {
 describe("scoped refs", () => {
   const environmentId = EnvironmentId.make("environment-test");
   const projectRef = scopeProjectRef(environmentId, ProjectId.make("project-1"));
-  const threadRef = scopeThreadRef(environmentId, ThreadId.make("thread-1"));
+  const sessionRef = scopeSessionRef(environmentId, SessionId.make("session-1"));
 
-  it("builds stable scoped project and thread keys", () => {
+  it("builds stable scoped project and session keys", () => {
     expect(scopedRefKey(projectRef)).toBe("environment-test:project-1");
-    expect(scopedRefKey(threadRef)).toBe("environment-test:thread-1");
+    expect(scopedRefKey(sessionRef)).toBe("environment-test:session-1");
     expect(scopedProjectKey(projectRef)).toBe("environment-test:project-1");
-    expect(scopedThreadKey(threadRef)).toBe("environment-test:thread-1");
+    expect(scopedSessionKey(sessionRef)).toBe("environment-test:session-1");
   });
 
   it("returns typed scoped refs", () => {
@@ -77,16 +77,16 @@ describe("scoped refs", () => {
       environmentId,
       projectId: ProjectId.make("project-1"),
     });
-    expect(threadRef).toEqual({
+    expect(sessionRef).toEqual({
       environmentId,
-      threadId: ThreadId.make("thread-1"),
+      sessionId: SessionId.make("session-1"),
     });
   });
 
-  it("parses scoped project and thread keys back into refs", () => {
+  it("parses scoped project and session keys back into refs", () => {
     expect(parseScopedProjectKey("environment-test:project-1")).toEqual(projectRef);
-    expect(parseScopedThreadKey("environment-test:thread-1")).toEqual(threadRef);
+    expect(parseScopedSessionKey("environment-test:session-1")).toEqual(sessionRef);
     expect(parseScopedProjectKey("bad-key")).toBeNull();
-    expect(parseScopedThreadKey("bad-key")).toBeNull();
+    expect(parseScopedSessionKey("bad-key")).toBeNull();
   });
 });

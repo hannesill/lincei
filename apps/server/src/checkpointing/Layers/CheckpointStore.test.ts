@@ -10,14 +10,14 @@ import * as PlatformError from "effect/PlatformError";
 import * as Scope from "effect/Scope";
 import { describe, expect } from "vitest";
 
-import { checkpointRefForThreadTurn } from "../Utils.ts";
+import { checkpointRefForSessionTurn } from "../Utils.ts";
 import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import type { VcsError } from "@t3tools/contracts";
 import { ServerConfig } from "../../config.ts";
-import { ThreadId } from "@t3tools/contracts";
+import { SessionId } from "@t3tools/contracts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-checkpoint-store-test-",
@@ -101,9 +101,9 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
         const tmp = yield* makeTmpDir();
         yield* initRepoWithCommit(tmp);
         const checkpointStore = yield* CheckpointStore;
-        const threadId = ThreadId.make("thread-checkpoint-store");
-        const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
-        const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+        const sessionId = SessionId.make("session-checkpoint-store");
+        const fromCheckpointRef = checkpointRefForSessionTurn(sessionId, 0);
+        const toCheckpointRef = checkpointRefForSessionTurn(sessionId, 1);
 
         yield* checkpointStore.captureCheckpoint({
           cwd: tmp,
@@ -133,9 +133,9 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
         const tmp = yield* makeTmpDir();
         yield* initRepoWithCommit(tmp);
         const checkpointStore = yield* CheckpointStore;
-        const threadId = ThreadId.make("thread-checkpoint-store-whitespace");
-        const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
-        const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+        const sessionId = SessionId.make("session-checkpoint-store-whitespace");
+        const fromCheckpointRef = checkpointRefForSessionTurn(sessionId, 0);
+        const toCheckpointRef = checkpointRefForSessionTurn(sessionId, 1);
 
         const componentPath = path.join(tmp, "Component.tsx");
         yield* writeTextFile(

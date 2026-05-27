@@ -14,7 +14,7 @@
  *
  * @module RuntimeReceiptBus
  */
-import { CheckpointRef, IsoDateTime, NonNegativeInt, ThreadId, TurnId } from "@t3tools/contracts";
+import { CheckpointRef, IsoDateTime, NonNegativeInt, SessionId, TurnId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -22,7 +22,7 @@ import type * as Stream from "effect/Stream";
 
 export const CheckpointBaselineCapturedReceipt = Schema.Struct({
   type: Schema.Literal("checkpoint.baseline.captured"),
-  threadId: ThreadId,
+  sessionId: SessionId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
   createdAt: IsoDateTime,
@@ -31,7 +31,7 @@ export type CheckpointBaselineCapturedReceipt = typeof CheckpointBaselineCapture
 
 export const CheckpointDiffFinalizedReceipt = Schema.Struct({
   type: Schema.Literal("checkpoint.diff.finalized"),
-  threadId: ThreadId,
+  sessionId: SessionId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
@@ -42,7 +42,7 @@ export type CheckpointDiffFinalizedReceipt = typeof CheckpointDiffFinalizedRecei
 
 export const TurnProcessingQuiescedReceipt = Schema.Struct({
   type: Schema.Literal("turn.processing.quiesced"),
-  threadId: ThreadId,
+  sessionId: SessionId,
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   createdAt: IsoDateTime,

@@ -1,4 +1,4 @@
-import { type ThreadId } from "@t3tools/contracts";
+import { type SessionId } from "@t3tools/contracts";
 
 export interface TerminalContextSelection {
   terminalId: string;
@@ -10,7 +10,7 @@ export interface TerminalContextSelection {
 
 export interface TerminalContextDraft extends TerminalContextSelection {
   id: string;
-  threadId: ThreadId;
+  sessionId: SessionId;
   createdAt: string;
 }
 

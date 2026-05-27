@@ -5,7 +5,7 @@ import {
   EventId,
   IsoDateTime,
   ProviderItemId,
-  ThreadId,
+  SessionId,
   TurnId,
 } from "./baseSchemas.ts";
 import {
@@ -41,7 +41,7 @@ export const ProviderSession = Schema.Struct({
   runtimeMode: RuntimeMode,
   cwd: Schema.optional(TrimmedNonEmptyString),
   model: Schema.optional(TrimmedNonEmptyString),
-  threadId: ThreadId,
+  sessionId: SessionId,
   resumeCursor: Schema.optional(Schema.Unknown),
   activeTurnId: Schema.optional(TurnId),
   createdAt: IsoDateTime,
@@ -51,7 +51,7 @@ export const ProviderSession = Schema.Struct({
 export type ProviderSession = typeof ProviderSession.Type;
 
 export const ProviderSessionStartInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   provider: Schema.optional(ProviderDriverKind),
   // See ProviderSession for the migration story.
   providerInstanceId: Schema.optional(ProviderInstanceId),
@@ -65,7 +65,7 @@ export const ProviderSessionStartInput = Schema.Struct({
 export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;
 
 export const ProviderSendTurnInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   input: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
   ),
@@ -78,32 +78,32 @@ export const ProviderSendTurnInput = Schema.Struct({
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 
 export const ProviderTurnStartResult = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   turnId: TurnId,
   resumeCursor: Schema.optional(Schema.Unknown),
 });
 export type ProviderTurnStartResult = typeof ProviderTurnStartResult.Type;
 
 export const ProviderInterruptTurnInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   turnId: Schema.optional(TurnId),
 });
 export type ProviderInterruptTurnInput = typeof ProviderInterruptTurnInput.Type;
 
 export const ProviderStopSessionInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
 });
 export type ProviderStopSessionInput = typeof ProviderStopSessionInput.Type;
 
 export const ProviderRespondToRequestInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   requestId: ApprovalRequestId,
   decision: ProviderApprovalDecision,
 });
 export type ProviderRespondToRequestInput = typeof ProviderRespondToRequestInput.Type;
 
 export const ProviderRespondToUserInputInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   requestId: ApprovalRequestId,
   answers: ProviderUserInputAnswers,
 });
@@ -117,7 +117,7 @@ export const ProviderEvent = Schema.Struct({
   provider: ProviderDriverKind,
   // See ProviderSession for the migration story.
   providerInstanceId: Schema.optional(ProviderInstanceId),
-  threadId: ThreadId,
+  sessionId: SessionId,
   createdAt: IsoDateTime,
   method: TrimmedNonEmptyString,
   message: Schema.optional(TrimmedNonEmptyString),

@@ -7,9 +7,9 @@ import type {
   ProviderInteractionMode,
   ResolvedKeybindingsConfig,
   RuntimeMode,
-  ScopedThreadRef,
+  ScopedSessionRef,
   ServerProvider,
-  ThreadId,
+  SessionId,
   TurnId,
 } from "@t3tools/contracts";
 import {
@@ -46,7 +46,7 @@ import {
   type DraftId,
   type PersistedComposerImageAttachment,
   useComposerDraftStore,
-  useComposerThreadDraft,
+  useComposerSessionDraft,
   useEffectiveComposerModelState,
 } from "../../composerDraftStore";
 import {
@@ -104,7 +104,7 @@ import {
 } from "../../providerInstances";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
 import type { UnifiedSettings } from "@t3tools/contracts/settings";
-import type { SessionPhase, Thread } from "../../types";
+import type { SessionPhase, Session } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
@@ -305,7 +305,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   preserveComposerFocusOnPointerDown?: boolean;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
-  onImplementPlanInNewThread: () => void;
+  onImplementPlanInNewSession: () => void;
 }) {
   return (
     <>
@@ -327,7 +327,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
         onPreviousPendingQuestion={props.onPreviousPendingQuestion}
         onInterrupt={props.onInterrupt}
-        onImplementPlanInNewThread={props.onImplementPlanInNewThread}
+        onImplementPlanInNewSession={props.onImplementPlanInNewSession}
       />
     </>
   );
@@ -376,18 +376,18 @@ export interface ChatComposerHandle {
 // --------------------------------------------------------------------------
 
 export interface ChatComposerProps {
-  composerDraftTarget: ScopedThreadRef | DraftId;
+  composerDraftTarget: ScopedSessionRef | DraftId;
   environmentId: EnvironmentId;
   routeKind: "server" | "draft";
-  routeThreadRef: ScopedThreadRef;
+  routeSessionRef: ScopedSessionRef;
   draftId: DraftId | null;
 
-  // Thread context
-  activeThreadId: ThreadId | null;
-  activeThreadEnvironmentId: EnvironmentId | undefined;
-  activeThread: Thread | undefined;
-  isServerThread: boolean;
-  isLocalDraftThread: boolean;
+  // Session context
+  activeSessionId: SessionId | null;
+  activeSessionEnvironmentId: EnvironmentId | undefined;
+  activeSession: Session | undefined;
+  isServerSession: boolean;
+  isLocalDraftSession: boolean;
 
   // Session phase
   phase: SessionPhase;
@@ -418,7 +418,7 @@ export interface ChatComposerProps {
 
   // Plan
   showPlanFollowUpPrompt: boolean;
-  activeProposedPlan: Thread["proposedPlans"][number] | null;
+  activeProposedPlan: Session["proposedPlans"][number] | null;
   activePlan: { turnId?: TurnId } | null;
   sidebarProposedPlan: { turnId?: TurnId } | null;
   planSidebarLabel: string;
@@ -432,10 +432,10 @@ export interface ChatComposerProps {
   lockedProvider: ProviderDriverKind | null;
   providerStatuses: ServerProvider[];
   activeProjectDefaultModelSelection: ModelSelection | null | undefined;
-  activeThreadModelSelection: ModelSelection | null | undefined;
+  activeSessionModelSelection: ModelSelection | null | undefined;
 
   // Context window
-  activeThreadActivities: Thread["activities"] | undefined;
+  activeSessionActivities: Session["activities"] | undefined;
 
   // Misc
   resolvedTheme: "light" | "dark";
@@ -457,7 +457,7 @@ export interface ChatComposerProps {
   // Callbacks
   onSend: (e?: { preventDefault: () => void }) => void;
   onInterrupt: () => void;
-  onImplementPlanInNewThread: () => void;
+  onImplementPlanInNewSession: () => void;
   onRespondToApproval: (
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
@@ -481,7 +481,7 @@ export interface ChatComposerProps {
 
   focusComposer: () => void;
   scheduleComposerFocus: () => void;
-  setThreadError: (threadId: ThreadId | null, error: string | null) => void;
+  setSessionError: (sessionId: SessionId | null, error: string | null) => void;
   onExpandImage: (preview: ExpandedImagePreview) => void;
 }
 
@@ -494,13 +494,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     composerDraftTarget,
     environmentId,
     routeKind,
-    routeThreadRef,
+    routeSessionRef,
     draftId,
-    activeThreadId,
-    activeThreadEnvironmentId: _activeThreadEnvironmentId,
-    activeThread,
-    isServerThread: _isServerThread,
-    isLocalDraftThread: _isLocalDraftThread,
+    activeSessionId,
+    activeSessionEnvironmentId: _activeSessionEnvironmentId,
+    activeSession,
+    isServerSession: _isServerSession,
+    isLocalDraftSession: _isLocalDraftSession,
     phase,
     isConnecting,
     isSendBusy,
@@ -526,8 +526,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     lockedProvider,
     providerStatuses,
     activeProjectDefaultModelSelection,
-    activeThreadModelSelection,
-    activeThreadActivities,
+    activeSessionModelSelection,
+    activeSessionActivities,
     resolvedTheme,
     settings,
     keybindings,
@@ -541,7 +541,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     scheduleStickToBottom,
     onSend,
     onInterrupt,
-    onImplementPlanInNewThread,
+    onImplementPlanInNewSession,
     onRespondToApproval,
     onSelectActivePendingUserInputOption,
     onAdvanceActivePendingUserInput,
@@ -554,14 +554,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     togglePlanSidebar,
     focusComposer,
     scheduleComposerFocus,
-    setThreadError,
+    setSessionError,
     onExpandImage,
   } = props;
 
   // ------------------------------------------------------------------
   // Store subscriptions (prompt / images / terminal contexts)
   // ------------------------------------------------------------------
-  const composerDraft = useComposerThreadDraft(composerDraftTarget);
+  const composerDraft = useComposerSessionDraft(composerDraftTarget);
   const prompt = composerDraft.prompt;
   const composerImages = composerDraft.images;
   const composerTerminalContexts = composerDraft.terminalContexts;
@@ -598,13 +598,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => sortProviderInstanceEntries(deriveProviderInstanceEntries(providerStatuses)),
     [providerStatuses],
   );
-  const selectedProviderByThreadId = composerDraft.activeProvider ?? null;
-  const threadProvider =
-    activeThread?.session?.providerInstanceId ??
-    activeThreadModelSelection?.instanceId ??
+  const selectedProviderBySessionId = composerDraft.activeProvider ?? null;
+  const sessionProvider =
+    activeSession?.session?.providerInstanceId ??
+    activeSessionModelSelection?.instanceId ??
     activeProjectDefaultModelSelection?.instanceId ??
     null;
-  const explicitSelectedInstanceId = selectedProviderByThreadId ?? threadProvider;
+  const explicitSelectedInstanceId = selectedProviderBySessionId ?? sessionProvider;
 
   const unlockedSelectedProvider =
     resolveProviderDriverKindForInstanceSelection(
@@ -614,17 +614,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ) ?? ProviderDriverKind.make("codex");
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const lockedContinuationGroupKey = useMemo((): string | null => {
-    if (!lockedProvider || !activeThread) return null;
+    if (!lockedProvider || !activeSession) return null;
     const lockedInstanceId =
-      activeThread.session?.providerInstanceId ?? activeThreadModelSelection?.instanceId;
+      activeSession.session?.providerInstanceId ?? activeSessionModelSelection?.instanceId;
     if (!lockedInstanceId) return null;
     return (
       providerInstanceEntries.find((entry) => entry.instanceId === lockedInstanceId)
         ?.continuationGroupKey ?? null
     );
   }, [
-    activeThread,
-    activeThreadModelSelection?.instanceId,
+    activeSession,
+    activeSessionModelSelection?.instanceId,
     lockedProvider,
     providerInstanceEntries,
   ]);
@@ -634,7 +634,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   //   1. The composer draft's `activeProvider` — the user's unsaved pick
   //      from the model picker (must win, otherwise the UI appears to
   //      ignore picker selections).
-  //   2. Thread's persisted instance id (server-side saved selection).
+  //   2. Session's persisted instance id (server-side saved selection).
   //   3. Project default's instance id.
   //   4. First enabled entry matching the current driver kind.
   //   5. First enabled entry overall / default instance for the kind.
@@ -642,8 +642,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const selectedInstanceId = useMemo<ProviderInstanceId>(() => {
     const candidates: Array<string | null | undefined> = [
       composerDraft.activeProvider,
-      activeThread?.session?.providerInstanceId,
-      activeThreadModelSelection?.instanceId,
+      activeSession?.session?.providerInstanceId,
+      activeSessionModelSelection?.instanceId,
       activeProjectDefaultModelSelection?.instanceId,
     ];
     for (const candidate of candidates) {
@@ -678,14 +678,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return (
       anyEnabled?.instanceId ??
       providerInstanceEntries[0]?.instanceId ??
-      activeThreadModelSelection?.instanceId ??
+      activeSessionModelSelection?.instanceId ??
       activeProjectDefaultModelSelection?.instanceId ??
       ProviderInstanceId.make("codex")
     );
   }, [
     activeProjectDefaultModelSelection?.instanceId,
-    activeThread?.session?.providerInstanceId,
-    activeThreadModelSelection?.instanceId,
+    activeSession?.session?.providerInstanceId,
+    activeSessionModelSelection?.instanceId,
     composerDraft.activeProvider,
     explicitSelectedInstanceId,
     lockedContinuationGroupKey,
@@ -695,11 +695,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   ]);
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
-    threadRef: composerDraftTarget,
+    sessionRef: composerDraftTarget,
     providers: providerStatuses,
     selectedProvider,
     selectedInstanceId,
-    threadModelSelection: activeThreadModelSelection,
+    sessionModelSelection: activeSessionModelSelection,
     projectModelSelection: activeProjectDefaultModelSelection,
     settings,
   });
@@ -779,8 +779,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // Context window
   // ------------------------------------------------------------------
   const activeContextWindow = useMemo(
-    () => deriveLatestContextWindowSnapshot(activeThreadActivities ?? []),
-    [activeThreadActivities],
+    () => deriveLatestContextWindowSnapshot(activeSessionActivities ?? []),
+    [activeSessionActivities],
   );
 
   // ------------------------------------------------------------------
@@ -876,21 +876,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           type: "slash-command",
           command: "model",
           label: "/model",
-          description: "Switch response model for this thread",
+          description: "Switch response model for this session",
         },
         {
           id: "slash:plan",
           type: "slash-command",
           command: "plan",
           label: "/plan",
-          description: "Switch this thread into plan mode",
+          description: "Switch this session into plan mode",
         },
         {
           id: "slash:default",
           type: "slash-command",
           command: "default",
           label: "/default",
-          description: "Switch this thread back to normal build mode",
+          description: "Switch this session back to normal build mode",
         },
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
       const providerSlashCommandItems = (selectedProviderStatus?.slashCommands ?? []).map(
@@ -1026,7 +1026,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const providerTraitsMenuContent = renderProviderTraitsMenuContent({
     provider: selectedProvider,
     instanceId: selectedInstanceId,
-    ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
+    ...(routeKind === "server" ? { sessionRef: routeSessionRef } : {}),
     ...(routeKind === "draft" && draftId ? { draftId } : {}),
     model: selectedModel,
     models: selectedProviderModels,
@@ -1037,7 +1037,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const providerTraitsPicker = renderProviderTraitsPicker({
     provider: selectedProvider,
     instanceId: selectedInstanceId,
-    ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
+    ...(routeKind === "server" ? { sessionRef: routeSessionRef } : {}),
     ...(routeKind === "draft" && draftId ? { draftId } : {}),
     model: selectedModel,
     models: selectedProviderModels,
@@ -1209,7 +1209,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   ]);
 
   // ------------------------------------------------------------------
-  // Reset compositor state on thread/draft change
+  // Reset compositor state on session/draft change
   // ------------------------------------------------------------------
   useEffect(() => {
     setComposerHighlightedItemId(null);
@@ -1217,7 +1217,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setComposerTrigger(detectComposerTrigger(promptRef.current, promptRef.current.length));
     dragDepthRef.current = 0;
     setIsDragOverComposer(false);
-  }, [draftId, activeThreadId, promptRef]);
+  }, [draftId, activeSessionId, promptRef]);
 
   // ------------------------------------------------------------------
   // Footer compact layout observation
@@ -1273,7 +1273,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       observer.disconnect();
     };
   }, [
-    activeThreadId,
+    activeSessionId,
     composerFooterActionLayoutKey,
     composerFooterHasWideActions,
     scheduleStickToBottom,
@@ -1290,10 +1290,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         clearComposerDraftPersistedAttachments(composerDraftTarget);
         return;
       }
-      const getPersistedAttachmentsForThread = () =>
+      const getPersistedAttachmentsForSession = () =>
         getComposerDraft(composerDraftTarget)?.persistedAttachments ?? [];
       try {
-        const currentPersistedAttachments = getPersistedAttachmentsForThread();
+        const currentPersistedAttachments = getPersistedAttachmentsForSession();
         const existingPersistedById = new Map(
           currentPersistedAttachments.map((attachment) => [attachment.id, attachment]),
         );
@@ -1322,7 +1322,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         syncComposerDraftPersistedAttachments(composerDraftTarget, serialized);
       } catch {
         const currentImageIds = new Set(composerImages.map((image) => image.id));
-        const fallbackPersistedAttachments = getPersistedAttachmentsForThread();
+        const fallbackPersistedAttachments = getPersistedAttachmentsForSession();
         const fallbackPersistedIds = fallbackPersistedAttachments
           .map((attachment) => attachment.id)
           .filter((id) => currentImageIds.has(id));
@@ -1693,7 +1693,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // Callbacks: images
   // ------------------------------------------------------------------
   const addComposerImages = (files: File[]) => {
-    if (!activeThreadId || files.length === 0) return;
+    if (!activeSessionId || files.length === 0) return;
     if (pendingUserInputs.length > 0) {
       toastManager.add({
         type: "error",
@@ -1734,7 +1734,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     } else if (nextImages.length > 1) {
       addComposerImagesToDraft(nextImages);
     }
-    setThreadError(activeThreadId, error);
+    setSessionError(activeSessionId, error);
   };
 
   const removeComposerImage = (imageId: string) => {
@@ -1790,9 +1790,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const handleInterruptPrimaryAction = useCallback(() => {
     void onInterrupt();
   }, [onInterrupt]);
-  const handleImplementPlanInNewThreadPrimaryAction = useCallback(() => {
-    void onImplementPlanInNewThread();
-  }, [onImplementPlanInNewThread]);
+  const handleImplementPlanInNewSessionPrimaryAction = useCallback(() => {
+    void onImplementPlanInNewSession();
+  }, [onImplementPlanInNewSession]);
   const scheduleComposerCollapseCheck = useCallback(() => {
     if (!isMobileViewport) {
       return;
@@ -1879,7 +1879,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         );
       },
       addTerminalContext: (selection: TerminalContextSelection) => {
-        if (!activeThread) return;
+        if (!activeSession) return;
         const snapshot = composerEditorRef.current?.readSnapshot() ?? {
           value: promptRef.current,
           cursor: composerCursor,
@@ -1899,7 +1899,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           insertion.prompt,
           {
             id: randomUUID(),
-            threadId: activeThread.id,
+            sessionId: activeSession.id,
             createdAt: new Date().toISOString(),
             ...selection,
           },
@@ -1926,7 +1926,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }),
     }),
     [
-      activeThread,
+      activeSession,
       composerDraftTarget,
       composerCursor,
       composerTerminalContexts,
@@ -2088,7 +2088,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       preserveComposerFocusOnPointerDown
                       onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                       onInterrupt={handleInterruptPrimaryAction}
-                      onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                      onImplementPlanInNewSession={handleImplementPlanInNewSessionPrimaryAction}
                     />
                   ) : null}
                 </div>
@@ -2297,7 +2297,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     preserveComposerFocusOnPointerDown
                     onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                     onInterrupt={handleInterruptPrimaryAction}
-                    onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                    onImplementPlanInNewSession={handleImplementPlanInNewSessionPrimaryAction}
                   />
                 </div>
               ) : null}
@@ -2405,7 +2405,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   preserveComposerFocusOnPointerDown={isMobileViewport}
                   onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                   onInterrupt={handleInterruptPrimaryAction}
-                  onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                  onImplementPlanInNewSession={handleImplementPlanInNewSessionPrimaryAction}
                 />
               </div>
             </div>

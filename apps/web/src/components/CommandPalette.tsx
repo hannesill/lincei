@@ -1,6 +1,6 @@
 "use client";
 
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
+import { scopeProjectRef, scopeSessionRef } from "@t3tools/client-runtime";
 import {
   DEFAULT_MODEL,
   type EnvironmentId,
@@ -45,7 +45,7 @@ import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useHandleNewSession } from "../hooks/useHandleNewSession";
 import { useSettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
 import {
@@ -53,9 +53,9 @@ import {
   refreshSourceControlDiscovery,
 } from "../lib/sourceControlDiscoveryState";
 import {
-  startNewThreadInProjectFromContext,
-  startNewThreadFromContext,
-} from "../lib/chatThreadActions";
+  startNewSessionInProjectFromContext,
+  startNewSessionFromContext,
+} from "../lib/chatSessionActions";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -72,21 +72,21 @@ import {
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { getLatestThreadForProject } from "../lib/threadSort";
+import { getLatestSessionForProject } from "../lib/sessionSort";
 import { cn, isMacPlatform, isWindowsPlatform, newCommandId, newProjectId } from "../lib/utils";
 import {
   selectProjectsAcrossEnvironments,
-  selectSidebarThreadsAcrossEnvironments,
+  selectSidebarSessionsAcrossEnvironments,
   useStore,
 } from "../store";
-import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
-import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
+import { selectSessionTerminalState, useTerminalStateStore } from "../terminalStateStore";
+import { buildSessionRouteParams, resolveSessionRouteTarget } from "../sessionRoutes";
 import {
   ADDON_ICON_CLASS,
   buildBrowseGroups,
   buildProjectActionItems,
   buildRootGroups,
-  buildThreadActionItems,
+  buildSessionActionItems,
   type CommandPaletteActionItem,
   type CommandPaletteSubmenuItem,
   type CommandPaletteView,
@@ -101,7 +101,7 @@ import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteResults } from "./CommandPaletteResults";
 import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
 import { ProjectFavicon } from "./ProjectFavicon";
-import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
+import { SessionRowLeadingStatus, SessionRowTrailingStatus } from "./SessionStatusIndicators";
 import { useServerKeybindings } from "../rpc/serverState";
 import { resolveShortcutCommand } from "../keybindings";
 import {
@@ -114,7 +114,7 @@ import {
 } from "./ui/command";
 import { Button } from "./ui/button";
 import { Kbd, KbdGroup } from "./ui/kbd";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { stackedSessionToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
@@ -334,12 +334,12 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   const composerHandleRef = useRef<ChatComposerHandle | null>(null);
   const routeTarget = useParams({
     strict: false,
-    select: (params) => resolveThreadRouteTarget(params),
+    select: (params) => resolveSessionRouteTarget(params),
   });
-  const routeThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
+  const routeSessionRef = routeTarget?.kind === "server" ? routeTarget.sessionRef : null;
   const terminalOpen = useTerminalStateStore((state) =>
-    routeThreadRef
-      ? selectThreadTerminalState(state.terminalStateByThreadKey, routeThreadRef).terminalOpen
+    routeSessionRef
+      ? selectSessionTerminalState(state.terminalStateBySessionKey, routeSessionRef).terminalOpen
       : false,
   );
 
@@ -402,10 +402,10 @@ function OpenCommandPaletteDialog() {
   const queryClient = useQueryClient();
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
   const settings = useSettings();
-  const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
-    useHandleNewThread();
+  const { activeDraftSession, activeSession, defaultProjectRef, handleNewSession } =
+    useHandleNewSession();
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
-  const threads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
+  const sessions = useStore(useShallow(selectSidebarSessionsAcrossEnvironments));
   const keybindings = useServerKeybindings();
   const [viewStack, setViewStack] = useState<CommandPaletteView[]>([]);
   const currentView = viewStack.at(-1) ?? null;
@@ -516,10 +516,10 @@ function OpenCommandPaletteDialog() {
     [projects],
   );
 
-  const activeThreadId = activeThread?.id;
+  const activeSessionId = activeSession?.id;
   const currentProjectEnvironmentId =
-    activeThread?.environmentId ?? activeDraftThread?.environmentId ?? null;
-  const currentProjectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? null;
+    activeSession?.environmentId ?? activeDraftSession?.environmentId ?? null;
+  const currentProjectId = activeSession?.projectId ?? activeDraftSession?.projectId ?? null;
   const currentProjectCwd = currentProjectId
     ? (projectCwdById.get(currentProjectId) ?? null)
     : null;
@@ -611,31 +611,31 @@ function OpenCommandPaletteDialog() {
 
   const openProjectFromSearch = useMemo(
     () => async (project: (typeof projects)[number]) => {
-      const latestThread = getLatestThreadForProject(
-        threads.filter((thread) => thread.environmentId === project.environmentId),
+      const latestSession = getLatestSessionForProject(
+        sessions.filter((session) => session.environmentId === project.environmentId),
         project.id,
-        settings.sidebarThreadSortOrder,
+        settings.sidebarSessionSortOrder,
       );
-      if (latestThread) {
+      if (latestSession) {
         await navigate({
-          to: "/$environmentId/$threadId",
-          params: buildThreadRouteParams(
-            scopeThreadRef(latestThread.environmentId, latestThread.id),
+          to: "/$environmentId/$sessionId",
+          params: buildSessionRouteParams(
+            scopeSessionRef(latestSession.environmentId, latestSession.id),
           ),
         });
         return;
       }
 
-      await handleNewThread(scopeProjectRef(project.environmentId, project.id), {
-        envMode: settings.defaultThreadEnvMode,
+      await handleNewSession(scopeProjectRef(project.environmentId, project.id), {
+        envMode: settings.defaultSessionEnvMode,
       });
     },
     [
-      handleNewThread,
+      handleNewSession,
       navigate,
-      settings.defaultThreadEnvMode,
-      settings.sidebarThreadSortOrder,
-      threads,
+      settings.defaultSessionEnvMode,
+      settings.sidebarSessionSortOrder,
+      sessions,
     ],
   );
 
@@ -656,11 +656,11 @@ function OpenCommandPaletteDialog() {
     [openProjectFromSearch, projects],
   );
 
-  const projectThreadItems = useMemo(
+  const projectSessionItems = useMemo(
     () =>
       buildProjectActionItems({
         projects,
-        valuePrefix: "new-thread-in",
+        valuePrefix: "new-session-in",
         icon: (project) => (
           <ProjectFavicon
             environmentId={project.environmentId}
@@ -669,48 +669,48 @@ function OpenCommandPaletteDialog() {
           />
         ),
         runProject: async (project) => {
-          await startNewThreadInProjectFromContext(
+          await startNewSessionInProjectFromContext(
             {
-              activeDraftThread,
-              activeThread,
+              activeDraftSession,
+              activeSession,
               defaultProjectRef,
-              defaultThreadEnvMode: settings.defaultThreadEnvMode,
-              handleNewThread,
+              defaultSessionEnvMode: settings.defaultSessionEnvMode,
+              handleNewSession,
             },
             scopeProjectRef(project.environmentId, project.id),
           );
         },
       }),
     [
-      activeDraftThread,
-      activeThread,
+      activeDraftSession,
+      activeSession,
       defaultProjectRef,
-      handleNewThread,
+      handleNewSession,
       projects,
-      settings.defaultThreadEnvMode,
+      settings.defaultSessionEnvMode,
     ],
   );
 
-  const allThreadItems = useMemo(
+  const allSessionItems = useMemo(
     () =>
-      buildThreadActionItems({
-        threads,
-        ...(activeThreadId ? { activeThreadId } : {}),
+      buildSessionActionItems({
+        sessions,
+        ...(activeSessionId ? { activeSessionId } : {}),
         projectTitleById,
-        sortOrder: settings.sidebarThreadSortOrder,
+        sortOrder: settings.sidebarSessionSortOrder,
         icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
-        renderLeadingContent: (thread) => <ThreadRowLeadingStatus thread={thread} />,
-        renderTrailingContent: (thread) => <ThreadRowTrailingStatus thread={thread} />,
-        runThread: async (thread) => {
+        renderLeadingContent: (session) => <SessionRowLeadingStatus session={session} />,
+        renderTrailingContent: (session) => <SessionRowTrailingStatus session={session} />,
+        runSession: async (session) => {
           await navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+            to: "/$environmentId/$sessionId",
+            params: buildSessionRouteParams(scopeSessionRef(session.environmentId, session.id)),
           });
         },
       }),
-    [activeThreadId, navigate, projectTitleById, settings.sidebarThreadSortOrder, threads],
+    [activeSessionId, navigate, projectTitleById, settings.sidebarSessionSortOrder, sessions],
   );
-  const recentThreadItems = allThreadItems.slice(0, RECENT_THREAD_LIMIT);
+  const recentSessionItems = allSessionItems.slice(0, RECENT_THREAD_LIMIT);
 
   function pushPaletteView(view: CommandPaletteView): void {
     setViewStack((previousViews) => [
@@ -954,7 +954,7 @@ function OpenCommandPaletteDialog() {
     const environmentId = defaultAddProjectEnvironmentId;
     if (!environmentId) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Unable to browse studies",
           description: "No environment is available.",
@@ -989,22 +989,22 @@ function OpenCommandPaletteDialog() {
     if (activeProjectTitle) {
       actionItems.push({
         kind: "action",
-        value: "action:new-thread",
-        searchTerms: ["new thread", "chat", "create", "draft"],
+        value: "action:new-session",
+        searchTerms: ["new session", "chat", "create", "draft"],
         title: (
           <>
-            New thread in <span className="font-semibold">{activeProjectTitle}</span>
+            New session in <span className="font-semibold">{activeProjectTitle}</span>
           </>
         ),
         icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
         shortcutCommand: "chat.new",
         run: async () => {
-          await startNewThreadFromContext({
-            activeDraftThread,
-            activeThread,
+          await startNewSessionFromContext({
+            activeDraftSession,
+            activeSession,
             defaultProjectRef,
-            defaultThreadEnvMode: settings.defaultThreadEnvMode,
-            handleNewThread,
+            defaultSessionEnvMode: settings.defaultSessionEnvMode,
+            handleNewSession,
           });
         },
       });
@@ -1012,12 +1012,12 @@ function OpenCommandPaletteDialog() {
 
     actionItems.push({
       kind: "submenu",
-      value: "action:new-thread-in",
-      searchTerms: ["new thread", "project", "pick", "choose", "select"],
-      title: "New thread in...",
+      value: "action:new-session-in",
+      searchTerms: ["new session", "project", "pick", "choose", "select"],
+      title: "New session in...",
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
-      groups: [{ value: "projects", label: "Studies", items: projectThreadItems }],
+      groups: [{ value: "projects", label: "Studies", items: projectSessionItems }],
     });
   }
 
@@ -1061,7 +1061,7 @@ function OpenCommandPaletteDialog() {
     },
   });
 
-  const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
+  const rootGroups = buildRootGroups({ actionItems, recentSessionItems });
   const activeGroups = currentView ? currentView.groups : rootGroups;
 
   const filteredGroups = filterCommandPaletteGroups({
@@ -1069,7 +1069,7 @@ function OpenCommandPaletteDialog() {
     query: deferredQuery,
     isInSubmenu: currentView !== null,
     projectSearchItems: projectSearchItems,
-    threadSearchItems: allThreadItems,
+    sessionSearchItems: allSessionItems,
   });
 
   const handleAddProject = useCallback(
@@ -1080,7 +1080,7 @@ function OpenCommandPaletteDialog() {
 
       if (isUnsupportedWindowsProjectPath(rawCwd.trim(), browseEnvironmentPlatform)) {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Failed to add study",
             description: "Windows-style paths are only supported on Windows.",
@@ -1091,7 +1091,7 @@ function OpenCommandPaletteDialog() {
 
       if (isExplicitRelativeProjectPath(rawCwd.trim()) && !currentProjectCwdForBrowse) {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Failed to add study",
             description: "Relative paths require an active study.",
@@ -1108,21 +1108,21 @@ function OpenCommandPaletteDialog() {
         cwd,
       );
       if (existing) {
-        const latestThread = getLatestThreadForProject(
-          threads.filter((thread) => thread.environmentId === existing.environmentId),
+        const latestSession = getLatestSessionForProject(
+          sessions.filter((session) => session.environmentId === existing.environmentId),
           existing.id,
-          settings.sidebarThreadSortOrder,
+          settings.sidebarSessionSortOrder,
         );
-        if (latestThread) {
+        if (latestSession) {
           await navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(
-              scopeThreadRef(latestThread.environmentId, latestThread.id),
+            to: "/$environmentId/$sessionId",
+            params: buildSessionRouteParams(
+              scopeSessionRef(latestSession.environmentId, latestSession.id),
             ),
           });
         } else {
-          await handleNewThread(scopeProjectRef(existing.environmentId, existing.id), {
-            envMode: settings.defaultThreadEnvMode,
+          await handleNewSession(scopeProjectRef(existing.environmentId, existing.id), {
+            envMode: settings.defaultSessionEnvMode,
           }).catch(() => undefined);
         }
         setOpen(false);
@@ -1144,13 +1144,13 @@ function OpenCommandPaletteDialog() {
           },
           createdAt: new Date().toISOString(),
         });
-        await handleNewThread(scopeProjectRef(browseEnvironmentId, projectId), {
-          envMode: settings.defaultThreadEnvMode,
+        await handleNewSession(scopeProjectRef(browseEnvironmentId, projectId), {
+          envMode: settings.defaultSessionEnvMode,
         }).catch(() => undefined);
         setOpen(false);
       } catch (error) {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Failed to add study",
             description: error instanceof Error ? error.message : "An error occurred.",
@@ -1162,13 +1162,13 @@ function OpenCommandPaletteDialog() {
       browseEnvironmentId,
       browseEnvironmentPlatform,
       currentProjectCwdForBrowse,
-      handleNewThread,
+      handleNewSession,
       navigate,
       projects,
       setOpen,
-      settings.defaultThreadEnvMode,
-      settings.sidebarThreadSortOrder,
-      threads,
+      settings.defaultSessionEnvMode,
+      settings.sidebarSessionSortOrder,
+      sessions,
     ],
   );
 
@@ -1184,7 +1184,7 @@ function OpenCommandPaletteDialog() {
     const api = readEnvironmentApi(addProjectCloneFlow.environmentId);
     if (!api) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Unable to clone study",
           description: "Environment API is not available.",
@@ -1236,7 +1236,7 @@ function OpenCommandPaletteDialog() {
         setBrowseGeneration((generation) => generation + 1);
       } catch (error) {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Repository lookup failed",
             description: errorMessage(error),
@@ -1255,7 +1255,7 @@ function OpenCommandPaletteDialog() {
 
     if (isUnsupportedWindowsProjectPath(rawDestination, browseEnvironmentPlatform)) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Clone failed",
           description: "Windows-style paths are only supported on Windows.",
@@ -1266,7 +1266,7 @@ function OpenCommandPaletteDialog() {
 
     if (isExplicitRelativeProjectPath(rawDestination) && !currentProjectCwdForBrowse) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Clone failed",
           description: "Relative paths require an active study.",
@@ -1292,7 +1292,7 @@ function OpenCommandPaletteDialog() {
       await handleAddProject(result.cwd);
     } catch (error) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Clone failed",
           description: errorMessage(error),
@@ -1483,7 +1483,7 @@ function OpenCommandPaletteDialog() {
 
     void item.run().catch((error: unknown) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Unable to run command",
           description: error instanceof Error ? error.message : "An unexpected error occurred.",

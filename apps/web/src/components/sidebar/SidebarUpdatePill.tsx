@@ -6,7 +6,7 @@ import {
   setDesktopUpdateStateQueryData,
   useDesktopUpdateState,
 } from "../../lib/desktopUpdateReactQuery";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { stackedSessionToast, toastManager } from "../ui/toast";
 import {
   getArm64IntelBuildWarningDescription,
   getDesktopUpdateActionError,
@@ -56,7 +56,7 @@ export function SidebarUpdatePill() {
           const actionError = getDesktopUpdateActionError(result);
           if (!actionError) return;
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not download update",
               description: actionError,
@@ -65,7 +65,7 @@ export function SidebarUpdatePill() {
         })
         .catch((error) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not start update download",
               description: error instanceof Error ? error.message : "An unexpected error occurred.",
@@ -86,7 +86,7 @@ export function SidebarUpdatePill() {
           const actionError = getDesktopUpdateActionError(result);
           if (!actionError) return;
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not install update",
               description: actionError,
@@ -95,7 +95,7 @@ export function SidebarUpdatePill() {
         })
         .catch((error) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not install update",
               description: error instanceof Error ? error.message : "An unexpected error occurred.",

@@ -194,16 +194,16 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     }).pipe(Effect.provide(makeKeybindingsLayer())),
   );
 
-  it.effect("ships configurable thread navigation defaults", () =>
+  it.effect("ships configurable session navigation defaults", () =>
     Effect.sync(() => {
       const defaultsByCommand = new Map(
         DEFAULT_KEYBINDINGS.map((binding) => [binding.command, binding.key] as const),
       );
 
-      assert.equal(defaultsByCommand.get("thread.previous"), "mod+shift+[");
-      assert.equal(defaultsByCommand.get("thread.next"), "mod+shift+]");
-      assert.equal(defaultsByCommand.get("thread.jump.1"), "mod+1");
-      assert.equal(defaultsByCommand.get("thread.jump.9"), "mod+9");
+      assert.equal(defaultsByCommand.get("session.previous"), "mod+shift+[");
+      assert.equal(defaultsByCommand.get("session.next"), "mod+shift+]");
+      assert.equal(defaultsByCommand.get("session.jump.1"), "mod+1");
+      assert.equal(defaultsByCommand.get("session.jump.9"), "mod+9");
       assert.equal(defaultsByCommand.get("modelPicker.toggle"), "mod+shift+m");
       assert.equal(defaultsByCommand.get("modelPicker.jump.1"), "mod+1");
       assert.equal(defaultsByCommand.get("modelPicker.jump.9"), "mod+9");

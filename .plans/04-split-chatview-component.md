@@ -26,7 +26,7 @@ Refactor `ChatView.tsx` into composable pieces with isolated responsibilities.
    - `sendTurn`
    - `interruptTurn`
 2. Split presentational components:
-   - `components/chat/ThreadHeader.tsx`
+   - `components/chat/SessionHeader.tsx`
    - `components/chat/MessageTimeline.tsx`
    - `components/chat/ComposerBar.tsx`
 3. Keep `ChatView.tsx` as container wiring store + hook + child components.

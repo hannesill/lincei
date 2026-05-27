@@ -13,7 +13,7 @@ import {
   type ProviderTurnStartResult,
   type ProviderUserInputAnswers,
   RuntimeMode,
-  ThreadId,
+  SessionId,
   TurnId,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
@@ -50,20 +50,20 @@ const ANSI_ESCAPE_REGEX = new RegExp(`${ANSI_ESCAPE_CHAR}\\[[0-9;]*m`, "g");
 const CODEX_STDERR_LOG_REGEX =
   /^\d{4}-\d{2}-\d{2}T\S+\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+\S+:\s+(.*)$/;
 const BENIGN_ERROR_LOG_SNIPPETS = [
-  "state db missing rollout path for thread",
-  "state db record_discrepancy: find_thread_path_by_id_str_in_subdir, falling_back",
+  "state db missing rollout path for session",
+  "state db record_discrepancy: find_session_path_by_id_str_in_subdir, falling_back",
 ];
 const CODEX_APP_SERVER_FORCE_KILL_AFTER = "2 seconds" as const;
 const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "not found",
-  "missing thread",
-  "no such thread",
-  "unknown thread",
+  "missing session",
+  "no such session",
+  "unknown session",
   "does not exist",
 ];
 
 export const CodexResumeCursorSchema = Schema.Struct({
-  threadId: Schema.String,
+  sessionId: Schema.String,
 });
 const CodexUserInputAnswerObject = Schema.Struct({
   answers: Schema.Array(Schema.String),
@@ -88,12 +88,12 @@ const formatSchemaIssue = SchemaIssue.makeFormatterDefault();
 
 export type CodexResumeCursor = typeof CodexResumeCursorSchema.Type;
 type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["serviceTier"]>;
-type CodexThreadItem =
+type CodexSessionItem =
   | EffectCodexSchema.V2ThreadReadResponse["thread"]["turns"][number]["items"][number]
   | EffectCodexSchema.V2ThreadRollbackResponse["thread"]["turns"][number]["items"][number];
 
 export interface CodexSessionRuntimeOptions {
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   readonly providerInstanceId?: ProviderInstanceId;
   readonly binaryPath: string;
   readonly homePath?: string;
@@ -117,14 +117,14 @@ export interface CodexSessionRuntimeSendTurnInput {
   readonly interactionMode?: ProviderInteractionMode;
 }
 
-export interface CodexThreadTurnSnapshot {
+export interface CodexSessionTurnSnapshot {
   readonly id: TurnId;
-  readonly items: ReadonlyArray<CodexThreadItem>;
+  readonly items: ReadonlyArray<CodexSessionItem>;
 }
 
-export interface CodexThreadSnapshot {
-  readonly threadId: string;
-  readonly turns: ReadonlyArray<CodexThreadTurnSnapshot>;
+export interface CodexSessionSnapshot {
+  readonly sessionId: string;
+  readonly turns: ReadonlyArray<CodexSessionTurnSnapshot>;
 }
 
 export interface CodexSessionRuntimeShape {
@@ -134,10 +134,10 @@ export interface CodexSessionRuntimeShape {
     input: CodexSessionRuntimeSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, CodexSessionRuntimeError>;
   readonly interruptTurn: (turnId?: TurnId) => Effect.Effect<void, CodexSessionRuntimeError>;
-  readonly readThread: Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
-  readonly rollbackThread: (
+  readonly readSession: Effect.Effect<CodexSessionSnapshot, CodexSessionRuntimeError>;
+  readonly rollbackSession: (
     numTurns: number,
-  ) => Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
+  ) => Effect.Effect<CodexSessionSnapshot, CodexSessionRuntimeError>;
   readonly respondToRequest: (
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
@@ -155,7 +155,7 @@ export type CodexSessionRuntimeError =
   | CodexSessionRuntimePendingApprovalNotFoundError
   | CodexSessionRuntimePendingUserInputNotFoundError
   | CodexSessionRuntimeInvalidUserInputAnswersError
-  | CodexSessionRuntimeThreadIdMissingError;
+  | CodexSessionRuntimeSessionIdMissingError;
 
 export class CodexSessionRuntimePendingApprovalNotFoundError extends Schema.TaggedErrorClass<CodexSessionRuntimePendingApprovalNotFoundError>()(
   "CodexSessionRuntimePendingApprovalNotFoundError",
@@ -190,14 +190,14 @@ export class CodexSessionRuntimeInvalidUserInputAnswersError extends Schema.Tagg
   }
 }
 
-export class CodexSessionRuntimeThreadIdMissingError extends Schema.TaggedErrorClass<CodexSessionRuntimeThreadIdMissingError>()(
-  "CodexSessionRuntimeThreadIdMissingError",
+export class CodexSessionRuntimeSessionIdMissingError extends Schema.TaggedErrorClass<CodexSessionRuntimeSessionIdMissingError>()(
+  "CodexSessionRuntimeSessionIdMissingError",
   {
-    threadId: Schema.String,
+    sessionId: Schema.String,
   },
 ) {
   override get message(): string {
-    return `Codex session is missing a provider thread id for ${this.threadId}`;
+    return `Codex session is missing a provider session id for ${this.sessionId}`;
   }
 }
 
@@ -252,13 +252,13 @@ function normalizeCodexModelSlug(
   return normalized;
 }
 
-function readResumeCursorThreadId(
+function readResumeCursorSessionId(
   resumeCursor: ProviderSession["resumeCursor"],
 ): string | undefined {
-  return isCodexResumeCursorSchema(resumeCursor) ? resumeCursor.threadId : undefined;
+  return isCodexResumeCursorSchema(resumeCursor) ? resumeCursor.sessionId : undefined;
 }
 
-function runtimeModeToThreadConfig(input: RuntimeMode): {
+function runtimeModeToSessionConfig(input: RuntimeMode): {
   readonly approvalPolicy: EffectCodexSchema.V2ThreadStartParams__AskForApproval;
   readonly sandbox: EffectCodexSchema.V2ThreadStartParams__SandboxMode;
 } {
@@ -282,13 +282,13 @@ function runtimeModeToThreadConfig(input: RuntimeMode): {
   }
 }
 
-function buildThreadStartParams(input: {
+function buildSessionStartParams(input: {
   readonly cwd: string;
   readonly runtimeMode: RuntimeMode;
   readonly model: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
 }): EffectCodexSchema.V2ThreadStartParams {
-  const config = runtimeModeToThreadConfig(input.runtimeMode);
+  const config = runtimeModeToSessionConfig(input.runtimeMode);
   return {
     cwd: input.cwd,
     approvalPolicy: config.approvalPolicy,
@@ -341,7 +341,7 @@ function buildCodexCollaborationMode(input: {
 }
 
 export function buildTurnStartParams(input: {
-  readonly threadId: string;
+  readonly sessionId: string;
   readonly runtimeMode: RuntimeMode;
   readonly prompt?: string;
   readonly attachments?: ReadonlyArray<{
@@ -367,7 +367,7 @@ export function buildTurnStartParams(input: {
     turnInput.push(attachment);
   }
 
-  const config = runtimeModeToThreadConfig(input.runtimeMode);
+  const config = runtimeModeToSessionConfig(input.runtimeMode);
   const collaborationMode = buildCodexCollaborationMode({
     ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
     ...(input.model ? { model: input.model } : {}),
@@ -375,7 +375,7 @@ export function buildTurnStartParams(input: {
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
-    threadId: input.threadId,
+    threadId: input.sessionId,
     input: turnInput,
     approvalPolicy: config.approvalPolicy,
     sandboxPolicy: runtimeModeToTurnSandboxPolicy(input.runtimeMode),
@@ -408,59 +408,59 @@ function classifyCodexStderrLine(rawLine: string): { readonly message: string } 
   return { message: line };
 }
 
-export function isRecoverableThreadResumeError(error: unknown): boolean {
+export function isRecoverableSessionResumeError(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  if (!message.includes("thread")) {
+  if (!message.includes("session")) {
     return false;
   }
   return RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS.some((snippet) => message.includes(snippet));
 }
 
-type CodexThreadOpenResponse =
+type CodexSessionOpenResponse =
   | CodexRpc.ClientRequestResponsesByMethod["thread/start"]
   | CodexRpc.ClientRequestResponsesByMethod["thread/resume"];
 
-type CodexThreadOpenMethod = "thread/start" | "thread/resume";
+type CodexSessionOpenMethod = "thread/start" | "thread/resume";
 
-interface CodexThreadOpenClient {
-  readonly request: <M extends CodexThreadOpenMethod>(
+interface CodexSessionOpenClient {
+  readonly request: <M extends CodexSessionOpenMethod>(
     method: M,
     payload: CodexRpc.ClientRequestParamsByMethod[M],
   ) => Effect.Effect<CodexRpc.ClientRequestResponsesByMethod[M], CodexErrors.CodexAppServerError>;
 }
 
-export const openCodexThread = (input: {
-  readonly client: CodexThreadOpenClient;
-  readonly threadId: ThreadId;
+export const openCodexSession = (input: {
+  readonly client: CodexSessionOpenClient;
+  readonly sessionId: SessionId;
   readonly runtimeMode: RuntimeMode;
   readonly cwd: string;
   readonly requestedModel: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
-  readonly resumeThreadId: string | undefined;
-}): Effect.Effect<CodexThreadOpenResponse, CodexErrors.CodexAppServerError> => {
-  const resumeThreadId = input.resumeThreadId;
-  const startParams = buildThreadStartParams({
+  readonly resumeSessionId: string | undefined;
+}): Effect.Effect<CodexSessionOpenResponse, CodexErrors.CodexAppServerError> => {
+  const resumeSessionId = input.resumeSessionId;
+  const startParams = buildSessionStartParams({
     cwd: input.cwd,
     runtimeMode: input.runtimeMode,
     model: input.requestedModel,
     serviceTier: input.serviceTier,
   });
 
-  if (resumeThreadId === undefined) {
+  if (resumeSessionId === undefined) {
     return input.client.request("thread/start", startParams);
   }
 
   return input.client
     .request("thread/resume", {
-      threadId: resumeThreadId,
+      threadId: resumeSessionId,
       ...startParams,
     })
     .pipe(
-      Effect.catchIf(isRecoverableThreadResumeError, (error) =>
-        Effect.logWarning("codex app-server thread resume fell back to fresh start", {
-          threadId: input.threadId,
+      Effect.catchIf(isRecoverableSessionResumeError, (error) =>
+        Effect.logWarning("codex app-server session resume fell back to fresh start", {
+          sessionId: input.sessionId,
           requestedRuntimeMode: input.runtimeMode,
-          resumeThreadId,
+          resumeSessionId,
           recoverable: true,
           cause: error.message,
         }).pipe(Effect.andThen(input.client.request("thread/start", startParams))),
@@ -468,7 +468,7 @@ export const openCodexThread = (input: {
     );
 };
 
-function readNotificationThreadId(notification: CodexServerNotification): string | undefined {
+function readNotificationSessionId(notification: CodexServerNotification): string | undefined {
   switch (notification.method) {
     case "thread/started":
       return notification.params.thread.id;
@@ -592,8 +592,8 @@ function rememberCollabReceiverTurns(
     return;
   }
 
-  for (const receiverThreadId of notification.params.item.receiverThreadIds) {
-    collabReceiverTurns.set(receiverThreadId, parentTurnId);
+  for (const receiverSessionId of notification.params.item.receiverThreadIds) {
+    collabReceiverTurns.set(receiverSessionId, parentTurnId);
   }
 }
 
@@ -662,8 +662,8 @@ function toProtocolParseError(
   });
 }
 
-function currentProviderThreadId(session: ProviderSession): string | undefined {
-  return readResumeCursorThreadId(session.resumeCursor);
+function currentProviderSessionId(session: ProviderSession): string | undefined {
+  return readResumeCursorSessionId(session.resumeCursor);
 }
 
 function updateSession(
@@ -680,11 +680,11 @@ function updateSession(
   });
 }
 
-function parseThreadSnapshot(
+function parseSessionSnapshot(
   response: EffectCodexSchema.V2ThreadReadResponse | EffectCodexSchema.V2ThreadRollbackResponse,
-): CodexThreadSnapshot {
+): CodexSessionSnapshot {
   return {
-    threadId: response.thread.id,
+    sessionId: response.thread.id,
     turns: response.thread.turns.map((turn) => ({
       id: TurnId.make(turn.id),
       items: turn.items,
@@ -755,7 +755,7 @@ export const makeCodexSessionRuntime = (
       runtimeMode: options.runtimeMode,
       cwd: options.cwd,
       ...(options.model ? { model: options.model } : {}),
-      threadId: options.threadId,
+      sessionId: options.sessionId,
       ...(options.resumeCursor !== undefined ? { resumeCursor: options.resumeCursor } : {}),
       createdAt: sessionCreatedAt,
       updatedAt: sessionCreatedAt,
@@ -777,7 +777,7 @@ export const makeCodexSessionRuntime = (
     const emitSessionEvent = (method: string, message: string) =>
       emitEvent({
         kind: "session",
-        threadId: options.threadId,
+        sessionId: options.sessionId,
         method,
         message,
       });
@@ -812,7 +812,7 @@ export const makeCodexSessionRuntime = (
         const route = readRouteFields(notification);
         const collabReceiverTurns = yield* Ref.get(collabReceiverTurnsRef);
         const childParentTurnId = (() => {
-          const providerConversationId = readNotificationThreadId(notification);
+          const providerConversationId = readNotificationSessionId(notification);
           return providerConversationId
             ? collabReceiverTurns.get(providerConversationId)
             : undefined;
@@ -853,7 +853,7 @@ export const makeCodexSessionRuntime = (
         yield* Ref.set(collabReceiverTurnsRef, collabReceiverTurns);
         yield* emitEvent({
           kind: "notification",
-          threadId: options.threadId,
+          sessionId: options.sessionId,
           method: notification.method,
           ...(turnId ? { turnId } : {}),
           ...(itemId ? { itemId } : {}),
@@ -866,25 +866,28 @@ export const makeCodexSessionRuntime = (
         });
       });
 
-    const currentSessionProviderThreadId = Effect.map(Ref.get(sessionRef), currentProviderThreadId);
+    const currentSessionProviderSessionId = Effect.map(
+      Ref.get(sessionRef),
+      currentProviderSessionId,
+    );
 
     yield* client.handleServerNotification("thread/started", (payload) =>
-      currentSessionProviderThreadId.pipe(
-        Effect.flatMap((providerThreadId) => {
-          if (providerThreadId && payload.thread.id !== providerThreadId) {
+      currentSessionProviderSessionId.pipe(
+        Effect.flatMap((providerSessionId) => {
+          if (providerSessionId && payload.thread.id !== providerSessionId) {
             return Effect.void;
           }
           return updateSession(sessionRef, {
-            resumeCursor: { threadId: payload.thread.id },
+            resumeCursor: { sessionId: payload.thread.id },
           });
         }),
       ),
     );
 
     yield* client.handleServerNotification("turn/started", (payload) =>
-      currentSessionProviderThreadId.pipe(
-        Effect.flatMap((providerThreadId) => {
-          if (providerThreadId && payload.threadId !== providerThreadId) {
+      currentSessionProviderSessionId.pipe(
+        Effect.flatMap((providerSessionId) => {
+          if (providerSessionId && payload.threadId !== providerSessionId) {
             return Effect.void;
           }
           return updateSession(sessionRef, {
@@ -896,9 +899,9 @@ export const makeCodexSessionRuntime = (
     );
 
     yield* client.handleServerNotification("turn/completed", (payload) =>
-      currentSessionProviderThreadId.pipe(
-        Effect.flatMap((providerThreadId) => {
-          if (providerThreadId && payload.threadId !== providerThreadId) {
+      currentSessionProviderSessionId.pipe(
+        Effect.flatMap((providerSessionId) => {
+          if (providerSessionId && payload.threadId !== providerSessionId) {
             return Effect.void;
           }
           const lastError =
@@ -915,10 +918,10 @@ export const makeCodexSessionRuntime = (
     );
 
     yield* client.handleServerNotification("error", (payload) =>
-      currentSessionProviderThreadId.pipe(
-        Effect.flatMap((providerThreadId) => {
-          const payloadThreadId = payload.threadId;
-          if (providerThreadId && payloadThreadId && payloadThreadId !== providerThreadId) {
+      currentSessionProviderSessionId.pipe(
+        Effect.flatMap((providerSessionId) => {
+          const payloadSessionId = payload.threadId;
+          if (providerSessionId && payloadSessionId && payloadSessionId !== providerSessionId) {
             return Effect.void;
           }
           const errorMessage = payload.error.message;
@@ -963,7 +966,7 @@ export const makeCodexSessionRuntime = (
 
         yield* emitEvent({
           kind: "request",
-          threadId: options.threadId,
+          sessionId: options.sessionId,
           method: "item/commandExecution/requestApproval",
           requestId,
           requestKind: "command",
@@ -1019,7 +1022,7 @@ export const makeCodexSessionRuntime = (
 
         yield* emitEvent({
           kind: "request",
-          threadId: options.threadId,
+          sessionId: options.sessionId,
           method: "item/fileChange/requestApproval",
           requestId,
           requestKind: "file-change",
@@ -1063,7 +1066,7 @@ export const makeCodexSessionRuntime = (
 
         yield* emitEvent({
           kind: "request",
-          threadId: options.threadId,
+          sessionId: options.sessionId,
           method: "item/tool/requestUserInput",
           requestId,
           ...(turnId ? { turnId } : {}),
@@ -1137,7 +1140,7 @@ export const makeCodexSessionRuntime = (
                 }
                 return emitEvent({
                   kind: "notification",
-                  threadId: options.threadId,
+                  sessionId: options.sessionId,
                   method: "process/stderr",
                   message: classified.message,
                 });
@@ -1184,23 +1187,23 @@ export const makeCodexSessionRuntime = (
 
       const requestedModel = normalizeCodexModelSlug(options.model);
 
-      const opened = yield* openCodexThread({
+      const opened = yield* openCodexSession({
         client,
-        threadId: options.threadId,
+        sessionId: options.sessionId,
         runtimeMode: options.runtimeMode,
         cwd: options.cwd,
         requestedModel,
         serviceTier: options.serviceTier,
-        resumeThreadId: readResumeCursorThreadId(options.resumeCursor),
+        resumeSessionId: readResumeCursorSessionId(options.resumeCursor),
       });
 
-      const providerThreadId = opened.thread.id;
+      const providerSessionId = opened.thread.id;
       const session = {
         ...(yield* Ref.get(sessionRef)),
         status: "ready",
         cwd: opened.cwd,
         model: opened.model,
-        resumeCursor: { threadId: providerThreadId },
+        resumeCursor: { threadId: providerSessionId },
         updatedAt: yield* nowIso,
       } satisfies ProviderSession;
       yield* Ref.set(sessionRef, session);
@@ -1208,14 +1211,14 @@ export const makeCodexSessionRuntime = (
       return session;
     });
 
-    const readProviderThreadId = Effect.gen(function* () {
-      const providerThreadId = currentProviderThreadId(yield* Ref.get(sessionRef));
-      if (!providerThreadId) {
-        return yield* new CodexSessionRuntimeThreadIdMissingError({
-          threadId: options.threadId,
+    const readProviderSessionId = Effect.gen(function* () {
+      const providerSessionId = currentProviderSessionId(yield* Ref.get(sessionRef));
+      if (!providerSessionId) {
+        return yield* new CodexSessionRuntimeSessionIdMissingError({
+          sessionId: options.sessionId,
         });
       }
-      return providerThreadId;
+      return providerSessionId;
     });
 
     const close = Effect.gen(function* () {
@@ -1229,7 +1232,7 @@ export const makeCodexSessionRuntime = (
         status: "closed",
         activeTurnId: undefined,
       });
-      yield* emitSessionEvent("session/closed", "Session stopped");
+      yield* emitSessionEvent("thread/closed", "Session stopped");
       yield* Scope.close(runtimeScope, Exit.void);
       yield* Queue.shutdown(serverNotifications);
       yield* Queue.shutdown(events);
@@ -1240,12 +1243,12 @@ export const makeCodexSessionRuntime = (
       getSession: Ref.get(sessionRef),
       sendTurn: (input) =>
         Effect.gen(function* () {
-          const providerThreadId = yield* readProviderThreadId;
+          const providerSessionId = yield* readProviderSessionId;
           const normalizedModel = normalizeCodexModelSlug(
             input.model ?? (yield* Ref.get(sessionRef)).model,
           );
           const params = yield* buildTurnStartParams({
-            threadId: providerThreadId,
+            sessionId: providerSessionId,
             runtimeMode: options.runtimeMode,
             ...(input.input ? { prompt: input.input } : {}),
             ...(input.attachments ? { attachments: input.attachments } : {}),
@@ -1266,48 +1269,48 @@ export const makeCodexSessionRuntime = (
             activeTurnId: turnId,
             ...(normalizedModel ? { model: normalizedModel } : {}),
           });
-          const resumedProviderThreadId = currentProviderThreadId(yield* Ref.get(sessionRef));
+          const resumedProviderSessionId = currentProviderSessionId(yield* Ref.get(sessionRef));
           return {
-            threadId: options.threadId,
+            sessionId: options.sessionId,
             turnId,
-            ...(resumedProviderThreadId
-              ? { resumeCursor: { threadId: resumedProviderThreadId } }
+            ...(resumedProviderSessionId
+              ? { resumeCursor: { sessionId: resumedProviderSessionId } }
               : {}),
           } satisfies ProviderTurnStartResult;
         }),
       interruptTurn: (turnId) =>
         Effect.gen(function* () {
-          const providerThreadId = yield* readProviderThreadId;
+          const providerSessionId = yield* readProviderSessionId;
           const session = yield* Ref.get(sessionRef);
           const effectiveTurnId = turnId ?? session.activeTurnId;
           if (!effectiveTurnId) {
             return;
           }
           yield* client.request("turn/interrupt", {
-            threadId: providerThreadId,
+            threadId: providerSessionId,
             turnId: effectiveTurnId,
           });
         }),
-      readThread: Effect.gen(function* () {
-        const providerThreadId = yield* readProviderThreadId;
+      readSession: Effect.gen(function* () {
+        const providerSessionId = yield* readProviderSessionId;
         const response = yield* client.request("thread/read", {
-          threadId: providerThreadId,
+          threadId: providerSessionId,
           includeTurns: true,
         });
-        return parseThreadSnapshot(response);
+        return parseSessionSnapshot(response);
       }),
-      rollbackThread: (numTurns) =>
+      rollbackSession: (numTurns) =>
         Effect.gen(function* () {
-          const providerThreadId = yield* readProviderThreadId;
+          const providerSessionId = yield* readProviderSessionId;
           const response = yield* client.request("thread/rollback", {
-            threadId: providerThreadId,
+            threadId: providerSessionId,
             numTurns,
           });
           yield* updateSession(sessionRef, {
             status: "ready",
             activeTurnId: undefined,
           });
-          return parseThreadSnapshot(response);
+          return parseSessionSnapshot(response);
         }),
       respondToRequest: (requestId, decision) =>
         Effect.gen(function* () {
@@ -1325,7 +1328,7 @@ export const makeCodexSessionRuntime = (
           yield* Deferred.succeed(pending.decision, decision);
           yield* emitEvent({
             kind: "notification",
-            threadId: options.threadId,
+            sessionId: options.sessionId,
             method: "item/requestApproval/decision",
             requestId: pending.requestId,
             requestKind: pending.requestKind,
@@ -1355,7 +1358,7 @@ export const makeCodexSessionRuntime = (
           yield* Deferred.succeed(pending.answers, answers);
           yield* emitEvent({
             kind: "notification",
-            threadId: options.threadId,
+            sessionId: options.sessionId,
             method: "item/tool/requestUserInput/answered",
             requestId: pending.requestId,
             ...(pending.turnId ? { turnId: pending.turnId } : {}),

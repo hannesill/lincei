@@ -65,7 +65,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       } satisfies OrchestrationCommand;
     }
 
-    if (command.type !== "thread.turn.start") {
+    if (command.type !== "session.turn.start") {
       return command as OrchestrationCommand;
     }
 
@@ -87,7 +87,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             });
           }
 
-          const attachmentId = createAttachmentId(command.threadId);
+          const attachmentId = createAttachmentId(command.sessionId);
           if (!attachmentId) {
             return yield* new OrchestrationDispatchCommandError({
               message: "Failed to create a safe attachment id.",

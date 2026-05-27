@@ -22,13 +22,13 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-  buildThreadTitlePrompt,
+  buildSessionTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
-  sanitizeThreadTitle,
+  sanitizeSessionTitle,
   toJsonSchemaObject,
 } from "./TextGenerationUtils.ts";
 import {
@@ -83,7 +83,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateSessionTitle",
     value: unknown,
     detail: string,
   ): Effect.Effect<string, TextGenerationError> =>
@@ -113,7 +113,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateSessionTitle";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -331,16 +331,16 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     };
   });
 
-  const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
-    "ClaudeTextGeneration.generateThreadTitle",
+  const generateSessionTitle: TextGenerationShape["generateSessionTitle"] = Effect.fn(
+    "ClaudeTextGeneration.generateSessionTitle",
   )(function* (input) {
-    const { prompt, outputSchema } = buildThreadTitlePrompt({
+    const { prompt, outputSchema } = buildSessionTitlePrompt({
       message: input.message,
       attachments: input.attachments,
     });
 
     const generated = yield* runClaudeJson({
-      operation: "generateThreadTitle",
+      operation: "generateSessionTitle",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
@@ -348,7 +348,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     });
 
     return {
-      title: sanitizeThreadTitle(generated.title),
+      title: sanitizeSessionTitle(generated.title),
     };
   });
 
@@ -356,6 +356,6 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
-    generateThreadTitle,
+    generateSessionTitle,
   } satisfies TextGenerationShape;
 });

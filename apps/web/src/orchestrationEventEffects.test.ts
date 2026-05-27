@@ -4,7 +4,7 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
-  ThreadId,
+  SessionId,
   TurnId,
   type OrchestrationEvent,
 } from "@t3tools/contracts";
@@ -21,10 +21,10 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
   return {
     sequence,
     eventId: EventId.make(`event-${sequence}`),
-    aggregateKind: "thread",
+    aggregateKind: "session",
     aggregateId:
-      "threadId" in payload
-        ? payload.threadId
+      "sessionId" in payload
+        ? payload.sessionId
         : "projectId" in payload
           ? payload.projectId
           : ProjectId.make("project-1"),
@@ -40,16 +40,16 @@ function makeEvent<T extends OrchestrationEvent["type"]>(
 }
 
 describe("deriveOrchestrationBatchEffects", () => {
-  it("targets draft promotion and terminal cleanup from thread lifecycle events", () => {
-    const createdThreadId = ThreadId.make("thread-created");
-    const deletedThreadId = ThreadId.make("thread-deleted");
-    const archivedThreadId = ThreadId.make("thread-archived");
+  it("targets draft promotion and terminal cleanup from session lifecycle events", () => {
+    const createdSessionId = SessionId.make("session-created");
+    const deletedSessionId = SessionId.make("session-deleted");
+    const archivedSessionId = SessionId.make("session-archived");
 
     const effects = deriveOrchestrationBatchEffects([
-      makeEvent("thread.created", {
-        threadId: createdThreadId,
+      makeEvent("session.created", {
+        sessionId: createdSessionId,
         projectId: ProjectId.make("project-1"),
-        title: "Created thread",
+        title: "Created session",
         modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
         runtimeMode: "full-access",
         interactionMode: "default",
@@ -58,35 +58,35 @@ describe("deriveOrchestrationBatchEffects", () => {
         createdAt: "2026-02-27T00:00:00.000Z",
         updatedAt: "2026-02-27T00:00:00.000Z",
       }),
-      makeEvent("thread.deleted", {
-        threadId: deletedThreadId,
+      makeEvent("session.deleted", {
+        sessionId: deletedSessionId,
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
-      makeEvent("thread.archived", {
-        threadId: archivedThreadId,
+      makeEvent("session.archived", {
+        sessionId: archivedSessionId,
         archivedAt: "2026-02-27T00:00:02.000Z",
         updatedAt: "2026-02-27T00:00:02.000Z",
       }),
     ]);
 
-    expect(effects.promoteDraftThreadIds).toEqual([createdThreadId]);
-    expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([deletedThreadId, archivedThreadId]);
+    expect(effects.promoteDraftSessionIds).toEqual([createdSessionId]);
+    expect(effects.clearDeletedSessionIds).toEqual([deletedSessionId]);
+    expect(effects.removeTerminalStateSessionIds).toEqual([deletedSessionId, archivedSessionId]);
     expect(effects.needsProviderInvalidation).toBe(false);
   });
 
-  it("keeps only the final lifecycle outcome for a thread within one batch", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("keeps only the final lifecycle outcome for a session within one batch", () => {
+    const sessionId = SessionId.make("session-1");
 
     const effects = deriveOrchestrationBatchEffects([
-      makeEvent("thread.deleted", {
-        threadId,
+      makeEvent("session.deleted", {
+        sessionId,
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
-      makeEvent("thread.created", {
-        threadId,
+      makeEvent("session.created", {
+        sessionId,
         projectId: ProjectId.make("project-1"),
-        title: "Recreated thread",
+        title: "Recreated session",
         modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" },
         runtimeMode: "full-access",
         interactionMode: "default",
@@ -95,8 +95,8 @@ describe("deriveOrchestrationBatchEffects", () => {
         createdAt: "2026-02-27T00:00:02.000Z",
         updatedAt: "2026-02-27T00:00:02.000Z",
       }),
-      makeEvent("thread.turn-diff-completed", {
-        threadId,
+      makeEvent("session.turn-diff-completed", {
+        sessionId,
         turnId: TurnId.make("turn-1"),
         checkpointTurnCount: 1,
         checkpointRef: CheckpointRef.make("checkpoint-1"),
@@ -107,29 +107,29 @@ describe("deriveOrchestrationBatchEffects", () => {
       }),
     ]);
 
-    expect(effects.promoteDraftThreadIds).toEqual([threadId]);
-    expect(effects.clearDeletedThreadIds).toEqual([]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.promoteDraftSessionIds).toEqual([sessionId]);
+    expect(effects.clearDeletedSessionIds).toEqual([]);
+    expect(effects.removeTerminalStateSessionIds).toEqual([]);
     expect(effects.needsProviderInvalidation).toBe(true);
   });
 
-  it("does not retain archive cleanup when a thread is unarchived later in the same batch", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("does not retain archive cleanup when a session is unarchived later in the same batch", () => {
+    const sessionId = SessionId.make("session-1");
 
     const effects = deriveOrchestrationBatchEffects([
-      makeEvent("thread.archived", {
-        threadId,
+      makeEvent("session.archived", {
+        sessionId,
         archivedAt: "2026-02-27T00:00:01.000Z",
         updatedAt: "2026-02-27T00:00:01.000Z",
       }),
-      makeEvent("thread.unarchived", {
-        threadId,
+      makeEvent("session.unarchived", {
+        sessionId,
         updatedAt: "2026-02-27T00:00:02.000Z",
       }),
     ]);
 
-    expect(effects.promoteDraftThreadIds).toEqual([]);
-    expect(effects.clearDeletedThreadIds).toEqual([]);
-    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+    expect(effects.promoteDraftSessionIds).toEqual([]);
+    expect(effects.clearDeletedSessionIds).toEqual([]);
+    expect(effects.removeTerminalStateSessionIds).toEqual([]);
   });
 });

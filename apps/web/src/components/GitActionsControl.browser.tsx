@@ -1,10 +1,10 @@
-import { scopeThreadRef } from "@t3tools/client-runtime";
-import { ThreadId } from "@t3tools/contracts";
+import { scopeSessionRef } from "@t3tools/client-runtime";
+import { SessionId } from "@t3tools/contracts";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-const SHARED_THREAD_ID = ThreadId.make("thread-shared");
+const SHARED_THREAD_ID = SessionId.make("session-shared");
 const ENVIRONMENT_A = "environment-local" as never;
 const ENVIRONMENT_B = "environment-remote" as never;
 const GIT_CWD = "/repo/project";
@@ -24,26 +24,26 @@ function createDeferredPromise<T>() {
 
 const {
   activeRunStackedActionDeferredRef,
-  activeDraftThreadRef,
-  hasServerThreadRef,
+  activeDraftSessionRef,
+  hasServerSessionRef,
   invalidateGitQueriesSpy,
   refreshGitStatusSpy,
   runStackedActionMutateAsyncSpy,
-  setDraftThreadContextSpy,
-  setThreadBranchSpy,
+  setDraftSessionContextSpy,
+  setSessionBranchSpy,
   toastAddSpy,
   toastCloseSpy,
   toastPromiseSpy,
   toastUpdateSpy,
 } = vi.hoisted(() => ({
   activeRunStackedActionDeferredRef: { current: createDeferredPromise<never>() },
-  activeDraftThreadRef: { current: null as unknown },
-  hasServerThreadRef: { current: true },
+  activeDraftSessionRef: { current: null as unknown },
+  hasServerSessionRef: { current: true },
   invalidateGitQueriesSpy: vi.fn(() => Promise.resolve()),
   refreshGitStatusSpy: vi.fn(() => Promise.resolve(null)),
   runStackedActionMutateAsyncSpy: vi.fn(() => activeRunStackedActionDeferredRef.current.promise),
-  setDraftThreadContextSpy: vi.fn(),
-  setThreadBranchSpy: vi.fn(),
+  setDraftSessionContextSpy: vi.fn(),
+  setSessionBranchSpy: vi.fn(),
   toastAddSpy: vi.fn(() => "toast-1"),
   toastCloseSpy: vi.fn(),
   toastPromiseSpy: vi.fn(),
@@ -90,7 +90,7 @@ vi.mock("~/components/ui/toast", () => ({
     promise: toastPromiseSpy,
     update: toastUpdateSpy,
   },
-  stackedThreadToast: vi.fn((options: unknown) => options),
+  stackedSessionToast: vi.fn((options: unknown) => options),
 }));
 
 vi.mock("~/editorPreferences", () => ({
@@ -145,15 +145,14 @@ vi.mock("~/localApi", () => ({
 
 vi.mock("~/composerDraftStore", async () => {
   const draftStoreState = {
-    getDraftThreadByRef: () => activeDraftThreadRef.current,
-    getDraftSession: () => activeDraftThreadRef.current,
-    getDraftThread: () => activeDraftThreadRef.current,
+    getDraftSessionByRef: () => activeDraftSessionRef.current,
+    getDraftSession: () => activeDraftSessionRef.current,
     getDraftSessionByLogicalProjectKey: () => null,
-    setDraftThreadContext: setDraftThreadContextSpy,
-    setLogicalProjectDraftThreadId: vi.fn(),
-    setProjectDraftThreadId: vi.fn(),
-    hasDraftThreadsInEnvironment: () => false,
-    clearDraftThread: vi.fn(),
+    setDraftSessionContext: setDraftSessionContextSpy,
+    setLogicalProjectDraftSessionId: vi.fn(),
+    setProjectDraftSessionId: vi.fn(),
+    hasDraftSessionsInEnvironment: () => false,
+    clearDraftSession: vi.fn(),
   };
 
   return {
@@ -164,12 +163,12 @@ vi.mock("~/composerDraftStore", async () => {
       (selector: (state: unknown) => unknown) => selector(draftStoreState),
       { getState: () => draftStoreState },
     ),
-    markPromotedDraftThread: vi.fn(),
-    markPromotedDraftThreadByRef: vi.fn(),
-    markPromotedDraftThreads: vi.fn(),
-    markPromotedDraftThreadsByRef: vi.fn(),
-    finalizePromotedDraftThreadByRef: vi.fn(),
-    finalizePromotedDraftThreadsByRef: vi.fn(),
+    markPromotedDraftSession: vi.fn(),
+    markPromotedDraftSessionByRef: vi.fn(),
+    markPromotedDraftSessions: vi.fn(),
+    markPromotedDraftSessionsByRef: vi.fn(),
+    finalizePromotedDraftSessionByRef: vi.fn(),
+    finalizePromotedDraftSessionsByRef: vi.fn(),
   };
 });
 
@@ -189,23 +188,23 @@ vi.mock("~/store", () => ({
   },
   selectProjectsForEnvironment: () => [],
   selectProjectsAcrossEnvironments: () => [],
-  selectThreadsForEnvironment: () => [],
-  selectThreadsAcrossEnvironments: () => [],
-  selectThreadShellsAcrossEnvironments: () => [],
-  selectSidebarThreadsAcrossEnvironments: () => [],
-  selectSidebarThreadsForProjectRef: () => [],
-  selectSidebarThreadsForProjectRefs: () => [],
+  selectSessionsForEnvironment: () => [],
+  selectSessionsAcrossEnvironments: () => [],
+  selectSessionShellsAcrossEnvironments: () => [],
+  selectSidebarSessionsAcrossEnvironments: () => [],
+  selectSidebarSessionsForProjectRef: () => [],
+  selectSidebarSessionsForProjectRefs: () => [],
   selectBootstrapCompleteForActiveEnvironment: () => true,
   selectProjectByRef: () => null,
-  selectThreadByRef: () => null,
-  selectSidebarThreadSummaryByRef: () => null,
-  selectThreadIdsByProjectRef: () => [],
+  selectSessionByRef: () => null,
+  selectSidebarSessionSummaryByRef: () => null,
+  selectSessionIdsByProjectRef: () => [],
   useStore: (selector: (state: unknown) => unknown) =>
     selector({
-      setThreadBranch: setThreadBranchSpy,
+      setSessionBranch: setSessionBranchSpy,
       environmentStateById: {
         [ENVIRONMENT_A]: {
-          threadShellById: hasServerThreadRef.current
+          sessionShellById: hasServerSessionRef.current
             ? {
                 [SHARED_THREAD_ID]: {
                   id: SHARED_THREAD_ID,
@@ -214,19 +213,19 @@ vi.mock("~/store", () => ({
                 },
               }
             : {},
-          threadSessionById: {},
-          threadTurnStateById: {},
-          messageIdsByThreadId: {},
-          messageByThreadId: {},
-          activityIdsByThreadId: {},
-          activityByThreadId: {},
-          proposedPlanIdsByThreadId: {},
-          proposedPlanByThreadId: {},
-          turnDiffIdsByThreadId: {},
-          turnDiffSummaryByThreadId: {},
+          providerRuntimeById: {},
+          sessionTurnStateById: {},
+          messageIdsBySessionId: {},
+          messageBySessionId: {},
+          activityIdsBySessionId: {},
+          activityBySessionId: {},
+          proposedPlanIdsBySessionId: {},
+          proposedPlanBySessionId: {},
+          turnDiffIdsBySessionId: {},
+          turnDiffSummaryBySessionId: {},
         },
         [ENVIRONMENT_B]: {
-          threadShellById: hasServerThreadRef.current
+          sessionShellById: hasServerSessionRef.current
             ? {
                 [SHARED_THREAD_ID]: {
                   id: SHARED_THREAD_ID,
@@ -235,16 +234,16 @@ vi.mock("~/store", () => ({
                 },
               }
             : {},
-          threadSessionById: {},
-          threadTurnStateById: {},
-          messageIdsByThreadId: {},
-          messageByThreadId: {},
-          activityIdsByThreadId: {},
-          activityByThreadId: {},
-          proposedPlanIdsByThreadId: {},
-          proposedPlanByThreadId: {},
-          turnDiffIdsByThreadId: {},
-          turnDiffSummaryByThreadId: {},
+          providerRuntimeById: {},
+          sessionTurnStateById: {},
+          messageIdsBySessionId: {},
+          messageBySessionId: {},
+          activityIdsBySessionId: {},
+          activityBySessionId: {},
+          proposedPlanIdsBySessionId: {},
+          proposedPlanBySessionId: {},
+          turnDiffIdsBySessionId: {},
+          turnDiffSummaryBySessionId: {},
         },
       },
     }),
@@ -263,34 +262,34 @@ function findButtonByText(text: string): HTMLButtonElement | null {
 }
 
 function Harness() {
-  const [activeThreadRef, setActiveThreadRef] = useState(
-    scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID),
+  const [activeSessionRef, setActiveSessionRef] = useState(
+    scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID),
   );
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setActiveThreadRef(scopeThreadRef(ENVIRONMENT_B, SHARED_THREAD_ID))}
+        onClick={() => setActiveSessionRef(scopeSessionRef(ENVIRONMENT_B, SHARED_THREAD_ID))}
       >
         Switch environment
       </button>
-      <GitActionsControl gitCwd={GIT_CWD} activeThreadRef={activeThreadRef} />
+      <GitActionsControl gitCwd={GIT_CWD} activeSessionRef={activeSessionRef} />
     </>
   );
 }
 
-describe("GitActionsControl thread-scoped progress toast", () => {
+describe("GitActionsControl session-scoped progress toast", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
     activeRunStackedActionDeferredRef.current = createDeferredPromise<never>();
-    activeDraftThreadRef.current = null;
-    hasServerThreadRef.current = true;
+    activeDraftSessionRef.current = null;
+    hasServerSessionRef.current = true;
     document.body.innerHTML = "";
   });
 
-  it("keeps an in-flight git action toast pinned to the thread ref that started it", async () => {
+  it("keeps an in-flight git action toast pinned to the session ref that started it", async () => {
     vi.useFakeTimers();
 
     const host = document.createElement("div");
@@ -307,7 +306,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
       expect(toastAddSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { threadRef: scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID) },
+          data: { sessionRef: scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID) },
           title: "Pushing...",
           type: "loading",
         }),
@@ -318,7 +317,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       expect(toastUpdateSpy).toHaveBeenLastCalledWith(
         "toast-1",
         expect.objectContaining({
-          data: { threadRef: scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID) },
+          data: { sessionRef: scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID) },
           title: "Pushing...",
           type: "loading",
         }),
@@ -338,7 +337,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       expect(toastUpdateSpy).toHaveBeenLastCalledWith(
         "toast-1",
         expect.objectContaining({
-          data: { threadRef: scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID) },
+          data: { sessionRef: scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID) },
           title: "Pushing...",
           type: "loading",
         }),
@@ -367,7 +366,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     const screen = await render(
       <GitActionsControl
         gitCwd={GIT_CWD}
-        activeThreadRef={scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID)}
+        activeSessionRef={scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID)}
       />,
       {
         container: host,
@@ -400,10 +399,10 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     }
   });
 
-  it("syncs the live branch into the active draft thread when no server thread exists", async () => {
-    hasServerThreadRef.current = false;
-    activeDraftThreadRef.current = {
-      threadId: SHARED_THREAD_ID,
+  it("syncs the live branch into the active draft session when no server session exists", async () => {
+    hasServerSessionRef.current = false;
+    activeDraftSessionRef.current = {
+      sessionId: SHARED_THREAD_ID,
       environmentId: ENVIRONMENT_A,
       branch: null,
       worktreePath: null,
@@ -414,7 +413,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     const screen = await render(
       <GitActionsControl
         gitCwd={GIT_CWD}
-        activeThreadRef={scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID)}
+        activeSessionRef={scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID)}
       />,
       {
         container: host,
@@ -424,14 +423,14 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     try {
       await Promise.resolve();
 
-      expect(setDraftThreadContextSpy).toHaveBeenCalledWith(
-        scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID),
+      expect(setDraftSessionContextSpy).toHaveBeenCalledWith(
+        scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID),
         {
           branch: BRANCH_NAME,
           worktreePath: null,
         },
       );
-      expect(setThreadBranchSpy).not.toHaveBeenCalled();
+      expect(setSessionBranchSpy).not.toHaveBeenCalled();
     } finally {
       await screen.unmount();
       host.remove();
@@ -439,9 +438,9 @@ describe("GitActionsControl thread-scoped progress toast", () => {
   });
 
   it("does not overwrite a selected base branch while a new worktree draft is being configured", async () => {
-    hasServerThreadRef.current = false;
-    activeDraftThreadRef.current = {
-      threadId: SHARED_THREAD_ID,
+    hasServerSessionRef.current = false;
+    activeDraftSessionRef.current = {
+      sessionId: SHARED_THREAD_ID,
       environmentId: ENVIRONMENT_A,
       branch: "feature/base-branch",
       worktreePath: null,
@@ -453,7 +452,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     const screen = await render(
       <GitActionsControl
         gitCwd={GIT_CWD}
-        activeThreadRef={scopeThreadRef(ENVIRONMENT_A, SHARED_THREAD_ID)}
+        activeSessionRef={scopeSessionRef(ENVIRONMENT_A, SHARED_THREAD_ID)}
       />,
       {
         container: host,
@@ -463,8 +462,8 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     try {
       await Promise.resolve();
 
-      expect(setDraftThreadContextSpy).not.toHaveBeenCalled();
-      expect(setThreadBranchSpy).not.toHaveBeenCalled();
+      expect(setDraftSessionContextSpy).not.toHaveBeenCalled();
+      expect(setSessionBranchSpy).not.toHaveBeenCalled();
     } finally {
       await screen.unmount();
       host.remove();

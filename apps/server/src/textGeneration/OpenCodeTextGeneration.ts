@@ -21,13 +21,13 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-  buildThreadTitlePrompt,
+  buildSessionTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import { type TextGenerationShape } from "./TextGeneration.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
-  sanitizeThreadTitle,
+  sanitizeSessionTitle,
 } from "./TextGenerationUtils.ts";
 import {
   OpenCodeRuntime,
@@ -160,7 +160,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateSessionTitle";
   }) =>
     sharedServerMutex.withPermit(
       Effect.gen(function* () {
@@ -270,7 +270,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateSessionTitle";
     readonly cwd: string;
     readonly prompt: string;
     readonly outputSchemaJson: S;
@@ -437,15 +437,15 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
     };
   });
 
-  const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
-    "OpenCodeTextGeneration.generateThreadTitle",
+  const generateSessionTitle: TextGenerationShape["generateSessionTitle"] = Effect.fn(
+    "OpenCodeTextGeneration.generateSessionTitle",
   )(function* (input) {
-    const { prompt, outputSchema } = buildThreadTitlePrompt({
+    const { prompt, outputSchema } = buildSessionTitlePrompt({
       message: input.message,
       attachments: input.attachments,
     });
     const generated = yield* runOpenCodeJson({
-      operation: "generateThreadTitle",
+      operation: "generateSessionTitle",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
@@ -454,7 +454,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
     });
 
     return {
-      title: sanitizeThreadTitle(generated.title),
+      title: sanitizeSessionTitle(generated.title),
     };
   });
 
@@ -462,6 +462,6 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
-    generateThreadTitle,
+    generateSessionTitle,
   } satisfies TextGenerationShape;
 });

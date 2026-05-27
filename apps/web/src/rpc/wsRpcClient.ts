@@ -108,8 +108,8 @@ export interface WsRpcClient {
       options?: GitRunStackedActionOptions,
     ) => Promise<GitRunStackedActionResult>;
     readonly resolvePullRequest: RpcUnaryMethod<typeof WS_METHODS.gitResolvePullRequest>;
-    readonly preparePullRequestThread: RpcUnaryMethod<
-      typeof WS_METHODS.gitPreparePullRequestThread
+    readonly preparePullRequestSession: RpcUnaryMethod<
+      typeof WS_METHODS.gitPreparePullRequestSession
     >;
   };
   readonly server: {
@@ -146,12 +146,14 @@ export interface WsRpcClient {
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
-    readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
+    readonly getFullSessionDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullSessionDiff>;
     readonly getArchivedShellSnapshot: RpcUnaryNoArgMethod<
       typeof ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot
     >;
     readonly subscribeShell: RpcStreamMethod<typeof ORCHESTRATION_WS_METHODS.subscribeShell>;
-    readonly subscribeThread: RpcInputStreamMethod<typeof ORCHESTRATION_WS_METHODS.subscribeThread>;
+    readonly subscribeSession: RpcInputStreamMethod<
+      typeof ORCHESTRATION_WS_METHODS.subscribeSession
+    >;
   };
 }
 
@@ -243,8 +245,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       },
       resolvePullRequest: (input) =>
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
-      preparePullRequestThread: (input) =>
-        transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      preparePullRequestSession: (input) =>
+        transport.request((client) => client[WS_METHODS.gitPreparePullRequestSession](input)),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
@@ -300,8 +302,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.dispatchCommand](input)),
       getTurnDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getTurnDiff](input)),
-      getFullThreadDiff: (input) =>
-        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullThreadDiff](input)),
+      getFullSessionDiff: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullSessionDiff](input)),
       getArchivedShellSnapshot: () =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),
@@ -312,11 +314,11 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
           listener,
           { ...options, tag: ORCHESTRATION_WS_METHODS.subscribeShell },
         ),
-      subscribeThread: (input, listener, options) =>
+      subscribeSession: (input, listener, options) =>
         transport.subscribe(
-          (client) => client[ORCHESTRATION_WS_METHODS.subscribeThread](input),
+          (client) => client[ORCHESTRATION_WS_METHODS.subscribeSession](input),
           listener,
-          { ...options, tag: ORCHESTRATION_WS_METHODS.subscribeThread },
+          { ...options, tag: ORCHESTRATION_WS_METHODS.subscribeSession },
         ),
     },
   };

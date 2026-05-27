@@ -31,7 +31,7 @@ import { DraftInput } from "../ui/draft-input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ScrollArea } from "../ui/scroll-area";
 import { Switch } from "../ui/switch";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { stackedSessionToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { DriverOption } from "./providerDriverMeta";
 import { ProviderSettingsForm } from "./ProviderSettingsForm";
@@ -498,7 +498,7 @@ export function ProviderInstanceCard({
     },
     onError: (error, { providerName }) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: `Could not copy ${providerName} update command`,
           description: error.message,

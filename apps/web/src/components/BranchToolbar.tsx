@@ -1,5 +1,5 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { scopeProjectRef, scopeSessionRef } from "@t3tools/client-runtime";
+import type { EnvironmentId, SessionId } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
   CloudIcon,
@@ -13,7 +13,7 @@ import { memo, useMemo } from "react";
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { useStore } from "../store";
-import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
+import { createProjectSelectorByRef, createSessionSelectorByRef } from "../storeSelectors";
 import {
   type EnvMode,
   type EnvironmentOption,
@@ -40,12 +40,12 @@ import { Separator } from "./ui/separator";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
-  threadId: ThreadId;
+  sessionId: SessionId;
   draftId?: DraftId;
   onEnvModeChange: (mode: EnvMode) => void;
   effectiveEnvModeOverride?: EnvMode;
-  activeThreadBranchOverride?: string | null;
-  onActiveThreadBranchOverrideChange?: (branch: string | null) => void;
+  activeSessionBranchOverride?: string | null;
+  onActiveSessionBranchOverrideChange?: (branch: string | null) => void;
   envLocked: boolean;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
@@ -191,54 +191,54 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
 
 export const BranchToolbar = memo(function BranchToolbar({
   environmentId,
-  threadId,
+  sessionId,
   draftId,
   onEnvModeChange,
   effectiveEnvModeOverride,
-  activeThreadBranchOverride,
-  onActiveThreadBranchOverrideChange,
+  activeSessionBranchOverride,
+  onActiveSessionBranchOverrideChange,
   envLocked,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
 }: BranchToolbarProps) {
-  const threadRef = useMemo(
-    () => scopeThreadRef(environmentId, threadId),
-    [environmentId, threadId],
+  const sessionRef = useMemo(
+    () => scopeSessionRef(environmentId, sessionId),
+    [environmentId, sessionId],
   );
-  const serverThreadSelector = useMemo(() => createThreadSelectorByRef(threadRef), [threadRef]);
-  const serverThread = useStore(serverThreadSelector);
-  const draftThread = useComposerDraftStore((store) =>
-    draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
+  const serverSessionSelector = useMemo(() => createSessionSelectorByRef(sessionRef), [sessionRef]);
+  const serverSession = useStore(serverSessionSelector);
+  const draftSession = useComposerDraftStore((store) =>
+    draftId ? store.getDraftSession(draftId) : store.getDraftSessionByRef(sessionRef),
   );
-  const activeProjectRef = serverThread
-    ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)
-    : draftThread
-      ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
+  const activeProjectRef = serverSession
+    ? scopeProjectRef(serverSession.environmentId, serverSession.projectId)
+    : draftSession
+      ? scopeProjectRef(draftSession.environmentId, draftSession.projectId)
       : null;
   const activeProjectSelector = useMemo(
     () => createProjectSelectorByRef(activeProjectRef),
     [activeProjectRef],
   );
   const activeProject = useStore(activeProjectSelector);
-  const hasActiveThread = serverThread !== undefined || draftThread !== null;
-  const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
+  const hasActiveSession = serverSession !== undefined || draftSession !== null;
+  const activeWorktreePath = serverSession?.worktreePath ?? draftSession?.worktreePath ?? null;
   const effectiveEnvMode =
     effectiveEnvModeOverride ??
     resolveEffectiveEnvMode({
       activeWorktreePath,
-      hasServerThread: serverThread !== undefined,
-      draftThreadEnvMode: draftThread?.envMode,
+      hasServerSession: serverSession !== undefined,
+      draftSessionEnvMode: draftSession?.envMode,
     });
-  const envModeLocked = envLocked || (serverThread !== undefined && activeWorktreePath !== null);
+  const envModeLocked = envLocked || (serverSession !== undefined && activeWorktreePath !== null);
 
   const showEnvironmentPicker = Boolean(
     availableEnvironments && availableEnvironments.length > 1 && onEnvironmentChange,
   );
   const isMobile = useIsMobile();
 
-  if (!hasActiveThread || !activeProject) return null;
+  if (!hasActiveSession || !activeProject) return null;
 
   return (
     <div className="mx-auto flex w-full max-w-208 items-center gap-2 px-2.5 pb-3 pt-1 sm:px-3">
@@ -279,12 +279,12 @@ export const BranchToolbar = memo(function BranchToolbar({
       <BranchToolbarBranchSelector
         className="min-w-0 flex-1 justify-end md:ml-auto md:flex-none"
         environmentId={environmentId}
-        threadId={threadId}
+        sessionId={sessionId}
         {...(draftId ? { draftId } : {})}
         envLocked={envLocked}
         {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
-        {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
-        {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
+        {...(activeSessionBranchOverride !== undefined ? { activeSessionBranchOverride } : {})}
+        {...(onActiveSessionBranchOverrideChange ? { onActiveSessionBranchOverrideChange } : {})}
         {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
         {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
       />

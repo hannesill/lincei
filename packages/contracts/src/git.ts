@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { NonNegativeInt, PositiveInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { NonNegativeInt, PositiveInt, SessionId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { SourceControlProviderError, SourceControlProviderInfo } from "./sourceControl.ts";
 import { VcsDriverKind } from "./vcs.ts";
 
@@ -45,7 +45,7 @@ const GitPrStepStatus = Schema.Literals(["created", "opened_existing", "skipped_
 const VcsStatusChangeRequestState = Schema.Literals(["open", "closed", "merged"]);
 const GitPullRequestReference = TrimmedNonEmptyStringSchema;
 const GitPullRequestState = Schema.Literals(["open", "closed", "merged"]);
-const GitPreparePullRequestThreadMode = Schema.Literals(["local", "worktree"]);
+const GitPreparePullRequestSessionMode = Schema.Literals(["local", "worktree"]);
 export const GitRunStackedActionToastRunAction = Schema.Struct({
   kind: GitStackedAction,
 });
@@ -145,13 +145,13 @@ export const GitPullRequestRefInput = Schema.Struct({
 });
 export type GitPullRequestRefInput = typeof GitPullRequestRefInput.Type;
 
-export const GitPreparePullRequestThreadInput = Schema.Struct({
+export const GitPreparePullRequestSessionInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   reference: GitPullRequestReference,
-  mode: GitPreparePullRequestThreadMode,
-  threadId: Schema.optional(ThreadId),
+  mode: GitPreparePullRequestSessionMode,
+  sessionId: Schema.optional(SessionId),
 });
-export type GitPreparePullRequestThreadInput = typeof GitPreparePullRequestThreadInput.Type;
+export type GitPreparePullRequestSessionInput = typeof GitPreparePullRequestSessionInput.Type;
 
 export const VcsRemoveWorktreeInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
@@ -268,12 +268,12 @@ export const GitResolvePullRequestResult = Schema.Struct({
 });
 export type GitResolvePullRequestResult = typeof GitResolvePullRequestResult.Type;
 
-export const GitPreparePullRequestThreadResult = Schema.Struct({
+export const GitPreparePullRequestSessionResult = Schema.Struct({
   pullRequest: GitResolvedPullRequest,
   branch: TrimmedNonEmptyStringSchema,
   worktreePath: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
-export type GitPreparePullRequestThreadResult = typeof GitPreparePullRequestThreadResult.Type;
+export type GitPreparePullRequestSessionResult = typeof GitPreparePullRequestSessionResult.Type;
 
 export const VcsSwitchRefResult = Schema.Struct({
   refName: Schema.NullOr(TrimmedNonEmptyStringSchema),

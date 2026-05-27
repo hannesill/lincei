@@ -84,7 +84,7 @@ interface ShellCandidate {
 }
 
 interface TerminalStartInput {
-  threadId: string;
+  sessionId: string;
   terminalId: string;
   cwd: string;
   worktreePath?: string | null;
@@ -94,7 +94,7 @@ interface TerminalStartInput {
 }
 
 interface TerminalSessionState {
-  threadId: string;
+  sessionId: string;
   terminalId: string;
   cwd: string;
   worktreePath: string | null;
@@ -128,7 +128,7 @@ type DrainProcessEventAction =
   | { type: "idle" }
   | {
       type: "output";
-      threadId: string;
+      sessionId: string;
       terminalId: string;
       history: string | null;
       data: string;
@@ -136,7 +136,7 @@ type DrainProcessEventAction =
   | {
       type: "exit";
       process: PtyProcess | null;
-      threadId: string;
+      sessionId: string;
       terminalId: string;
       exitCode: number | null;
       exitSignal: number | null;
@@ -149,7 +149,7 @@ interface TerminalManagerState {
 
 function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
   return {
-    threadId: session.threadId,
+    sessionId: session.sessionId,
     terminalId: session.terminalId,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
@@ -668,20 +668,20 @@ function sanitizeTerminalHistoryChunk(
   return { visibleText, pendingControlSequence: "" };
 }
 
-function legacySafeThreadId(threadId: string): string {
-  return threadId.replace(/[^a-zA-Z0-9._-]/g, "_");
+function legacySafeSessionId(sessionId: string): string {
+  return sessionId.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-function toSafeThreadId(threadId: string): string {
-  return `terminal_${Encoding.encodeBase64Url(threadId)}`;
+function toSafeSessionId(sessionId: string): string {
+  return `terminal_${Encoding.encodeBase64Url(sessionId)}`;
 }
 
 function toSafeTerminalId(terminalId: string): string {
   return Encoding.encodeBase64Url(terminalId);
 }
 
-function toSessionKey(threadId: string, terminalId: string): string {
-  return `${threadId}\u0000${terminalId}`;
+function toSessionKey(sessionId: string, terminalId: string): string {
+  return `${sessionId}\u0000${terminalId}`;
 }
 
 function shouldExcludeTerminalEnvKey(key: string): boolean {
@@ -775,7 +775,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       sessions: new Map(),
       killFibers: new Map(),
     });
-    const threadLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
+    const sessionLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
     const terminalEventListeners = new Set<(event: TerminalEvent) => Effect.Effect<void>>();
     const workerScope = yield* Scope.make("sequential");
     yield* Effect.addFinalizer(() => Scope.close(workerScope, Exit.void));
@@ -787,23 +787,23 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         }
       });
 
-    const historyPath = (threadId: string, terminalId: string) => {
-      const threadPart = toSafeThreadId(threadId);
+    const historyPath = (sessionId: string, terminalId: string) => {
+      const sessionPart = toSafeSessionId(sessionId);
       if (terminalId === DEFAULT_TERMINAL_ID) {
-        return path.join(logsDir, `${threadPart}.log`);
+        return path.join(logsDir, `${sessionPart}.log`);
       }
-      return path.join(logsDir, `${threadPart}_${toSafeTerminalId(terminalId)}.log`);
+      return path.join(logsDir, `${sessionPart}_${toSafeTerminalId(terminalId)}.log`);
     };
 
-    const legacyHistoryPath = (threadId: string) =>
-      path.join(logsDir, `${legacySafeThreadId(threadId)}.log`);
+    const legacyHistoryPath = (sessionId: string) =>
+      path.join(logsDir, `${legacySafeSessionId(sessionId)}.log`);
 
     const toTerminalHistoryError =
-      (operation: "read" | "truncate" | "migrate", threadId: string, terminalId: string) =>
+      (operation: "read" | "truncate" | "migrate", sessionId: string, terminalId: string) =>
       (cause: unknown) =>
         new TerminalHistoryError({
           operation,
-          threadId,
+          sessionId,
           terminalId,
           cause,
         });
@@ -814,17 +814,17 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],
     ) => SynchronizedRef.modify(managerStateRef, f);
 
-    const getThreadSemaphore = (threadId: string) =>
-      SynchronizedRef.modifyEffect(threadLocksRef, (current) => {
+    const getSessionSemaphore = (sessionId: string) =>
+      SynchronizedRef.modifyEffect(sessionLocksRef, (current) => {
         const existing: Option.Option<Semaphore.Semaphore> = Option.fromNullishOr(
-          current.get(threadId),
+          current.get(sessionId),
         );
         return Option.match(existing, {
           onNone: () =>
             Semaphore.make(1).pipe(
               Effect.map((semaphore) => {
                 const next = new Map(current);
-                next.set(threadId, semaphore);
+                next.set(sessionId, semaphore);
                 return [semaphore, next] as const;
               }),
             ),
@@ -832,11 +832,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         });
       });
 
-    const withThreadLock = <A, E, R>(
-      threadId: string,
+    const withSessionLock = <A, E, R>(
+      sessionId: string,
       effect: Effect.Effect<A, E, R>,
     ): Effect.Effect<A, E, R> =>
-      Effect.flatMap(getThreadSemaphore(threadId), (semaphore) => semaphore.withPermit(effect));
+      Effect.flatMap(getSessionSemaphore(sessionId), (semaphore) => semaphore.withPermit(effect));
 
     const clearKillFiber = Effect.fn("terminal.clearKillFiber")(function* (
       process: PtyProcess | null,
@@ -873,7 +873,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
     const runKillEscalation = Effect.fn("terminal.runKillEscalation")(function* (
       process: PtyProcess,
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ) {
       const terminated = yield* Effect.try({
@@ -888,7 +888,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         Effect.as(true),
         Effect.catch((error) =>
           Effect.logWarning("failed to kill terminal process", {
-            threadId,
+            sessionId,
             terminalId,
             signal: "SIGTERM",
             error: error.message,
@@ -912,7 +912,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       }).pipe(
         Effect.catch((error) =>
           Effect.logWarning("failed to force-kill terminal process", {
-            threadId,
+            sessionId,
             terminalId,
             signal: "SIGKILL",
             error: error.message,
@@ -923,10 +923,10 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
     const startKillEscalation = Effect.fn("terminal.startKillEscalation")(function* (
       process: PtyProcess,
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ) {
-      const fiber = yield* runKillEscalation(process, threadId, terminalId).pipe(
+      const fiber = yield* runKillEscalation(process, sessionId, terminalId).pipe(
         Effect.ensuring(
           modifyManagerState((state) => {
             if (!state.killFibers.has(process)) {
@@ -958,15 +958,15 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           yield* Effect.sleep(DEFAULT_PERSIST_DEBOUNCE_MS);
         }
 
-        const [threadId, terminalId] = sessionKey.split("\u0000");
-        if (!threadId || !terminalId) {
+        const [sessionId, terminalId] = sessionKey.split("\u0000");
+        if (!sessionId || !terminalId) {
           return;
         }
 
-        yield* fileSystem.writeFileString(historyPath(threadId, terminalId), request.history).pipe(
+        yield* fileSystem.writeFileString(historyPath(sessionId, terminalId), request.history).pipe(
           Effect.catch((error) =>
             Effect.logWarning("failed to persist terminal history", {
-              threadId,
+              sessionId,
               terminalId,
               error,
             }),
@@ -976,53 +976,53 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     });
 
     const queuePersist = Effect.fn("terminal.queuePersist")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
       history: string,
     ) {
-      yield* persistWorker.enqueue(toSessionKey(threadId, terminalId), {
+      yield* persistWorker.enqueue(toSessionKey(sessionId, terminalId), {
         history,
         immediate: false,
       });
     });
 
     const flushPersist = Effect.fn("terminal.flushPersist")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ) {
-      yield* persistWorker.drainKey(toSessionKey(threadId, terminalId));
+      yield* persistWorker.drainKey(toSessionKey(sessionId, terminalId));
     });
 
     const persistHistory = Effect.fn("terminal.persistHistory")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
       history: string,
     ) {
-      yield* persistWorker.enqueue(toSessionKey(threadId, terminalId), {
+      yield* persistWorker.enqueue(toSessionKey(sessionId, terminalId), {
         history,
         immediate: true,
       });
-      yield* flushPersist(threadId, terminalId);
+      yield* flushPersist(sessionId, terminalId);
     });
 
     const readHistory = Effect.fn("terminal.readHistory")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ) {
-      const nextPath = historyPath(threadId, terminalId);
+      const nextPath = historyPath(sessionId, terminalId);
       if (
         yield* fileSystem
           .exists(nextPath)
-          .pipe(Effect.mapError(toTerminalHistoryError("read", threadId, terminalId)))
+          .pipe(Effect.mapError(toTerminalHistoryError("read", sessionId, terminalId)))
       ) {
         const raw = yield* fileSystem
           .readFileString(nextPath)
-          .pipe(Effect.mapError(toTerminalHistoryError("read", threadId, terminalId)));
+          .pipe(Effect.mapError(toTerminalHistoryError("read", sessionId, terminalId)));
         const capped = capHistory(raw, historyLineLimit);
         if (capped !== raw) {
           yield* fileSystem
             .writeFileString(nextPath, capped)
-            .pipe(Effect.mapError(toTerminalHistoryError("truncate", threadId, terminalId)));
+            .pipe(Effect.mapError(toTerminalHistoryError("truncate", sessionId, terminalId)));
         }
         return capped;
       }
@@ -1031,26 +1031,26 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         return "";
       }
 
-      const legacyPath = legacyHistoryPath(threadId);
+      const legacyPath = legacyHistoryPath(sessionId);
       if (
         !(yield* fileSystem
           .exists(legacyPath)
-          .pipe(Effect.mapError(toTerminalHistoryError("migrate", threadId, terminalId))))
+          .pipe(Effect.mapError(toTerminalHistoryError("migrate", sessionId, terminalId))))
       ) {
         return "";
       }
 
       const raw = yield* fileSystem
         .readFileString(legacyPath)
-        .pipe(Effect.mapError(toTerminalHistoryError("migrate", threadId, terminalId)));
+        .pipe(Effect.mapError(toTerminalHistoryError("migrate", sessionId, terminalId)));
       const capped = capHistory(raw, historyLineLimit);
       yield* fileSystem
         .writeFileString(nextPath, capped)
-        .pipe(Effect.mapError(toTerminalHistoryError("migrate", threadId, terminalId)));
+        .pipe(Effect.mapError(toTerminalHistoryError("migrate", sessionId, terminalId)));
       yield* fileSystem.remove(legacyPath, { force: true }).pipe(
         Effect.catch((cleanupError) =>
           Effect.logWarning("failed to remove legacy terminal history", {
-            threadId,
+            sessionId,
             error: cleanupError,
           }),
         ),
@@ -1059,23 +1059,23 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     });
 
     const deleteHistory = Effect.fn("terminal.deleteHistory")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ) {
-      yield* fileSystem.remove(historyPath(threadId, terminalId), { force: true }).pipe(
+      yield* fileSystem.remove(historyPath(sessionId, terminalId), { force: true }).pipe(
         Effect.catch((error) =>
           Effect.logWarning("failed to delete terminal history", {
-            threadId,
+            sessionId,
             terminalId,
             error,
           }),
         ),
       );
       if (terminalId === DEFAULT_TERMINAL_ID) {
-        yield* fileSystem.remove(legacyHistoryPath(threadId), { force: true }).pipe(
+        yield* fileSystem.remove(legacyHistoryPath(sessionId), { force: true }).pipe(
           Effect.catch((error) =>
             Effect.logWarning("failed to delete terminal history", {
-              threadId,
+              sessionId,
               terminalId,
               error,
             }),
@@ -1084,25 +1084,25 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       }
     });
 
-    const deleteAllHistoryForThread = Effect.fn("terminal.deleteAllHistoryForThread")(function* (
-      threadId: string,
+    const deleteAllHistoryForSession = Effect.fn("terminal.deleteAllHistoryForSession")(function* (
+      sessionId: string,
     ) {
-      const threadPrefix = `${toSafeThreadId(threadId)}_`;
+      const sessionPrefix = `${toSafeSessionId(sessionId)}_`;
       const entries = yield* fileSystem
         .readDirectory(logsDir, { recursive: false })
         .pipe(Effect.catch(() => Effect.succeed([] as Array<string>)));
       yield* Effect.forEach(
         entries.filter(
           (name) =>
-            name === `${toSafeThreadId(threadId)}.log` ||
-            name === `${legacySafeThreadId(threadId)}.log` ||
-            name.startsWith(threadPrefix),
+            name === `${toSafeSessionId(sessionId)}.log` ||
+            name === `${legacySafeSessionId(sessionId)}.log` ||
+            name.startsWith(sessionPrefix),
         ),
         (name) =>
           fileSystem.remove(path.join(logsDir, name), { force: true }).pipe(
             Effect.catch((error) =>
-              Effect.logWarning("failed to delete terminal histories for thread", {
-                threadId,
+              Effect.logWarning("failed to delete terminal histories for session", {
+                sessionId,
                 error,
               }),
             ),
@@ -1131,24 +1131,24 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     });
 
     const getSession = Effect.fn("terminal.getSession")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ): Effect.fn.Return<Option.Option<TerminalSessionState>> {
       return yield* Effect.map(readManagerState, (state) =>
-        Option.fromNullishOr(state.sessions.get(toSessionKey(threadId, terminalId))),
+        Option.fromNullishOr(state.sessions.get(toSessionKey(sessionId, terminalId))),
       );
     });
 
     const requireSession = Effect.fn("terminal.requireSession")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
     ): Effect.fn.Return<TerminalSessionState, TerminalSessionLookupError> {
-      return yield* Effect.flatMap(getSession(threadId, terminalId), (session) =>
+      return yield* Effect.flatMap(getSession(sessionId, terminalId), (session) =>
         Option.match(session, {
           onNone: () =>
             Effect.fail(
               new TerminalSessionLookupError({
-                threadId,
+                sessionId,
                 terminalId,
               }),
             ),
@@ -1157,10 +1157,12 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       );
     });
 
-    const sessionsForThread = Effect.fn("terminal.sessionsForThread")(function* (threadId: string) {
+    const sessionsForSession = Effect.fn("terminal.sessionsForSession")(function* (
+      sessionId: string,
+    ) {
       return yield* readManagerState.pipe(
         Effect.map((state) =>
-          [...state.sessions.values()].filter((session) => session.threadId === threadId),
+          [...state.sessions.values()].filter((session) => session.sessionId === sessionId),
         ),
       );
     });
@@ -1178,7 +1180,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           inactiveSessions.sort(
             (left, right) =>
               left.updatedAt.localeCompare(right.updatedAt) ||
-              left.threadId.localeCompare(right.threadId) ||
+              left.sessionId.localeCompare(right.sessionId) ||
               left.terminalId.localeCompare(right.terminalId),
           );
 
@@ -1186,7 +1188,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
           const toEvict = inactiveSessions.length - maxRetainedInactiveSessions;
           for (const session of inactiveSessions.slice(0, toEvict)) {
-            const key = toSessionKey(session.threadId, session.terminalId);
+            const key = toSessionKey(session.sessionId, session.terminalId);
             sessions.delete(key);
           }
 
@@ -1239,7 +1241,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
             return {
               type: "output",
-              threadId: session.threadId,
+              sessionId: session.sessionId,
               terminalId: session.terminalId,
               history: sanitized.visibleText.length > 0 ? session.history : null,
               data: nextEvent.data,
@@ -1267,7 +1269,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           return {
             type: "exit",
             process,
-            threadId: session.threadId,
+            sessionId: session.sessionId,
             terminalId: session.terminalId,
             exitCode: session.exitCode,
             exitSignal: session.exitSignal,
@@ -1280,13 +1282,13 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
         if (action.type === "output") {
           if (action.history !== null) {
-            yield* queuePersist(action.threadId, action.terminalId, action.history);
+            yield* queuePersist(action.sessionId, action.terminalId, action.history);
           }
 
           const createdAt = yield* nowIso;
           yield* publishEvent({
             type: "output",
-            threadId: action.threadId,
+            sessionId: action.sessionId,
             terminalId: action.terminalId,
             createdAt,
             data: action.data,
@@ -1298,7 +1300,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         const createdAt = yield* nowIso;
         yield* publishEvent({
           type: "exited",
-          threadId: action.threadId,
+          sessionId: action.sessionId,
           terminalId: action.terminalId,
           createdAt,
           exitCode: action.exitCode,
@@ -1331,7 +1333,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       });
 
       yield* clearKillFiber(process);
-      yield* startKillEscalation(process, session.threadId, session.terminalId);
+      yield* startKillEscalation(process, session.sessionId, session.terminalId);
       yield* evictInactiveSessionsIfNeeded();
     });
 
@@ -1399,7 +1401,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     ) {
       yield* stopProcess(session);
       yield* Effect.annotateCurrentSpan({
-        "terminal.thread_id": session.threadId,
+        "terminal.session_id": session.sessionId,
         "terminal.id": session.terminalId,
         "terminal.event_type": eventType,
         "terminal.cwd": input.cwd,
@@ -1463,7 +1465,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
               const createdAt = yield* nowIso;
               yield* publishEvent({
                 type: eventType,
-                threadId: session.threadId,
+                sessionId: session.sessionId,
                 terminalId: session.terminalId,
                 createdAt,
                 snapshot: snapshot(session),
@@ -1480,7 +1482,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       {
         const error = startResult.failure;
         if (ptyProcess) {
-          yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
+          yield* startKillEscalation(ptyProcess, session.sessionId, session.terminalId);
         }
         const erroredAt = yield* nowIso;
 
@@ -1504,13 +1506,13 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         const createdAt = yield* nowIso;
         yield* publishEvent({
           type: "error",
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           terminalId: session.terminalId,
           createdAt,
           message,
         });
         yield* Effect.logError("failed to start terminal", {
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           terminalId: session.terminalId,
           error: message,
           ...(startedShell ? { shell: startedShell } : {}),
@@ -1519,19 +1521,19 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     });
 
     const closeSession = Effect.fn("terminal.closeSession")(function* (
-      threadId: string,
+      sessionId: string,
       terminalId: string,
       deleteHistoryOnClose: boolean,
     ) {
-      const key = toSessionKey(threadId, terminalId);
-      const session = yield* getSession(threadId, terminalId);
+      const key = toSessionKey(sessionId, terminalId);
+      const session = yield* getSession(sessionId, terminalId);
 
       if (Option.isSome(session)) {
         yield* stopProcess(session.value);
-        yield* persistHistory(threadId, terminalId, session.value.history);
+        yield* persistHistory(sessionId, terminalId, session.value.history);
       }
 
-      yield* flushPersist(threadId, terminalId);
+      yield* flushPersist(sessionId, terminalId);
 
       yield* modifyManagerState((state) => {
         if (!state.sessions.has(key)) {
@@ -1543,7 +1545,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       });
 
       if (deleteHistoryOnClose) {
-        yield* deleteHistory(threadId, terminalId);
+        yield* deleteHistory(sessionId, terminalId);
       }
     });
 
@@ -1566,7 +1568,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           Effect.map(Option.some),
           Effect.catch((reason) =>
             Effect.logWarning("failed to check terminal subprocess activity", {
-              threadId: session.threadId,
+              sessionId: session.sessionId,
               terminalId: session.terminalId,
               terminalPid,
               reason,
@@ -1582,7 +1584,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         const createdAt = yield* nowIso;
         const event = yield* modifyManagerState((state) => {
           const liveSession: Option.Option<TerminalSessionState> = Option.fromNullishOr(
-            state.sessions.get(toSessionKey(session.threadId, session.terminalId)),
+            state.sessions.get(toSessionKey(session.sessionId, session.terminalId)),
           );
           if (
             Option.isNone(liveSession) ||
@@ -1599,7 +1601,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           return [
             Option.some({
               type: "activity" as const,
-              threadId: liveSession.value.threadId,
+              sessionId: liveSession.value.sessionId,
               terminalId: liveSession.value.terminalId,
               createdAt,
               hasRunningSubprocess: hasRunningSubprocess.value,
@@ -1656,7 +1658,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           cleanupProcessHandles(session);
           if (!session.process) return;
           yield* clearKillFiber(session.process);
-          yield* runKillEscalation(session.process, session.threadId, session.terminalId);
+          yield* runKillEscalation(session.process, session.sessionId, session.terminalId);
         });
 
         yield* Effect.forEach(sessions, cleanupSession, {
@@ -1667,22 +1669,22 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     );
 
     const open: TerminalManagerShape["open"] = (input) =>
-      withThreadLock(
-        input.threadId,
+      withSessionLock(
+        input.sessionId,
         Effect.gen(function* () {
           const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
           yield* assertValidCwd(input.cwd);
 
-          const sessionKey = toSessionKey(input.threadId, terminalId);
-          const existing = yield* getSession(input.threadId, terminalId);
+          const sessionKey = toSessionKey(input.sessionId, terminalId);
+          const existing = yield* getSession(input.sessionId, terminalId);
           if (Option.isNone(existing)) {
-            yield* flushPersist(input.threadId, terminalId);
-            const history = yield* readHistory(input.threadId, terminalId);
+            yield* flushPersist(input.sessionId, terminalId);
+            const history = yield* readHistory(input.sessionId, terminalId);
             const cols = input.cols ?? DEFAULT_OPEN_COLS;
             const rows = input.rows ?? DEFAULT_OPEN_ROWS;
             const createdAt = yield* nowIso;
             const session: TerminalSessionState = {
-              threadId: input.threadId,
+              sessionId: input.sessionId,
               terminalId,
               cwd: input.cwd,
               worktreePath: input.worktreePath ?? null,
@@ -1716,7 +1718,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
             yield* startSession(
               session,
               {
-                threadId: input.threadId,
+                sessionId: input.sessionId,
                 terminalId,
                 cwd: input.cwd,
                 ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
@@ -1747,7 +1749,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
             liveSession.pendingProcessEventIndex = 0;
             liveSession.processEventDrainRunning = false;
             yield* persistHistory(
-              liveSession.threadId,
+              liveSession.sessionId,
               liveSession.terminalId,
               liveSession.history,
             );
@@ -1760,7 +1762,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
             liveSession.pendingProcessEventIndex = 0;
             liveSession.processEventDrainRunning = false;
             yield* persistHistory(
-              liveSession.threadId,
+              liveSession.sessionId,
               liveSession.terminalId,
               liveSession.history,
             );
@@ -1770,7 +1772,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
             yield* startSession(
               liveSession,
               {
-                threadId: input.threadId,
+                sessionId: input.sessionId,
                 terminalId,
                 cwd: input.cwd,
                 worktreePath: liveSession.worktreePath,
@@ -1796,12 +1798,12 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
     const write: TerminalManagerShape["write"] = Effect.fn("terminal.write")(function* (input) {
       const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-      const session = yield* requireSession(input.threadId, terminalId);
+      const session = yield* requireSession(input.sessionId, terminalId);
       const process = session.process;
       if (!process || session.status !== "running") {
         if (session.status === "exited") return;
         return yield* new TerminalNotRunningError({
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           terminalId,
         });
       }
@@ -1810,11 +1812,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
     const resize: TerminalManagerShape["resize"] = Effect.fn("terminal.resize")(function* (input) {
       const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-      const session = yield* requireSession(input.threadId, terminalId);
+      const session = yield* requireSession(input.sessionId, terminalId);
       const process = session.process;
       if (!process || session.status !== "running") {
         return yield* new TerminalNotRunningError({
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           terminalId,
         });
       }
@@ -1825,11 +1827,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     });
 
     const clear: TerminalManagerShape["clear"] = (input) =>
-      withThreadLock(
-        input.threadId,
+      withSessionLock(
+        input.sessionId,
         Effect.gen(function* () {
           const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-          const session = yield* requireSession(input.threadId, terminalId);
+          const session = yield* requireSession(input.sessionId, terminalId);
           const updatedAt = yield* nowIso;
           session.history = "";
           session.pendingHistoryControlSequence = "";
@@ -1837,11 +1839,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           session.pendingProcessEventIndex = 0;
           session.processEventDrainRunning = false;
           session.updatedAt = updatedAt;
-          yield* persistHistory(input.threadId, terminalId, session.history);
+          yield* persistHistory(input.sessionId, terminalId, session.history);
           const createdAt = yield* nowIso;
           yield* publishEvent({
             type: "cleared",
-            threadId: input.threadId,
+            sessionId: input.sessionId,
             terminalId,
             createdAt,
           });
@@ -1849,22 +1851,22 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       );
 
     const restart: TerminalManagerShape["restart"] = (input) =>
-      withThreadLock(
-        input.threadId,
+      withSessionLock(
+        input.sessionId,
         Effect.gen(function* () {
-          yield* increment(terminalRestartsTotal, { scope: "thread" });
+          yield* increment(terminalRestartsTotal, { scope: "session" });
           const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
           yield* assertValidCwd(input.cwd);
 
-          const sessionKey = toSessionKey(input.threadId, terminalId);
-          const existingSession = yield* getSession(input.threadId, terminalId);
+          const sessionKey = toSessionKey(input.sessionId, terminalId);
+          const existingSession = yield* getSession(input.sessionId, terminalId);
           let session: TerminalSessionState;
           if (Option.isNone(existingSession)) {
             const cols = input.cols ?? DEFAULT_OPEN_COLS;
             const rows = input.rows ?? DEFAULT_OPEN_ROWS;
             const createdAt = yield* nowIso;
             session = {
-              threadId: input.threadId,
+              sessionId: input.sessionId,
               terminalId,
               cwd: input.cwd,
               worktreePath: input.worktreePath ?? null,
@@ -1909,11 +1911,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           session.pendingProcessEvents = [];
           session.pendingProcessEventIndex = 0;
           session.processEventDrainRunning = false;
-          yield* persistHistory(input.threadId, terminalId, session.history);
+          yield* persistHistory(input.sessionId, terminalId, session.history);
           yield* startSession(
             session,
             {
-              threadId: input.threadId,
+              sessionId: input.sessionId,
               terminalId,
               cwd: input.cwd,
               ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
@@ -1928,23 +1930,23 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       );
 
     const close: TerminalManagerShape["close"] = (input) =>
-      withThreadLock(
-        input.threadId,
+      withSessionLock(
+        input.sessionId,
         Effect.gen(function* () {
           if (input.terminalId) {
-            yield* closeSession(input.threadId, input.terminalId, input.deleteHistory === true);
+            yield* closeSession(input.sessionId, input.terminalId, input.deleteHistory === true);
             return;
           }
 
-          const threadSessions = yield* sessionsForThread(input.threadId);
+          const providerRuntimes = yield* sessionsForSession(input.sessionId);
           yield* Effect.forEach(
-            threadSessions,
-            (session) => closeSession(input.threadId, session.terminalId, false),
+            providerRuntimes,
+            (session) => closeSession(input.sessionId, session.terminalId, false),
             { discard: true },
           );
 
           if (input.deleteHistory) {
-            yield* deleteAllHistoryForThread(input.threadId);
+            yield* deleteAllHistoryForSession(input.sessionId);
           }
         }),
       );

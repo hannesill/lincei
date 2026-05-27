@@ -7,38 +7,38 @@ import {
 } from "./service";
 
 describe("shouldApplyTerminalEvent", () => {
-  it("applies terminal events for draft-only threads", () => {
+  it("applies terminal events for draft-only sessions", () => {
     expect(
       shouldApplyTerminalEvent({
-        serverThreadArchivedAt: undefined,
-        hasDraftThread: true,
+        serverSessionArchivedAt: undefined,
+        hasDraftSession: true,
       }),
     ).toBe(true);
   });
 
-  it("drops terminal events for unknown threads", () => {
+  it("drops terminal events for unknown sessions", () => {
     expect(
       shouldApplyTerminalEvent({
-        serverThreadArchivedAt: undefined,
-        hasDraftThread: false,
+        serverSessionArchivedAt: undefined,
+        hasDraftSession: false,
       }),
     ).toBe(false);
   });
 
-  it("drops terminal events for archived server threads even if a draft exists", () => {
+  it("drops terminal events for archived server sessions even if a draft exists", () => {
     expect(
       shouldApplyTerminalEvent({
-        serverThreadArchivedAt: "2026-04-09T00:00:00.000Z",
-        hasDraftThread: true,
+        serverSessionArchivedAt: "2026-04-09T00:00:00.000Z",
+        hasDraftSession: true,
       }),
     ).toBe(false);
   });
 
-  it("applies terminal events for active server threads", () => {
+  it("applies terminal events for active server sessions", () => {
     expect(
       shouldApplyTerminalEvent({
-        serverThreadArchivedAt: null,
-        hasDraftThread: false,
+        serverSessionArchivedAt: null,
+        hasDraftSession: false,
       }),
     ).toBe(true);
   });

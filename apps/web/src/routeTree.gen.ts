@@ -21,7 +21,7 @@ import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagn
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
-import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
+import { Route as ChatEnvironmentIdSessionIdRouteImport } from './routes/_chat.$environmentId.$sessionId'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -82,10 +82,10 @@ const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   path: '/draft/$draftId',
   getParentRoute: () => ChatRoute,
 } as any)
-const ChatEnvironmentIdThreadIdRoute =
-  ChatEnvironmentIdThreadIdRouteImport.update({
-    id: '/$environmentId/$threadId',
-    path: '/$environmentId/$threadId',
+const ChatEnvironmentIdSessionIdRoute =
+  ChatEnvironmentIdSessionIdRouteImport.update({
+    id: '/$environmentId/$sessionId',
+    path: '/$environmentId/$sessionId',
     getParentRoute: () => ChatRoute,
   } as any)
 
@@ -100,7 +100,7 @@ export interface FileRoutesByFullPath {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
-  '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
+  '/$environmentId/$sessionId': typeof ChatEnvironmentIdSessionIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
@@ -114,7 +114,7 @@ export interface FileRoutesByTo {
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/': typeof ChatIndexRoute
-  '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
+  '/$environmentId/$sessionId': typeof ChatEnvironmentIdSessionIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesById {
@@ -130,7 +130,7 @@ export interface FileRoutesById {
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/_chat/': typeof ChatIndexRoute
-  '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
+  '/_chat/$environmentId/$sessionId': typeof ChatEnvironmentIdSessionIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRouteTypes {
@@ -146,7 +146,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/providers'
     | '/settings/source-control'
-    | '/$environmentId/$threadId'
+    | '/$environmentId/$sessionId'
     | '/draft/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -160,7 +160,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/settings/source-control'
     | '/'
-    | '/$environmentId/$threadId'
+    | '/$environmentId/$sessionId'
     | '/draft/$draftId'
   id:
     | '__root__'
@@ -175,7 +175,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/settings/source-control'
     | '/_chat/'
-    | '/_chat/$environmentId/$threadId'
+    | '/_chat/$environmentId/$sessionId'
     | '/_chat/draft/$draftId'
   fileRoutesById: FileRoutesById
 }
@@ -271,11 +271,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatDraftDraftIdRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/_chat/$environmentId/$threadId': {
-      id: '/_chat/$environmentId/$threadId'
-      path: '/$environmentId/$threadId'
-      fullPath: '/$environmentId/$threadId'
-      preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
+    '/_chat/$environmentId/$sessionId': {
+      id: '/_chat/$environmentId/$sessionId'
+      path: '/$environmentId/$sessionId'
+      fullPath: '/$environmentId/$sessionId'
+      preLoaderRoute: typeof ChatEnvironmentIdSessionIdRouteImport
       parentRoute: typeof ChatRoute
     }
   }
@@ -283,13 +283,13 @@ declare module '@tanstack/react-router' {
 
 interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
-  ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
+  ChatEnvironmentIdSessionIdRoute: typeof ChatEnvironmentIdSessionIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
-  ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
+  ChatEnvironmentIdSessionIdRoute: ChatEnvironmentIdSessionIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
 }
 

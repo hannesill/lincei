@@ -2,22 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderDriverKind } from "@t3tools/contracts";
 
 import {
-  createThreadJumpHintVisibilityController,
-  getSidebarThreadIdsToPrewarm,
-  getVisibleSidebarThreadIds,
-  resolveAdjacentThreadId,
-  getFallbackThreadIdAfterDelete,
-  getVisibleThreadsForProject,
+  createSessionJumpHintVisibilityController,
+  getSidebarSessionIdsToPrewarm,
+  getVisibleSidebarSessionIds,
+  resolveAdjacentSessionId,
+  getFallbackSessionIdAfterDelete,
+  getVisibleSessionsForProject,
   getProjectSortTimestamp,
   hasUnseenCompletion,
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
-  resolveSidebarNewThreadSeedContext,
-  resolveSidebarNewThreadEnvMode,
-  resolveThreadRowClassName,
-  resolveThreadStatusPill,
-  shouldClearThreadSelectionOnMouseDown,
+  resolveSidebarNewSessionSeedContext,
+  resolveSidebarNewSessionEnvMode,
+  resolveSessionRowClassName,
+  resolveSessionStatusPill,
+  shouldClearSessionSelectionOnMouseDown,
   sortProjectsForSidebar,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
@@ -26,13 +26,13 @@ import {
   OrchestrationLatestTurn,
   ProjectId,
   ProviderInstanceId,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   type Project,
-  type Thread,
+  type Session,
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
@@ -52,7 +52,7 @@ function makeLatestTurn(overrides?: {
 }
 
 describe("hasUnseenCompletion", () => {
-  it("returns true when a thread completed after its last visit", () => {
+  it("returns true when a session completed after its last visit", () => {
     expect(
       hasUnseenCompletion({
         hasActionableProposedPlan: false,
@@ -67,7 +67,7 @@ describe("hasUnseenCompletion", () => {
   });
 });
 
-describe("createThreadJumpHintVisibilityController", () => {
+describe("createSessionJumpHintVisibilityController", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -78,7 +78,7 @@ describe("createThreadJumpHintVisibilityController", () => {
 
   it("delays showing jump hints until the configured delay elapses", () => {
     const visibilityChanges: boolean[] = [];
-    const controller = createThreadJumpHintVisibilityController({
+    const controller = createSessionJumpHintVisibilityController({
       delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
         visibilityChanges.push(visible);
@@ -97,7 +97,7 @@ describe("createThreadJumpHintVisibilityController", () => {
 
   it("hides immediately when the modifiers are released", () => {
     const visibilityChanges: boolean[] = [];
-    const controller = createThreadJumpHintVisibilityController({
+    const controller = createSessionJumpHintVisibilityController({
       delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
         visibilityChanges.push(visible);
@@ -113,7 +113,7 @@ describe("createThreadJumpHintVisibilityController", () => {
 
   it("cancels a pending reveal when the modifier is released early", () => {
     const visibilityChanges: boolean[] = [];
-    const controller = createThreadJumpHintVisibilityController({
+    const controller = createSessionJumpHintVisibilityController({
       delayMs: THREAD_JUMP_HINT_SHOW_DELAY_MS,
       onVisibilityChange: (visible) => {
         visibilityChanges.push(visible);
@@ -129,37 +129,37 @@ describe("createThreadJumpHintVisibilityController", () => {
   });
 });
 
-describe("getSidebarThreadIdsToPrewarm", () => {
-  it("returns only the first visible thread ids up to the prewarm limit", () => {
-    expect(getSidebarThreadIdsToPrewarm(["t1", "t2", "t3"], 2)).toEqual(["t1", "t2"]);
+describe("getSidebarSessionIdsToPrewarm", () => {
+  it("returns only the first visible session ids up to the prewarm limit", () => {
+    expect(getSidebarSessionIdsToPrewarm(["t1", "t2", "t3"], 2)).toEqual(["t1", "t2"]);
   });
 
-  it("returns all visible thread ids when they fit within the limit", () => {
-    expect(getSidebarThreadIdsToPrewarm(["t1", "t2"], 10)).toEqual(["t1", "t2"]);
+  it("returns all visible session ids when they fit within the limit", () => {
+    expect(getSidebarSessionIdsToPrewarm(["t1", "t2"], 10)).toEqual(["t1", "t2"]);
   });
 
-  it("returns no thread ids when the limit is zero", () => {
-    expect(getSidebarThreadIdsToPrewarm(["t1", "t2"], 0)).toEqual([]);
+  it("returns no session ids when the limit is zero", () => {
+    expect(getSidebarSessionIdsToPrewarm(["t1", "t2"], 0)).toEqual([]);
   });
 });
 
-describe("shouldClearThreadSelectionOnMouseDown", () => {
-  it("preserves selection for thread items", () => {
+describe("shouldClearSessionSelectionOnMouseDown", () => {
+  it("preserves selection for session items", () => {
     const child = {
       closest: (selector: string) =>
-        selector.includes("[data-thread-item]") ? ({} as Element) : null,
+        selector.includes("[data-session-item]") ? ({} as Element) : null,
     } as unknown as HTMLElement;
 
-    expect(shouldClearThreadSelectionOnMouseDown(child)).toBe(false);
+    expect(shouldClearSessionSelectionOnMouseDown(child)).toBe(false);
   });
 
-  it("preserves selection for thread list toggle controls", () => {
+  it("preserves selection for session list toggle controls", () => {
     const selectionSafe = {
       closest: (selector: string) =>
-        selector.includes("[data-thread-selection-safe]") ? ({} as Element) : null,
+        selector.includes("[data-session-selection-safe]") ? ({} as Element) : null,
     } as unknown as HTMLElement;
 
-    expect(shouldClearThreadSelectionOnMouseDown(selectionSafe)).toBe(false);
+    expect(shouldClearSessionSelectionOnMouseDown(selectionSafe)).toBe(false);
   });
 
   it("clears selection for unrelated sidebar clicks", () => {
@@ -167,14 +167,14 @@ describe("shouldClearThreadSelectionOnMouseDown", () => {
       closest: () => null,
     } as unknown as HTMLElement;
 
-    expect(shouldClearThreadSelectionOnMouseDown(unrelated)).toBe(true);
+    expect(shouldClearSessionSelectionOnMouseDown(unrelated)).toBe(true);
   });
 });
 
-describe("resolveSidebarNewThreadEnvMode", () => {
+describe("resolveSidebarNewSessionEnvMode", () => {
   it("uses the app default when the caller does not request a specific mode", () => {
     expect(
-      resolveSidebarNewThreadEnvMode({
+      resolveSidebarNewSessionEnvMode({
         defaultEnvMode: "worktree",
       }),
     ).toBe("worktree");
@@ -182,7 +182,7 @@ describe("resolveSidebarNewThreadEnvMode", () => {
 
   it("preserves an explicit requested mode over the app default", () => {
     expect(
-      resolveSidebarNewThreadEnvMode({
+      resolveSidebarNewSessionEnvMode({
         requestedEnvMode: "local",
         defaultEnvMode: "worktree",
       }),
@@ -190,18 +190,18 @@ describe("resolveSidebarNewThreadEnvMode", () => {
   });
 });
 
-describe("resolveSidebarNewThreadSeedContext", () => {
-  it("prefers the default worktree mode over active thread context", () => {
+describe("resolveSidebarNewSessionSeedContext", () => {
+  it("prefers the default worktree mode over active session context", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewSessionSeedContext({
         projectId: "project-1",
         defaultEnvMode: "worktree",
-        activeThread: {
+        activeSession: {
           projectId: "project-1",
           branch: "feature/existing",
           worktreePath: "/repo/.t3/worktrees/existing",
         },
-        activeDraftThread: {
+        activeDraftSession: {
           projectId: "project-1",
           branch: "feature/draft",
           worktreePath: "/repo/.t3/worktrees/draft",
@@ -213,17 +213,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
     });
   });
 
-  it("inherits the active server thread context when creating a new thread in the same project", () => {
+  it("inherits the active server session context when creating a new session in the same project", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewSessionSeedContext({
         projectId: "project-1",
         defaultEnvMode: "local",
-        activeThread: {
+        activeSession: {
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
-        activeDraftThread: null,
+        activeDraftSession: null,
       }),
     ).toEqual({
       branch: "effect-atom",
@@ -232,17 +232,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
     });
   });
 
-  it("prefers the active draft thread context when it matches the target project", () => {
+  it("prefers the active draft session context when it matches the target project", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewSessionSeedContext({
         projectId: "project-1",
         defaultEnvMode: "local",
-        activeThread: {
+        activeSession: {
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
-        activeDraftThread: {
+        activeDraftSession: {
           projectId: "project-1",
           branch: "feature/new-draft",
           worktreePath: "/repo/worktree",
@@ -256,17 +256,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
     });
   });
 
-  it("falls back to the default env mode when there is no matching active thread context", () => {
+  it("falls back to the default env mode when there is no matching active session context", () => {
     expect(
-      resolveSidebarNewThreadSeedContext({
+      resolveSidebarNewSessionSeedContext({
         projectId: "project-2",
         defaultEnvMode: "worktree",
-        activeThread: {
+        activeSession: {
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
-        activeDraftThread: null,
+        activeDraftSession: null,
       }),
     ).toEqual({
       envMode: "worktree",
@@ -354,89 +354,92 @@ describe("orderItemsByPreferredIds", () => {
   });
 });
 
-describe("resolveAdjacentThreadId", () => {
-  it("resolves adjacent thread ids in ordered sidebar traversal", () => {
-    const threads = [
-      ThreadId.make("thread-1"),
-      ThreadId.make("thread-2"),
-      ThreadId.make("thread-3"),
+describe("resolveAdjacentSessionId", () => {
+  it("resolves adjacent session ids in ordered sidebar traversal", () => {
+    const sessions = [
+      SessionId.make("session-1"),
+      SessionId.make("session-2"),
+      SessionId.make("session-3"),
     ];
 
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: threads[1] ?? null,
+      resolveAdjacentSessionId({
+        sessionIds: sessions,
+        currentSessionId: sessions[1] ?? null,
         direction: "previous",
       }),
-    ).toBe(threads[0]);
+    ).toBe(sessions[0]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: threads[1] ?? null,
+      resolveAdjacentSessionId({
+        sessionIds: sessions,
+        currentSessionId: sessions[1] ?? null,
         direction: "next",
       }),
-    ).toBe(threads[2]);
+    ).toBe(sessions[2]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: null,
+      resolveAdjacentSessionId({
+        sessionIds: sessions,
+        currentSessionId: null,
         direction: "next",
       }),
-    ).toBe(threads[0]);
+    ).toBe(sessions[0]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: null,
+      resolveAdjacentSessionId({
+        sessionIds: sessions,
+        currentSessionId: null,
         direction: "previous",
       }),
-    ).toBe(threads[2]);
+    ).toBe(sessions[2]);
     expect(
-      resolveAdjacentThreadId({
-        threadIds: threads,
-        currentThreadId: threads[0] ?? null,
+      resolveAdjacentSessionId({
+        sessionIds: sessions,
+        currentSessionId: sessions[0] ?? null,
         direction: "previous",
       }),
     ).toBeNull();
   });
 });
 
-describe("getVisibleSidebarThreadIds", () => {
-  it("returns only the rendered visible thread order across projects", () => {
+describe("getVisibleSidebarSessionIds", () => {
+  it("returns only the rendered visible session order across projects", () => {
     expect(
-      getVisibleSidebarThreadIds([
+      getVisibleSidebarSessionIds([
         {
-          renderedThreadIds: [
-            ThreadId.make("thread-12"),
-            ThreadId.make("thread-11"),
-            ThreadId.make("thread-10"),
+          renderedSessionIds: [
+            SessionId.make("session-12"),
+            SessionId.make("session-11"),
+            SessionId.make("session-10"),
           ],
         },
         {
-          renderedThreadIds: [ThreadId.make("thread-8"), ThreadId.make("thread-6")],
+          renderedSessionIds: [SessionId.make("session-8"), SessionId.make("session-6")],
         },
       ]),
     ).toEqual([
-      ThreadId.make("thread-12"),
-      ThreadId.make("thread-11"),
-      ThreadId.make("thread-10"),
-      ThreadId.make("thread-8"),
-      ThreadId.make("thread-6"),
+      SessionId.make("session-12"),
+      SessionId.make("session-11"),
+      SessionId.make("session-10"),
+      SessionId.make("session-8"),
+      SessionId.make("session-6"),
     ]);
   });
 
-  it("skips threads from collapsed projects whose thread panels are not shown", () => {
+  it("skips sessions from collapsed projects whose session panels are not shown", () => {
     expect(
-      getVisibleSidebarThreadIds([
+      getVisibleSidebarSessionIds([
         {
-          shouldShowThreadPanel: false,
-          renderedThreadIds: [ThreadId.make("thread-hidden-2"), ThreadId.make("thread-hidden-1")],
+          shouldShowSessionPanel: false,
+          renderedSessionIds: [
+            SessionId.make("session-hidden-2"),
+            SessionId.make("session-hidden-1"),
+          ],
         },
         {
-          shouldShowThreadPanel: true,
-          renderedThreadIds: [ThreadId.make("thread-12"), ThreadId.make("thread-11")],
+          shouldShowSessionPanel: true,
+          renderedSessionIds: [SessionId.make("session-12"), SessionId.make("session-11")],
         },
       ]),
-    ).toEqual([ThreadId.make("thread-12"), ThreadId.make("thread-11")]);
+    ).toEqual([SessionId.make("session-12"), SessionId.make("session-11")]);
   });
 });
 
@@ -472,8 +475,8 @@ describe("isContextMenuPointerDown", () => {
   });
 });
 
-describe("resolveThreadStatusPill", () => {
-  const baseThread = {
+describe("resolveSessionStatusPill", () => {
+  const baseSession = {
     hasActionableProposedPlan: false,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
@@ -491,9 +494,9 @@ describe("resolveThreadStatusPill", () => {
 
   it("shows pending approval before all other statuses", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveSessionStatusPill({
+        session: {
+          ...baseSession,
           hasPendingApprovals: true,
           hasPendingUserInput: true,
         },
@@ -503,32 +506,32 @@ describe("resolveThreadStatusPill", () => {
 
   it("shows awaiting input when plan mode is blocked on user answers", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveSessionStatusPill({
+        session: {
+          ...baseSession,
           hasPendingUserInput: true,
         },
       }),
     ).toMatchObject({ label: "Awaiting Input", pulse: false });
   });
 
-  it("falls back to working when the thread is actively running without blockers", () => {
+  it("falls back to working when the session is actively running without blockers", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: baseThread,
+      resolveSessionStatusPill({
+        session: baseSession,
       }),
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveSessionStatusPill({
+        session: {
+          ...baseSession,
           hasActionableProposedPlan: true,
           latestTurn: makeLatestTurn(),
           session: {
-            ...baseThread.session,
+            ...baseSession.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
@@ -539,12 +542,12 @@ describe("resolveThreadStatusPill", () => {
 
   it("does not show plan ready after the proposed plan was implemented elsewhere", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveSessionStatusPill({
+        session: {
+          ...baseSession,
           latestTurn: makeLatestTurn(),
           session: {
-            ...baseThread.session,
+            ...baseSession.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
@@ -555,14 +558,14 @@ describe("resolveThreadStatusPill", () => {
 
   it("shows completed when there is an unseen completion and no active blocker", () => {
     expect(
-      resolveThreadStatusPill({
-        thread: {
-          ...baseThread,
+      resolveSessionStatusPill({
+        session: {
+          ...baseSession,
           interactionMode: "default",
           latestTurn: makeLatestTurn(),
           lastVisitedAt: "2026-03-09T10:04:00.000Z",
           session: {
-            ...baseThread.session,
+            ...baseSession.session,
             status: "ready",
             orchestrationStatus: "ready",
           },
@@ -572,36 +575,36 @@ describe("resolveThreadStatusPill", () => {
   });
 });
 
-describe("resolveThreadRowClassName", () => {
-  it("uses the darker selected palette when a thread is both selected and active", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: true });
+describe("resolveSessionRowClassName", () => {
+  it("uses the darker selected palette when a session is both selected and active", () => {
+    const className = resolveSessionRowClassName({ isActive: true, isSelected: true });
     expect(className).toContain("bg-primary/22");
     expect(className).toContain("hover:bg-primary/26");
     expect(className).toContain("dark:bg-primary/30");
     expect(className).not.toContain("bg-accent/85");
   });
 
-  it("uses selected hover colors for selected threads", () => {
-    const className = resolveThreadRowClassName({ isActive: false, isSelected: true });
+  it("uses selected hover colors for selected sessions", () => {
+    const className = resolveSessionRowClassName({ isActive: false, isSelected: true });
     expect(className).toContain("bg-primary/15");
     expect(className).toContain("hover:bg-primary/19");
     expect(className).toContain("dark:bg-primary/22");
     expect(className).not.toContain("hover:bg-accent");
   });
 
-  it("keeps the accent palette for active-only threads", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
+  it("keeps the accent palette for active-only sessions", () => {
+    const className = resolveSessionRowClassName({ isActive: true, isSelected: false });
     expect(className).toContain("bg-accent/85");
     expect(className).toContain("hover:bg-accent");
   });
 });
 
 describe("resolveProjectStatusIndicator", () => {
-  it("returns null when no threads have a notable status", () => {
+  it("returns null when no sessions have a notable status", () => {
     expect(resolveProjectStatusIndicator([null, null])).toBeNull();
   });
 
-  it("surfaces the highest-priority actionable state across project threads", () => {
+  it("surfaces the highest-priority actionable state across project sessions", () => {
     expect(
       resolveProjectStatusIndicator([
         {
@@ -646,54 +649,56 @@ describe("resolveProjectStatusIndicator", () => {
   });
 });
 
-describe("getVisibleThreadsForProject", () => {
-  it("includes the active thread even when it falls below the folded preview", () => {
-    const threads = Array.from({ length: 8 }, (_, index) =>
-      makeThread({
-        id: ThreadId.make(`thread-${index + 1}`),
-        title: `Thread ${index + 1}`,
+describe("getVisibleSessionsForProject", () => {
+  it("includes the active session even when it falls below the folded preview", () => {
+    const sessions = Array.from({ length: 8 }, (_, index) =>
+      makeSession({
+        id: SessionId.make(`session-${index + 1}`),
+        title: `Session ${index + 1}`,
       }),
     );
 
-    const result = getVisibleThreadsForProject({
-      threads,
-      activeThreadId: ThreadId.make("thread-8"),
-      isThreadListExpanded: false,
+    const result = getVisibleSessionsForProject({
+      sessions,
+      activeSessionId: SessionId.make("session-8"),
+      isSessionListExpanded: false,
       previewLimit: 6,
     });
 
-    expect(result.hasHiddenThreads).toBe(true);
-    expect(result.visibleThreads.map((thread) => thread.id)).toEqual([
-      ThreadId.make("thread-1"),
-      ThreadId.make("thread-2"),
-      ThreadId.make("thread-3"),
-      ThreadId.make("thread-4"),
-      ThreadId.make("thread-5"),
-      ThreadId.make("thread-6"),
-      ThreadId.make("thread-8"),
+    expect(result.hasHiddenSessions).toBe(true);
+    expect(result.visibleSessions.map((session) => session.id)).toEqual([
+      SessionId.make("session-1"),
+      SessionId.make("session-2"),
+      SessionId.make("session-3"),
+      SessionId.make("session-4"),
+      SessionId.make("session-5"),
+      SessionId.make("session-6"),
+      SessionId.make("session-8"),
     ]);
-    expect(result.hiddenThreads.map((thread) => thread.id)).toEqual([ThreadId.make("thread-7")]);
+    expect(result.hiddenSessions.map((session) => session.id)).toEqual([
+      SessionId.make("session-7"),
+    ]);
   });
 
-  it("returns all threads when the list is expanded", () => {
-    const threads = Array.from({ length: 8 }, (_, index) =>
-      makeThread({
-        id: ThreadId.make(`thread-${index + 1}`),
+  it("returns all sessions when the list is expanded", () => {
+    const sessions = Array.from({ length: 8 }, (_, index) =>
+      makeSession({
+        id: SessionId.make(`session-${index + 1}`),
       }),
     );
 
-    const result = getVisibleThreadsForProject({
-      threads,
-      activeThreadId: ThreadId.make("thread-8"),
-      isThreadListExpanded: true,
+    const result = getVisibleSessionsForProject({
+      sessions,
+      activeSessionId: SessionId.make("session-8"),
+      isSessionListExpanded: true,
       previewLimit: 6,
     });
 
-    expect(result.hasHiddenThreads).toBe(true);
-    expect(result.visibleThreads.map((thread) => thread.id)).toEqual(
-      threads.map((thread) => thread.id),
+    expect(result.hasHiddenSessions).toBe(true);
+    expect(result.visibleSessions.map((session) => session.id)).toEqual(
+      sessions.map((session) => session.id),
     );
-    expect(result.hiddenThreads).toEqual([]);
+    expect(result.hiddenSessions).toEqual([]);
   });
 });
 
@@ -716,13 +721,13 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeSession(overrides: Partial<Session> = {}): Session {
   return {
-    id: ThreadId.make("thread-1"),
+    id: SessionId.make("session-1"),
     environmentId: localEnvironmentId,
-    codexThreadId: null,
+    codexSessionId: null,
     projectId: ProjectId.make("project-1"),
-    title: "Thread",
+    title: "Session",
     modelSelection: {
       instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5.4",
@@ -746,80 +751,83 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-describe("getFallbackThreadIdAfterDelete", () => {
-  it("returns the top remaining thread in the deleted thread's project sidebar order", () => {
-    const fallbackThreadId = getFallbackThreadIdAfterDelete({
-      threads: [
-        makeThread({
-          id: ThreadId.make("thread-oldest"),
+describe("getFallbackSessionIdAfterDelete", () => {
+  it("returns the top remaining session in the deleted session's project sidebar order", () => {
+    const fallbackSessionId = getFallbackSessionIdAfterDelete({
+      sessions: [
+        makeSession({
+          id: SessionId.make("session-oldest"),
           projectId: ProjectId.make("project-1"),
           createdAt: "2026-03-09T10:00:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.make("thread-active"),
+        makeSession({
+          id: SessionId.make("session-active"),
           projectId: ProjectId.make("project-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.make("thread-newest"),
+        makeSession({
+          id: SessionId.make("session-newest"),
           projectId: ProjectId.make("project-1"),
           createdAt: "2026-03-09T10:10:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.make("thread-other-project"),
+        makeSession({
+          id: SessionId.make("session-other-project"),
           projectId: ProjectId.make("project-2"),
           createdAt: "2026-03-09T10:20:00.000Z",
           messages: [],
         }),
       ],
-      deletedThreadId: ThreadId.make("thread-active"),
+      deletedSessionId: SessionId.make("session-active"),
       sortOrder: "created_at",
     });
 
-    expect(fallbackThreadId).toBe(ThreadId.make("thread-newest"));
+    expect(fallbackSessionId).toBe(SessionId.make("session-newest"));
   });
 
-  it("skips other threads being deleted in the same action", () => {
-    const fallbackThreadId = getFallbackThreadIdAfterDelete({
-      threads: [
-        makeThread({
-          id: ThreadId.make("thread-active"),
+  it("skips other sessions being deleted in the same action", () => {
+    const fallbackSessionId = getFallbackSessionIdAfterDelete({
+      sessions: [
+        makeSession({
+          id: SessionId.make("session-active"),
           projectId: ProjectId.make("project-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.make("thread-newest"),
+        makeSession({
+          id: SessionId.make("session-newest"),
           projectId: ProjectId.make("project-1"),
           createdAt: "2026-03-09T10:10:00.000Z",
           messages: [],
         }),
-        makeThread({
-          id: ThreadId.make("thread-next"),
+        makeSession({
+          id: SessionId.make("session-next"),
           projectId: ProjectId.make("project-1"),
           createdAt: "2026-03-09T10:07:00.000Z",
           messages: [],
         }),
       ],
-      deletedThreadId: ThreadId.make("thread-active"),
-      deletedThreadIds: new Set([ThreadId.make("thread-active"), ThreadId.make("thread-newest")]),
+      deletedSessionId: SessionId.make("session-active"),
+      deletedSessionIds: new Set([
+        SessionId.make("session-active"),
+        SessionId.make("session-newest"),
+      ]),
       sortOrder: "created_at",
     });
 
-    expect(fallbackThreadId).toBe(ThreadId.make("thread-next"));
+    expect(fallbackSessionId).toBe(SessionId.make("session-next"));
   });
 });
 describe("sortProjectsForSidebar", () => {
-  it("sorts projects by the most recent user message across their threads", () => {
+  it("sorts projects by the most recent user message across their sessions", () => {
     const projects = [
       makeProject({ id: ProjectId.make("project-1"), name: "Older project" }),
       makeProject({ id: ProjectId.make("project-2"), name: "Newer project" }),
     ];
-    const threads = [
-      makeThread({
+    const sessions = [
+      makeSession({
         projectId: ProjectId.make("project-1"),
         updatedAt: "2026-03-09T10:20:00.000Z",
         messages: [
@@ -833,8 +841,8 @@ describe("sortProjectsForSidebar", () => {
           },
         ],
       }),
-      makeThread({
-        id: ThreadId.make("thread-2"),
+      makeSession({
+        id: SessionId.make("session-2"),
         projectId: ProjectId.make("project-2"),
         updatedAt: "2026-03-09T10:05:00.000Z",
         messages: [
@@ -850,7 +858,7 @@ describe("sortProjectsForSidebar", () => {
       }),
     ];
 
-    const sorted = sortProjectsForSidebar(projects, threads, "updated_at");
+    const sorted = sortProjectsForSidebar(projects, sessions, "updated_at");
 
     expect(sorted.map((project) => project.id)).toEqual([
       ProjectId.make("project-2"),
@@ -858,7 +866,7 @@ describe("sortProjectsForSidebar", () => {
     ]);
   });
 
-  it("falls back to project timestamps when a project has no threads", () => {
+  it("falls back to project timestamps when a project has no sessions", () => {
     const sorted = sortProjectsForSidebar(
       [
         makeProject({
@@ -922,7 +930,7 @@ describe("sortProjectsForSidebar", () => {
     ]);
   });
 
-  it("ignores archived threads when sorting projects", () => {
+  it("ignores archived sessions when sorting projects", () => {
     const sorted = sortProjectsForSidebar(
       [
         makeProject({
@@ -937,19 +945,19 @@ describe("sortProjectsForSidebar", () => {
         }),
       ],
       [
-        makeThread({
-          id: ThreadId.make("thread-visible"),
+        makeSession({
+          id: SessionId.make("session-visible"),
           projectId: ProjectId.make("project-1"),
           updatedAt: "2026-03-09T10:02:00.000Z",
           archivedAt: null,
         }),
-        makeThread({
-          id: ThreadId.make("thread-archived"),
+        makeSession({
+          id: SessionId.make("session-archived"),
           projectId: ProjectId.make("project-2"),
           updatedAt: "2026-03-09T10:10:00.000Z",
           archivedAt: "2026-03-09T10:11:00.000Z",
         }),
-      ].filter((thread) => thread.archivedAt === null),
+      ].filter((session) => session.archivedAt === null),
       "updated_at",
     );
 
@@ -959,7 +967,7 @@ describe("sortProjectsForSidebar", () => {
     ]);
   });
 
-  it("returns the project timestamp when no threads are present", () => {
+  it("returns the project timestamp when no sessions are present", () => {
     const timestamp = getProjectSortTimestamp(
       makeProject({ updatedAt: "2026-03-09T10:10:00.000Z" }),
       [],

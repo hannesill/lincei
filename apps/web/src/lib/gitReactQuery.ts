@@ -3,7 +3,7 @@ import {
   type GitActionProgressEvent,
   type GitStackedAction,
   type SourceControlPublishRepositoryInput,
-  type ThreadId,
+  type SessionId,
 } from "@t3tools/contracts";
 import {
   infiniteQueryOptions,
@@ -35,8 +35,8 @@ export const gitMutationKeys = {
     ["git", "mutation", "run-stacked-action", environmentId ?? null, cwd] as const,
   pull: (environmentId: EnvironmentId | null, cwd: string | null) =>
     ["git", "mutation", "pull", environmentId ?? null, cwd] as const,
-  preparePullRequestThread: (environmentId: EnvironmentId | null, cwd: string | null) =>
-    ["git", "mutation", "prepare-pull-request-thread", environmentId ?? null, cwd] as const,
+  preparePullRequestSession: (environmentId: EnvironmentId | null, cwd: string | null) =>
+    ["git", "mutation", "prepare-pull-request-session", environmentId ?? null, cwd] as const,
   publishRepository: (environmentId: EnvironmentId | null, cwd: string | null) =>
     ["git", "mutation", "publish-repository", environmentId ?? null, cwd] as const,
 };
@@ -297,27 +297,27 @@ export function gitRemoveWorktreeMutationOptions(input: {
   });
 }
 
-export function gitPreparePullRequestThreadMutationOptions(input: {
+export function gitPreparePullRequestSessionMutationOptions(input: {
   environmentId: EnvironmentId | null;
   cwd: string | null;
   queryClient: QueryClient;
 }) {
   return mutationOptions({
-    mutationKey: gitMutationKeys.preparePullRequestThread(input.environmentId, input.cwd),
+    mutationKey: gitMutationKeys.preparePullRequestSession(input.environmentId, input.cwd),
     mutationFn: async (args: {
       reference: string;
       mode: "local" | "worktree";
-      threadId?: ThreadId;
+      sessionId?: SessionId;
     }) => {
       if (!input.cwd || !input.environmentId) {
-        throw new Error("Pull request thread preparation is unavailable.");
+        throw new Error("Pull request session preparation is unavailable.");
       }
       const api = ensureEnvironmentApi(input.environmentId);
-      return api.git.preparePullRequestThread({
+      return api.git.preparePullRequestSession({
         cwd: input.cwd,
         reference: args.reference,
         mode: args.mode,
-        ...(args.threadId ? { threadId: args.threadId } : {}),
+        ...(args.sessionId ? { sessionId: args.sessionId } : {}),
       });
     },
     onSuccess: async () => {

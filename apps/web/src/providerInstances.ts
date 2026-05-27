@@ -197,7 +197,7 @@ export function getProviderInstanceEntry(
 
 /**
  * Model list for a specific instance. Returns `[]` when the instance isn't
- * present so callers don't have to thread optionality through render code.
+ * present so callers don't have to session optionality through render code.
  */
 export function getProviderInstanceModels(
   providers: ReadonlyArray<ServerProvider>,
@@ -208,7 +208,7 @@ export function getProviderInstanceModels(
 
 /**
  * Resolve the routing key for a selection that may reference an instance
- * id that no longer exists (e.g. a persisted thread selection after the
+ * id that no longer exists (e.g. a persisted session selection after the
  * user deleted the custom instance). Returns the first enabled instance
  * as a fallback so downstream code can still send a turn.
  */

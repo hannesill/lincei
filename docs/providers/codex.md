@@ -42,7 +42,7 @@ The idea is:
 
 - both accounts can see the same T3/Codex sessions
 - each account keeps its own login
-- existing threads can continue with either account
+- existing sessions can continue with either account
 
 ### Set Up The First Account
 
@@ -99,7 +99,7 @@ This is useful when a Codex-compatible setup needs account-specific variables. A
 the provider instance that should receive them, and mark API keys or tokens as sensitive. Sensitive
 values are stored as server secrets and are not sent back to the app after saving.
 
-## Can I Switch Accounts In An Existing Thread?
+## Can I Switch Accounts In An Existing Session?
 
 Yes, when both Codex providers share the same `CODEX_HOME path`.
 
@@ -114,7 +114,7 @@ Those two providers are considered compatible for continuation, so the locked mo
 both.
 
 If you add a third Codex provider with a completely different `CODEX_HOME path`, Lincei treats it
-as a different workspace. It will not be offered for existing threads created under `~/.codex`.
+as a different workspace. It will not be offered for existing sessions created under `~/.codex`.
 
 ## If Both Accounts Look The Same
 
@@ -136,5 +136,5 @@ find ~/.codex_p -mindepth 1 ! -name auth.json -exec rm -rf {} +
 
 Use a totally separate `CODEX_HOME path` only when you want a separate Codex workspace.
 
-That means separate sessions and less account switching inside old threads. Most dual-account users
+That means separate sessions and less account switching inside old sessions. Most dual-account users
 should use the shared-home plus shadow-home setup instead.

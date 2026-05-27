@@ -1,33 +1,35 @@
-interface TerminalRetentionThread {
+interface TerminalRetentionSession {
   key: string;
   deletedAt: string | null;
   archivedAt: string | null;
 }
 
-interface CollectActiveTerminalThreadIdsInput {
-  snapshotThreads: readonly TerminalRetentionThread[];
-  draftThreadKeys: Iterable<string>;
+interface CollectActiveTerminalSessionIdsInput {
+  snapshotSessions: readonly TerminalRetentionSession[];
+  draftSessionKeys: Iterable<string>;
 }
 
-export function collectActiveTerminalThreadIds(
-  input: CollectActiveTerminalThreadIdsInput,
+export function collectActiveTerminalSessionIds(
+  input: CollectActiveTerminalSessionIdsInput,
 ): Set<string> {
-  const activeThreadIds = new Set<string>();
-  const snapshotThreadById = new Map(input.snapshotThreads.map((thread) => [thread.key, thread]));
-  for (const thread of input.snapshotThreads) {
-    if (thread.deletedAt !== null) continue;
-    if (thread.archivedAt !== null) continue;
-    activeThreadIds.add(thread.key);
+  const activeSessionIds = new Set<string>();
+  const snapshotSessionById = new Map(
+    input.snapshotSessions.map((session) => [session.key, session]),
+  );
+  for (const session of input.snapshotSessions) {
+    if (session.deletedAt !== null) continue;
+    if (session.archivedAt !== null) continue;
+    activeSessionIds.add(session.key);
   }
-  for (const draftThreadKey of input.draftThreadKeys) {
-    const snapshotThread = snapshotThreadById.get(draftThreadKey);
+  for (const draftSessionKey of input.draftSessionKeys) {
+    const snapshotSession = snapshotSessionById.get(draftSessionKey);
     if (
-      snapshotThread &&
-      (snapshotThread.deletedAt !== null || snapshotThread.archivedAt !== null)
+      snapshotSession &&
+      (snapshotSession.deletedAt !== null || snapshotSession.archivedAt !== null)
     ) {
       continue;
     }
-    activeThreadIds.add(draftThreadKey);
+    activeSessionIds.add(draftSessionKey);
   }
-  return activeThreadIds;
+  return activeSessionIds;
 }

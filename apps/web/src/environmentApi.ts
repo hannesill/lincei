@@ -41,17 +41,17 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     },
     git: {
       resolvePullRequest: rpcClient.git.resolvePullRequest,
-      preparePullRequestThread: rpcClient.git.preparePullRequestThread,
+      preparePullRequestSession: rpcClient.git.preparePullRequestSession,
     },
     orchestration: {
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
-      getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
+      getFullSessionDiff: rpcClient.orchestration.getFullSessionDiff,
       getArchivedShellSnapshot: rpcClient.orchestration.getArchivedShellSnapshot,
       subscribeShell: (callback, options) =>
         rpcClient.orchestration.subscribeShell(callback, options),
-      subscribeThread: (input, callback, options) =>
-        rpcClient.orchestration.subscribeThread(input, callback, options),
+      subscribeSession: (input, callback, options) =>
+        rpcClient.orchestration.subscribeSession(input, callback, options),
     },
   };
 }

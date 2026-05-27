@@ -13,7 +13,7 @@ import {
   type ServerLifecycleWelcomePayload,
   ServerConfig as ServerConfigSchema,
   ServerSettings,
-  type ThreadId,
+  type SessionId,
   WS_METHODS,
 } from "@t3tools/contracts";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
@@ -40,7 +40,7 @@ vi.mock("../lib/gitStatusState", () => ({
   resetGitStatusStateForTests: () => undefined,
 }));
 
-const THREAD_ID = "thread-kb-toast-test" as ThreadId;
+const THREAD_ID = "session-kb-toast-test" as SessionId;
 const PROJECT_ID = "project-1" as ProjectId;
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
@@ -102,7 +102,7 @@ function createBaseServerConfig(): ServerConfig {
     settings: {
       ...DEFAULT_SERVER_SETTINGS,
       enableAssistantStreaming: false,
-      defaultThreadEnvMode: "local" as const,
+      defaultSessionEnvMode: "local" as const,
       textGenerationModelSelection: {
         instanceId: ProviderInstanceId.make("codex"),
         model: "gpt-5.4-mini",
@@ -153,11 +153,11 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         deletedAt: null,
       },
     ],
-    threads: [
+    sessions: [
       {
         id: THREAD_ID,
         projectId: PROJECT_ID,
-        title: "Test thread",
+        title: "Test session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5",
@@ -186,7 +186,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         proposedPlans: [],
         checkpoints: [],
         session: {
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           status: "ready",
           providerName: "codex",
           runtimeMode: "full-access",
@@ -213,22 +213,22 @@ function toShellSnapshot(snapshot: OrchestrationReadModel) {
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     })),
-    threads: snapshot.threads.map((thread) => ({
-      id: thread.id,
-      projectId: thread.projectId,
-      title: thread.title,
-      modelSelection: thread.modelSelection,
-      runtimeMode: thread.runtimeMode,
-      interactionMode: thread.interactionMode,
-      branch: thread.branch,
-      worktreePath: thread.worktreePath,
-      latestTurn: thread.latestTurn,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      archivedAt: thread.archivedAt,
-      session: thread.session,
+    sessions: snapshot.sessions.map((session) => ({
+      id: session.id,
+      projectId: session.projectId,
+      title: session.title,
+      modelSelection: session.modelSelection,
+      runtimeMode: session.runtimeMode,
+      interactionMode: session.interactionMode,
+      branch: session.branch,
+      worktreePath: session.worktreePath,
+      latestTurn: session.latestTurn,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      archivedAt: session.archivedAt,
+      session: session.session,
       latestUserMessageAt:
-        thread.messages.findLast((message) => message.role === "user")?.createdAt ?? null,
+        session.messages.findLast((message) => message.role === "user")?.createdAt ?? null,
       hasPendingApprovals: false,
       hasPendingUserInput: false,
       hasActionableProposedPlan: false,
@@ -252,7 +252,7 @@ function buildFixture(): TestFixture {
       cwd: "/repo/project",
       projectName: "Project",
       bootstrapProjectId: PROJECT_ID,
-      bootstrapThreadId: THREAD_ID,
+      bootstrapSessionId: THREAD_ID,
     },
   };
 }
@@ -503,15 +503,15 @@ describe("Keybindings update toast", () => {
           ];
         }
         if (
-          request._tag === ORCHESTRATION_WS_METHODS.subscribeThread &&
-          request.threadId === THREAD_ID
+          request._tag === ORCHESTRATION_WS_METHODS.subscribeSession &&
+          request.sessionId === THREAD_ID
         ) {
           return [
             {
               kind: "snapshot",
               snapshot: {
                 snapshotSequence: fixture.snapshot.snapshotSequence,
-                thread: fixture.snapshot.threads[0],
+                session: fixture.snapshot.sessions[0],
               },
             },
           ];
@@ -523,9 +523,9 @@ describe("Keybindings update toast", () => {
     localStorage.clear();
     document.body.innerHTML = "";
     useComposerDraftStore.setState({
-      draftsByThreadKey: {},
-      draftThreadsByThreadKey: {},
-      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
+      draftsBySessionKey: {},
+      draftSessionsBySessionKey: {},
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {},
     });
     useStore.setState({
       activeEnvironmentId: null,

@@ -4,103 +4,103 @@ import {
   ProjectId,
   type ModelSelection,
   type ProviderDriverKind,
-  type ScopedThreadRef,
-  type ThreadId,
+  type ScopedSessionRef,
+  type SessionId,
   type TurnId,
 } from "@t3tools/contracts";
-import { type ChatMessage, type SessionPhase, type Thread, type ThreadSession } from "../types";
-import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
+import { type ChatMessage, type SessionPhase, type Session, type ProviderRuntime } from "../types";
+import { type ComposerImageAttachment, type DraftSessionState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
-import { selectThreadByRef, useStore } from "../store";
+import { selectSessionByRef, useStore } from "../store";
 import {
   filterTerminalContextsWithText,
   stripInlineTerminalContextPlaceholders,
   type TerminalContextDraft,
 } from "../lib/terminalContext";
-import type { DraftThreadEnvMode } from "../composerDraftStore";
+import type { DraftSessionEnvMode } from "../composerDraftStore";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "lincei:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
-export function buildLocalDraftThread(
-  threadId: ThreadId,
-  draftThread: DraftThreadState,
+export function buildLocalDraftSession(
+  sessionId: SessionId,
+  draftSession: DraftSessionState,
   fallbackModelSelection: ModelSelection,
   error: string | null,
-): Thread {
+): Session {
   return {
-    id: threadId,
-    environmentId: draftThread.environmentId,
-    codexThreadId: null,
-    projectId: draftThread.projectId,
-    title: "New thread",
+    id: sessionId,
+    environmentId: draftSession.environmentId,
+    codexSessionId: null,
+    projectId: draftSession.projectId,
+    title: "New session",
     modelSelection: fallbackModelSelection,
-    runtimeMode: draftThread.runtimeMode,
-    interactionMode: draftThread.interactionMode,
+    runtimeMode: draftSession.runtimeMode,
+    interactionMode: draftSession.interactionMode,
     session: null,
     messages: [],
     error,
-    createdAt: draftThread.createdAt,
+    createdAt: draftSession.createdAt,
     archivedAt: null,
     latestTurn: null,
-    branch: draftThread.branch,
-    worktreePath: draftThread.worktreePath,
+    branch: draftSession.branch,
+    worktreePath: draftSession.worktreePath,
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],
   };
 }
 
-export function shouldWriteThreadErrorToCurrentServerThread(input: {
-  serverThread:
+export function shouldWriteSessionErrorToCurrentServerSession(input: {
+  serverSession:
     | {
         environmentId: EnvironmentId;
-        id: ThreadId;
+        id: SessionId;
       }
     | null
     | undefined;
-  routeThreadRef: ScopedThreadRef;
-  targetThreadId: ThreadId;
+  routeSessionRef: ScopedSessionRef;
+  targetSessionId: SessionId;
 }): boolean {
   return Boolean(
-    input.serverThread &&
-    input.targetThreadId === input.routeThreadRef.threadId &&
-    input.serverThread.environmentId === input.routeThreadRef.environmentId &&
-    input.serverThread.id === input.targetThreadId,
+    input.serverSession &&
+    input.targetSessionId === input.routeSessionRef.sessionId &&
+    input.serverSession.environmentId === input.routeSessionRef.environmentId &&
+    input.serverSession.id === input.targetSessionId,
   );
 }
 
-export function reconcileMountedTerminalThreadIds(input: {
-  currentThreadIds: ReadonlyArray<string>;
-  openThreadIds: ReadonlyArray<string>;
-  activeThreadId: string | null;
-  activeThreadTerminalOpen: boolean;
-  maxHiddenThreadCount?: number;
+export function reconcileMountedTerminalSessionIds(input: {
+  currentSessionIds: ReadonlyArray<string>;
+  openSessionIds: ReadonlyArray<string>;
+  activeSessionId: string | null;
+  activeSessionTerminalOpen: boolean;
+  maxHiddenSessionCount?: number;
 }): string[] {
-  const openThreadIdSet = new Set(input.openThreadIds);
-  const hiddenThreadIds = input.currentThreadIds.filter(
-    (threadId) => threadId !== input.activeThreadId && openThreadIdSet.has(threadId),
+  const openSessionIdSet = new Set(input.openSessionIds);
+  const hiddenSessionIds = input.currentSessionIds.filter(
+    (sessionId) => sessionId !== input.activeSessionId && openSessionIdSet.has(sessionId),
   );
-  const maxHiddenThreadCount = Math.max(
+  const maxHiddenSessionCount = Math.max(
     0,
-    input.maxHiddenThreadCount ?? MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
+    input.maxHiddenSessionCount ?? MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   );
-  const nextThreadIds =
-    hiddenThreadIds.length > maxHiddenThreadCount
-      ? hiddenThreadIds.slice(-maxHiddenThreadCount)
-      : hiddenThreadIds;
+  const nextSessionIds =
+    hiddenSessionIds.length > maxHiddenSessionCount
+      ? hiddenSessionIds.slice(-maxHiddenSessionCount)
+      : hiddenSessionIds;
 
   if (
-    input.activeThreadId &&
-    input.activeThreadTerminalOpen &&
-    !nextThreadIds.includes(input.activeThreadId)
+    input.activeSessionId &&
+    input.activeSessionTerminalOpen &&
+    !nextSessionIds.includes(input.activeSessionId)
   ) {
-    nextThreadIds.push(input.activeThreadId);
+    nextSessionIds.push(input.activeSessionId);
   }
 
-  return nextThreadIds;
+  return nextSessionIds;
 }
 
 export function revokeBlobPreviewUrl(previewUrl: string | undefined): void {
@@ -158,9 +158,9 @@ export function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export function resolveSendEnvMode(input: {
-  requestedEnvMode: DraftThreadEnvMode;
+  requestedEnvMode: DraftSessionEnvMode;
   isGitRepo: boolean;
-}): DraftThreadEnvMode {
+}): DraftSessionEnvMode {
   return input.isGitRepo ? input.requestedEnvMode : "local";
 }
 
@@ -221,13 +221,14 @@ export function buildExpiredTerminalContextToastCopy(
   };
 }
 
-export function threadHasStarted(thread: Thread | null | undefined): boolean {
+export function sessionHasStarted(session: Session | null | undefined): boolean {
   return Boolean(
-    thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),
+    session &&
+    (session.latestTurn !== null || session.messages.length > 0 || session.session !== null),
   );
 }
 
-// `threadProvider` is the open branded driver kind carried by the session.
+// `sessionProvider` is the open branded driver kind carried by the session.
 // Unknown driver kinds degrade to `null` (i.e. "unlocked"), which is the safe
 // rollback / fork behavior — the routing layer is the right place to surface
 // "driver not installed" errors, not the lock state.
@@ -240,36 +241,36 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
 // a custom instance's underlying driver kind should resolve the instance id
 // upstream and pass the correlated kind.
 export function deriveLockedProvider(input: {
-  thread: Thread | null | undefined;
+  session: Session | null | undefined;
   selectedProvider: string | null;
-  threadProvider: string | null;
+  sessionProvider: string | null;
 }): ProviderDriverKind | null {
-  if (!threadHasStarted(input.thread)) {
+  if (!sessionHasStarted(input.session)) {
     return null;
   }
-  const sessionProvider = input.thread?.session?.provider ?? null;
+  const sessionProvider = input.session?.session?.provider ?? null;
   if (sessionProvider) {
     return sessionProvider;
   }
-  const narrowedThreadProvider =
-    input.threadProvider && isProviderDriverKind(input.threadProvider)
-      ? input.threadProvider
+  const narrowedSessionProvider =
+    input.sessionProvider && isProviderDriverKind(input.sessionProvider)
+      ? input.sessionProvider
       : null;
   const narrowedSelectedProvider =
     input.selectedProvider && isProviderDriverKind(input.selectedProvider)
       ? input.selectedProvider
       : null;
-  return narrowedThreadProvider ?? narrowedSelectedProvider ?? null;
+  return narrowedSessionProvider ?? narrowedSelectedProvider ?? null;
 }
 
-export async function waitForStartedServerThread(
-  threadRef: ScopedThreadRef,
+export async function waitForStartedServerSession(
+  sessionRef: ScopedSessionRef,
   timeoutMs = 1_000,
 ): Promise<boolean> {
-  const getThread = () => selectThreadByRef(useStore.getState(), threadRef);
-  const thread = getThread();
+  const getSession = () => selectSessionByRef(useStore.getState(), sessionRef);
+  const session = getSession();
 
-  if (threadHasStarted(thread)) {
+  if (sessionHasStarted(session)) {
     return true;
   }
 
@@ -289,13 +290,13 @@ export async function waitForStartedServerThread(
     };
 
     const unsubscribe = useStore.subscribe((state) => {
-      if (!threadHasStarted(selectThreadByRef(state, threadRef))) {
+      if (!sessionHasStarted(selectSessionByRef(state, sessionRef))) {
         return;
       }
       finish(true);
     });
 
-    if (threadHasStarted(getThread())) {
+    if (sessionHasStarted(getSession())) {
       finish(true);
       return;
     }
@@ -313,16 +314,16 @@ export interface LocalDispatchSnapshot {
   latestTurnRequestedAt: string | null;
   latestTurnStartedAt: string | null;
   latestTurnCompletedAt: string | null;
-  sessionOrchestrationStatus: ThreadSession["orchestrationStatus"] | null;
+  sessionOrchestrationStatus: ProviderRuntime["orchestrationStatus"] | null;
   sessionUpdatedAt: string | null;
 }
 
 export function createLocalDispatchSnapshot(
-  activeThread: Thread | undefined,
+  activeSession: Session | undefined,
   options?: { preparingWorktree?: boolean },
 ): LocalDispatchSnapshot {
-  const latestTurn = activeThread?.latestTurn ?? null;
-  const session = activeThread?.session ?? null;
+  const latestTurn = activeSession?.latestTurn ?? null;
+  const session = activeSession?.session ?? null;
   return {
     startedAt: new Date().toISOString(),
     preparingWorktree: Boolean(options?.preparingWorktree),
@@ -338,16 +339,16 @@ export function createLocalDispatchSnapshot(
 export function hasServerAcknowledgedLocalDispatch(input: {
   localDispatch: LocalDispatchSnapshot | null;
   phase: SessionPhase;
-  latestTurn: Thread["latestTurn"] | null;
-  session: Thread["session"] | null;
+  latestTurn: Session["latestTurn"] | null;
+  session: Session["session"] | null;
   hasPendingApproval: boolean;
   hasPendingUserInput: boolean;
-  threadError: string | null | undefined;
+  sessionError: string | null | undefined;
 }): boolean {
   if (!input.localDispatch) {
     return false;
   }
-  if (input.hasPendingApproval || input.hasPendingUserInput || Boolean(input.threadError)) {
+  if (input.hasPendingApproval || input.hasPendingUserInput || Boolean(input.sessionError)) {
     return true;
   }
 

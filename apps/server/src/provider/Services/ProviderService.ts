@@ -21,7 +21,7 @@ import type {
   ProviderSession,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
-  ThreadId,
+  SessionId,
   ProviderTurnStartResult,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -40,7 +40,7 @@ export interface ProviderServiceShape {
    * Start a provider session.
    */
   readonly startSession: (
-    threadId: ThreadId,
+    sessionId: SessionId,
     input: ProviderSessionStartInput,
   ) => Effect.Effect<ProviderSession, ProviderServiceError>;
 
@@ -101,7 +101,7 @@ export interface ProviderServiceShape {
    * Roll back provider conversation state by a number of turns.
    */
   readonly rollbackConversation: (input: {
-    readonly threadId: ThreadId;
+    readonly sessionId: SessionId;
     readonly numTurns: number;
   }) => Effect.Effect<void, ProviderServiceError>;
 

@@ -26,12 +26,12 @@ export class ProviderAdapterSessionNotFoundError extends Schema.TaggedErrorClass
   "ProviderAdapterSessionNotFoundError",
   {
     provider: Schema.String,
-    threadId: Schema.String,
+    sessionId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Unknown ${this.provider} adapter thread: ${this.threadId}`;
+    return `Unknown ${this.provider} adapter session: ${this.sessionId}`;
   }
 }
 
@@ -42,12 +42,12 @@ export class ProviderAdapterSessionClosedError extends Schema.TaggedErrorClass<P
   "ProviderAdapterSessionClosedError",
   {
     provider: Schema.String,
-    threadId: Schema.String,
+    sessionId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `${this.provider} adapter thread is closed: ${this.threadId}`;
+    return `${this.provider} adapter session is closed: ${this.sessionId}`;
   }
 }
 
@@ -75,13 +75,13 @@ export class ProviderAdapterProcessError extends Schema.TaggedErrorClass<Provide
   "ProviderAdapterProcessError",
   {
     provider: Schema.String,
-    threadId: Schema.String,
+    sessionId: Schema.String,
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Provider adapter process error (${this.provider}) for thread ${this.threadId}: ${this.detail}`;
+    return `Provider adapter process error (${this.provider}) for session ${this.sessionId}: ${this.detail}`;
   }
 }
 
@@ -162,12 +162,12 @@ export class ProviderDriverError extends Schema.TaggedErrorClass<ProviderDriverE
 export class ProviderSessionNotFoundError extends Schema.TaggedErrorClass<ProviderSessionNotFoundError>()(
   "ProviderSessionNotFoundError",
   {
-    threadId: Schema.String,
+    sessionId: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
-    return `Unknown provider thread: ${this.threadId}`;
+    return `Unknown provider session: ${this.sessionId}`;
   }
 }
 

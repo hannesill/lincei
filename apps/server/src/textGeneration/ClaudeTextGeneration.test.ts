@@ -11,7 +11,7 @@ import { expect } from "vitest";
 
 import { ServerConfig } from "../config.ts";
 import { type TextGenerationShape } from "./TextGeneration.ts";
-import { sanitizeThreadTitle } from "./TextGenerationUtils.ts";
+import { sanitizeSessionTitle } from "./TextGenerationUtils.ts";
 import { makeClaudeTextGeneration } from "./ClaudeTextGeneration.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
@@ -255,7 +255,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
     ),
   );
 
-  it.effect("generates thread titles through the Claude provider", () =>
+  it.effect("generates session titles through the Claude provider", () =>
     withFakeClaudeEnv(
       {
         output: JSON.stringify({
@@ -264,11 +264,11 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
               '  "Reconnect failures after restart because the session state does not recover"  ',
           },
         }),
-        stdinMustContain: "You write concise thread titles for coding conversations.",
+        stdinMustContain: "You write concise session titles for coding conversations.",
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
+          const generated = yield* textGeneration.generateSessionTitle({
             cwd: process.cwd(),
             message: "Please investigate reconnect failures after restarting the session.",
             modelSelection: {
@@ -278,7 +278,7 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
           });
 
           expect(generated.title).toBe(
-            sanitizeThreadTitle(
+            sanitizeSessionTitle(
               '"Reconnect failures after restart because the session state does not recover"',
             ),
           );
@@ -303,22 +303,22 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
         },
         (textGeneration) =>
           Effect.gen(function* () {
-            const generated = yield* textGeneration.generateThreadTitle({
+            const generated = yield* textGeneration.generateSessionTitle({
               cwd: process.cwd(),
-              message: "thread title",
+              message: "session title",
               modelSelection: {
                 instanceId: ProviderInstanceId.make("claudeAgent"),
                 model: "claude-sonnet-4-6",
               },
             });
 
-            expect(generated.title).toBe(sanitizeThreadTitle("Use Claude home"));
+            expect(generated.title).toBe(sanitizeSessionTitle("Use Claude home"));
           }),
       );
     }),
   );
 
-  it.effect("falls back when Claude thread title normalization becomes whitespace-only", () =>
+  it.effect("falls back when Claude session title normalization becomes whitespace-only", () =>
     withFakeClaudeEnv(
       {
         output: JSON.stringify({
@@ -329,16 +329,16 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
       },
       (textGeneration) =>
         Effect.gen(function* () {
-          const generated = yield* textGeneration.generateThreadTitle({
+          const generated = yield* textGeneration.generateSessionTitle({
             cwd: process.cwd(),
-            message: "Name this thread.",
+            message: "Name this session.",
             modelSelection: {
               instanceId: ProviderInstanceId.make("claudeAgent"),
               model: "claude-sonnet-4-6",
             },
           });
 
-          expect(generated.title).toBe("New thread");
+          expect(generated.title).toBe("New session");
         }),
     ),
   );

@@ -2,8 +2,8 @@ import type {
   EnvironmentId,
   ProjectId,
   ScopedProjectRef,
-  ScopedThreadRef,
-  ThreadId,
+  ScopedSessionRef,
+  SessionId,
 } from "@t3tools/contracts";
 
 export function scopeProjectRef(
@@ -13,12 +13,15 @@ export function scopeProjectRef(
   return { environmentId, projectId };
 }
 
-export function scopeThreadRef(environmentId: EnvironmentId, threadId: ThreadId): ScopedThreadRef {
-  return { environmentId, threadId };
+export function scopeSessionRef(
+  environmentId: EnvironmentId,
+  sessionId: SessionId,
+): ScopedSessionRef {
+  return { environmentId, sessionId };
 }
 
-export function scopedRefKey(ref: ScopedProjectRef | ScopedThreadRef): string {
-  const localId = "projectId" in ref ? ref.projectId : ref.threadId;
+export function scopedRefKey(ref: ScopedProjectRef | ScopedSessionRef): string {
+  const localId = "projectId" in ref ? ref.projectId : ref.sessionId;
   return `${ref.environmentId}:${localId}`;
 }
 
@@ -26,7 +29,7 @@ export function scopedProjectKey(ref: ScopedProjectRef): string {
   return scopedRefKey(ref);
 }
 
-export function scopedThreadKey(ref: ScopedThreadRef): string {
+export function scopedSessionKey(ref: ScopedSessionRef): string {
   return scopedRefKey(ref);
 }
 
@@ -52,13 +55,13 @@ export function parseScopedProjectKey(key: string): ScopedProjectRef | null {
   };
 }
 
-export function parseScopedThreadKey(key: string): ScopedThreadRef | null {
+export function parseScopedSessionKey(key: string): ScopedSessionRef | null {
   const parsed = parseScopedKey(key);
   if (!parsed) {
     return null;
   }
   return {
     environmentId: parsed.environmentId,
-    threadId: parsed.localId as ThreadId,
+    sessionId: parsed.localId as SessionId,
   };
 }

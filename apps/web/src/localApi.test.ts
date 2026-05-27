@@ -11,7 +11,7 @@ import {
   type ServerConfig,
   type ServerProvider,
   type TerminalEvent,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,7 +80,7 @@ const rpcClientMock = {
   git: {
     runStackedAction: vi.fn(),
     resolvePullRequest: vi.fn(),
-    preparePullRequestThread: vi.fn(),
+    preparePullRequestSession: vi.fn(),
   },
   server: {
     getConfig: vi.fn(),
@@ -96,11 +96,11 @@ const rpcClientMock = {
   orchestration: {
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
-    getFullThreadDiff: vi.fn(),
+    getFullSessionDiff: vi.fn(),
     subscribeShell: vi.fn((listener: (event: OrchestrationShellStreamItem) => void) =>
       registerListener(shellStreamListeners, listener),
     ),
-    subscribeThread: vi.fn(() => () => undefined),
+    subscribeSession: vi.fn(() => () => undefined),
   },
 };
 
@@ -354,7 +354,7 @@ describe("wsApi", () => {
     api.orchestration.subscribeShell(onShellEvent);
 
     const terminalEvent = {
-      threadId: "thread-1",
+      sessionId: "session-1",
       terminalId: "terminal-1",
       createdAt: "2026-02-24T00:00:00.000Z",
       type: "output",
@@ -483,18 +483,18 @@ describe("wsApi", () => {
     });
   });
 
-  it("forwards full-thread diff requests to the orchestration RPC", async () => {
-    rpcClientMock.orchestration.getFullThreadDiff.mockResolvedValue({ diff: "patch" });
+  it("forwards full-session diff requests to the orchestration RPC", async () => {
+    rpcClientMock.orchestration.getFullSessionDiff.mockResolvedValue({ diff: "patch" });
     const { createEnvironmentApi } = await import("./environmentApi");
 
     const api = createEnvironmentApi(rpcClientMock as never);
-    await api.orchestration.getFullThreadDiff({
-      threadId: ThreadId.make("thread-1"),
+    await api.orchestration.getFullSessionDiff({
+      sessionId: SessionId.make("session-1"),
       toTurnCount: 1,
     });
 
-    expect(rpcClientMock.orchestration.getFullThreadDiff).toHaveBeenCalledWith({
-      threadId: "thread-1",
+    expect(rpcClientMock.orchestration.getFullSessionDiff).toHaveBeenCalledWith({
+      sessionId: "session-1",
       toTurnCount: 1,
     });
   });
@@ -600,8 +600,8 @@ describe("wsApi", () => {
   it("reads and writes persistence through the desktop bridge when available", async () => {
     const clientSettings = {
       autoOpenPlanSidebar: false,
-      confirmThreadArchive: true,
-      confirmThreadDelete: false,
+      confirmSessionArchive: true,
+      confirmSessionDelete: false,
       dismissedProviderUpdateNotificationKeys: [],
       diffIgnoreWhitespace: true,
       diffWordWrap: true,
@@ -612,8 +612,8 @@ describe("wsApi", () => {
         "environment-local:/tmp/project": "separate" as const,
       },
       sidebarProjectSortOrder: "manual" as const,
-      sidebarThreadSortOrder: "created_at" as const,
-      sidebarThreadPreviewCount: 6,
+      sidebarSessionSortOrder: "created_at" as const,
+      sidebarSessionPreviewCount: 6,
       timestampFormat: "24-hour" as const,
     };
     const getClientSettings = vi.fn().mockResolvedValue({
@@ -663,8 +663,8 @@ describe("wsApi", () => {
     const api = createLocalApi(rpcClientMock as never);
     const clientSettings = {
       autoOpenPlanSidebar: false,
-      confirmThreadArchive: true,
-      confirmThreadDelete: false,
+      confirmSessionArchive: true,
+      confirmSessionDelete: false,
       dismissedProviderUpdateNotificationKeys: [],
       diffIgnoreWhitespace: true,
       diffWordWrap: true,
@@ -675,8 +675,8 @@ describe("wsApi", () => {
         "environment-local:/tmp/project": "separate" as const,
       },
       sidebarProjectSortOrder: "manual" as const,
-      sidebarThreadSortOrder: "created_at" as const,
-      sidebarThreadPreviewCount: 6,
+      sidebarSessionSortOrder: "created_at" as const,
+      sidebarSessionPreviewCount: 6,
       timestampFormat: "24-hour" as const,
     };
 

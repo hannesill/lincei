@@ -14,9 +14,9 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { expect } from "vitest";
 import type {
   GitActionProgressEvent,
-  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestSessionInput,
   ModelSelection,
-  ThreadId,
+  SessionId,
 } from "@t3tools/contracts";
 
 import { GitCommandError, TextGenerationError } from "@t3tools/contracts";
@@ -99,7 +99,7 @@ interface FakeGitTextGeneration {
     message: string;
     modelSelection: ModelSelection;
   }) => Effect.Effect<{ branch: string }, TextGenerationError>;
-  generateThreadTitle: (input: {
+  generateSessionTitle: (input: {
     cwd: string;
     message: string;
     modelSelection: ModelSelection;
@@ -329,7 +329,7 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
       Effect.succeed({
         branch: "update-workflow",
       }),
-    generateThreadTitle: () =>
+    generateSessionTitle: () =>
       Effect.succeed({
         title: "Update workflow",
       }),
@@ -370,12 +370,12 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
             }),
         ),
       ),
-    generateThreadTitle: (input) =>
-      implementation.generateThreadTitle(input).pipe(
+    generateSessionTitle: (input) =>
+      implementation.generateSessionTitle(input).pipe(
         Effect.mapError(
           (cause) =>
             new TextGenerationError({
-              operation: "generateThreadTitle",
+              operation: "generateSessionTitle",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),
@@ -641,11 +641,11 @@ function resolvePullRequest(manager: GitManagerShape, input: { cwd: string; refe
   return manager.resolvePullRequest(input);
 }
 
-function preparePullRequestThread(
+function preparePullRequestSession(
   manager: GitManagerShape,
-  input: GitPreparePullRequestThreadInput,
+  input: GitPreparePullRequestSessionInput,
 ) {
-  return manager.preparePullRequestThread(input);
+  return manager.preparePullRequestSession(input);
 }
 
 function makeManager(input?: {
@@ -686,7 +686,7 @@ function makeManager(input?: {
     Layer.succeed(
       ProjectSetupScriptRunner,
       input?.setupScriptRunner ?? {
-        runForThread: () => Effect.succeed({ status: "no-script" as const }),
+        runForSession: () => Effect.succeed({ status: "no-script" as const }),
       },
     ),
     vcsDriverLayer,
@@ -699,7 +699,7 @@ function makeManager(input?: {
   );
 }
 
-const asThreadId = (threadId: string) => threadId as ThreadId;
+const asSessionId = (sessionId: string) => sessionId as SessionId;
 
 const GitManagerTestLayer = GitVcsDriver.layer.pipe(
   Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-git-manager-test-" })),
@@ -2504,7 +2504,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("prepares pull request threads in local mode by checking out the PR branch", () =>
+  it.effect("prepares pull request sessions in local mode by checking out the PR branch", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
       yield* initRepo(repoDir);
@@ -2526,7 +2526,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "#64",
         mode: "local",
@@ -2584,7 +2584,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         });
 
-        const result = yield* preparePullRequestThread(manager, {
+        const result = yield* preparePullRequestSession(manager, {
           cwd: repoDir,
           reference: "65",
           mode: "local",
@@ -2633,7 +2633,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         });
 
-        const result = yield* preparePullRequestThread(manager, {
+        const result = yield* preparePullRequestSession(manager, {
           cwd: repoDir,
           reference: "66",
           mode: "local",
@@ -2647,7 +2647,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       }),
   );
 
-  it.effect("prepares pull request threads in worktree mode on the PR head branch", () =>
+  it.effect("prepares pull request sessions in worktree mode on the PR head branch", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
       yield* initRepo(repoDir);
@@ -2675,7 +2675,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "77",
         mode: "worktree",
@@ -2720,7 +2720,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: (setupInput) =>
+          runForSession: (setupInput) =>
             Effect.sync(() => {
               setupCalls.push(setupInput);
               return { status: "no-script" as const };
@@ -2728,24 +2728,24 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "177",
         mode: "worktree",
-        threadId: asThreadId("thread-pr-setup"),
+        sessionId: asSessionId("session-pr-setup"),
       });
 
       expect(result.worktreePath).not.toBeNull();
       expect(setupCalls).toHaveLength(1);
       expect(setupCalls[0]).toEqual({
-        threadId: "thread-pr-setup",
+        sessionId: "session-pr-setup",
         projectCwd: repoDir,
         worktreePath: result.worktreePath as string,
       });
     }),
   );
 
-  it.effect("preserves fork upstream tracking when preparing a worktree PR thread", () =>
+  it.effect("preserves fork upstream tracking when preparing a worktree PR session", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
       yield* initRepo(repoDir);
@@ -2783,7 +2783,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "81",
         mode: "worktree",
@@ -2807,7 +2807,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("preserves fork upstream tracking when preparing a local PR thread", () =>
+  it.effect("preserves fork upstream tracking when preparing a local PR session", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
       yield* initRepo(repoDir);
@@ -2846,7 +2846,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "82",
         mode: "local",
@@ -2903,7 +2903,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "642",
         mode: "local",
@@ -2942,7 +2942,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: (setupInput) =>
+          runForSession: (setupInput) =>
             Effect.sync(() => {
               setupCalls.push(setupInput);
               return { status: "no-script" as const };
@@ -2950,11 +2950,11 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "78",
         mode: "worktree",
-        threadId: asThreadId("thread-pr-existing-worktree"),
+        sessionId: asSessionId("session-pr-existing-worktree"),
       });
 
       expect(result.worktreePath && fs.realpathSync.native(result.worktreePath)).toBe(
@@ -3006,7 +3006,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         });
 
-        const result = yield* preparePullRequestThread(manager, {
+        const result = yield* preparePullRequestSession(manager, {
           cwd: repoDir,
           reference: "91",
           mode: "worktree",
@@ -3067,7 +3067,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         });
 
-        const result = yield* preparePullRequestThread(manager, {
+        const result = yield* preparePullRequestSession(manager, {
           cwd: repoDir,
           reference: "92",
           mode: "worktree",
@@ -3126,7 +3126,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "83",
         mode: "worktree",
@@ -3168,16 +3168,16 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           },
         },
         setupScriptRunner: {
-          runForThread: () =>
+          runForSession: () =>
             Effect.fail(new ProjectSetupScriptRunnerError({ message: "terminal start failed" })),
         },
       });
 
-      const result = yield* preparePullRequestThread(manager, {
+      const result = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "184",
         mode: "worktree",
-        threadId: asThreadId("thread-pr-setup-failure"),
+        sessionId: asSessionId("session-pr-setup-failure"),
       });
 
       expect(result.branch).toBe("feature/pr-setup-failure");
@@ -3205,7 +3205,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         },
       });
 
-      const errorMessage = yield* preparePullRequestThread(manager, {
+      const errorMessage = yield* preparePullRequestSession(manager, {
         cwd: repoDir,
         reference: "79",
         mode: "worktree",

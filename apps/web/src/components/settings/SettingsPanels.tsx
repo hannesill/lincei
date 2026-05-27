@@ -9,9 +9,9 @@ import {
   ProviderDriverKind,
   type ProviderInstanceConfig,
   type ProviderInstanceId,
-  type ScopedThreadRef,
+  type ScopedSessionRef,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime";
+import { scopeSessionRef } from "@t3tools/client-runtime";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Duration from "effect/Duration";
@@ -30,7 +30,7 @@ import { isElectron } from "../../env";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
-import { useThreadActions } from "../../hooks/useThreadActions";
+import { useSessionActions } from "../../hooks/useSessionActions";
 import {
   setDesktopUpdateStateQueryData,
   useDesktopUpdateState,
@@ -46,13 +46,13 @@ import {
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { useShallow } from "zustand/react/shallow";
 import { selectProjectsAcrossEnvironments, useStore } from "../../store";
-import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { useArchivedSessionSnapshots } from "../../lib/archivedSessionsState";
 import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
 import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { stackedSessionToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import {
@@ -181,7 +181,7 @@ function AboutVersionSection() {
         })
         .catch((error: unknown) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not change update track",
               description: error instanceof Error ? error.message : "Update track change failed.",
@@ -209,7 +209,7 @@ function AboutVersionSection() {
         })
         .catch((error: unknown) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not download update",
               description: error instanceof Error ? error.message : "Download failed.",
@@ -233,7 +233,7 @@ function AboutVersionSection() {
         })
         .catch((error: unknown) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not install update",
               description: error instanceof Error ? error.message : "Install failed.",
@@ -250,7 +250,7 @@ function AboutVersionSection() {
         setDesktopUpdateStateQueryData(queryClient, result.state);
         if (!result.checked) {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not check for updates",
               description:
@@ -261,7 +261,7 @@ function AboutVersionSection() {
       })
       .catch((error: unknown) => {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Could not check for updates",
             description: error instanceof Error ? error.message : "Update check failed.",
@@ -393,8 +393,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? ["Time format"]
         : []),
-      ...(settings.sidebarThreadPreviewCount !== DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount
-        ? ["Visible threads"]
+      ...(settings.sidebarSessionPreviewCount !==
+      DEFAULT_UNIFIED_SETTINGS.sidebarSessionPreviewCount
+        ? ["Visible sessions"]
         : []),
       ...(settings.diffWordWrap !== DEFAULT_UNIFIED_SETTINGS.diffWordWrap
         ? ["Diff line wrapping"]
@@ -412,16 +413,16 @@ export function useSettingsRestore(onRestored?: () => void) {
       Duration.toMillis(DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval)
         ? ["Automatic Git fetch interval"]
         : []),
-      ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
-        ? ["New thread mode"]
+      ...(settings.defaultSessionEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultSessionEnvMode
+        ? ["New session mode"]
         : []),
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
         ? ["Add study base directory"]
         : []),
-      ...(settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive
+      ...(settings.confirmSessionArchive !== DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive
         ? ["Archive confirmation"]
         : []),
-      ...(settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete
+      ...(settings.confirmSessionDelete !== DEFAULT_UNIFIED_SETTINGS.confirmSessionDelete
         ? ["Delete confirmation"]
         : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
@@ -429,15 +430,15 @@ export function useSettingsRestore(onRestored?: () => void) {
     [
       isGitWritingModelDirty,
       settings.autoOpenPlanSidebar,
-      settings.confirmThreadArchive,
-      settings.confirmThreadDelete,
+      settings.confirmSessionArchive,
+      settings.confirmSessionDelete,
       settings.addProjectBaseDirectory,
-      settings.defaultThreadEnvMode,
+      settings.defaultSessionEnvMode,
       settings.diffIgnoreWhitespace,
       settings.diffWordWrap,
       settings.automaticGitFetchInterval,
       settings.enableAssistantStreaming,
-      settings.sidebarThreadPreviewCount,
+      settings.sidebarSessionPreviewCount,
       settings.timestampFormat,
       theme,
     ],
@@ -458,14 +459,14 @@ export function useSettingsRestore(onRestored?: () => void) {
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
-      sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
+      sidebarSessionPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarSessionPreviewCount,
       autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
       enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
-      defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
+      defaultSessionEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultSessionEnvMode,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
-      confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
-      confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
+      confirmSessionArchive: DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive,
+      confirmSessionDelete: DEFAULT_UNIFIED_SETTINGS.confirmSessionDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
     });
     onRestored?.();
@@ -696,15 +697,15 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
-          title="New threads"
-          description="Pick the default workspace mode for newly created draft threads."
+          title="New sessions"
+          description="Pick the default workspace mode for newly created draft sessions."
           resetAction={
-            settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode ? (
+            settings.defaultSessionEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultSessionEnvMode ? (
               <SettingResetButton
-                label="new threads"
+                label="new sessions"
                 onClick={() =>
                   updateSettings({
-                    defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
+                    defaultSessionEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultSessionEnvMode,
                   })
                 }
               />
@@ -712,16 +713,16 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Select
-              value={settings.defaultThreadEnvMode}
+              value={settings.defaultSessionEnvMode}
               onValueChange={(value) => {
                 if (value === "local" || value === "worktree") {
-                  updateSettings({ defaultThreadEnvMode: value });
+                  updateSettings({ defaultSessionEnvMode: value });
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-44" aria-label="Default thread mode">
+              <SelectTrigger className="w-full sm:w-44" aria-label="Default session mode">
                 <SelectValue>
-                  {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
+                  {settings.defaultSessionEnvMode === "worktree" ? "New worktree" : "Local"}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -766,14 +767,14 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           title="Archive confirmation"
-          description="Require a second click on the inline archive action before a thread is archived."
+          description="Require a second click on the inline archive action before a session is archived."
           resetAction={
-            settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive ? (
+            settings.confirmSessionArchive !== DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive ? (
               <SettingResetButton
                 label="archive confirmation"
                 onClick={() =>
                   updateSettings({
-                    confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
+                    confirmSessionArchive: DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive,
                   })
                 }
               />
@@ -781,25 +782,25 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.confirmThreadArchive}
+              checked={settings.confirmSessionArchive}
               onCheckedChange={(checked) =>
-                updateSettings({ confirmThreadArchive: Boolean(checked) })
+                updateSettings({ confirmSessionArchive: Boolean(checked) })
               }
-              aria-label="Confirm thread archiving"
+              aria-label="Confirm session archiving"
             />
           }
         />
 
         <SettingsRow
           title="Delete confirmation"
-          description="Ask before deleting a thread and its chat history."
+          description="Ask before deleting a session and its chat history."
           resetAction={
-            settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete ? (
+            settings.confirmSessionDelete !== DEFAULT_UNIFIED_SETTINGS.confirmSessionDelete ? (
               <SettingResetButton
                 label="delete confirmation"
                 onClick={() =>
                   updateSettings({
-                    confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
+                    confirmSessionDelete: DEFAULT_UNIFIED_SETTINGS.confirmSessionDelete,
                   })
                 }
               />
@@ -807,11 +808,11 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.confirmThreadDelete}
+              checked={settings.confirmSessionDelete}
               onCheckedChange={(checked) =>
-                updateSettings({ confirmThreadDelete: Boolean(checked) })
+                updateSettings({ confirmSessionDelete: Boolean(checked) })
               }
-              aria-label="Confirm thread deletion"
+              aria-label="Confirm session deletion"
             />
           }
         />
@@ -989,7 +990,7 @@ export function ProviderSettingsPanel() {
       });
     } catch (error) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: `Could not update ${PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver}`,
           description:
@@ -1331,9 +1332,9 @@ export function ProviderSettingsPanel() {
   );
 }
 
-export function ArchivedThreadsPanel() {
+export function ArchivedSessionsPanel() {
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
-  const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const { unarchiveSession, confirmAndDeleteSession } = useSessionActions();
   const environmentIds = useMemo(
     () => [...new Set(projects.map((project) => project.environmentId))],
     [projects],
@@ -1342,8 +1343,8 @@ export function ArchivedThreadsPanel() {
     snapshots: archivedSnapshots,
     error: archiveError,
     isLoading: isLoadingArchive,
-    refresh: refreshArchivedThreads,
-  } = useArchivedThreadSnapshots(environmentIds);
+    refresh: refreshArchivedSessions,
+  } = useArchivedSessionSnapshots(environmentIds);
 
   const archivedGroups = useMemo(() => {
     const projectsByEnvironmentAndId = new Map(
@@ -1362,9 +1363,9 @@ export function ArchivedThreadsPanel() {
         ),
       ),
     );
-    const threads = archivedSnapshots.flatMap(({ environmentId, snapshot }) =>
-      snapshot.threads.map((thread) => ({
-        ...thread,
+    const sessions = archivedSnapshots.flatMap(({ environmentId, snapshot }) =>
+      snapshot.sessions.map((session) => ({
+        ...session,
         environmentId,
       })),
     );
@@ -1372,10 +1373,10 @@ export function ArchivedThreadsPanel() {
     return [...projectsByEnvironmentAndId.values()]
       .map((project) => ({
         project,
-        threads: threads
+        sessions: sessions
           .filter(
-            (thread) =>
-              thread.projectId === project.id && thread.environmentId === project.environmentId,
+            (session) =>
+              session.projectId === project.id && session.environmentId === project.environmentId,
           )
           .toSorted((left, right) => {
             const leftKey = left.archivedAt ?? left.createdAt;
@@ -1383,11 +1384,11 @@ export function ArchivedThreadsPanel() {
             return rightKey.localeCompare(leftKey) || right.id.localeCompare(left.id);
           }),
       }))
-      .filter((group) => group.threads.length > 0);
+      .filter((group) => group.sessions.length > 0);
   }, [archivedSnapshots]);
 
-  const handleArchivedThreadContextMenu = useCallback(
-    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+  const handleArchivedSessionContextMenu = useCallback(
+    async (sessionRef: ScopedSessionRef, position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
@@ -1400,13 +1401,13 @@ export function ArchivedThreadsPanel() {
 
       if (clicked === "unarchive") {
         try {
-          await unarchiveThread(threadRef);
-          refreshArchivedThreads();
+          await unarchiveSession(sessionRef);
+          refreshArchivedSessions();
         } catch (error) {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
-              title: "Failed to unarchive thread",
+              title: "Failed to unarchive session",
               description: error instanceof Error ? error.message : "An error occurred.",
             }),
           );
@@ -1415,17 +1416,17 @@ export function ArchivedThreadsPanel() {
       }
 
       if (clicked === "delete") {
-        await confirmAndDeleteThread(threadRef);
-        refreshArchivedThreads();
+        await confirmAndDeleteSession(sessionRef);
+        refreshArchivedSessions();
       }
     },
-    [confirmAndDeleteThread, refreshArchivedThreads, unarchiveThread],
+    [confirmAndDeleteSession, refreshArchivedSessions, unarchiveSession],
   );
 
   return (
     <SettingsPageContainer>
       {archivedGroups.length === 0 ? (
-        <SettingsSection title="Archived threads">
+        <SettingsSection title="Archived sessions">
           <SettingsRow
             title={
               <span className="inline-flex items-center gap-2">
@@ -1435,45 +1436,45 @@ export function ArchivedThreadsPanel() {
                   <ArchiveIcon className="size-3.5 text-muted-foreground" />
                 )}
                 {isLoadingArchive
-                  ? "Loading archived threads"
+                  ? "Loading archived sessions"
                   : archiveError
-                    ? "Could not load archived threads"
-                    : "No archived threads"}
+                    ? "Could not load archived sessions"
+                    : "No archived sessions"}
               </span>
             }
             description={
               isLoadingArchive
                 ? "Checking connected environments."
-                : (archiveError ?? "Archived threads will appear here.")
+                : (archiveError ?? "Archived sessions will appear here.")
             }
           />
         </SettingsSection>
       ) : (
-        archivedGroups.map(({ project, threads: projectThreads }) => (
+        archivedGroups.map(({ project, sessions: projectSessions }) => (
           <SettingsSection
             key={project.id}
             title={project.name}
             icon={<ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />}
           >
-            {projectThreads.map((thread) => (
+            {projectSessions.map((session) => (
               <SettingsRow
-                key={thread.id}
+                key={session.id}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  void handleArchivedThreadContextMenu(
-                    scopeThreadRef(thread.environmentId, thread.id),
+                  void handleArchivedSessionContextMenu(
+                    scopeSessionRef(session.environmentId, session.id),
                     {
                       x: event.clientX,
                       y: event.clientY,
                     },
                   );
                 }}
-                title={thread.title}
+                title={session.title}
                 description={
                   <>
-                    Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
+                    Archived {formatRelativeTimeLabel(session.archivedAt ?? session.createdAt)}
                     {" \u00b7 Created "}
-                    {formatRelativeTimeLabel(thread.createdAt)}
+                    {formatRelativeTimeLabel(session.createdAt)}
                   </>
                 }
                 control={
@@ -1483,13 +1484,13 @@ export function ArchivedThreadsPanel() {
                     size="sm"
                     className="h-7 shrink-0 cursor-pointer gap-1.5 px-2.5"
                     onClick={() =>
-                      void unarchiveThread(scopeThreadRef(thread.environmentId, thread.id))
-                        .then(() => refreshArchivedThreads())
+                      void unarchiveSession(scopeSessionRef(session.environmentId, session.id))
+                        .then(() => refreshArchivedSessions())
                         .catch((error) => {
                           toastManager.add(
-                            stackedThreadToast({
+                            stackedSessionToast({
                               type: "error",
-                              title: "Failed to unarchive thread",
+                              title: "Failed to unarchive session",
                               description:
                                 error instanceof Error ? error.message : "An error occurred.",
                             }),

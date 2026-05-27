@@ -22,7 +22,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
       sql`
         INSERT INTO projection_pending_approvals (
           request_id,
-          thread_id,
+          session_id,
           turn_id,
           status,
           decision,
@@ -31,7 +31,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
         )
         VALUES (
           ${row.requestId},
-          ${row.threadId},
+          ${row.sessionId},
           ${row.turnId},
           ${row.status},
           ${row.decision},
@@ -40,7 +40,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
         )
         ON CONFLICT (request_id)
         DO UPDATE SET
-          thread_id = excluded.thread_id,
+          session_id = excluded.session_id,
           turn_id = excluded.turn_id,
           status = excluded.status,
           decision = excluded.decision,
@@ -52,18 +52,18 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
   const listProjectionPendingApprovalRows = SqlSchema.findAll({
     Request: ListProjectionPendingApprovalsInput,
     Result: ProjectionPendingApproval,
-    execute: ({ threadId }) =>
+    execute: ({ sessionId }) =>
       sql`
         SELECT
           request_id AS "requestId",
-          thread_id AS "threadId",
+          session_id AS "sessionId",
           turn_id AS "turnId",
           status,
           decision,
           created_at AS "createdAt",
           resolved_at AS "resolvedAt"
         FROM projection_pending_approvals
-        WHERE thread_id = ${threadId}
+        WHERE session_id = ${sessionId}
         ORDER BY created_at ASC, request_id ASC
       `,
   });
@@ -75,7 +75,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
       sql`
         SELECT
           request_id AS "requestId",
-          thread_id AS "threadId",
+          session_id AS "sessionId",
           turn_id AS "turnId",
           status,
           decision,
@@ -100,10 +100,10 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionPendingApprovalRepository.upsert:query")),
     );
 
-  const listByThreadId: ProjectionPendingApprovalRepositoryShape["listByThreadId"] = (input) =>
+  const listBySessionId: ProjectionPendingApprovalRepositoryShape["listBySessionId"] = (input) =>
     listProjectionPendingApprovalRows(input).pipe(
       Effect.mapError(
-        toPersistenceSqlError("ProjectionPendingApprovalRepository.listByThreadId:query"),
+        toPersistenceSqlError("ProjectionPendingApprovalRepository.listBySessionId:query"),
       ),
     );
 
@@ -125,7 +125,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
 
   return {
     upsert,
-    listByThreadId,
+    listBySessionId,
     getByRequestId,
     deleteByRequestId,
   } satisfies ProjectionPendingApprovalRepositoryShape;

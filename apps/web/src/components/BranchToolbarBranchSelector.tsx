@@ -1,5 +1,5 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
-import type { EnvironmentId, VcsRef, ThreadId } from "@t3tools/contracts";
+import { scopeProjectRef, scopeSessionRef } from "@t3tools/client-runtime";
+import type { EnvironmentId, VcsRef, SessionId } from "@t3tools/contracts";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { ChevronDownIcon } from "lucide-react";
@@ -23,7 +23,7 @@ import { cn } from "../lib/utils";
 import { parsePullRequestReference } from "../pullRequestReference";
 import { getSourceControlPresentation } from "../sourceControlPresentation";
 import { useStore } from "../store";
-import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
+import { createProjectSelectorByRef, createSessionSelectorByRef } from "../storeSelectors";
 import {
   deriveLocalBranchNameFromRemoteRef,
   resolveBranchSelectionTarget,
@@ -44,17 +44,17 @@ import {
   ComboboxStatus,
   ComboboxTrigger,
 } from "./ui/combobox";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { stackedSessionToast, toastManager } from "./ui/toast";
 
 interface BranchToolbarBranchSelectorProps {
   className?: string;
   environmentId: EnvironmentId;
-  threadId: ThreadId;
+  sessionId: SessionId;
   draftId?: DraftId;
   envLocked: boolean;
   effectiveEnvModeOverride?: "local" | "worktree";
-  activeThreadBranchOverride?: string | null;
-  onActiveThreadBranchOverrideChange?: (refName: string | null) => void;
+  activeSessionBranchOverride?: string | null;
+  onActiveSessionBranchOverrideChange?: (refName: string | null) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
 }
@@ -81,35 +81,34 @@ function getBranchTriggerLabel(input: {
 export function BranchToolbarBranchSelector({
   className,
   environmentId,
-  threadId,
+  sessionId,
   draftId,
   envLocked,
   effectiveEnvModeOverride,
-  activeThreadBranchOverride,
-  onActiveThreadBranchOverrideChange,
+  activeSessionBranchOverride,
+  onActiveSessionBranchOverrideChange,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
 }: BranchToolbarBranchSelectorProps) {
   // ---------------------------------------------------------------------------
-  // Thread / project state (pushed down from parent to colocate with mutation)
+  // Session / project state (pushed down from parent to colocate with mutation)
   // ---------------------------------------------------------------------------
-  const threadRef = useMemo(
-    () => scopeThreadRef(environmentId, threadId),
-    [environmentId, threadId],
+  const sessionRef = useMemo(
+    () => scopeSessionRef(environmentId, sessionId),
+    [environmentId, sessionId],
   );
-  const serverThreadSelector = useMemo(() => createThreadSelectorByRef(threadRef), [threadRef]);
-  const serverThread = useStore(serverThreadSelector);
-  const serverSession = serverThread?.session ?? null;
-  const setThreadBranchAction = useStore((store) => store.setThreadBranch);
-  const draftThread = useComposerDraftStore((store) =>
-    draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
+  const serverSessionSelector = useMemo(() => createSessionSelectorByRef(sessionRef), [sessionRef]);
+  const serverSession = useStore(serverSessionSelector);
+  const setSessionBranchAction = useStore((store) => store.setSessionBranch);
+  const draftSession = useComposerDraftStore((store) =>
+    draftId ? store.getDraftSession(draftId) : store.getDraftSessionByRef(sessionRef),
   );
-  const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
+  const setDraftSessionContext = useComposerDraftStore((store) => store.setDraftSessionContext);
 
-  const activeProjectRef = serverThread
-    ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)
-    : draftThread
-      ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
+  const activeProjectRef = serverSession
+    ? scopeProjectRef(serverSession.environmentId, serverSession.projectId)
+    : draftSession
+      ? scopeProjectRef(draftSession.environmentId, draftSession.projectId)
       : null;
   const activeProjectSelector = useMemo(
     () => createProjectSelectorByRef(activeProjectRef),
@@ -117,52 +116,52 @@ export function BranchToolbarBranchSelector({
   );
   const activeProject = useStore(activeProjectSelector);
 
-  const activeThreadId = serverThread?.id ?? (draftThread ? threadId : undefined);
-  const activeThreadBranch =
-    activeThreadBranchOverride !== undefined
-      ? activeThreadBranchOverride
-      : (serverThread?.branch ?? draftThread?.branch ?? null);
-  const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
+  const activeSessionId = serverSession?.id ?? (draftSession ? sessionId : undefined);
+  const activeSessionBranch =
+    activeSessionBranchOverride !== undefined
+      ? activeSessionBranchOverride
+      : (serverSession?.branch ?? draftSession?.branch ?? null);
+  const activeWorktreePath = serverSession?.worktreePath ?? draftSession?.worktreePath ?? null;
   const activeProjectCwd = activeProject?.cwd ?? null;
   const branchCwd = activeWorktreePath ?? activeProjectCwd;
-  const hasServerThread = serverThread !== undefined;
+  const hasServerSession = serverSession !== undefined;
   const effectiveEnvMode =
     effectiveEnvModeOverride ??
     resolveEffectiveEnvMode({
       activeWorktreePath,
-      hasServerThread,
-      draftThreadEnvMode: draftThread?.envMode,
+      hasServerSession,
+      draftSessionEnvMode: draftSession?.envMode,
     });
 
   // ---------------------------------------------------------------------------
-  // Thread branch mutation (colocated — only this component calls it)
+  // Session branch mutation (colocated — only this component calls it)
   // ---------------------------------------------------------------------------
-  const setThreadBranch = useCallback(
+  const setSessionBranch = useCallback(
     (branch: string | null, worktreePath: string | null) => {
-      if (!activeThreadId || !activeProject) return;
+      if (!activeSessionId || !activeProject) return;
       const api = readEnvironmentApi(environmentId);
       if (serverSession && worktreePath !== activeWorktreePath && api) {
         void api.orchestration
           .dispatchCommand({
-            type: "thread.session.stop",
+            type: "session.session.stop",
             commandId: newCommandId(),
-            threadId: activeThreadId,
+            sessionId: activeSessionId,
             createdAt: new Date().toISOString(),
           })
           .catch(() => undefined);
       }
-      if (api && hasServerThread) {
+      if (api && hasServerSession) {
         void api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
+          type: "session.meta.update",
           commandId: newCommandId(),
-          threadId: activeThreadId,
+          sessionId: activeSessionId,
           branch,
           worktreePath,
         });
       }
-      if (hasServerThread) {
-        onActiveThreadBranchOverrideChange?.(branch);
-        setThreadBranchAction(threadRef, branch, worktreePath);
+      if (hasServerSession) {
+        onActiveSessionBranchOverrideChange?.(branch);
+        setSessionBranchAction(sessionRef, branch, worktreePath);
         return;
       }
       const nextDraftEnvMode = resolveDraftEnvModeAfterBranchChange({
@@ -170,7 +169,7 @@ export function BranchToolbarBranchSelector({
         currentWorktreePath: activeWorktreePath,
         effectiveEnvMode,
       });
-      setDraftThreadContext(draftId ?? threadRef, {
+      setDraftSessionContext(draftId ?? sessionRef, {
         branch,
         worktreePath,
         envMode: nextDraftEnvMode,
@@ -178,16 +177,16 @@ export function BranchToolbarBranchSelector({
       });
     },
     [
-      activeThreadId,
+      activeSessionId,
       activeProject,
       serverSession,
       activeWorktreePath,
-      hasServerThread,
-      onActiveThreadBranchOverrideChange,
-      setThreadBranchAction,
-      setDraftThreadContext,
+      hasServerSession,
+      onActiveSessionBranchOverrideChange,
+      setSessionBranchAction,
+      setDraftSessionContext,
       draftId,
-      threadRef,
+      sessionRef,
       environmentId,
       effectiveEnvMode,
     ],
@@ -239,7 +238,7 @@ export function BranchToolbarBranchSelector({
   const canonicalActiveBranch = resolveBranchToolbarValue({
     envMode: effectiveEnvMode,
     activeWorktreePath,
-    activeThreadBranch,
+    activeSessionBranch,
     currentGitBranch,
   });
   const branchNames = useMemo(() => refs.map((refName) => refName.name), [refs]);
@@ -319,7 +318,7 @@ export function BranchToolbarBranchSelector({
     if (!api || !branchCwd || !activeProjectCwd || isBranchActionPending) return;
 
     if (isSelectingWorktreeBase) {
-      setThreadBranch(refName.name, null);
+      setSessionBranch(refName.name, null);
       setIsBranchMenuOpen(false);
       onComposerFocusRequest?.();
       return;
@@ -332,7 +331,7 @@ export function BranchToolbarBranchSelector({
     });
 
     if (selectionTarget.reuseExistingWorktree) {
-      setThreadBranch(refName.name, selectionTarget.nextWorktreePath);
+      setSessionBranch(refName.name, selectionTarget.nextWorktreePath);
       setIsBranchMenuOpen(false);
       onComposerFocusRequest?.();
       return;
@@ -357,11 +356,11 @@ export function BranchToolbarBranchSelector({
           ? (checkoutResult.refName ?? selectedBranchName)
           : selectedBranchName;
         setOptimisticBranch(nextBranchName);
-        setThreadBranch(nextBranchName, selectionTarget.nextWorktreePath);
+        setSessionBranch(nextBranchName, selectionTarget.nextWorktreePath);
       } catch (error) {
         setOptimisticBranch(previousBranch);
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Failed to switch ref.",
             description: toBranchActionErrorMessage(error),
@@ -389,11 +388,11 @@ export function BranchToolbarBranchSelector({
           switchRef: true,
         });
         setOptimisticBranch(createBranchResult.refName);
-        setThreadBranch(createBranchResult.refName, activeWorktreePath);
+        setSessionBranch(createBranchResult.refName, activeWorktreePath);
       } catch (error) {
         setOptimisticBranch(previousBranch);
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Failed to create and switch ref.",
             description: toBranchActionErrorMessage(error),
@@ -407,13 +406,19 @@ export function BranchToolbarBranchSelector({
     if (
       effectiveEnvMode !== "worktree" ||
       activeWorktreePath ||
-      activeThreadBranch ||
+      activeSessionBranch ||
       !currentGitBranch
     ) {
       return;
     }
-    setThreadBranch(currentGitBranch, null);
-  }, [activeThreadBranch, activeWorktreePath, currentGitBranch, effectiveEnvMode, setThreadBranch]);
+    setSessionBranch(currentGitBranch, null);
+  }, [
+    activeSessionBranch,
+    activeWorktreePath,
+    currentGitBranch,
+    effectiveEnvMode,
+    setSessionBranch,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Combobox / list plumbing

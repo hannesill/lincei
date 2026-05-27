@@ -2,7 +2,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff, type FileDiffMetadata, Virtualizer } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { scopeThreadRef } from "@t3tools/client-runtime";
+import { scopeSessionRef } from "@t3tools/client-runtime";
 import type { TurnId } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
@@ -33,8 +33,8 @@ import { buildPatchCacheKey } from "../lib/diffRendering";
 import { resolveDiffThemeName } from "../lib/diffRendering";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { selectProjectByRef, useStore } from "../store";
-import { createThreadSelectorByRef } from "../storeSelectors";
-import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
+import { createSessionSelectorByRef } from "../storeSelectors";
+import { buildSessionRouteParams, resolveSessionRouteRef } from "../sessionRoutes";
 import { useSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
@@ -198,33 +198,33 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const previousDiffOpenRef = useRef(false);
   const [canScrollTurnStripLeft, setCanScrollTurnStripLeft] = useState(false);
   const [canScrollTurnStripRight, setCanScrollTurnStripRight] = useState(false);
-  const routeThreadRef = useParams({
+  const routeSessionRef = useParams({
     strict: false,
-    select: (params) => resolveThreadRouteRef(params),
+    select: (params) => resolveSessionRouteRef(params),
   });
   const diffSearch = useSearch({ strict: false, select: (search) => parseDiffRouteSearch(search) });
   const diffOpen = diffSearch.diff === "1";
-  const activeThreadId = routeThreadRef?.threadId ?? null;
-  const activeThread = useStore(
-    useMemo(() => createThreadSelectorByRef(routeThreadRef), [routeThreadRef]),
+  const activeSessionId = routeSessionRef?.sessionId ?? null;
+  const activeSession = useStore(
+    useMemo(() => createSessionSelectorByRef(routeSessionRef), [routeSessionRef]),
   );
-  const activeProjectId = activeThread?.projectId ?? null;
+  const activeProjectId = activeSession?.projectId ?? null;
   const activeProject = useStore((store) =>
-    activeThread && activeProjectId
+    activeSession && activeProjectId
       ? selectProjectByRef(store, {
-          environmentId: activeThread.environmentId,
+          environmentId: activeSession.environmentId,
           projectId: activeProjectId,
         })
       : undefined,
   );
-  const activeCwd = activeThread?.worktreePath ?? activeProject?.cwd;
+  const activeCwd = activeSession?.worktreePath ?? activeProject?.cwd;
   const gitStatusQuery = useGitStatus({
-    environmentId: activeThread?.environmentId ?? null,
+    environmentId: activeSession?.environmentId ?? null,
     cwd: activeCwd ?? null,
   });
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
-    useTurnDiffSummaries(activeThread);
+    useTurnDiffSummaries(activeSession);
   const orderedTurnDiffSummaries = useMemo(
     () =>
       [...turnDiffSummaries].toSorted((left, right) => {
@@ -294,8 +294,8 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   }, [orderedTurnDiffSummaries, selectedTurn]);
   const activeCheckpointDiffQuery = useQuery(
     checkpointDiffQueryOptions({
-      environmentId: activeThread?.environmentId ?? null,
-      threadId: activeThreadId,
+      environmentId: activeSession?.environmentId ?? null,
+      sessionId: activeSessionId,
       fromTurnCount: activeCheckpointRange?.fromTurnCount ?? null,
       toTurnCount: activeCheckpointRange?.toTurnCount ?? null,
       ignoreWhitespace: diffIgnoreWhitespace,
@@ -391,10 +391,12 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   }, []);
 
   const selectTurn = (turnId: TurnId) => {
-    if (!activeThread) return;
+    if (!activeSession) return;
     void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(activeThread.environmentId, activeThread.id)),
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(
+        scopeSessionRef(activeSession.environmentId, activeSession.id),
+      ),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
         return { ...rest, diff: "1", diffTurnId: turnId };
@@ -402,10 +404,12 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     });
   };
   const selectWholeConversation = () => {
-    if (!activeThread) return;
+    if (!activeSession) return;
     void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(activeThread.environmentId, activeThread.id)),
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(
+        scopeSessionRef(activeSession.environmentId, activeSession.id),
+      ),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
         return { ...rest, diff: "1" };
@@ -616,9 +620,9 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
 
   return (
     <DiffPanelShell mode={mode} header={headerRow}>
-      {!activeThread ? (
+      {!activeSession ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">
-          Select a thread to inspect turn diffs.
+          Select a session to inspect turn diffs.
         </div>
       ) : !isGitRepo ? (
         <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-muted-foreground/70">

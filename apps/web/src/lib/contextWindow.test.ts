@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { EventId, type OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
+import { EventId, type OrchestrationSessionActivity, TurnId } from "@t3tools/contracts";
 
 import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "./contextWindow";
 
-function makeActivity(id: string, kind: string, payload: unknown): OrchestrationThreadActivity {
+function makeActivity(id: string, kind: string, payload: unknown): OrchestrationSessionActivity {
   return {
     id: EventId.make(id),
     tone: "info",

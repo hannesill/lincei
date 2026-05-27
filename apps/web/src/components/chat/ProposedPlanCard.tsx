@@ -24,7 +24,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { stackedSessionToast, toastManager } from "../ui/toast";
 import { readEnvironmentApi } from "~/environmentApi";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
@@ -46,7 +46,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   const { copyToClipboard, isCopied } = useCopyToClipboard({
     onError: (error) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not copy plan",
           description: error instanceof Error ? error.message : "An error occurred while copying.",
@@ -76,10 +76,10 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   const openSaveDialog = () => {
     if (!workspaceRoot) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Workspace path is unavailable",
-          description: "This thread does not have a workspace path to save into.",
+          description: "This session does not have a workspace path to save into.",
         }),
       );
       return;
@@ -119,7 +119,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
       })
       .catch((error) => {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Could not save plan",
             description: error instanceof Error ? error.message : "An error occurred while saving.",

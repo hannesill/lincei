@@ -1,4 +1,4 @@
-import type { Thread } from "./types";
+import type { Session } from "./types";
 
 function normalizeWorktreePath(path: string | null): string | null {
   const trimmed = path?.trim();
@@ -8,25 +8,25 @@ function normalizeWorktreePath(path: string | null): string | null {
   return trimmed;
 }
 
-export function getOrphanedWorktreePathForThread(
-  threads: readonly Thread[],
-  threadId: Thread["id"],
+export function getOrphanedWorktreePathForSession(
+  sessions: readonly Session[],
+  sessionId: Session["id"],
 ): string | null {
-  const targetThread = threads.find((thread) => thread.id === threadId);
-  if (!targetThread) {
+  const targetSession = sessions.find((session) => session.id === sessionId);
+  if (!targetSession) {
     return null;
   }
 
-  const targetWorktreePath = normalizeWorktreePath(targetThread.worktreePath);
+  const targetWorktreePath = normalizeWorktreePath(targetSession.worktreePath);
   if (!targetWorktreePath) {
     return null;
   }
 
-  const isShared = threads.some((thread) => {
-    if (thread.id === threadId) {
+  const isShared = sessions.some((session) => {
+    if (session.id === sessionId) {
       return false;
     }
-    return normalizeWorktreePath(thread.worktreePath) === targetWorktreePath;
+    return normalizeWorktreePath(session.worktreePath) === targetWorktreePath;
   });
 
   return isShared ? null : targetWorktreePath;

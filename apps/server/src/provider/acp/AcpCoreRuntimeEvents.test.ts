@@ -31,7 +31,7 @@ describe("AcpCoreRuntimeEvents", () => {
       makeAcpRequestOpenedEvent({
         stamp,
         provider: ProviderDriverKind.make("cursor"),
-        threadId: "thread-1" as never,
+        sessionId: "session-1" as never,
         turnId,
         requestId: RuntimeRequestId.make("request-1"),
         permissionRequest,
@@ -53,7 +53,7 @@ describe("AcpCoreRuntimeEvents", () => {
       makeAcpRequestResolvedEvent({
         stamp,
         provider: ProviderDriverKind.make("cursor"),
-        threadId: "thread-1" as never,
+        sessionId: "session-1" as never,
         turnId,
         requestId: RuntimeRequestId.make("request-1"),
         permissionRequest,
@@ -76,7 +76,7 @@ describe("AcpCoreRuntimeEvents", () => {
       makeAcpPlanUpdatedEvent({
         stamp,
         provider: ProviderDriverKind.make("cursor"),
-        threadId: "thread-1" as never,
+        sessionId: "session-1" as never,
         turnId,
         payload: {
           plan: [{ step: "Inspect state", status: "inProgress" }],
@@ -96,7 +96,7 @@ describe("AcpCoreRuntimeEvents", () => {
       makeAcpToolCallEvent({
         stamp,
         provider: ProviderDriverKind.make("cursor"),
-        threadId: "thread-1" as never,
+        sessionId: "session-1" as never,
         turnId,
         toolCall: {
           toolCallId: "tool-1",
@@ -120,7 +120,7 @@ describe("AcpCoreRuntimeEvents", () => {
       makeAcpContentDeltaEvent({
         stamp,
         provider: ProviderDriverKind.make("cursor"),
-        threadId: "thread-1" as never,
+        sessionId: "session-1" as never,
         turnId,
         itemId: "assistant:session-1:segment:0",
         text: "hello",
@@ -138,7 +138,7 @@ describe("AcpCoreRuntimeEvents", () => {
       makeAcpAssistantItemEvent({
         stamp,
         provider: ProviderDriverKind.make("cursor"),
-        threadId: "thread-1" as never,
+        sessionId: "session-1" as never,
         turnId,
         itemId: "assistant:session-1:segment:0",
         lifecycle: "item.started",

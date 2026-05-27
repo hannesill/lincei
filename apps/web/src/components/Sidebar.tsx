@@ -13,10 +13,10 @@ import {
 import {
   ChangeRequestStatusIcon,
   prStatusIndicator,
-  resolveThreadPr,
+  resolveSessionPr,
   terminalStatusFromRunningIds,
-  ThreadStatusLabel,
-} from "./ThreadStatusIndicators";
+  SessionStatusLabel,
+} from "./SessionStatusIndicators";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -40,25 +40,25 @@ import {
   type ContextMenuItem,
   type DesktopUpdateState,
   ProjectId,
-  type ScopedThreadRef,
+  type ScopedSessionRef,
   type SidebarProjectGroupingMode,
-  type ThreadEnvMode,
-  ThreadId,
+  type SessionEnvMode,
+  SessionId,
 } from "@t3tools/contracts";
 import {
-  parseScopedThreadKey,
+  parseScopedSessionKey,
   scopedProjectKey,
-  scopedThreadKey,
+  scopedSessionKey,
   scopeProjectRef,
-  scopeThreadRef,
+  scopeSessionRef,
 } from "@t3tools/client-runtime";
 import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import {
   MAX_SIDEBAR_THREAD_PREVIEW_COUNT,
   MIN_SIDEBAR_THREAD_PREVIEW_COUNT,
   type SidebarProjectSortOrder,
-  type SidebarThreadPreviewCount,
-  type SidebarThreadSortOrder,
+  type SidebarSessionPreviewCount,
+  type SidebarSessionSortOrder,
 } from "@t3tools/contracts/settings";
 import { usePrimaryEnvironmentId } from "../environments/primary";
 import { isElectron } from "../env";
@@ -68,36 +68,36 @@ import { isMacPlatform, newCommandId } from "../lib/utils";
 import {
   selectProjectByRef,
   selectProjectsAcrossEnvironments,
-  selectSidebarThreadsForProjectRefs,
-  selectSidebarThreadsAcrossEnvironments,
-  selectThreadByRef,
+  selectSidebarSessionsForProjectRefs,
+  selectSidebarSessionsAcrossEnvironments,
+  selectSessionByRef,
   useStore,
 } from "../store";
-import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
+import { selectSessionTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
-  shouldShowThreadJumpHintsForModifiers,
-  threadJumpCommandForIndex,
-  threadJumpIndexFromCommand,
-  threadTraversalDirectionFromCommand,
+  shouldShowSessionJumpHintsForModifiers,
+  sessionJumpCommandForIndex,
+  sessionJumpIndexFromCommand,
+  sessionTraversalDirectionFromCommand,
 } from "../keybindings";
 import { useModelPickerOpen } from "../modelPickerOpenState";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { useGitStatus } from "../lib/gitStatusState";
 import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
-import { useNewThreadHandler } from "../hooks/useHandleNewThread";
-import { retainThreadDetailSubscription } from "../environments/runtime/service";
+import { useNewSessionHandler } from "../hooks/useHandleNewSession";
+import { retainSessionDetailSubscription } from "../environments/runtime/service";
 
-import { useThreadActions } from "../hooks/useThreadActions";
+import { useSessionActions } from "../hooks/useSessionActions";
 import {
-  buildThreadRouteParams,
-  resolveThreadRouteRef,
-  resolveThreadRouteTarget,
-} from "../threadRoutes";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+  buildSessionRouteParams,
+  resolveSessionRouteRef,
+  resolveSessionRouteTarget,
+} from "../sessionRoutes";
+import { stackedSessionToast, toastManager } from "./ui/toast";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { Kbd } from "./ui/kbd";
@@ -155,24 +155,24 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar";
-import { useThreadSelectionStore } from "../threadSelectionStore";
+import { useSessionSelectionStore } from "../sessionSelectionStore";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
-  getSidebarThreadIdsToPrewarm,
-  resolveAdjacentThreadId,
+  getSidebarSessionIdsToPrewarm,
+  resolveAdjacentSessionId,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
-  resolveSidebarNewThreadSeedContext,
-  resolveSidebarNewThreadEnvMode,
-  resolveThreadRowClassName,
-  resolveThreadStatusPill,
+  resolveSidebarNewSessionSeedContext,
+  resolveSidebarNewSessionEnvMode,
+  resolveSessionRowClassName,
+  resolveSessionStatusPill,
   orderItemsByPreferredIds,
-  shouldClearThreadSelectionOnMouseDown,
+  shouldClearSessionSelectionOnMouseDown,
   sortProjectsForSidebar,
-  useThreadJumpHintVisibility,
-  ThreadStatusPill,
+  useSessionJumpHintVisibility,
+  SessionStatusPill,
 } from "./Sidebar.logic";
-import { sortThreads } from "../lib/threadSort";
+import { sortSessions } from "../lib/sessionSort";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { CommandDialogTrigger } from "./ui/command";
@@ -189,7 +189,7 @@ import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
-import type { SidebarThreadSummary } from "../types";
+import type { SidebarSessionSummary } from "../types";
 import {
   buildPhysicalToLogicalProjectKeyMap,
   buildSidebarProjectSnapshots,
@@ -202,7 +202,7 @@ const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   created_at: "Created at",
   manual: "Manual",
 };
-const SIDEBAR_THREAD_SORT_LABELS: Record<SidebarThreadSortOrder, string> = {
+const SIDEBAR_THREAD_SORT_LABELS: Record<SidebarSessionSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
 };
@@ -217,11 +217,11 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   separate: "Keep separate",
 };
 
-function clampSidebarThreadPreviewCount(value: number): SidebarThreadPreviewCount {
+function clampSidebarSessionPreviewCount(value: number): SidebarSessionPreviewCount {
   return Math.min(
     MAX_SIDEBAR_THREAD_PREVIEW_COUNT,
     Math.max(MIN_SIDEBAR_THREAD_PREVIEW_COUNT, value),
-  ) as SidebarThreadPreviewCount;
+  ) as SidebarSessionPreviewCount;
 }
 
 function formatProjectMemberActionLabel(
@@ -246,16 +246,16 @@ function projectGroupingModeDescription(mode: SidebarProjectGroupingMode): strin
   }
 }
 
-function buildThreadJumpLabelMap(input: {
+function buildSessionJumpLabelMap(input: {
   keybindings: ReturnType<typeof useServerKeybindings>;
   platform: string;
   terminalOpen: boolean;
-  threadJumpCommandByKey: ReadonlyMap<
+  sessionJumpCommandByKey: ReadonlyMap<
     string,
-    NonNullable<ReturnType<typeof threadJumpCommandForIndex>>
+    NonNullable<ReturnType<typeof sessionJumpCommandForIndex>>
   >;
 }): ReadonlyMap<string, string> {
-  if (input.threadJumpCommandByKey.size === 0) {
+  if (input.sessionJumpCommandByKey.size === 0) {
     return EMPTY_THREAD_JUMP_LABELS;
   }
 
@@ -267,134 +267,134 @@ function buildThreadJumpLabelMap(input: {
     },
   } as const;
   const mapping = new Map<string, string>();
-  for (const [threadKey, command] of input.threadJumpCommandByKey) {
+  for (const [sessionKey, command] of input.sessionJumpCommandByKey) {
     const label = shortcutLabelForCommand(input.keybindings, command, shortcutLabelOptions);
     if (label) {
-      mapping.set(threadKey, label);
+      mapping.set(sessionKey, label);
     }
   }
   return mapping.size > 0 ? mapping : EMPTY_THREAD_JUMP_LABELS;
 }
 
-interface SidebarThreadRowProps {
-  thread: SidebarThreadSummary;
+interface SidebarSessionRowProps {
+  session: SidebarSessionSummary;
   projectCwd: string | null;
-  orderedProjectThreadKeys: readonly string[];
+  orderedProjectSessionKeys: readonly string[];
   isActive: boolean;
   jumpLabel: string | null;
-  appSettingsConfirmThreadArchive: boolean;
-  renamingThreadKey: string | null;
+  appSettingsConfirmSessionArchive: boolean;
+  renamingSessionKey: string | null;
   renamingTitle: string;
   setRenamingTitle: (title: string) => void;
   renamingInputRef: React.RefObject<HTMLInputElement | null>;
   renamingCommittedRef: React.RefObject<boolean>;
-  confirmingArchiveThreadKey: string | null;
-  setConfirmingArchiveThreadKey: React.Dispatch<React.SetStateAction<string | null>>;
+  confirmingArchiveSessionKey: string | null;
+  setConfirmingArchiveSessionKey: React.Dispatch<React.SetStateAction<string | null>>;
   confirmArchiveButtonRefs: React.RefObject<Map<string, HTMLButtonElement>>;
-  handleThreadClick: (
+  handleSessionClick: (
     event: React.MouseEvent,
-    threadRef: ScopedThreadRef,
-    orderedProjectThreadKeys: readonly string[],
+    sessionRef: ScopedSessionRef,
+    orderedProjectSessionKeys: readonly string[],
   ) => void;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToSession: (sessionRef: ScopedSessionRef) => void;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
-  handleThreadContextMenu: (
-    threadRef: ScopedThreadRef,
+  handleSessionContextMenu: (
+    sessionRef: ScopedSessionRef,
     position: { x: number; y: number },
   ) => Promise<void>;
   clearSelection: () => void;
   commitRename: (
-    threadRef: ScopedThreadRef,
+    sessionRef: ScopedSessionRef,
     newTitle: string,
     originalTitle: string,
   ) => Promise<void>;
   cancelRename: () => void;
-  attemptArchiveThread: (threadRef: ScopedThreadRef) => Promise<void>;
+  attemptArchiveSession: (sessionRef: ScopedSessionRef) => Promise<void>;
   openPrLink: (event: React.MouseEvent<HTMLElement>, prUrl: string) => void;
 }
 
-const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
+const SidebarSessionRow = memo(function SidebarSessionRow(props: SidebarSessionRowProps) {
   const {
-    orderedProjectThreadKeys,
+    orderedProjectSessionKeys,
     isActive,
     jumpLabel,
-    appSettingsConfirmThreadArchive,
-    renamingThreadKey,
+    appSettingsConfirmSessionArchive,
+    renamingSessionKey,
     renamingTitle,
     setRenamingTitle,
     renamingInputRef,
     renamingCommittedRef,
-    confirmingArchiveThreadKey,
-    setConfirmingArchiveThreadKey,
+    confirmingArchiveSessionKey,
+    setConfirmingArchiveSessionKey,
     confirmArchiveButtonRefs,
-    handleThreadClick,
-    navigateToThread,
+    handleSessionClick,
+    navigateToSession,
     handleMultiSelectContextMenu,
-    handleThreadContextMenu,
+    handleSessionContextMenu,
     clearSelection,
     commitRename,
     cancelRename,
-    attemptArchiveThread,
+    attemptArchiveSession,
     openPrLink,
-    thread,
+    session,
   } = props;
-  const threadRef = scopeThreadRef(thread.environmentId, thread.id);
-  const threadKey = scopedThreadKey(threadRef);
-  const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
-  const isSelected = useThreadSelectionStore((state) => state.selectedThreadKeys.has(threadKey));
+  const sessionRef = scopeSessionRef(session.environmentId, session.id);
+  const sessionKey = scopedSessionKey(sessionRef);
+  const lastVisitedAt = useUiStateStore((state) => state.sessionLastVisitedAtById[sessionKey]);
+  const isSelected = useSessionSelectionStore((state) => state.selectedSessionKeys.has(sessionKey));
   const runningTerminalIds = useTerminalStateStore(
     (state) =>
-      selectThreadTerminalState(state.terminalStateByThreadKey, threadRef).runningTerminalIds,
+      selectSessionTerminalState(state.terminalStateBySessionKey, sessionRef).runningTerminalIds,
   );
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const isRemoteThread =
-    primaryEnvironmentId !== null && thread.environmentId !== primaryEnvironmentId;
+  const isRemoteSession =
+    primaryEnvironmentId !== null && session.environmentId !== primaryEnvironmentId;
   const remoteEnvLabel = useSavedEnvironmentRuntimeStore(
-    (s) => s.byId[thread.environmentId]?.descriptor?.label ?? null,
+    (s) => s.byId[session.environmentId]?.descriptor?.label ?? null,
   );
   const remoteEnvSavedLabel = useSavedEnvironmentRegistryStore(
-    (s) => s.byId[thread.environmentId]?.label ?? null,
+    (s) => s.byId[session.environmentId]?.label ?? null,
   );
-  const threadEnvironmentLabel = isRemoteThread
+  const sessionEnvironmentLabel = isRemoteSession
     ? (remoteEnvLabel ?? remoteEnvSavedLabel ?? "Remote")
     : null;
-  // For grouped projects, the thread may belong to a different environment
-  // than the representative project.  Look up the thread's own project cwd
+  // For grouped projects, the session may belong to a different environment
+  // than the representative project.  Look up the session's own project cwd
   // so git status (and thus PR detection) queries the correct path.
-  const threadProjectCwd = useStore(
+  const sessionProjectCwd = useStore(
     useMemo(
       () => (state: import("../store").AppState) =>
-        selectProjectByRef(state, scopeProjectRef(thread.environmentId, thread.projectId))?.cwd ??
+        selectProjectByRef(state, scopeProjectRef(session.environmentId, session.projectId))?.cwd ??
         null,
-      [thread.environmentId, thread.projectId],
+      [session.environmentId, session.projectId],
     ),
   );
-  const gitCwd = thread.worktreePath ?? threadProjectCwd ?? props.projectCwd;
+  const gitCwd = session.worktreePath ?? sessionProjectCwd ?? props.projectCwd;
   const gitStatus = useGitStatus({
-    environmentId: thread.environmentId,
-    cwd: thread.branch != null ? gitCwd : null,
+    environmentId: session.environmentId,
+    cwd: session.branch != null ? gitCwd : null,
   });
   const isHighlighted = isActive || isSelected;
-  const isThreadRunning =
-    thread.session?.status === "running" && thread.session.activeTurnId != null;
-  const threadStatus = resolveThreadStatusPill({
-    thread: {
-      ...thread,
+  const isSessionRunning =
+    session.session?.status === "running" && session.session.activeTurnId != null;
+  const sessionStatus = resolveSessionStatusPill({
+    session: {
+      ...session,
       lastVisitedAt,
     },
   });
-  const pr = resolveThreadPr(thread.branch, gitStatus.data);
+  const pr = resolveSessionPr(session.branch, gitStatus.data);
   const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
-  const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
-  const threadMetaClassName = isConfirmingArchive
+  const isConfirmingArchive = confirmingArchiveSessionKey === sessionKey && !isSessionRunning;
+  const sessionMetaClassName = isConfirmingArchive
     ? "pointer-events-none opacity-0"
-    : !isThreadRunning
+    : !isSessionRunning
       ? "pointer-events-none transition-opacity duration-150 max-sm:pr-6 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0"
       : "pointer-events-none";
   const clearConfirmingArchive = useCallback(() => {
-    setConfirmingArchiveThreadKey((current) => (current === threadKey ? null : current));
-  }, [setConfirmingArchiveThreadKey, threadKey]);
+    setConfirmingArchiveSessionKey((current) => (current === sessionKey ? null : current));
+  }, [setConfirmingArchiveSessionKey, sessionKey]);
   const handleMouseLeave = useCallback(() => {
     clearConfirmingArchive();
   }, [clearConfirmingArchive]);
@@ -412,22 +412,22 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   );
   const handleRowClick = useCallback(
     (event: React.MouseEvent) => {
-      handleThreadClick(event, threadRef, orderedProjectThreadKeys);
+      handleSessionClick(event, sessionRef, orderedProjectSessionKeys);
     },
-    [handleThreadClick, orderedProjectThreadKeys, threadRef],
+    [handleSessionClick, orderedProjectSessionKeys, sessionRef],
   );
   const handleRowKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      navigateToThread(threadRef);
+      navigateToSession(sessionRef);
     },
-    [navigateToThread, threadRef],
+    [navigateToSession, sessionRef],
   );
   const handleRowContextMenu = useCallback(
     (event: React.MouseEvent) => {
       event.preventDefault();
-      const hasSelection = useThreadSelectionStore.getState().hasSelection();
+      const hasSelection = useSessionSelectionStore.getState().hasSelection();
       if (hasSelection && isSelected) {
         void handleMultiSelectContextMenu({
           x: event.clientX,
@@ -439,12 +439,18 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       if (hasSelection) {
         clearSelection();
       }
-      void handleThreadContextMenu(threadRef, {
+      void handleSessionContextMenu(sessionRef, {
         x: event.clientX,
         y: event.clientY,
       });
     },
-    [clearSelection, handleMultiSelectContextMenu, handleThreadContextMenu, isSelected, threadRef],
+    [
+      clearSelection,
+      handleMultiSelectContextMenu,
+      handleSessionContextMenu,
+      isSelected,
+      sessionRef,
+    ],
   );
   const handlePrClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -475,32 +481,32 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       if (event.key === "Enter") {
         event.preventDefault();
         renamingCommittedRef.current = true;
-        void commitRename(threadRef, renamingTitle, thread.title);
+        void commitRename(sessionRef, renamingTitle, session.title);
       } else if (event.key === "Escape") {
         event.preventDefault();
         renamingCommittedRef.current = true;
         cancelRename();
       }
     },
-    [cancelRename, commitRename, renamingCommittedRef, renamingTitle, thread.title, threadRef],
+    [cancelRename, commitRename, renamingCommittedRef, renamingTitle, session.title, sessionRef],
   );
   const handleRenameInputBlur = useCallback(() => {
     if (!renamingCommittedRef.current) {
-      void commitRename(threadRef, renamingTitle, thread.title);
+      void commitRename(sessionRef, renamingTitle, session.title);
     }
-  }, [commitRename, renamingCommittedRef, renamingTitle, thread.title, threadRef]);
+  }, [commitRename, renamingCommittedRef, renamingTitle, session.title, sessionRef]);
   const handleRenameInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
     event.stopPropagation();
   }, []);
   const handleConfirmArchiveRef = useCallback(
     (element: HTMLButtonElement | null) => {
       if (element) {
-        confirmArchiveButtonRefs.current.set(threadKey, element);
+        confirmArchiveButtonRefs.current.set(sessionKey, element);
       } else {
-        confirmArchiveButtonRefs.current.delete(threadKey);
+        confirmArchiveButtonRefs.current.delete(sessionKey);
       }
     },
-    [confirmArchiveButtonRefs, threadKey],
+    [confirmArchiveButtonRefs, sessionKey],
   );
   const stopPropagationOnPointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -513,35 +519,35 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       event.preventDefault();
       event.stopPropagation();
       clearConfirmingArchive();
-      void attemptArchiveThread(threadRef);
+      void attemptArchiveSession(sessionRef);
     },
-    [attemptArchiveThread, clearConfirmingArchive, threadRef],
+    [attemptArchiveSession, clearConfirmingArchive, sessionRef],
   );
   const handleStartArchiveConfirmation = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      setConfirmingArchiveThreadKey(threadKey);
+      setConfirmingArchiveSessionKey(sessionKey);
       requestAnimationFrame(() => {
-        confirmArchiveButtonRefs.current.get(threadKey)?.focus();
+        confirmArchiveButtonRefs.current.get(sessionKey)?.focus();
       });
     },
-    [confirmArchiveButtonRefs, setConfirmingArchiveThreadKey, threadKey],
+    [confirmArchiveButtonRefs, setConfirmingArchiveSessionKey, sessionKey],
   );
   const handleArchiveImmediateClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      void attemptArchiveThread(threadRef);
+      void attemptArchiveSession(sessionRef);
     },
-    [attemptArchiveThread, threadRef],
+    [attemptArchiveSession, sessionRef],
   );
   const rowButtonRender = useMemo(() => <div role="button" tabIndex={0} />, []);
 
   return (
     <SidebarMenuSubItem
       className="w-full"
-      data-thread-item
+      data-session-item
       onMouseLeave={handleMouseLeave}
       onBlurCapture={handleBlurCapture}
     >
@@ -549,8 +555,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         render={rowButtonRender}
         size="sm"
         isActive={isActive}
-        data-testid={`thread-row-${thread.id}`}
-        className={`${resolveThreadRowClassName({
+        data-testid={`session-row-${session.id}`}
+        className={`${resolveSessionRowClassName({
           isActive,
           isSelected,
         })} relative isolate`}
@@ -576,8 +582,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
             </Tooltip>
           )}
-          {threadStatus && <ThreadStatusLabel status={threadStatus} />}
-          {renamingThreadKey === threadKey ? (
+          {sessionStatus && <SessionStatusLabel status={sessionStatus} />}
+          {renamingSessionKey === sessionKey ? (
             <input
               ref={handleRenameInputRef}
               className="min-w-0 flex-1 truncate text-base sm:text-xs bg-transparent outline-none border border-ring rounded px-0.5"
@@ -593,14 +599,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 render={
                   <span
                     className="min-w-0 flex-1 truncate text-xs"
-                    data-testid={`thread-title-${thread.id}`}
+                    data-testid={`session-title-${session.id}`}
                   >
-                    {thread.title}
+                    {session.title}
                   </span>
                 }
               />
               <TooltipPopup side="top" className="max-w-80 whitespace-normal leading-tight">
-                {thread.title}
+                {session.title}
               </TooltipPopup>
             </Tooltip>
           )}
@@ -618,30 +624,30 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           )}
           <div
             className={`flex min-w-12 justify-end ${
-              isRemoteThread ? "max-sm:min-w-24" : "max-sm:min-w-20"
+              isRemoteSession ? "max-sm:min-w-24" : "max-sm:min-w-20"
             }`}
           >
             {isConfirmingArchive ? (
               <button
                 ref={handleConfirmArchiveRef}
                 type="button"
-                data-thread-selection-safe
-                data-testid={`thread-archive-confirm-${thread.id}`}
-                aria-label={`Confirm archive ${thread.title}`}
+                data-session-selection-safe
+                data-testid={`session-archive-confirm-${session.id}`}
+                aria-label={`Confirm archive ${session.title}`}
                 className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
                 onPointerDown={stopPropagationOnPointerDown}
                 onClick={handleConfirmArchiveClick}
               >
                 Confirm
               </button>
-            ) : !isThreadRunning ? (
-              appSettingsConfirmThreadArchive ? (
+            ) : !isSessionRunning ? (
+              appSettingsConfirmSessionArchive ? (
                 <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
                   <button
                     type="button"
-                    data-thread-selection-safe
-                    data-testid={`thread-archive-${thread.id}`}
-                    aria-label={`Archive ${thread.title}`}
+                    data-session-selection-safe
+                    data-testid={`session-archive-${session.id}`}
+                    aria-label={`Archive ${session.title}`}
                     className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     onPointerDown={stopPropagationOnPointerDown}
                     onClick={handleStartArchiveConfirmation}
@@ -656,9 +662,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
                         <button
                           type="button"
-                          data-thread-selection-safe
-                          data-testid={`thread-archive-${thread.id}`}
-                          aria-label={`Archive ${thread.title}`}
+                          data-session-selection-safe
+                          data-testid={`session-archive-${session.id}`}
+                          aria-label={`Archive ${session.title}`}
                           className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                           onPointerDown={stopPropagationOnPointerDown}
                           onClick={handleArchiveImmediateClick}
@@ -672,21 +678,21 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 </Tooltip>
               )
             ) : null}
-            <span className={threadMetaClassName}>
+            <span className={sessionMetaClassName}>
               <span className="inline-flex items-center gap-1">
-                {isRemoteThread && (
+                {isRemoteSession && (
                   <Tooltip>
                     <TooltipTrigger
                       render={
                         <span
-                          aria-label={threadEnvironmentLabel ?? "Remote"}
+                          aria-label={sessionEnvironmentLabel ?? "Remote"}
                           className="inline-flex h-5 items-center justify-center"
                         />
                       }
                     >
                       <CloudIcon className="block size-3 text-muted-foreground/60" />
                     </TooltipTrigger>
-                    <TooltipPopup side="top">{threadEnvironmentLabel}</TooltipPopup>
+                    <TooltipPopup side="top">{sessionEnvironmentLabel}</TooltipPopup>
                   </Tooltip>
                 )}
                 {jumpLabel ? (
@@ -705,7 +711,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     }`}
                   >
                     {formatRelativeTimeLabel(
-                      thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
+                      session.latestUserMessageAt ?? session.updatedAt ?? session.createdAt,
                     )}
                   </span>
                 )}
@@ -718,169 +724,169 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   );
 });
 
-interface SidebarProjectThreadListProps {
+interface SidebarProjectSessionListProps {
   projectKey: string;
   projectExpanded: boolean;
-  hasOverflowingThreads: boolean;
-  hiddenThreadStatus: ThreadStatusPill | null;
-  orderedProjectThreadKeys: readonly string[];
-  renderedThreads: readonly SidebarThreadSummary[];
-  showEmptyThreadState: boolean;
-  shouldShowThreadPanel: boolean;
-  isThreadListExpanded: boolean;
+  hasOverflowingSessions: boolean;
+  hiddenSessionStatus: SessionStatusPill | null;
+  orderedProjectSessionKeys: readonly string[];
+  renderedSessions: readonly SidebarSessionSummary[];
+  showEmptySessionState: boolean;
+  shouldShowSessionPanel: boolean;
+  isSessionListExpanded: boolean;
   projectCwd: string;
-  activeRouteThreadKey: string | null;
-  threadJumpLabelByKey: ReadonlyMap<string, string>;
-  appSettingsConfirmThreadArchive: boolean;
-  renamingThreadKey: string | null;
+  activeRouteSessionKey: string | null;
+  sessionJumpLabelByKey: ReadonlyMap<string, string>;
+  appSettingsConfirmSessionArchive: boolean;
+  renamingSessionKey: string | null;
   renamingTitle: string;
   setRenamingTitle: (title: string) => void;
   renamingInputRef: React.RefObject<HTMLInputElement | null>;
   renamingCommittedRef: React.RefObject<boolean>;
-  confirmingArchiveThreadKey: string | null;
-  setConfirmingArchiveThreadKey: React.Dispatch<React.SetStateAction<string | null>>;
+  confirmingArchiveSessionKey: string | null;
+  setConfirmingArchiveSessionKey: React.Dispatch<React.SetStateAction<string | null>>;
   confirmArchiveButtonRefs: React.RefObject<Map<string, HTMLButtonElement>>;
-  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
-  handleThreadClick: (
+  attachSessionListAutoAnimateRef: (node: HTMLElement | null) => void;
+  handleSessionClick: (
     event: React.MouseEvent,
-    threadRef: ScopedThreadRef,
-    orderedProjectThreadKeys: readonly string[],
+    sessionRef: ScopedSessionRef,
+    orderedProjectSessionKeys: readonly string[],
   ) => void;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToSession: (sessionRef: ScopedSessionRef) => void;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
-  handleThreadContextMenu: (
-    threadRef: ScopedThreadRef,
+  handleSessionContextMenu: (
+    sessionRef: ScopedSessionRef,
     position: { x: number; y: number },
   ) => Promise<void>;
   clearSelection: () => void;
   commitRename: (
-    threadRef: ScopedThreadRef,
+    sessionRef: ScopedSessionRef,
     newTitle: string,
     originalTitle: string,
   ) => Promise<void>;
   cancelRename: () => void;
-  attemptArchiveThread: (threadRef: ScopedThreadRef) => Promise<void>;
+  attemptArchiveSession: (sessionRef: ScopedSessionRef) => Promise<void>;
   openPrLink: (event: React.MouseEvent<HTMLElement>, prUrl: string) => void;
-  expandThreadListForProject: (projectKey: string) => void;
-  collapseThreadListForProject: (projectKey: string) => void;
+  expandSessionListForProject: (projectKey: string) => void;
+  collapseSessionListForProject: (projectKey: string) => void;
 }
 
-const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
-  props: SidebarProjectThreadListProps,
+const SidebarProjectSessionList = memo(function SidebarProjectSessionList(
+  props: SidebarProjectSessionListProps,
 ) {
   const {
     projectKey,
     projectExpanded,
-    hasOverflowingThreads,
-    hiddenThreadStatus,
-    orderedProjectThreadKeys,
-    renderedThreads,
-    showEmptyThreadState,
-    shouldShowThreadPanel,
-    isThreadListExpanded,
+    hasOverflowingSessions,
+    hiddenSessionStatus,
+    orderedProjectSessionKeys,
+    renderedSessions,
+    showEmptySessionState,
+    shouldShowSessionPanel,
+    isSessionListExpanded,
     projectCwd,
-    activeRouteThreadKey,
-    threadJumpLabelByKey,
-    appSettingsConfirmThreadArchive,
-    renamingThreadKey,
+    activeRouteSessionKey,
+    sessionJumpLabelByKey,
+    appSettingsConfirmSessionArchive,
+    renamingSessionKey,
     renamingTitle,
     setRenamingTitle,
     renamingInputRef,
     renamingCommittedRef,
-    confirmingArchiveThreadKey,
-    setConfirmingArchiveThreadKey,
+    confirmingArchiveSessionKey,
+    setConfirmingArchiveSessionKey,
     confirmArchiveButtonRefs,
-    attachThreadListAutoAnimateRef,
-    handleThreadClick,
-    navigateToThread,
+    attachSessionListAutoAnimateRef,
+    handleSessionClick,
+    navigateToSession,
     handleMultiSelectContextMenu,
-    handleThreadContextMenu,
+    handleSessionContextMenu,
     clearSelection,
     commitRename,
     cancelRename,
-    attemptArchiveThread,
+    attemptArchiveSession,
     openPrLink,
-    expandThreadListForProject,
-    collapseThreadListForProject,
+    expandSessionListForProject,
+    collapseSessionListForProject,
   } = props;
   const showMoreButtonRender = useMemo(() => <button type="button" />, []);
   const showLessButtonRender = useMemo(() => <button type="button" />, []);
 
   return (
     <SidebarMenuSub
-      ref={attachThreadListAutoAnimateRef}
+      ref={attachSessionListAutoAnimateRef}
       className="mx-1 my-0 w-full translate-x-0 gap-0.5 overflow-hidden px-1.5 py-0"
     >
-      {shouldShowThreadPanel && showEmptyThreadState ? (
-        <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
+      {shouldShowSessionPanel && showEmptySessionState ? (
+        <SidebarMenuSubItem className="w-full" data-session-selection-safe>
           <div
-            data-thread-selection-safe
+            data-session-selection-safe
             className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60"
           >
-            <span>No threads yet</span>
+            <span>No sessions yet</span>
           </div>
         </SidebarMenuSubItem>
       ) : null}
-      {shouldShowThreadPanel &&
-        renderedThreads.map((thread) => {
-          const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+      {shouldShowSessionPanel &&
+        renderedSessions.map((session) => {
+          const sessionKey = scopedSessionKey(scopeSessionRef(session.environmentId, session.id));
           return (
-            <SidebarThreadRow
-              key={threadKey}
-              thread={thread}
+            <SidebarSessionRow
+              key={sessionKey}
+              session={session}
               projectCwd={projectCwd}
-              orderedProjectThreadKeys={orderedProjectThreadKeys}
-              isActive={activeRouteThreadKey === threadKey}
-              jumpLabel={threadJumpLabelByKey.get(threadKey) ?? null}
-              appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
-              renamingThreadKey={renamingThreadKey}
+              orderedProjectSessionKeys={orderedProjectSessionKeys}
+              isActive={activeRouteSessionKey === sessionKey}
+              jumpLabel={sessionJumpLabelByKey.get(sessionKey) ?? null}
+              appSettingsConfirmSessionArchive={appSettingsConfirmSessionArchive}
+              renamingSessionKey={renamingSessionKey}
               renamingTitle={renamingTitle}
               setRenamingTitle={setRenamingTitle}
               renamingInputRef={renamingInputRef}
               renamingCommittedRef={renamingCommittedRef}
-              confirmingArchiveThreadKey={confirmingArchiveThreadKey}
-              setConfirmingArchiveThreadKey={setConfirmingArchiveThreadKey}
+              confirmingArchiveSessionKey={confirmingArchiveSessionKey}
+              setConfirmingArchiveSessionKey={setConfirmingArchiveSessionKey}
               confirmArchiveButtonRefs={confirmArchiveButtonRefs}
-              handleThreadClick={handleThreadClick}
-              navigateToThread={navigateToThread}
+              handleSessionClick={handleSessionClick}
+              navigateToSession={navigateToSession}
               handleMultiSelectContextMenu={handleMultiSelectContextMenu}
-              handleThreadContextMenu={handleThreadContextMenu}
+              handleSessionContextMenu={handleSessionContextMenu}
               clearSelection={clearSelection}
               commitRename={commitRename}
               cancelRename={cancelRename}
-              attemptArchiveThread={attemptArchiveThread}
+              attemptArchiveSession={attemptArchiveSession}
               openPrLink={openPrLink}
             />
           );
         })}
 
-      {projectExpanded && hasOverflowingThreads && !isThreadListExpanded && (
+      {projectExpanded && hasOverflowingSessions && !isSessionListExpanded && (
         <SidebarMenuSubItem className="w-full">
           <SidebarMenuSubButton
             render={showMoreButtonRender}
-            data-thread-selection-safe
+            data-session-selection-safe
             size="sm"
             className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
             onClick={() => {
-              expandThreadListForProject(projectKey);
+              expandSessionListForProject(projectKey);
             }}
           >
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              {hiddenThreadStatus && <ThreadStatusLabel status={hiddenThreadStatus} compact />}
+              {hiddenSessionStatus && <SessionStatusLabel status={hiddenSessionStatus} compact />}
               <span>Show more</span>
             </span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>
       )}
-      {projectExpanded && hasOverflowingThreads && isThreadListExpanded && (
+      {projectExpanded && hasOverflowingSessions && isSessionListExpanded && (
         <SidebarMenuSubItem className="w-full">
           <SidebarMenuSubButton
             render={showLessButtonRender}
-            data-thread-selection-safe
+            data-session-selection-safe
             size="sm"
             className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
             onClick={() => {
-              collapseThreadListForProject(projectKey);
+              collapseSessionListForProject(projectKey);
             }}
           >
             <span>Show less</span>
@@ -893,16 +899,16 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
 
 interface SidebarProjectItemProps {
   project: SidebarProjectSnapshot;
-  isThreadListExpanded: boolean;
-  activeRouteThreadKey: string | null;
-  newThreadShortcutLabel: string | null;
-  handleNewThread: ReturnType<typeof useNewThreadHandler>["handleNewThread"];
-  archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
-  deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
-  threadJumpLabelByKey: ReadonlyMap<string, string>;
-  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
-  expandThreadListForProject: (projectKey: string) => void;
-  collapseThreadListForProject: (projectKey: string) => void;
+  isSessionListExpanded: boolean;
+  activeRouteSessionKey: string | null;
+  newSessionShortcutLabel: string | null;
+  handleNewSession: ReturnType<typeof useNewSessionHandler>["handleNewSession"];
+  archiveSession: ReturnType<typeof useSessionActions>["archiveSession"];
+  deleteSession: ReturnType<typeof useSessionActions>["deleteSession"];
+  sessionJumpLabelByKey: ReadonlyMap<string, string>;
+  attachSessionListAutoAnimateRef: (node: HTMLElement | null) => void;
+  expandSessionListForProject: (projectKey: string) => void;
+  collapseSessionListForProject: (projectKey: string) => void;
   dragInProgressRef: React.RefObject<boolean>;
   suppressProjectClickAfterDragRef: React.RefObject<boolean>;
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
@@ -913,63 +919,63 @@ interface SidebarProjectItemProps {
 const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjectItemProps) {
   const {
     project,
-    isThreadListExpanded,
-    activeRouteThreadKey,
-    newThreadShortcutLabel,
-    handleNewThread,
-    archiveThread,
-    deleteThread,
-    threadJumpLabelByKey,
-    attachThreadListAutoAnimateRef,
-    expandThreadListForProject,
-    collapseThreadListForProject,
+    isSessionListExpanded,
+    activeRouteSessionKey,
+    newSessionShortcutLabel,
+    handleNewSession,
+    archiveSession,
+    deleteSession,
+    sessionJumpLabelByKey,
+    attachSessionListAutoAnimateRef,
+    expandSessionListForProject,
+    collapseSessionListForProject,
     dragInProgressRef,
     suppressProjectClickAfterDragRef,
     suppressProjectClickForContextMenuRef,
     isManualProjectSorting,
     dragHandleProps,
   } = props;
-  const threadSortOrder = useSettings<SidebarThreadSortOrder>(
-    (settings) => settings.sidebarThreadSortOrder,
+  const sessionSortOrder = useSettings<SidebarSessionSortOrder>(
+    (settings) => settings.sidebarSessionSortOrder,
   );
-  const appSettingsConfirmThreadDelete = useSettings<boolean>(
-    (settings) => settings.confirmThreadDelete,
+  const appSettingsConfirmSessionDelete = useSettings<boolean>(
+    (settings) => settings.confirmSessionDelete,
   );
-  const appSettingsConfirmThreadArchive = useSettings<boolean>(
-    (settings) => settings.confirmThreadArchive,
+  const appSettingsConfirmSessionArchive = useSettings<boolean>(
+    (settings) => settings.confirmSessionArchive,
   );
-  const defaultThreadEnvMode = useSettings<ThreadEnvMode>(
-    (settings) => settings.defaultThreadEnvMode,
+  const defaultSessionEnvMode = useSettings<SessionEnvMode>(
+    (settings) => settings.defaultSessionEnvMode,
   );
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
   const { updateSettings } = useUpdateSettings();
-  const sidebarThreadPreviewCount = useSettings<SidebarThreadPreviewCount>(
-    (settings) => settings.sidebarThreadPreviewCount,
+  const sidebarSessionPreviewCount = useSettings<SidebarSessionPreviewCount>(
+    (settings) => settings.sidebarSessionPreviewCount,
   );
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
-  const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
+  const markSessionUnread = useUiStateStore((state) => state.markSessionUnread);
   const toggleProject = useUiStateStore((state) => state.toggleProject);
-  const toggleThreadSelection = useThreadSelectionStore((state) => state.toggleThread);
-  const rangeSelectTo = useThreadSelectionStore((state) => state.rangeSelectTo);
-  const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
-  const removeFromSelection = useThreadSelectionStore((state) => state.removeFromSelection);
-  const setSelectionAnchor = useThreadSelectionStore((state) => state.setAnchor);
-  const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{
-    threadId: ThreadId;
+  const toggleSessionSelection = useSessionSelectionStore((state) => state.toggleSession);
+  const rangeSelectTo = useSessionSelectionStore((state) => state.rangeSelectTo);
+  const clearSelection = useSessionSelectionStore((state) => state.clearSelection);
+  const removeFromSelection = useSessionSelectionStore((state) => state.removeFromSelection);
+  const setSelectionAnchor = useSessionSelectionStore((state) => state.setAnchor);
+  const { copyToClipboard: copySessionIdToClipboard } = useCopyToClipboard<{
+    sessionId: SessionId;
   }>({
     onCopy: (ctx) => {
       toastManager.add({
         type: "success",
-        title: "Thread ID copied",
-        description: ctx.threadId,
+        title: "Session ID copied",
+        description: ctx.sessionId,
       });
     },
     onError: (error) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
-          title: "Failed to copy thread ID",
+          title: "Failed to copy session ID",
           description: error instanceof Error ? error.message : "An error occurred.",
         }),
       );
@@ -987,7 +993,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     },
     onError: (error) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Failed to copy path",
           description: error instanceof Error ? error.message : "An error occurred.",
@@ -1010,7 +1016,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
     void api.shell.openExternal(prUrl).catch((error) => {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Unable to open pull request link",
           description: error instanceof Error ? error.message : "An error occurred.",
@@ -1018,47 +1024,52 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       );
     });
   }, []);
-  const sidebarThreads = useStore(
+  const sidebarSessions = useStore(
     useShallow(
       useMemo(
         () => (state: import("../store").AppState) =>
-          selectSidebarThreadsForProjectRefs(state, project.memberProjectRefs),
+          selectSidebarSessionsForProjectRefs(state, project.memberProjectRefs),
         [project.memberProjectRefs],
       ),
     ),
   );
-  const sidebarThreadByKey = useMemo(
+  const sidebarSessionByKey = useMemo(
     () =>
       new Map(
-        sidebarThreads.map(
-          (thread) =>
-            [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), thread] as const,
+        sidebarSessions.map(
+          (session) =>
+            [
+              scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+              session,
+            ] as const,
         ),
       ),
-    [sidebarThreads],
+    [sidebarSessions],
   );
   // Keep a ref so callbacks can read the latest map without appearing in
-  // dependency arrays (avoids invalidating every thread-row memo on each
-  // thread-list change).
-  const sidebarThreadByKeyRef = useRef(sidebarThreadByKey);
-  sidebarThreadByKeyRef.current = sidebarThreadByKey;
-  const projectThreads = sidebarThreads;
+  // dependency arrays (avoids invalidating every session-row memo on each
+  // session-list change).
+  const sidebarSessionByKeyRef = useRef(sidebarSessionByKey);
+  sidebarSessionByKeyRef.current = sidebarSessionByKey;
+  const projectSessions = sidebarSessions;
   const projectExpanded = useUiStateStore(
     (state) => state.projectExpandedById[project.projectKey] ?? true,
   );
-  const threadLastVisitedAts = useUiStateStore(
+  const sessionLastVisitedAts = useUiStateStore(
     useShallow((state) =>
-      projectThreads.map(
-        (thread) =>
-          state.threadLastVisitedAtById[
-            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+      projectSessions.map(
+        (session) =>
+          state.sessionLastVisitedAtById[
+            scopedSessionKey(scopeSessionRef(session.environmentId, session.id))
           ] ?? null,
       ),
     ),
   );
-  const [renamingThreadKey, setRenamingThreadKey] = useState<string | null>(null);
+  const [renamingSessionKey, setRenamingSessionKey] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
-  const [confirmingArchiveThreadKey, setConfirmingArchiveThreadKey] = useState<string | null>(null);
+  const [confirmingArchiveSessionKey, setConfirmingArchiveSessionKey] = useState<string | null>(
+    null,
+  );
   const [projectRenameTarget, setProjectRenameTarget] = useState<SidebarProjectGroupMember | null>(
     null,
   );
@@ -1081,13 +1092,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       ),
     [project.memberProjects],
   );
-  const memberThreadCountByPhysicalKey = useMemo(() => {
+  const memberSessionCountByPhysicalKey = useMemo(() => {
     const counts = new Map<string, number>(
       project.memberProjects.map((member) => [member.physicalProjectKey, 0] as const),
     );
-    for (const thread of projectThreads) {
+    for (const session of projectSessions) {
       const member = memberProjectByScopedKey.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+        scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId)),
       );
       if (!member) {
         continue;
@@ -1095,115 +1106,119 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       counts.set(member.physicalProjectKey, (counts.get(member.physicalProjectKey) ?? 0) + 1);
     }
     return counts;
-  }, [memberProjectByScopedKey, project.memberProjects, projectThreads]);
+  }, [memberProjectByScopedKey, project.memberProjects, projectSessions]);
 
-  const { projectStatus, visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
-    const lastVisitedAtByThreadKey = new Map(
-      projectThreads.map((thread, index) => [
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        threadLastVisitedAts[index] ?? null,
+  const { projectStatus, visibleProjectSessions, orderedProjectSessionKeys } = useMemo(() => {
+    const lastVisitedAtBySessionKey = new Map(
+      projectSessions.map((session, index) => [
+        scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+        sessionLastVisitedAts[index] ?? null,
       ]),
     );
-    const resolveProjectThreadStatus = (thread: SidebarThreadSummary) => {
-      const lastVisitedAt = lastVisitedAtByThreadKey.get(
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+    const resolveProjectSessionStatus = (session: SidebarSessionSummary) => {
+      const lastVisitedAt = lastVisitedAtBySessionKey.get(
+        scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
       );
-      return resolveThreadStatusPill({
-        thread: {
-          ...thread,
+      return resolveSessionStatusPill({
+        session: {
+          ...session,
           ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
         },
       });
     };
-    const visibleProjectThreads = sortThreads(
-      projectThreads.filter((thread) => thread.archivedAt === null),
-      threadSortOrder,
+    const visibleProjectSessions = sortSessions(
+      projectSessions.filter((session) => session.archivedAt === null),
+      sessionSortOrder,
     );
     const projectStatus = resolveProjectStatusIndicator(
-      visibleProjectThreads.map((thread) => resolveProjectThreadStatus(thread)),
+      visibleProjectSessions.map((session) => resolveProjectSessionStatus(session)),
     );
     return {
-      orderedProjectThreadKeys: visibleProjectThreads.map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      orderedProjectSessionKeys: visibleProjectSessions.map((session) =>
+        scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
       ),
       projectStatus,
-      visibleProjectThreads,
+      visibleProjectSessions,
     };
-  }, [projectThreads, threadLastVisitedAts, threadSortOrder]);
+  }, [projectSessions, sessionLastVisitedAts, sessionSortOrder]);
 
-  const pinnedCollapsedThread = useMemo(() => {
-    const activeThreadKey = activeRouteThreadKey ?? undefined;
-    if (!activeThreadKey || projectExpanded) {
+  const pinnedCollapsedSession = useMemo(() => {
+    const activeSessionKey = activeRouteSessionKey ?? undefined;
+    if (!activeSessionKey || projectExpanded) {
       return null;
     }
     return (
-      visibleProjectThreads.find(
-        (thread) =>
-          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === activeThreadKey,
+      visibleProjectSessions.find(
+        (session) =>
+          scopedSessionKey(scopeSessionRef(session.environmentId, session.id)) === activeSessionKey,
       ) ?? null
     );
-  }, [activeRouteThreadKey, projectExpanded, visibleProjectThreads]);
+  }, [activeRouteSessionKey, projectExpanded, visibleProjectSessions]);
 
   const {
-    hasOverflowingThreads,
-    hiddenThreadStatus,
-    renderedThreads,
-    showEmptyThreadState,
-    shouldShowThreadPanel,
+    hasOverflowingSessions,
+    hiddenSessionStatus,
+    renderedSessions,
+    showEmptySessionState,
+    shouldShowSessionPanel,
   } = useMemo(() => {
-    const lastVisitedAtByThreadKey = new Map(
-      projectThreads.map((thread, index) => [
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        threadLastVisitedAts[index] ?? null,
+    const lastVisitedAtBySessionKey = new Map(
+      projectSessions.map((session, index) => [
+        scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+        sessionLastVisitedAts[index] ?? null,
       ]),
     );
-    const resolveProjectThreadStatus = (thread: SidebarThreadSummary) => {
-      const lastVisitedAt = lastVisitedAtByThreadKey.get(
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+    const resolveProjectSessionStatus = (session: SidebarSessionSummary) => {
+      const lastVisitedAt = lastVisitedAtBySessionKey.get(
+        scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
       );
-      return resolveThreadStatusPill({
-        thread: {
-          ...thread,
+      return resolveSessionStatusPill({
+        session: {
+          ...session,
           ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
         },
       });
     };
-    const hasOverflowingThreads = visibleProjectThreads.length > sidebarThreadPreviewCount;
-    const previewThreads =
-      isThreadListExpanded || !hasOverflowingThreads
-        ? visibleProjectThreads
-        : visibleProjectThreads.slice(0, sidebarThreadPreviewCount);
-    const visibleThreadKeys = new Set(
-      [...previewThreads, ...(pinnedCollapsedThread ? [pinnedCollapsedThread] : [])].map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+    const hasOverflowingSessions = visibleProjectSessions.length > sidebarSessionPreviewCount;
+    const previewSessions =
+      isSessionListExpanded || !hasOverflowingSessions
+        ? visibleProjectSessions
+        : visibleProjectSessions.slice(0, sidebarSessionPreviewCount);
+    const visibleSessionKeys = new Set(
+      [...previewSessions, ...(pinnedCollapsedSession ? [pinnedCollapsedSession] : [])].map(
+        (session) => scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
       ),
     );
-    const renderedThreads = pinnedCollapsedThread
-      ? [pinnedCollapsedThread]
-      : visibleProjectThreads.filter((thread) =>
-          visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+    const renderedSessions = pinnedCollapsedSession
+      ? [pinnedCollapsedSession]
+      : visibleProjectSessions.filter((session) =>
+          visibleSessionKeys.has(
+            scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+          ),
         );
-    const hiddenThreads = visibleProjectThreads.filter(
-      (thread) =>
-        !visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+    const hiddenSessions = visibleProjectSessions.filter(
+      (session) =>
+        !visibleSessionKeys.has(
+          scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+        ),
     );
     return {
-      hasOverflowingThreads,
-      hiddenThreadStatus: resolveProjectStatusIndicator(
-        hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
+      hasOverflowingSessions,
+      hiddenSessionStatus: resolveProjectStatusIndicator(
+        hiddenSessions.map((session) => resolveProjectSessionStatus(session)),
       ),
-      renderedThreads,
-      showEmptyThreadState: projectExpanded && visibleProjectThreads.length === 0,
-      shouldShowThreadPanel: projectExpanded || pinnedCollapsedThread !== null,
+      renderedSessions,
+      showEmptySessionState: projectExpanded && visibleProjectSessions.length === 0,
+      shouldShowSessionPanel: projectExpanded || pinnedCollapsedSession !== null,
     };
   }, [
-    isThreadListExpanded,
-    pinnedCollapsedThread,
+    isSessionListExpanded,
+    pinnedCollapsedSession,
     projectExpanded,
-    projectThreads,
-    sidebarThreadPreviewCount,
-    threadLastVisitedAts,
-    visibleProjectThreads,
+    projectSessions,
+    sidebarSessionPreviewCount,
+    sessionLastVisitedAts,
+    visibleProjectSessions,
   ]);
 
   const handleProjectButtonClick = useCallback(
@@ -1225,7 +1240,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         event.stopPropagation();
         return;
       }
-      if (useThreadSelectionStore.getState().hasSelection()) {
+      if (useSessionSelectionStore.getState().hasSelection()) {
         clearSelection();
       }
       toggleProject(project.projectKey);
@@ -1290,11 +1305,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     async (member: SidebarProjectGroupMember, options: { force?: boolean } = {}): Promise<void> => {
       const memberProjectRef = scopeProjectRef(member.environmentId, member.id);
       const draftStore = useComposerDraftStore.getState();
-      const projectDraftThread = draftStore.getDraftThreadByProjectRef(memberProjectRef);
-      if (projectDraftThread) {
-        draftStore.clearDraftThread(projectDraftThread.draftId);
+      const projectDraftSession = draftStore.getDraftSessionByProjectRef(memberProjectRef);
+      if (projectDraftSession) {
+        draftStore.clearDraftSession(projectDraftSession.draftId);
       }
-      draftStore.clearProjectDraftThreadId(memberProjectRef);
+      draftStore.clearProjectDraftSessionId(memberProjectRef);
 
       const projectApi = readEnvironmentApi(member.environmentId);
       if (!projectApi) {
@@ -1319,13 +1334,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       }
 
       const memberProjectRef = scopeProjectRef(member.environmentId, member.id);
-      const memberThreadCount = memberThreadCountByPhysicalKey.get(member.physicalProjectKey) ?? 0;
-      if (memberThreadCount > 0) {
+      const memberSessionCount =
+        memberSessionCountByPhysicalKey.get(member.physicalProjectKey) ?? 0;
+      if (memberSessionCount > 0) {
         const warningToastId = toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "warning",
             title: "Study is not empty",
-            description: "Delete all threads in this study before removing it.",
+            description: "Delete all sessions in this study before removing it.",
             actionVariant: "destructive",
             actionProps: {
               children: "Delete anyway",
@@ -1336,21 +1352,21 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                     window.setTimeout(resolve, 180);
                   });
 
-                  const latestProjectThreads = selectSidebarThreadsForProjectRefs(
+                  const latestProjectSessions = selectSidebarSessionsForProjectRefs(
                     useStore.getState(),
                     [memberProjectRef],
                   );
                   const confirmed = await api.dialogs.confirm(
-                    latestProjectThreads.length > 0
+                    latestProjectSessions.length > 0
                       ? [
-                          `Remove study "${member.name}" and delete its ${latestProjectThreads.length} thread${
-                            latestProjectThreads.length === 1 ? "" : "s"
+                          `Remove study "${member.name}" and delete its ${latestProjectSessions.length} session${
+                            latestProjectSessions.length === 1 ? "" : "s"
                           }?`,
                           `Path: ${member.cwd}`,
                           ...(member.environmentLabel
                             ? [`Environment: ${member.environmentLabel}`]
                             : []),
-                          "This permanently clears conversation history for those threads.",
+                          "This permanently clears conversation history for those sessions.",
                           "This removes only this study entry.",
                           "This action cannot be undone.",
                         ].join("\n")
@@ -1377,7 +1393,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                     error,
                   });
                   toastManager.add(
-                    stackedThreadToast({
+                    stackedSessionToast({
                       type: "error",
                       title: `Failed to remove "${member.name}"`,
                       description: message,
@@ -1412,7 +1428,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           error,
         });
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: `Failed to remove "${member.name}"`,
             description: message,
@@ -1420,7 +1436,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         );
       }
     },
-    [memberThreadCountByPhysicalKey, removeProject],
+    [memberSessionCountByPhysicalKey, removeProject],
   );
 
   const handleProjectButtonContextMenu = useCallback(
@@ -1529,57 +1545,57 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     ],
   );
 
-  const navigateToThread = useCallback(
-    (threadRef: ScopedThreadRef) => {
-      if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
+  const navigateToSession = useCallback(
+    (sessionRef: ScopedSessionRef) => {
+      if (useSessionSelectionStore.getState().selectedSessionKeys.size > 0) {
         clearSelection();
       }
-      setSelectionAnchor(scopedThreadKey(threadRef));
+      setSelectionAnchor(scopedSessionKey(sessionRef));
       if (isMobile) {
         setOpenMobile(false);
       }
       void router.navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
+        to: "/$environmentId/$sessionId",
+        params: buildSessionRouteParams(sessionRef),
       });
     },
     [clearSelection, isMobile, router, setOpenMobile, setSelectionAnchor],
   );
 
-  const handleThreadClick = useCallback(
+  const handleSessionClick = useCallback(
     (
       event: React.MouseEvent,
-      threadRef: ScopedThreadRef,
-      orderedProjectThreadKeys: readonly string[],
+      sessionRef: ScopedSessionRef,
+      orderedProjectSessionKeys: readonly string[],
     ) => {
       const isMac = isMacPlatform(navigator.platform);
       const isModClick = isMac ? event.metaKey : event.ctrlKey;
       const isShiftClick = event.shiftKey;
-      const threadKey = scopedThreadKey(threadRef);
-      const currentSelectionCount = useThreadSelectionStore.getState().selectedThreadKeys.size;
+      const sessionKey = scopedSessionKey(sessionRef);
+      const currentSelectionCount = useSessionSelectionStore.getState().selectedSessionKeys.size;
 
       if (isModClick) {
         event.preventDefault();
-        toggleThreadSelection(threadKey);
+        toggleSessionSelection(sessionKey);
         return;
       }
 
       if (isShiftClick) {
         event.preventDefault();
-        rangeSelectTo(threadKey, orderedProjectThreadKeys);
+        rangeSelectTo(sessionKey, orderedProjectSessionKeys);
         return;
       }
 
       if (currentSelectionCount > 0) {
         clearSelection();
       }
-      setSelectionAnchor(threadKey);
+      setSelectionAnchor(sessionKey);
       if (isMobile) {
         setOpenMobile(false);
       }
       void router.navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
+        to: "/$environmentId/$sessionId",
+        params: buildSessionRouteParams(sessionRef),
       });
     },
     [
@@ -1589,7 +1605,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       router,
       setOpenMobile,
       setSelectionAnchor,
-      toggleThreadSelection,
+      toggleSessionSelection,
     ],
   );
 
@@ -1597,9 +1613,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     async (position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
-      const threadKeys = [...useThreadSelectionStore.getState().selectedThreadKeys];
-      if (threadKeys.length === 0) return;
-      const count = threadKeys.length;
+      const sessionKeys = [...useSessionSelectionStore.getState().selectedSessionKeys];
+      if (sessionKeys.length === 0) return;
+      const count = sessionKeys.length;
 
       const clicked = await api.contextMenu.show(
         [
@@ -1610,9 +1626,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       );
 
       if (clicked === "mark-unread") {
-        for (const threadKey of threadKeys) {
-          const thread = sidebarThreadByKeyRef.current.get(threadKey);
-          markThreadUnread(threadKey, thread?.latestTurn?.completedAt);
+        for (const sessionKey of sessionKeys) {
+          const session = sidebarSessionByKeyRef.current.get(sessionKey);
+          markSessionUnread(sessionKey, session?.latestTurn?.completedAt);
         }
         clearSelection();
         return;
@@ -1620,78 +1636,78 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       if (clicked !== "delete") return;
 
-      if (appSettingsConfirmThreadDelete) {
+      if (appSettingsConfirmSessionDelete) {
         const confirmed = await api.dialogs.confirm(
           [
-            `Delete ${count} thread${count === 1 ? "" : "s"}?`,
-            "This permanently clears conversation history for these threads.",
+            `Delete ${count} session${count === 1 ? "" : "s"}?`,
+            "This permanently clears conversation history for these sessions.",
           ].join("\n"),
         );
         if (!confirmed) return;
       }
 
-      const deletedThreadKeys = new Set(threadKeys);
-      for (const threadKey of threadKeys) {
-        const thread = sidebarThreadByKeyRef.current.get(threadKey);
-        if (!thread) continue;
-        await deleteThread(scopeThreadRef(thread.environmentId, thread.id), {
-          deletedThreadKeys,
+      const deletedSessionKeys = new Set(sessionKeys);
+      for (const sessionKey of sessionKeys) {
+        const session = sidebarSessionByKeyRef.current.get(sessionKey);
+        if (!session) continue;
+        await deleteSession(scopeSessionRef(session.environmentId, session.id), {
+          deletedSessionKeys,
         });
       }
-      removeFromSelection(threadKeys);
+      removeFromSelection(sessionKeys);
     },
     [
-      appSettingsConfirmThreadDelete,
+      appSettingsConfirmSessionDelete,
       clearSelection,
-      deleteThread,
-      markThreadUnread,
+      deleteSession,
+      markSessionUnread,
       removeFromSelection,
     ],
   );
 
-  const createThreadForProjectMember = useCallback(
+  const createSessionForProjectMember = useCallback(
     (member: SidebarProjectGroupMember) => {
       const currentRouteParams =
         router.state.matches[router.state.matches.length - 1]?.params ?? {};
-      const currentRouteTarget = resolveThreadRouteTarget(currentRouteParams);
-      const currentActiveThread =
+      const currentRouteTarget = resolveSessionRouteTarget(currentRouteParams);
+      const currentActiveSession =
         currentRouteTarget?.kind === "server"
-          ? (selectThreadByRef(useStore.getState(), currentRouteTarget.threadRef) ?? null)
+          ? (selectSessionByRef(useStore.getState(), currentRouteTarget.sessionRef) ?? null)
           : null;
       const draftStore = useComposerDraftStore.getState();
-      const currentActiveDraftThread =
+      const currentActiveDraftSession =
         currentRouteTarget?.kind === "server"
-          ? (draftStore.getDraftThread(currentRouteTarget.threadRef) ?? null)
+          ? (draftStore.getDraftSession(currentRouteTarget.sessionRef) ?? null)
           : currentRouteTarget?.kind === "draft"
             ? (draftStore.getDraftSession(currentRouteTarget.draftId) ?? null)
             : null;
-      const seedContext = resolveSidebarNewThreadSeedContext({
+      const seedContext = resolveSidebarNewSessionSeedContext({
         projectId: member.id,
-        defaultEnvMode: resolveSidebarNewThreadEnvMode({
-          defaultEnvMode: defaultThreadEnvMode,
+        defaultEnvMode: resolveSidebarNewSessionEnvMode({
+          defaultEnvMode: defaultSessionEnvMode,
         }),
-        activeThread:
-          currentActiveThread && currentActiveThread.projectId === member.id
+        activeSession:
+          currentActiveSession && currentActiveSession.projectId === member.id
             ? {
-                projectId: currentActiveThread.projectId,
-                branch: currentActiveThread.branch,
-                worktreePath: currentActiveThread.worktreePath,
+                projectId: currentActiveSession.projectId,
+                branch: currentActiveSession.branch,
+                worktreePath: currentActiveSession.worktreePath,
               }
             : null,
-        activeDraftThread:
-          currentActiveDraftThread && currentActiveDraftThread.projectId === member.id
+        activeDraftSession:
+          currentActiveDraftSession && currentActiveDraftSession.projectId === member.id
             ? {
-                projectId: currentActiveDraftThread.projectId,
-                branch: currentActiveDraftThread.branch,
-                worktreePath: currentActiveDraftThread.worktreePath,
-                envMode: currentActiveDraftThread.envMode,
+                projectId: currentActiveDraftSession.projectId,
+                branch: currentActiveDraftSession.branch,
+                worktreePath: currentActiveDraftSession.worktreePath,
+                envMode: currentActiveDraftSession.envMode,
               }
             : null,
       });
       if (isMobile) {
         setOpenMobile(false);
       }
-      void handleNewThread(scopeProjectRef(member.environmentId, member.id), {
+      void handleNewSession(scopeProjectRef(member.environmentId, member.id), {
         ...(seedContext.branch !== undefined ? { branch: seedContext.branch } : {}),
         ...(seedContext.worktreePath !== undefined
           ? { worktreePath: seedContext.worktreePath }
@@ -1699,16 +1715,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         envMode: seedContext.envMode,
       });
     },
-    [defaultThreadEnvMode, handleNewThread, isMobile, router, setOpenMobile],
+    [defaultSessionEnvMode, handleNewSession, isMobile, router, setOpenMobile],
   );
 
-  const handleCreateThreadClick = useCallback(
+  const handleCreateSessionClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
 
       if (project.memberProjects.length === 1) {
-        createThreadForProjectMember(project.memberProjects[0]!);
+        createSessionForProjectMember(project.memberProjects[0]!);
         return;
       }
 
@@ -1736,40 +1752,40 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         if (!targetMember) {
           return;
         }
-        createThreadForProjectMember(targetMember);
+        createSessionForProjectMember(targetMember);
       })();
     },
-    [createThreadForProjectMember, project.groupedProjectCount, project.memberProjects],
+    [createSessionForProjectMember, project.groupedProjectCount, project.memberProjects],
   );
 
-  const attemptArchiveThread = useCallback(
-    async (threadRef: ScopedThreadRef) => {
+  const attemptArchiveSession = useCallback(
+    async (sessionRef: ScopedSessionRef) => {
       try {
-        await archiveThread(threadRef);
+        await archiveSession(sessionRef);
       } catch (error) {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
-            title: "Failed to archive thread",
+            title: "Failed to archive session",
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
       }
     },
-    [archiveThread],
+    [archiveSession],
   );
 
   const cancelRename = useCallback(() => {
-    setRenamingThreadKey(null);
+    setRenamingSessionKey(null);
     renamingInputRef.current = null;
   }, []);
 
   const commitRename = useCallback(
-    async (threadRef: ScopedThreadRef, newTitle: string, originalTitle: string) => {
-      const threadKey = scopedThreadKey(threadRef);
+    async (sessionRef: ScopedSessionRef, newTitle: string, originalTitle: string) => {
+      const sessionKey = scopedSessionKey(sessionRef);
       const finishRename = () => {
-        setRenamingThreadKey((current) => {
-          if (current !== threadKey) return current;
+        setRenamingSessionKey((current) => {
+          if (current !== sessionKey) return current;
           renamingInputRef.current = null;
           return null;
         });
@@ -1779,7 +1795,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (trimmed.length === 0) {
         toastManager.add({
           type: "warning",
-          title: "Thread title cannot be empty",
+          title: "Session title cannot be empty",
         });
         finishRename();
         return;
@@ -1788,23 +1804,23 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         finishRename();
         return;
       }
-      const api = readEnvironmentApi(threadRef.environmentId);
+      const api = readEnvironmentApi(sessionRef.environmentId);
       if (!api) {
         finishRename();
         return;
       }
       try {
         await api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
+          type: "session.meta.update",
           commandId: newCommandId(),
-          threadId: threadRef.threadId,
+          sessionId: sessionRef.sessionId,
           title: trimmed,
         });
       } catch (error) {
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
-            title: "Failed to rename thread",
+            title: "Failed to rename session",
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
@@ -1841,7 +1857,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     const api = readEnvironmentApi(projectRenameTarget.environmentId);
     if (!api) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Failed to rename study",
           description: "Study API unavailable.",
@@ -1860,7 +1876,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       closeProjectRenameDialog();
     } catch (error) {
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Failed to rename study",
           description: error instanceof Error ? error.message : "An error occurred.",
@@ -1900,77 +1916,78 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     updateSettings,
   ]);
 
-  const handleThreadContextMenu = useCallback(
-    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+  const handleSessionContextMenu = useCallback(
+    async (sessionRef: ScopedSessionRef, position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
-      const threadKey = scopedThreadKey(threadRef);
-      const thread = sidebarThreadByKeyRef.current.get(threadKey) ?? null;
-      if (!thread) return;
-      const threadProject = memberProjectByScopedKey.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+      const sessionKey = scopedSessionKey(sessionRef);
+      const session = sidebarSessionByKeyRef.current.get(sessionKey) ?? null;
+      if (!session) return;
+      const sessionProject = memberProjectByScopedKey.get(
+        scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId)),
       );
-      const threadWorkspacePath = thread.worktreePath ?? threadProject?.cwd ?? project.cwd ?? null;
+      const sessionWorkspacePath =
+        session.worktreePath ?? sessionProject?.cwd ?? project.cwd ?? null;
       const clicked = await api.contextMenu.show(
         [
-          { id: "rename", label: "Rename thread" },
+          { id: "rename", label: "Rename session" },
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
-          { id: "copy-thread-id", label: "Copy Thread ID" },
+          { id: "copy-session-id", label: "Copy Session ID" },
           { id: "delete", label: "Delete", destructive: true },
         ],
         position,
       );
 
       if (clicked === "rename") {
-        setRenamingThreadKey(threadKey);
-        setRenamingTitle(thread.title);
+        setRenamingSessionKey(sessionKey);
+        setRenamingTitle(session.title);
         renamingCommittedRef.current = false;
         return;
       }
 
       if (clicked === "mark-unread") {
-        markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+        markSessionUnread(sessionKey, session.latestTurn?.completedAt);
         return;
       }
       if (clicked === "copy-path") {
-        if (!threadWorkspacePath) {
+        if (!sessionWorkspacePath) {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Path unavailable",
-              description: "This thread does not have a workspace path to copy.",
+              description: "This session does not have a workspace path to copy.",
             }),
           );
           return;
         }
-        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
+        copyPathToClipboard(sessionWorkspacePath, { path: sessionWorkspacePath });
         return;
       }
-      if (clicked === "copy-thread-id") {
-        copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+      if (clicked === "copy-session-id") {
+        copySessionIdToClipboard(session.id, { sessionId: session.id });
         return;
       }
       if (clicked !== "delete") return;
-      if (appSettingsConfirmThreadDelete) {
+      if (appSettingsConfirmSessionDelete) {
         const confirmed = await api.dialogs.confirm(
           [
-            `Delete thread "${thread.title}"?`,
-            "This permanently clears conversation history for this thread.",
+            `Delete session "${session.title}"?`,
+            "This permanently clears conversation history for this session.",
           ].join("\n"),
         );
         if (!confirmed) {
           return;
         }
       }
-      await deleteThread(threadRef);
+      await deleteSession(sessionRef);
     },
     [
-      appSettingsConfirmThreadDelete,
+      appSettingsConfirmSessionDelete,
       copyPathToClipboard,
-      copyThreadIdToClipboard,
-      deleteThread,
-      markThreadUnread,
+      copySessionIdToClipboard,
+      deleteSession,
+      markSessionUnread,
       memberProjectByScopedKey,
       project.cwd,
     ],
@@ -2027,8 +2044,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           </span>
         </SidebarMenuButton>
         {/* Environment badge – visible by default, crossfades with the
-            "new thread" button on hover using the same pointer-events +
-            opacity pattern as the thread row archive/timestamp swap. */}
+            "new session" button on hover using the same pointer-events +
+            opacity pattern as the session row archive/timestamp swap. */}
         {project.environmentPresence === "remote-only" && (
           <Tooltip>
             <TooltipTrigger
@@ -2056,10 +2073,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               <div className="pointer-events-none absolute top-1 right-1.5 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
                 <button
                   type="button"
-                  aria-label={`Create new thread in ${project.displayName}`}
-                  data-testid="new-thread-button"
+                  aria-label={`Create new session in ${project.displayName}`}
+                  data-testid="new-session-button"
                   className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                  onClick={handleCreateThreadClick}
+                  onClick={handleCreateSessionClick}
                 >
                   <SquarePenIcon className="size-3.5" />
                 </button>
@@ -2067,45 +2084,45 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             }
           />
           <TooltipPopup side="top">
-            {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
+            {newSessionShortcutLabel ? `New session (${newSessionShortcutLabel})` : "New session"}
           </TooltipPopup>
         </Tooltip>
       </div>
 
-      <SidebarProjectThreadList
+      <SidebarProjectSessionList
         projectKey={project.projectKey}
         projectExpanded={projectExpanded}
-        hasOverflowingThreads={hasOverflowingThreads}
-        hiddenThreadStatus={hiddenThreadStatus}
-        orderedProjectThreadKeys={orderedProjectThreadKeys}
-        renderedThreads={renderedThreads}
-        showEmptyThreadState={showEmptyThreadState}
-        shouldShowThreadPanel={shouldShowThreadPanel}
-        isThreadListExpanded={isThreadListExpanded}
+        hasOverflowingSessions={hasOverflowingSessions}
+        hiddenSessionStatus={hiddenSessionStatus}
+        orderedProjectSessionKeys={orderedProjectSessionKeys}
+        renderedSessions={renderedSessions}
+        showEmptySessionState={showEmptySessionState}
+        shouldShowSessionPanel={shouldShowSessionPanel}
+        isSessionListExpanded={isSessionListExpanded}
         projectCwd={project.cwd}
-        activeRouteThreadKey={activeRouteThreadKey}
-        threadJumpLabelByKey={threadJumpLabelByKey}
-        appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
-        renamingThreadKey={renamingThreadKey}
+        activeRouteSessionKey={activeRouteSessionKey}
+        sessionJumpLabelByKey={sessionJumpLabelByKey}
+        appSettingsConfirmSessionArchive={appSettingsConfirmSessionArchive}
+        renamingSessionKey={renamingSessionKey}
         renamingTitle={renamingTitle}
         setRenamingTitle={setRenamingTitle}
         renamingInputRef={renamingInputRef}
         renamingCommittedRef={renamingCommittedRef}
-        confirmingArchiveThreadKey={confirmingArchiveThreadKey}
-        setConfirmingArchiveThreadKey={setConfirmingArchiveThreadKey}
+        confirmingArchiveSessionKey={confirmingArchiveSessionKey}
+        setConfirmingArchiveSessionKey={setConfirmingArchiveSessionKey}
         confirmArchiveButtonRefs={confirmArchiveButtonRefs}
-        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-        handleThreadClick={handleThreadClick}
-        navigateToThread={navigateToThread}
+        attachSessionListAutoAnimateRef={attachSessionListAutoAnimateRef}
+        handleSessionClick={handleSessionClick}
+        navigateToSession={navigateToSession}
         handleMultiSelectContextMenu={handleMultiSelectContextMenu}
-        handleThreadContextMenu={handleThreadContextMenu}
+        handleSessionContextMenu={handleSessionContextMenu}
         clearSelection={clearSelection}
         commitRename={commitRename}
         cancelRename={cancelRename}
-        attemptArchiveThread={attemptArchiveThread}
+        attemptArchiveSession={attemptArchiveSession}
         openPrLink={openPrLink}
-        expandThreadListForProject={expandThreadListForProject}
-        collapseThreadListForProject={collapseThreadListForProject}
+        expandSessionListForProject={expandSessionListForProject}
+        collapseSessionListForProject={collapseSessionListForProject}
       />
 
       <Dialog
@@ -2256,35 +2273,35 @@ type SortableProjectHandleProps = Pick<
 
 function ProjectSortMenu({
   projectSortOrder,
-  threadSortOrder,
+  sessionSortOrder,
   projectGroupingMode,
-  threadPreviewCount,
+  sessionPreviewCount,
   onProjectSortOrderChange,
-  onThreadSortOrderChange,
+  onSessionSortOrderChange,
   onProjectGroupingModeChange,
-  onThreadPreviewCountChange,
+  onSessionPreviewCountChange,
 }: {
   projectSortOrder: SidebarProjectSortOrder;
-  threadSortOrder: SidebarThreadSortOrder;
+  sessionSortOrder: SidebarSessionSortOrder;
   projectGroupingMode: SidebarProjectGroupingMode;
-  threadPreviewCount: SidebarThreadPreviewCount;
+  sessionPreviewCount: SidebarSessionPreviewCount;
   onProjectSortOrderChange: (sortOrder: SidebarProjectSortOrder) => void;
-  onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
+  onSessionSortOrderChange: (sortOrder: SidebarSessionSortOrder) => void;
   onProjectGroupingModeChange: (mode: SidebarProjectGroupingMode) => void;
-  onThreadPreviewCountChange: (count: SidebarThreadPreviewCount) => void;
+  onSessionPreviewCountChange: (count: SidebarSessionPreviewCount) => void;
 }) {
-  const handleThreadPreviewCountChange = useCallback(
+  const handleSessionPreviewCountChange = useCallback(
     (nextValue: number | null) => {
       if (nextValue === null) {
         return;
       }
 
-      const clampedValue = clampSidebarThreadPreviewCount(nextValue);
-      if (clampedValue !== threadPreviewCount) {
-        onThreadPreviewCountChange(clampedValue);
+      const clampedValue = clampSidebarSessionPreviewCount(nextValue);
+      if (clampedValue !== sessionPreviewCount) {
+        onSessionPreviewCountChange(clampedValue);
       }
     },
-    [onThreadPreviewCountChange, threadPreviewCount],
+    [onSessionPreviewCountChange, sessionPreviewCount],
   );
 
   return (
@@ -2321,16 +2338,16 @@ function ProjectSortMenu({
         </MenuGroup>
         <MenuGroup>
           <div className="px-2 pt-2 pb-1 sm:text-xs font-medium text-muted-foreground">
-            Sort threads
+            Sort sessions
           </div>
           <MenuRadioGroup
-            value={threadSortOrder}
+            value={sessionSortOrder}
             onValueChange={(value) => {
-              onThreadSortOrderChange(value as SidebarThreadSortOrder);
+              onSessionSortOrderChange(value as SidebarSessionSortOrder);
             }}
           >
             {(
-              Object.entries(SIDEBAR_THREAD_SORT_LABELS) as Array<[SidebarThreadSortOrder, string]>
+              Object.entries(SIDEBAR_THREAD_SORT_LABELS) as Array<[SidebarSessionSortOrder, string]>
             ).map(([value, label]) => (
               <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
                 {label}
@@ -2340,26 +2357,26 @@ function ProjectSortMenu({
         </MenuGroup>
         <MenuGroup>
           <div className="px-2 pt-2 pb-1 text-muted-foreground sm:text-xs font-medium">
-            Visible threads
+            Visible sessions
           </div>
           <div className="px-2 py-1">
             <NumberField
-              aria-label="Visible thread count"
+              aria-label="Visible session count"
               className="w-28 gap-0"
               max={MAX_SIDEBAR_THREAD_PREVIEW_COUNT}
               min={MIN_SIDEBAR_THREAD_PREVIEW_COUNT}
-              onValueChange={handleThreadPreviewCountChange}
+              onValueChange={handleSessionPreviewCountChange}
               size="sm"
               step={1}
-              value={threadPreviewCount}
+              value={sessionPreviewCount}
             >
               <NumberFieldGroup className="h-7 rounded-md sm:h-6.5">
                 <NumberFieldDecrement
-                  aria-label="Decrease visible thread count"
+                  aria-label="Decrease visible session count"
                   className="px-2 sm:px-2 [&_svg]:size-3.5"
                 />
                 <NumberFieldInput
-                  aria-label="Visible thread count"
+                  aria-label="Visible session count"
                   className="h-7 w-9 grow-0 px-0 text-xs leading-7 sm:h-6.5 sm:leading-6.5"
                   inputMode="numeric"
                   onKeyDownCapture={(event) => {
@@ -2367,7 +2384,7 @@ function ProjectSortMenu({
                   }}
                 />
                 <NumberFieldIncrement
-                  aria-label="Increase visible thread count"
+                  aria-label="Increase visible session count"
                   className="px-2 sm:px-2 [&_svg]:size-3.5"
                 />
               </NumberFieldGroup>
@@ -2452,7 +2469,7 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
         <TooltipTrigger
           render={
             <Link
-              aria-label="Go to threads"
+              aria-label="Go to sessions"
               className="ml-1 flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-md outline-hidden ring-ring transition-colors hover:text-foreground focus-visible:ring-2"
               to="/"
             >
@@ -2516,9 +2533,9 @@ interface SidebarProjectsContentProps {
   desktopUpdateButtonDisabled: boolean;
   handleDesktopUpdateButtonClick: () => void;
   projectSortOrder: SidebarProjectSortOrder;
-  threadSortOrder: SidebarThreadSortOrder;
+  sessionSortOrder: SidebarSessionSortOrder;
   projectGroupingMode: SidebarProjectGroupingMode;
-  threadPreviewCount: SidebarThreadPreviewCount;
+  sessionPreviewCount: SidebarSessionPreviewCount;
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
   openAddProject: () => void;
   isManualProjectSorting: boolean;
@@ -2527,19 +2544,19 @@ interface SidebarProjectsContentProps {
   handleProjectDragStart: (event: DragStartEvent) => void;
   handleProjectDragEnd: (event: DragEndEvent) => void;
   handleProjectDragCancel: (event: DragCancelEvent) => void;
-  handleNewThread: ReturnType<typeof useNewThreadHandler>["handleNewThread"];
-  archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
-  deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
+  handleNewSession: ReturnType<typeof useNewSessionHandler>["handleNewSession"];
+  archiveSession: ReturnType<typeof useSessionActions>["archiveSession"];
+  deleteSession: ReturnType<typeof useSessionActions>["deleteSession"];
   sortedProjects: readonly SidebarProjectSnapshot[];
-  expandedThreadListsByProject: ReadonlySet<string>;
+  expandedSessionListsByProject: ReadonlySet<string>;
   activeRouteProjectKey: string | null;
-  routeThreadKey: string | null;
-  newThreadShortcutLabel: string | null;
+  routeSessionKey: string | null;
+  newSessionShortcutLabel: string | null;
   commandPaletteShortcutLabel: string | null;
-  threadJumpLabelByKey: ReadonlyMap<string, string>;
-  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
-  expandThreadListForProject: (projectKey: string) => void;
-  collapseThreadListForProject: (projectKey: string) => void;
+  sessionJumpLabelByKey: ReadonlyMap<string, string>;
+  attachSessionListAutoAnimateRef: (node: HTMLElement | null) => void;
+  expandSessionListForProject: (projectKey: string) => void;
+  collapseSessionListForProject: (projectKey: string) => void;
   dragInProgressRef: React.RefObject<boolean>;
   suppressProjectClickAfterDragRef: React.RefObject<boolean>;
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
@@ -2557,9 +2574,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     desktopUpdateButtonDisabled,
     handleDesktopUpdateButtonClick,
     projectSortOrder,
-    threadSortOrder,
+    sessionSortOrder,
     projectGroupingMode,
-    threadPreviewCount,
+    sessionPreviewCount,
     updateSettings,
     openAddProject,
     isManualProjectSorting,
@@ -2568,19 +2585,19 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     handleProjectDragStart,
     handleProjectDragEnd,
     handleProjectDragCancel,
-    handleNewThread,
-    archiveThread,
-    deleteThread,
+    handleNewSession,
+    archiveSession,
+    deleteSession,
     sortedProjects,
-    expandedThreadListsByProject,
+    expandedSessionListsByProject,
     activeRouteProjectKey,
-    routeThreadKey,
-    newThreadShortcutLabel,
+    routeSessionKey,
+    newSessionShortcutLabel,
     commandPaletteShortcutLabel,
-    threadJumpLabelByKey,
-    attachThreadListAutoAnimateRef,
-    expandThreadListForProject,
-    collapseThreadListForProject,
+    sessionJumpLabelByKey,
+    attachSessionListAutoAnimateRef,
+    expandSessionListForProject,
+    collapseSessionListForProject,
     dragInProgressRef,
     suppressProjectClickAfterDragRef,
     suppressProjectClickForContextMenuRef,
@@ -2594,9 +2611,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     },
     [updateSettings],
   );
-  const handleThreadSortOrderChange = useCallback(
-    (sortOrder: SidebarThreadSortOrder) => {
-      updateSettings({ sidebarThreadSortOrder: sortOrder });
+  const handleSessionSortOrderChange = useCallback(
+    (sortOrder: SidebarSessionSortOrder) => {
+      updateSettings({ sidebarSessionSortOrder: sortOrder });
     },
     [updateSettings],
   );
@@ -2606,9 +2623,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     },
     [updateSettings],
   );
-  const handleThreadPreviewCountChange = useCallback(
-    (count: SidebarThreadPreviewCount) => {
-      updateSettings({ sidebarThreadPreviewCount: count });
+  const handleSessionPreviewCountChange = useCallback(
+    (count: SidebarSessionPreviewCount) => {
+      updateSettings({ sidebarSessionPreviewCount: count });
     },
     [updateSettings],
   );
@@ -2669,13 +2686,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           <div className="flex items-center gap-1">
             <ProjectSortMenu
               projectSortOrder={projectSortOrder}
-              threadSortOrder={threadSortOrder}
+              sessionSortOrder={sessionSortOrder}
               projectGroupingMode={projectGroupingMode}
-              threadPreviewCount={threadPreviewCount}
+              sessionPreviewCount={sessionPreviewCount}
               onProjectSortOrderChange={handleProjectSortOrderChange}
-              onThreadSortOrderChange={handleThreadSortOrderChange}
+              onSessionSortOrderChange={handleSessionSortOrderChange}
               onProjectGroupingModeChange={handleProjectGroupingModeChange}
-              onThreadPreviewCountChange={handleThreadPreviewCountChange}
+              onSessionPreviewCountChange={handleSessionPreviewCountChange}
             />
             <Tooltip>
               <TooltipTrigger
@@ -2715,18 +2732,20 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     {(dragHandleProps) => (
                       <SidebarProjectItem
                         project={project}
-                        isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                        activeRouteThreadKey={
-                          activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                        isSessionListExpanded={expandedSessionListsByProject.has(
+                          project.projectKey,
+                        )}
+                        activeRouteSessionKey={
+                          activeRouteProjectKey === project.projectKey ? routeSessionKey : null
                         }
-                        newThreadShortcutLabel={newThreadShortcutLabel}
-                        handleNewThread={handleNewThread}
-                        archiveThread={archiveThread}
-                        deleteThread={deleteThread}
-                        threadJumpLabelByKey={threadJumpLabelByKey}
-                        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                        expandThreadListForProject={expandThreadListForProject}
-                        collapseThreadListForProject={collapseThreadListForProject}
+                        newSessionShortcutLabel={newSessionShortcutLabel}
+                        handleNewSession={handleNewSession}
+                        archiveSession={archiveSession}
+                        deleteSession={deleteSession}
+                        sessionJumpLabelByKey={sessionJumpLabelByKey}
+                        attachSessionListAutoAnimateRef={attachSessionListAutoAnimateRef}
+                        expandSessionListForProject={expandSessionListForProject}
+                        collapseSessionListForProject={collapseSessionListForProject}
                         dragInProgressRef={dragInProgressRef}
                         suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
                         suppressProjectClickForContextMenuRef={
@@ -2747,18 +2766,18 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               <SidebarProjectListRow
                 key={project.projectKey}
                 project={project}
-                isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                activeRouteThreadKey={
-                  activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                isSessionListExpanded={expandedSessionListsByProject.has(project.projectKey)}
+                activeRouteSessionKey={
+                  activeRouteProjectKey === project.projectKey ? routeSessionKey : null
                 }
-                newThreadShortcutLabel={newThreadShortcutLabel}
-                handleNewThread={handleNewThread}
-                archiveThread={archiveThread}
-                deleteThread={deleteThread}
-                threadJumpLabelByKey={threadJumpLabelByKey}
-                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                expandThreadListForProject={expandThreadListForProject}
-                collapseThreadListForProject={collapseThreadListForProject}
+                newSessionShortcutLabel={newSessionShortcutLabel}
+                handleNewSession={handleNewSession}
+                archiveSession={archiveSession}
+                deleteSession={deleteSession}
+                sessionJumpLabelByKey={sessionJumpLabelByKey}
+                attachSessionListAutoAnimateRef={attachSessionListAutoAnimateRef}
+                expandSessionListForProject={expandSessionListForProject}
+                collapseSessionListForProject={collapseSessionListForProject}
                 dragInProgressRef={dragInProgressRef}
                 suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
                 suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
@@ -2781,39 +2800,39 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 
 export default function Sidebar() {
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
-  const sidebarThreads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
+  const sidebarSessions = useStore(useShallow(selectSidebarSessionsAcrossEnvironments));
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const isOnSettings = pathname.startsWith("/settings");
-  const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
+  const sidebarSessionSortOrder = useSettings((s) => s.sidebarSessionSortOrder);
   const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
   const sidebarProjectGroupingMode = useSettings((s) => s.sidebarProjectGroupingMode);
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
-  const sidebarThreadPreviewCount = useSettings((s) => s.sidebarThreadPreviewCount);
+  const sidebarSessionPreviewCount = useSettings((s) => s.sidebarSessionPreviewCount);
   const { updateSettings } = useUpdateSettings();
-  const { handleNewThread } = useNewThreadHandler();
-  const { archiveThread, deleteThread } = useThreadActions();
+  const { handleNewSession } = useNewSessionHandler();
+  const { archiveSession, deleteSession } = useSessionActions();
   const { isMobile, setOpenMobile } = useSidebar();
-  const routeThreadRef = useParams({
+  const routeSessionRef = useParams({
     strict: false,
-    select: (params) => resolveThreadRouteRef(params),
+    select: (params) => resolveSessionRouteRef(params),
   });
-  const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
+  const routeSessionKey = routeSessionRef ? scopedSessionKey(routeSessionRef) : null;
   const keybindings = useServerKeybindings();
   const openAddProjectCommandPalette = useCommandPaletteStore((store) => store.openAddProject);
-  const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
+  const [expandedSessionListsByProject, setExpandedSessionListsByProject] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const { showThreadJumpHints, updateThreadJumpHintsVisibility } = useThreadJumpHintVisibility();
+  const { showSessionJumpHints, updateSessionJumpHintsVisibility } = useSessionJumpHintVisibility();
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
-  const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
-  const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
+  const clearSelection = useSessionSelectionStore((s) => s.clearSelection);
+  const setSelectionAnchor = useSessionSelectionStore((s) => s.setAnchor);
   const platform = navigator.platform;
   const shortcutModifiers = useShortcutModifierState();
   const modelPickerOpen = useModelPickerOpen();
@@ -2871,64 +2890,67 @@ export default function Sidebar() {
     () => new Map(sidebarProjects.map((project) => [project.projectKey, project] as const)),
     [sidebarProjects],
   );
-  const sidebarThreadByKey = useMemo(
+  const sidebarSessionByKey = useMemo(
     () =>
       new Map(
-        sidebarThreads.map(
-          (thread) =>
-            [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), thread] as const,
+        sidebarSessions.map(
+          (session) =>
+            [
+              scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
+              session,
+            ] as const,
         ),
       ),
-    [sidebarThreads],
+    [sidebarSessions],
   );
   // Resolve the active route's project key to a logical key so it matches the
   // sidebar's grouped project entries.
   const activeRouteProjectKey = useMemo(() => {
-    if (!routeThreadKey) {
+    if (!routeSessionKey) {
       return null;
     }
-    const activeThread = sidebarThreadByKey.get(routeThreadKey);
-    if (!activeThread) return null;
+    const activeSession = sidebarSessionByKey.get(routeSessionKey);
+    if (!activeSession) return null;
     const physicalKey =
       projectPhysicalKeyByScopedRef.get(
-        scopedProjectKey(scopeProjectRef(activeThread.environmentId, activeThread.projectId)),
-      ) ?? scopedProjectKey(scopeProjectRef(activeThread.environmentId, activeThread.projectId));
+        scopedProjectKey(scopeProjectRef(activeSession.environmentId, activeSession.projectId)),
+      ) ?? scopedProjectKey(scopeProjectRef(activeSession.environmentId, activeSession.projectId));
     return physicalToLogicalKey.get(physicalKey) ?? physicalKey;
-  }, [routeThreadKey, sidebarThreadByKey, physicalToLogicalKey, projectPhysicalKeyByScopedRef]);
+  }, [routeSessionKey, sidebarSessionByKey, physicalToLogicalKey, projectPhysicalKeyByScopedRef]);
 
-  // Group threads by logical project key so all threads from grouped projects
+  // Group sessions by logical project key so all sessions from grouped projects
   // are displayed together.
-  const threadsByProjectKey = useMemo(() => {
-    const next = new Map<string, SidebarThreadSummary[]>();
-    for (const thread of sidebarThreads) {
+  const sessionsByProjectKey = useMemo(() => {
+    const next = new Map<string, SidebarSessionSummary[]>();
+    for (const session of sidebarSessions) {
       const physicalKey =
         projectPhysicalKeyByScopedRef.get(
-          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-        ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+          scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId)),
+        ) ?? scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId));
       const logicalKey = physicalToLogicalKey.get(physicalKey) ?? physicalKey;
       const existing = next.get(logicalKey);
       if (existing) {
-        existing.push(thread);
+        existing.push(session);
       } else {
-        next.set(logicalKey, [thread]);
+        next.set(logicalKey, [session]);
       }
     }
     return next;
-  }, [sidebarThreads, physicalToLogicalKey, projectPhysicalKeyByScopedRef]);
+  }, [sidebarSessions, physicalToLogicalKey, projectPhysicalKeyByScopedRef]);
   const getCurrentSidebarShortcutContext = useCallback(
     () => ({
       terminalFocus: isTerminalFocused(),
-      terminalOpen: routeThreadRef
-        ? selectThreadTerminalState(
-            useTerminalStateStore.getState().terminalStateByThreadKey,
-            routeThreadRef,
+      terminalOpen: routeSessionRef
+        ? selectSessionTerminalState(
+            useTerminalStateStore.getState().terminalStateBySessionKey,
+            routeSessionRef,
           ).terminalOpen
         : false,
       modelPickerOpen,
     }),
-    [modelPickerOpen, routeThreadRef],
+    [modelPickerOpen, routeSessionRef],
   );
-  const newThreadShortcutLabelOptions = useMemo(
+  const newSessionShortcutLabelOptions = useMemo(
     () => ({
       platform,
       context: {
@@ -2938,22 +2960,22 @@ export default function Sidebar() {
     }),
     [platform],
   );
-  const newThreadShortcutLabel =
-    shortcutLabelForCommand(keybindings, "chat.newLocal", newThreadShortcutLabelOptions) ??
-    shortcutLabelForCommand(keybindings, "chat.new", newThreadShortcutLabelOptions);
+  const newSessionShortcutLabel =
+    shortcutLabelForCommand(keybindings, "chat.newLocal", newSessionShortcutLabelOptions) ??
+    shortcutLabelForCommand(keybindings, "chat.new", newSessionShortcutLabelOptions);
 
-  const navigateToThread = useCallback(
-    (threadRef: ScopedThreadRef) => {
-      if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
+  const navigateToSession = useCallback(
+    (sessionRef: ScopedSessionRef) => {
+      if (useSessionSelectionStore.getState().selectedSessionKeys.size > 0) {
         clearSelection();
       }
-      setSelectionAnchor(scopedThreadKey(threadRef));
+      setSelectionAnchor(scopedSessionKey(sessionRef));
       if (isMobile) {
         setOpenMobile(false);
       }
       void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(threadRef),
+        to: "/$environmentId/$sessionId",
+        params: buildSessionRouteParams(sessionRef),
       });
     },
     [clearSelection, isMobile, navigate, setOpenMobile, setSelectionAnchor],
@@ -3018,37 +3040,37 @@ export default function Sidebar() {
     animatedProjectListsRef.current.add(node);
   }, []);
 
-  const animatedThreadListsRef = useRef(new WeakSet<HTMLElement>());
-  const attachThreadListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
-    if (!node || animatedThreadListsRef.current.has(node)) {
+  const animatedSessionListsRef = useRef(new WeakSet<HTMLElement>());
+  const attachSessionListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
+    if (!node || animatedSessionListsRef.current.has(node)) {
       return;
     }
     autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-    animatedThreadListsRef.current.add(node);
+    animatedSessionListsRef.current.add(node);
   }, []);
 
-  const visibleThreads = useMemo(
-    () => sidebarThreads.filter((thread) => thread.archivedAt === null),
-    [sidebarThreads],
+  const visibleSessions = useMemo(
+    () => sidebarSessions.filter((session) => session.archivedAt === null),
+    [sidebarSessions],
   );
   const sortedProjects = useMemo(() => {
     const sortableProjects = sidebarProjects.map((project) => ({
       ...project,
       id: project.projectKey,
     }));
-    const sortableThreads = visibleThreads.map((thread) => {
+    const sortableSessions = visibleSessions.map((session) => {
       const physicalKey =
         projectPhysicalKeyByScopedRef.get(
-          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-        ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+          scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId)),
+        ) ?? scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId));
       return {
-        ...thread,
+        ...session,
         projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
       };
     });
     return sortProjectsForSidebar(
       sortableProjects,
-      sortableThreads,
+      sortableSessions,
       sidebarProjectSortOrder,
     ).flatMap((project) => {
       const resolvedProject = sidebarProjectByKey.get(project.id);
@@ -3060,93 +3082,95 @@ export default function Sidebar() {
     projectPhysicalKeyByScopedRef,
     sidebarProjectByKey,
     sidebarProjects,
-    visibleThreads,
+    visibleSessions,
   ]);
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
-  const visibleSidebarThreadKeys = useMemo(
+  const visibleSidebarSessionKeys = useMemo(
     () =>
       sortedProjects.flatMap((project) => {
-        const projectThreads = sortThreads(
-          (threadsByProjectKey.get(project.projectKey) ?? []).filter(
-            (thread) => thread.archivedAt === null,
+        const projectSessions = sortSessions(
+          (sessionsByProjectKey.get(project.projectKey) ?? []).filter(
+            (session) => session.archivedAt === null,
           ),
-          sidebarThreadSortOrder,
+          sidebarSessionSortOrder,
         );
         const projectExpanded = projectExpandedById[project.projectKey] ?? true;
-        const activeThreadKey = routeThreadKey ?? undefined;
-        const pinnedCollapsedThread =
-          !projectExpanded && activeThreadKey
-            ? (projectThreads.find(
-                (thread) =>
-                  scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
-                  activeThreadKey,
+        const activeSessionKey = routeSessionKey ?? undefined;
+        const pinnedCollapsedSession =
+          !projectExpanded && activeSessionKey
+            ? (projectSessions.find(
+                (session) =>
+                  scopedSessionKey(scopeSessionRef(session.environmentId, session.id)) ===
+                  activeSessionKey,
               ) ?? null)
             : null;
-        const shouldShowThreadPanel = projectExpanded || pinnedCollapsedThread !== null;
-        if (!shouldShowThreadPanel) {
+        const shouldShowSessionPanel = projectExpanded || pinnedCollapsedSession !== null;
+        if (!shouldShowSessionPanel) {
           return [];
         }
-        const isThreadListExpanded = expandedThreadListsByProject.has(project.projectKey);
-        const hasOverflowingThreads = projectThreads.length > sidebarThreadPreviewCount;
-        const previewThreads =
-          isThreadListExpanded || !hasOverflowingThreads
-            ? projectThreads
-            : projectThreads.slice(0, sidebarThreadPreviewCount);
-        const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : previewThreads;
-        return renderedThreads.map((thread) =>
-          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        const isSessionListExpanded = expandedSessionListsByProject.has(project.projectKey);
+        const hasOverflowingSessions = projectSessions.length > sidebarSessionPreviewCount;
+        const previewSessions =
+          isSessionListExpanded || !hasOverflowingSessions
+            ? projectSessions
+            : projectSessions.slice(0, sidebarSessionPreviewCount);
+        const renderedSessions = pinnedCollapsedSession
+          ? [pinnedCollapsedSession]
+          : previewSessions;
+        return renderedSessions.map((session) =>
+          scopedSessionKey(scopeSessionRef(session.environmentId, session.id)),
         );
       }),
     [
-      sidebarThreadSortOrder,
-      sidebarThreadPreviewCount,
-      expandedThreadListsByProject,
+      sidebarSessionSortOrder,
+      sidebarSessionPreviewCount,
+      expandedSessionListsByProject,
       projectExpandedById,
-      routeThreadKey,
+      routeSessionKey,
       sortedProjects,
-      threadsByProjectKey,
+      sessionsByProjectKey,
     ],
   );
-  const threadJumpCommandByKey = useMemo(() => {
-    const mapping = new Map<string, NonNullable<ReturnType<typeof threadJumpCommandForIndex>>>();
-    for (const [visibleThreadIndex, threadKey] of visibleSidebarThreadKeys.entries()) {
-      const jumpCommand = threadJumpCommandForIndex(visibleThreadIndex);
+  const sessionJumpCommandByKey = useMemo(() => {
+    const mapping = new Map<string, NonNullable<ReturnType<typeof sessionJumpCommandForIndex>>>();
+    for (const [visibleSessionIndex, sessionKey] of visibleSidebarSessionKeys.entries()) {
+      const jumpCommand = sessionJumpCommandForIndex(visibleSessionIndex);
       if (!jumpCommand) {
         return mapping;
       }
-      mapping.set(threadKey, jumpCommand);
+      mapping.set(sessionKey, jumpCommand);
     }
 
     return mapping;
-  }, [visibleSidebarThreadKeys]);
-  const threadJumpThreadKeys = useMemo(
-    () => [...threadJumpCommandByKey.keys()],
-    [threadJumpCommandByKey],
+  }, [visibleSidebarSessionKeys]);
+  const sessionJumpSessionKeys = useMemo(
+    () => [...sessionJumpCommandByKey.keys()],
+    [sessionJumpCommandByKey],
   );
   const sidebarShortcutContext = useMemo(
     () => ({
       terminalFocus: false,
-      terminalOpen: routeThreadRef
-        ? selectThreadTerminalState(
-            useTerminalStateStore.getState().terminalStateByThreadKey,
-            routeThreadRef,
+      terminalOpen: routeSessionRef
+        ? selectSessionTerminalState(
+            useTerminalStateStore.getState().terminalStateBySessionKey,
+            routeSessionRef,
           ).terminalOpen
         : false,
       modelPickerOpen,
     }),
-    [modelPickerOpen, routeThreadRef],
+    [modelPickerOpen, routeSessionRef],
   );
-  const threadJumpLabelByKey = useMemo(
+  const sessionJumpLabelByKey = useMemo(
     () =>
-      buildThreadJumpLabelMap({
+      buildSessionJumpLabelMap({
         keybindings,
         platform,
         terminalOpen: sidebarShortcutContext.terminalOpen,
-        threadJumpCommandByKey,
+        sessionJumpCommandByKey,
       }),
-    [keybindings, platform, sidebarShortcutContext.terminalOpen, threadJumpCommandByKey],
+    [keybindings, platform, sidebarShortcutContext.terminalOpen, sessionJumpCommandByKey],
   );
-  const shouldShowThreadJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
+  const shouldShowSessionJumpHintsNow = shouldShowSessionJumpHintsForModifiers(
     shortcutModifiers,
     keybindings,
     {
@@ -3154,26 +3178,26 @@ export default function Sidebar() {
       context: sidebarShortcutContext,
     },
   );
-  const visibleThreadJumpLabelByKey = showThreadJumpHints
-    ? threadJumpLabelByKey
+  const visibleSessionJumpLabelByKey = showSessionJumpHints
+    ? sessionJumpLabelByKey
     : EMPTY_THREAD_JUMP_LABELS;
-  const orderedSidebarThreadKeys = visibleSidebarThreadKeys;
-  const prewarmedSidebarThreadKeys = useMemo(
-    () => getSidebarThreadIdsToPrewarm(visibleSidebarThreadKeys),
-    [visibleSidebarThreadKeys],
+  const orderedSidebarSessionKeys = visibleSidebarSessionKeys;
+  const prewarmedSidebarSessionKeys = useMemo(
+    () => getSidebarSessionIdsToPrewarm(visibleSidebarSessionKeys),
+    [visibleSidebarSessionKeys],
   );
-  const prewarmedSidebarThreadRefs = useMemo(
+  const prewarmedSidebarSessionRefs = useMemo(
     () =>
-      prewarmedSidebarThreadKeys.flatMap((threadKey) => {
-        const ref = parseScopedThreadKey(threadKey);
+      prewarmedSidebarSessionKeys.flatMap((sessionKey) => {
+        const ref = parseScopedSessionKey(sessionKey);
         return ref ? [ref] : [];
       }),
-    [prewarmedSidebarThreadKeys],
+    [prewarmedSidebarSessionKeys],
   );
 
   useEffect(() => {
-    const releases = prewarmedSidebarThreadRefs.map((ref) =>
-      retainThreadDetailSubscription(ref.environmentId, ref.threadId),
+    const releases = prewarmedSidebarSessionRefs.map((ref) =>
+      retainSessionDetailSubscription(ref.environmentId, ref.sessionId),
     );
 
     return () => {
@@ -3181,11 +3205,11 @@ export default function Sidebar() {
         release();
       }
     };
-  }, [prewarmedSidebarThreadRefs]);
+  }, [prewarmedSidebarSessionRefs]);
 
   useEffect(() => {
-    updateThreadJumpHintsVisibility(shouldShowThreadJumpHintsNow);
-  }, [shouldShowThreadJumpHintsNow, updateThreadJumpHintsVisibility]);
+    updateSessionJumpHintsVisibility(shouldShowSessionJumpHintsNow);
+  }, [shouldShowSessionJumpHintsNow, updateSessionJumpHintsVisibility]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -3199,44 +3223,44 @@ export default function Sidebar() {
         platform,
         context: shortcutContext,
       });
-      const traversalDirection = threadTraversalDirectionFromCommand(command);
+      const traversalDirection = sessionTraversalDirectionFromCommand(command);
       if (traversalDirection !== null) {
-        const targetThreadKey = resolveAdjacentThreadId({
-          threadIds: orderedSidebarThreadKeys,
-          currentThreadId: routeThreadKey,
+        const targetSessionKey = resolveAdjacentSessionId({
+          sessionIds: orderedSidebarSessionKeys,
+          currentSessionId: routeSessionKey,
           direction: traversalDirection,
         });
-        if (!targetThreadKey) {
+        if (!targetSessionKey) {
           return;
         }
-        const targetThread = sidebarThreadByKey.get(targetThreadKey);
-        if (!targetThread) {
+        const targetSession = sidebarSessionByKey.get(targetSessionKey);
+        if (!targetSession) {
           return;
         }
 
         event.preventDefault();
         event.stopPropagation();
-        navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
+        navigateToSession(scopeSessionRef(targetSession.environmentId, targetSession.id));
         return;
       }
 
-      const jumpIndex = threadJumpIndexFromCommand(command ?? "");
+      const jumpIndex = sessionJumpIndexFromCommand(command ?? "");
       if (jumpIndex === null) {
         return;
       }
 
-      const targetThreadKey = threadJumpThreadKeys[jumpIndex];
-      if (!targetThreadKey) {
+      const targetSessionKey = sessionJumpSessionKeys[jumpIndex];
+      if (!targetSessionKey) {
         return;
       }
-      const targetThread = sidebarThreadByKey.get(targetThreadKey);
-      if (!targetThread) {
+      const targetSession = sidebarSessionByKey.get(targetSessionKey);
+      if (!targetSession) {
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-      navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
+      navigateToSession(scopeSessionRef(targetSession.environmentId, targetSession.id));
     };
 
     window.addEventListener("keydown", onWindowKeyDown);
@@ -3247,19 +3271,19 @@ export default function Sidebar() {
   }, [
     getCurrentSidebarShortcutContext,
     keybindings,
-    navigateToThread,
-    orderedSidebarThreadKeys,
+    navigateToSession,
+    orderedSidebarSessionKeys,
     platform,
-    routeThreadKey,
-    sidebarThreadByKey,
-    threadJumpThreadKeys,
+    routeSessionKey,
+    sidebarSessionByKey,
+    sessionJumpSessionKeys,
   ]);
 
   useEffect(() => {
     const onMouseDown = (event: globalThis.MouseEvent) => {
-      if (!useThreadSelectionStore.getState().hasSelection()) return;
+      if (!useSessionSelectionStore.getState().hasSelection()) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (!shouldClearThreadSelectionOnMouseDown(target)) return;
+      if (!shouldClearSessionSelectionOnMouseDown(target)) return;
       clearSelection();
     };
 
@@ -3315,7 +3339,7 @@ export default function Sidebar() {
   const commandPaletteShortcutLabel = shortcutLabelForCommand(
     keybindings,
     "commandPalette.toggle",
-    newThreadShortcutLabelOptions,
+    newSessionShortcutLabelOptions,
   );
   const handleDesktopUpdateButtonClick = useCallback(() => {
     const bridge = window.desktopBridge;
@@ -3337,7 +3361,7 @@ export default function Sidebar() {
           const actionError = getDesktopUpdateActionError(result);
           if (!actionError) return;
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not download update",
               description: actionError,
@@ -3346,7 +3370,7 @@ export default function Sidebar() {
         })
         .catch((error) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not start update download",
               description: error instanceof Error ? error.message : "An unexpected error occurred.",
@@ -3368,7 +3392,7 @@ export default function Sidebar() {
           const actionError = getDesktopUpdateActionError(result);
           if (!actionError) return;
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not install update",
               description: actionError,
@@ -3377,7 +3401,7 @@ export default function Sidebar() {
         })
         .catch((error) => {
           toastManager.add(
-            stackedThreadToast({
+            stackedSessionToast({
               type: "error",
               title: "Could not install update",
               description: error instanceof Error ? error.message : "An unexpected error occurred.",
@@ -3387,8 +3411,8 @@ export default function Sidebar() {
     }
   }, [desktopUpdateButtonAction, desktopUpdateButtonDisabled, desktopUpdateState]);
 
-  const expandThreadListForProject = useCallback((projectKey: string) => {
-    setExpandedThreadListsByProject((current) => {
+  const expandSessionListForProject = useCallback((projectKey: string) => {
+    setExpandedSessionListsByProject((current) => {
       if (current.has(projectKey)) return current;
       const next = new Set(current);
       next.add(projectKey);
@@ -3396,8 +3420,8 @@ export default function Sidebar() {
     });
   }, []);
 
-  const collapseThreadListForProject = useCallback((projectKey: string) => {
-    setExpandedThreadListsByProject((current) => {
+  const collapseSessionListForProject = useCallback((projectKey: string) => {
+    setExpandedSessionListsByProject((current) => {
       if (!current.has(projectKey)) return current;
       const next = new Set(current);
       next.delete(projectKey);
@@ -3420,9 +3444,9 @@ export default function Sidebar() {
             desktopUpdateButtonDisabled={desktopUpdateButtonDisabled}
             handleDesktopUpdateButtonClick={handleDesktopUpdateButtonClick}
             projectSortOrder={sidebarProjectSortOrder}
-            threadSortOrder={sidebarThreadSortOrder}
+            sessionSortOrder={sidebarSessionSortOrder}
             projectGroupingMode={sidebarProjectGroupingMode}
-            threadPreviewCount={sidebarThreadPreviewCount}
+            sessionPreviewCount={sidebarSessionPreviewCount}
             updateSettings={updateSettings}
             openAddProject={openAddProjectCommandPalette}
             isManualProjectSorting={isManualProjectSorting}
@@ -3431,19 +3455,19 @@ export default function Sidebar() {
             handleProjectDragStart={handleProjectDragStart}
             handleProjectDragEnd={handleProjectDragEnd}
             handleProjectDragCancel={handleProjectDragCancel}
-            handleNewThread={handleNewThread}
-            archiveThread={archiveThread}
-            deleteThread={deleteThread}
+            handleNewSession={handleNewSession}
+            archiveSession={archiveSession}
+            deleteSession={deleteSession}
             sortedProjects={sortedProjects}
-            expandedThreadListsByProject={expandedThreadListsByProject}
+            expandedSessionListsByProject={expandedSessionListsByProject}
             activeRouteProjectKey={activeRouteProjectKey}
-            routeThreadKey={routeThreadKey}
-            newThreadShortcutLabel={newThreadShortcutLabel}
+            routeSessionKey={routeSessionKey}
+            newSessionShortcutLabel={newSessionShortcutLabel}
             commandPaletteShortcutLabel={commandPaletteShortcutLabel}
-            threadJumpLabelByKey={visibleThreadJumpLabelByKey}
-            attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-            expandThreadListForProject={expandThreadListForProject}
-            collapseThreadListForProject={collapseThreadListForProject}
+            sessionJumpLabelByKey={visibleSessionJumpLabelByKey}
+            attachSessionListAutoAnimateRef={attachSessionListAutoAnimateRef}
+            expandSessionListForProject={expandSessionListForProject}
+            collapseSessionListForProject={collapseSessionListForProject}
             dragInProgressRef={dragInProgressRef}
             suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}

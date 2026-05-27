@@ -71,12 +71,12 @@ All 7 sections are implemented. CI passes (format, lint, typecheck, test, browse
 
 ### 7. Replace ad hoc test helpers with semantic test clients — MOSTLY DONE
 - `DrainableWorker` replaces timing-sensitive `Effect.sleep` with deterministic `drain()` across reactor tests.
-- Orchestration harness waits on receipts/barriers instead of `waitForThread`, `waitForGitRef`, and retry loops.
+- Orchestration harness waits on receipts/barriers instead of `waitForSession`, `waitForGitRef`, and retry loops.
 - Behavioral assertions moved to deterministic unit-style harnesses; narrow integration tests kept for real filesystem/socket behavior.
 - **Deferred:** Shared `WsTestClient` helper (connect, awaitSemanticWelcome, awaitTypedPush, trackSequence, matchRpcResponseById). Tests use direct transport subscription instead.
 
 ## Provider-Coupling Guardrails
-- No generic runtime API may depend on Codex-native event names, thread IDs, or request payload shapes.
+- No generic runtime API may depend on Codex-native event names, session IDs, or request payload shapes.
 - No readiness barrier may be defined as "Codex has emitted X." Readiness is owned by the server runtime, not by provider event order.
 - No websocket channel payload may contain raw provider-native payloads unless the channel is explicitly debug/internal.
 - Any provider-specific divergence must be exposed through provider capabilities from `ProviderService.getCapabilities()`, not `if provider === "codex"` branches in shared runtime code.

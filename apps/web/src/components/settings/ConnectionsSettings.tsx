@@ -55,7 +55,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { QRCodeSvg } from "../ui/qr-code";
 import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { stackedSessionToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Group, GroupSeparator } from "../ui/group";
@@ -585,7 +585,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
     onError: (error, kind) => {
       setIsRevealDialogOpen(true);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: canCopyToClipboard
             ? kind === "hosted-link"
@@ -970,7 +970,7 @@ const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderActio
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create pairing URL.";
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not create pairing URL",
           description: message,
@@ -1555,7 +1555,7 @@ export function ConnectionsSettings() {
         setIsDesktopServerExposureDialogOpen(false);
         setDesktopServerExposureError(message);
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Could not update network access",
             description: message,
@@ -1590,7 +1590,7 @@ export function ConnectionsSettings() {
         error instanceof Error ? error.message : "Failed to configure Tailscale HTTPS.";
       setDesktopServerExposureError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not set up Tailscale HTTPS",
           description: message,
@@ -1626,7 +1626,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to disable Tailscale HTTPS.";
       setDesktopServerExposureError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not disable Tailscale HTTPS",
           description: message,
@@ -1650,7 +1650,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to revoke pairing link.";
       setDesktopAccessManagementError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not revoke pairing link",
           description: message,
@@ -1671,7 +1671,7 @@ export function ConnectionsSettings() {
         const message = error instanceof Error ? error.message : "Failed to revoke client access.";
         setDesktopAccessManagementError(message);
         toastManager.add(
-          stackedThreadToast({
+          stackedSessionToast({
             type: "error",
             title: "Could not revoke client access",
             description: message,
@@ -1698,7 +1698,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to revoke other clients.";
       setDesktopAccessManagementError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not revoke other clients",
           description: message,
@@ -1767,7 +1767,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to add backend.";
       setSavedBackendError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not add backend",
           description: message,
@@ -1794,7 +1794,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to connect backend.";
       setSavedBackendError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not connect backend",
           description: message,
@@ -1814,7 +1814,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to disconnect backend.";
       setSavedBackendError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not disconnect backend",
           description: message,
@@ -1834,7 +1834,7 @@ export function ConnectionsSettings() {
       const message = error instanceof Error ? error.message : "Failed to remove backend.";
       setSavedBackendError(message);
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "error",
           title: "Could not remove backend",
           description: message,

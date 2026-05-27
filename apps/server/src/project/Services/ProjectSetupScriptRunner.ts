@@ -19,7 +19,7 @@ export type ProjectSetupScriptRunnerResult =
   | ProjectSetupScriptRunnerResultStarted;
 
 export interface ProjectSetupScriptRunnerInput {
-  readonly threadId: string;
+  readonly sessionId: string;
   readonly projectId?: string;
   readonly projectCwd?: string;
   readonly worktreePath: string;
@@ -33,7 +33,7 @@ export class ProjectSetupScriptRunnerError extends Data.TaggedError(
 }> {}
 
 export interface ProjectSetupScriptRunnerShape {
-  readonly runForThread: (
+  readonly runForSession: (
     input: ProjectSetupScriptRunnerInput,
   ) => Effect.Effect<ProjectSetupScriptRunnerResult, ProjectSetupScriptRunnerError>;
 }

@@ -70,8 +70,8 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
         `;
 
       yield* sql`
-          INSERT INTO projection_threads (
-            thread_id,
+          INSERT INTO projection_sessions (
+            session_id,
             project_id,
             title,
             model_selection_json,
@@ -91,9 +91,9 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
           )
           VALUES
             (
-              'thread-legacy',
+              'session-legacy',
               'project-legacy',
-              'Legacy thread',
+              'Legacy session',
               '{"provider":"claudeAgent","model":"claude-opus-4-6","options":{"effort":"max","thinking":false,"contextWindow":"1m"}}',
               NULL, NULL, NULL,
               '2026-01-01T00:00:00.000Z',
@@ -102,9 +102,9 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
               'full-access', 'default'
             ),
             (
-              'thread-empty-options',
+              'session-empty-options',
               'project-legacy',
-              'Empty options thread',
+              'Empty options session',
               '{"provider":"codex","model":"gpt-5.4","options":{}}',
               NULL, NULL, NULL,
               '2026-01-01T00:00:00.000Z',
@@ -113,9 +113,9 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
               'full-access', 'default'
             ),
             (
-              'thread-drop-garbage',
+              'session-drop-garbage',
               'project-legacy',
-              'Thread with non-scalar entries',
+              'Session with non-scalar entries',
               '{"provider":"claudeAgent","model":"claude-opus-4-6","options":{"effort":"high","thinking":{"enabled":true,"budgetTokens":2000},"emptyStr":"   ","nullish":null}}',
               NULL, NULL, NULL,
               '2026-01-01T00:00:00.000Z',
@@ -124,9 +124,9 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
               'full-access', 'default'
             ),
             (
-              'thread-no-options',
+              'session-no-options',
               'project-legacy',
-              'No options thread',
+              'No options session',
               '{"provider":"codex","model":"gpt-5.4"}',
               NULL, NULL, NULL,
               '2026-01-01T00:00:00.000Z',
@@ -135,9 +135,9 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
               'full-access', 'default'
             ),
             (
-              'thread-already-array',
+              'session-already-array',
               'project-legacy',
-              'Already array thread',
+              'Already array session',
               '{"provider":"codex","model":"gpt-5.4","options":[{"id":"fastMode","value":true}]}',
               NULL, NULL, NULL,
               '2026-01-01T00:00:00.000Z',
@@ -206,73 +206,73 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
               '{}'
             ),
             (
-              'event-thread-created',
-              'thread',
-              'thread-legacy',
+              'event-session-created',
+              'session',
+              'session-legacy',
               1,
-              'thread.created',
+              'session.created',
               '2026-01-01T00:00:00.000Z',
               'cmd-tc',
               NULL,
               'corr-tc',
               'user',
-              '{"threadId":"thread-legacy","projectId":"project-legacy","title":"Thread","modelSelection":{"provider":"claudeAgent","model":"claude-opus-4-6","options":{"effort":"max","thinking":false}},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
+              '{"sessionId":"session-legacy","projectId":"project-legacy","title":"Session","modelSelection":{"provider":"claudeAgent","model":"claude-opus-4-6","options":{"effort":"max","thinking":false}},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
               '{}'
             ),
             (
-              'event-thread-meta-updated',
-              'thread',
-              'thread-legacy',
+              'event-session-meta-updated',
+              'session',
+              'session-legacy',
               2,
-              'thread.meta-updated',
+              'session.meta-updated',
               '2026-01-01T00:00:00.000Z',
               'cmd-tmu',
               NULL,
               'corr-tmu',
               'user',
-              '{"threadId":"thread-legacy","modelSelection":{"provider":"codex","model":"gpt-5.4","options":{"fastMode":true}},"updatedAt":"2026-01-01T00:00:00.000Z"}',
+              '{"sessionId":"session-legacy","modelSelection":{"provider":"codex","model":"gpt-5.4","options":{"fastMode":true}},"updatedAt":"2026-01-01T00:00:00.000Z"}',
               '{}'
             ),
             (
-              'event-thread-turn-start',
-              'thread',
-              'thread-legacy',
+              'event-session-turn-start',
+              'session',
+              'session-legacy',
               3,
-              'thread.turn-start-requested',
+              'session.turn-start-requested',
               '2026-01-01T00:00:00.000Z',
               'cmd-tts',
               NULL,
               'corr-tts',
               'user',
-              '{"threadId":"thread-legacy","messageId":"msg-1","modelSelection":{"provider":"claudeAgent","model":"claude-opus-4-6","options":{"effort":"high","contextWindow":"1m"}},"runtimeMode":"full-access","interactionMode":"default","createdAt":"2026-01-01T00:00:00.000Z"}',
+              '{"sessionId":"session-legacy","messageId":"msg-1","modelSelection":{"provider":"claudeAgent","model":"claude-opus-4-6","options":{"effort":"high","contextWindow":"1m"}},"runtimeMode":"full-access","interactionMode":"default","createdAt":"2026-01-01T00:00:00.000Z"}',
               '{}'
             ),
             (
-              'event-thread-already-array',
-              'thread',
-              'thread-legacy',
+              'event-session-already-array',
+              'session',
+              'session-legacy',
               4,
-              'thread.created',
+              'session.created',
               '2026-01-01T00:00:00.000Z',
               'cmd-taa',
               NULL,
               'corr-taa',
               'user',
-              '{"threadId":"thread-already-array","projectId":"project-legacy","title":"Already Array","modelSelection":{"provider":"codex","model":"gpt-5.4","options":[{"id":"reasoningEffort","value":"medium"}]},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
+              '{"sessionId":"session-already-array","projectId":"project-legacy","title":"Already Array","modelSelection":{"provider":"codex","model":"gpt-5.4","options":[{"id":"reasoningEffort","value":"medium"}]},"runtimeMode":"full-access","interactionMode":"default","branch":null,"worktreePath":null,"createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z"}',
               '{}'
             ),
             (
               'event-activity-append',
-              'thread',
-              'thread-legacy',
+              'session',
+              'session-legacy',
               5,
-              'thread.activity-appended',
+              'session.activity-appended',
               '2026-01-01T00:00:00.000Z',
               'cmd-aa',
               NULL,
               'corr-aa',
               'user',
-              '{"threadId":"thread-legacy","activity":{"id":"a","tone":"info","kind":"k","summary":"s","payload":null,"turnId":null,"createdAt":"2026-01-01T00:00:00.000Z"}}',
+              '{"sessionId":"session-legacy","activity":{"id":"a","tone":"info","kind":"k","summary":"s","payload":null,"turnId":null,"createdAt":"2026-01-01T00:00:00.000Z"}}',
               '{}'
             )
         `;
@@ -323,25 +323,25 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
         ],
       );
 
-      // Projection threads
-      const threadRows = yield* sql<{
-        readonly threadId: string;
+      // Projection sessions
+      const sessionRows = yield* sql<{
+        readonly sessionId: string;
         readonly modelSelection: string | null;
       }>`
           SELECT
-            thread_id AS "threadId",
+            session_id AS "sessionId",
             model_selection_json AS "modelSelection"
-          FROM projection_threads
-          ORDER BY thread_id
+          FROM projection_sessions
+          ORDER BY session_id
         `;
       assert.deepStrictEqual(
-        threadRows.map((row) => ({
-          threadId: row.threadId,
+        sessionRows.map((row) => ({
+          sessionId: row.sessionId,
           selection: row.modelSelection ? JSON.parse(row.modelSelection) : null,
         })),
         [
           {
-            threadId: "thread-already-array",
+            sessionId: "session-already-array",
             selection: {
               provider: "codex",
               model: "gpt-5.4",
@@ -349,7 +349,7 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
             },
           },
           {
-            threadId: "thread-drop-garbage",
+            sessionId: "session-drop-garbage",
             selection: {
               provider: "claudeAgent",
               model: "claude-opus-4-6",
@@ -359,11 +359,11 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
             },
           },
           {
-            threadId: "thread-empty-options",
+            sessionId: "session-empty-options",
             selection: { provider: "codex", model: "gpt-5.4", options: [] },
           },
           {
-            threadId: "thread-legacy",
+            sessionId: "session-legacy",
             selection: {
               provider: "claudeAgent",
               model: "claude-opus-4-6",
@@ -375,7 +375,7 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
             },
           },
           {
-            threadId: "thread-no-options",
+            sessionId: "session-no-options",
             selection: { provider: "codex", model: "gpt-5.4" },
           },
         ],
@@ -412,7 +412,7 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
 
       assert.strictEqual(payloads["event-project-null-selection"].defaultModelSelection, null);
 
-      assert.deepStrictEqual(payloads["event-thread-created"].modelSelection, {
+      assert.deepStrictEqual(payloads["event-session-created"].modelSelection, {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
         options: [
@@ -421,13 +421,13 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
         ],
       });
 
-      assert.deepStrictEqual(payloads["event-thread-meta-updated"].modelSelection, {
+      assert.deepStrictEqual(payloads["event-session-meta-updated"].modelSelection, {
         provider: "codex",
         model: "gpt-5.4",
         options: [{ id: "fastMode", value: true }],
       });
 
-      assert.deepStrictEqual(payloads["event-thread-turn-start"].modelSelection, {
+      assert.deepStrictEqual(payloads["event-session-turn-start"].modelSelection, {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
         options: [
@@ -437,7 +437,7 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
       });
 
       // Already-array records are left untouched.
-      assert.deepStrictEqual(payloads["event-thread-already-array"].modelSelection, {
+      assert.deepStrictEqual(payloads["event-session-already-array"].modelSelection, {
         provider: "codex",
         model: "gpt-5.4",
         options: [{ id: "reasoningEffort", value: "medium" }],

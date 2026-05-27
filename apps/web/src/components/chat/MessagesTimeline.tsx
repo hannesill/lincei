@@ -77,12 +77,12 @@ import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 
 interface TimelineRowSharedState {
   timestampFormat: TimestampFormat;
-  routeThreadKey: string;
+  routeSessionKey: string;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   workspaceRoot: string | undefined;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
-  activeThreadEnvironmentId: EnvironmentId;
+  activeSessionEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
@@ -113,13 +113,13 @@ interface MessagesTimelineProps {
   completionDividerBeforeEntryId: string | null;
   completionSummary: string | null;
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
-  routeThreadKey: string;
+  routeSessionKey: string;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   revertTurnCountByUserMessageId: Map<MessageId, number>;
   onRevertUserMessage: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
-  activeThreadEnvironmentId: EnvironmentId;
+  activeSessionEnvironmentId: EnvironmentId;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
@@ -142,13 +142,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   completionDividerBeforeEntryId,
   completionSummary,
   turnDiffSummaryByAssistantMessageId,
-  routeThreadKey,
+  routeSessionKey,
   onOpenTurnDiff,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
   isRevertingCheckpoint,
   onImageExpand,
-  activeThreadEnvironmentId,
+  activeSessionEnvironmentId,
   markdownCwd,
   resolvedTheme,
   timestampFormat,
@@ -211,24 +211,24 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
       timestampFormat,
-      routeThreadKey,
+      routeSessionKey,
       markdownCwd,
       resolvedTheme,
       workspaceRoot,
       skills,
-      activeThreadEnvironmentId,
+      activeSessionEnvironmentId,
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
     }),
     [
       timestampFormat,
-      routeThreadKey,
+      routeSessionKey,
       markdownCwd,
       resolvedTheme,
       workspaceRoot,
       skills,
-      activeThreadEnvironmentId,
+      activeSessionEnvironmentId,
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
@@ -424,7 +424,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
         />
         <AssistantChangedFilesSection
           turnSummary={row.assistantTurnDiffSummary}
-          routeThreadKey={ctx.routeThreadKey}
+          routeSessionKey={ctx.routeSessionKey}
           resolvedTheme={ctx.resolvedTheme}
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
@@ -497,7 +497,7 @@ function ProposedPlanTimelineRow({
     <div className="min-w-0 px-1 py-0.5">
       <ProposedPlanCard
         planMarkdown={row.proposedPlan.planMarkdown}
-        environmentId={ctx.activeThreadEnvironmentId}
+        environmentId={ctx.activeSessionEnvironmentId}
         cwd={ctx.markdownCwd}
         workspaceRoot={ctx.workspaceRoot}
       />
@@ -645,12 +645,12 @@ const WorkGroupSection = memo(function WorkGroupSection({
  *  so toggling re-renders only this component — not the entire list. */
 const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection({
   turnSummary,
-  routeThreadKey,
+  routeSessionKey,
   resolvedTheme,
   onOpenTurnDiff,
 }: {
   turnSummary: TurnDiffSummary | undefined;
-  routeThreadKey: string;
+  routeSessionKey: string;
   resolvedTheme: "light" | "dark";
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }) {
@@ -662,7 +662,7 @@ const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection(
     <AssistantChangedFilesSectionInner
       turnSummary={turnSummary}
       checkpointFiles={checkpointFiles}
-      routeThreadKey={routeThreadKey}
+      routeSessionKey={routeSessionKey}
       resolvedTheme={resolvedTheme}
       onOpenTurnDiff={onOpenTurnDiff}
     />
@@ -674,20 +674,20 @@ const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection(
 function AssistantChangedFilesSectionInner({
   turnSummary,
   checkpointFiles,
-  routeThreadKey,
+  routeSessionKey,
   resolvedTheme,
   onOpenTurnDiff,
 }: {
   turnSummary: TurnDiffSummary;
   checkpointFiles: TurnDiffSummary["files"];
-  routeThreadKey: string;
+  routeSessionKey: string;
   resolvedTheme: "light" | "dark";
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }) {
   const allDirectoriesExpanded = useUiStateStore(
-    (store) => store.threadChangedFilesExpandedById[routeThreadKey]?.[turnSummary.turnId] ?? true,
+    (store) => store.sessionChangedFilesExpandedById[routeSessionKey]?.[turnSummary.turnId] ?? true,
   );
-  const setExpanded = useUiStateStore((store) => store.setThreadChangedFilesExpanded);
+  const setExpanded = useUiStateStore((store) => store.setSessionChangedFilesExpanded);
   const summaryStat = summarizeTurnDiffStats(checkpointFiles);
   const changedFileCountLabel = String(checkpointFiles.length);
 
@@ -709,7 +709,9 @@ function AssistantChangedFilesSectionInner({
             size="xs"
             variant="outline"
             data-scroll-anchor-ignore
-            onClick={() => setExpanded(routeThreadKey, turnSummary.turnId, !allDirectoriesExpanded)}
+            onClick={() =>
+              setExpanded(routeSessionKey, turnSummary.turnId, !allDirectoriesExpanded)
+            }
           >
             {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
           </Button>

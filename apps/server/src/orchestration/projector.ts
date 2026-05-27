@@ -1,9 +1,9 @@
-import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@t3tools/contracts";
+import type { OrchestrationEvent, OrchestrationReadModel, SessionId } from "@t3tools/contracts";
 import {
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
+  OrchestrationProviderRuntime,
   OrchestrationSession,
-  OrchestrationThread,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -14,21 +14,21 @@ import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
-  ThreadActivityAppendedPayload,
-  ThreadArchivedPayload,
-  ThreadCreatedPayload,
-  ThreadDeletedPayload,
-  ThreadInteractionModeSetPayload,
-  ThreadMetaUpdatedPayload,
-  ThreadProposedPlanUpsertedPayload,
-  ThreadRuntimeModeSetPayload,
-  ThreadUnarchivedPayload,
-  ThreadRevertedPayload,
-  ThreadSessionSetPayload,
-  ThreadTurnDiffCompletedPayload,
+  SessionActivityAppendedPayload,
+  SessionArchivedPayload,
+  SessionCreatedPayload,
+  SessionDeletedPayload,
+  SessionInteractionModeSetPayload,
+  SessionMetaUpdatedPayload,
+  SessionProposedPlanUpsertedPayload,
+  SessionRuntimeModeSetPayload,
+  SessionUnarchivedPayload,
+  SessionRevertedPayload,
+  ProviderRuntimeSetPayload,
+  SessionTurnDiffCompletedPayload,
 } from "./Schemas.ts";
 
-type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
+type SessionPatch = Partial<Omit<OrchestrationSession, "id" | "projectId">>;
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
 
@@ -38,12 +38,12 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
   return "completed" as const;
 }
 
-function updateThread(
-  threads: ReadonlyArray<OrchestrationThread>,
-  threadId: ThreadId,
-  patch: ThreadPatch,
-): OrchestrationThread[] {
-  return threads.map((thread) => (thread.id === threadId ? { ...thread, ...patch } : thread));
+function updateSession(
+  sessions: ReadonlyArray<OrchestrationSession>,
+  sessionId: SessionId,
+  patch: SessionPatch,
+): OrchestrationSession[] {
+  return sessions.map((session) => (session.id === sessionId ? { ...session, ...patch } : session));
 }
 
 function decodeForEvent<A>(
@@ -57,7 +57,7 @@ function decodeForEvent<A>(
   );
 }
 
-function retainThreadMessagesAfterRevert(
+function retainSessionMessagesAfterRevert(
   messages: ReadonlyArray<OrchestrationMessage>,
   retainedTurnIds: ReadonlySet<string>,
   turnCount: number,
@@ -120,27 +120,27 @@ function retainThreadMessagesAfterRevert(
   return messages.filter((message) => retainedMessageIds.has(message.id));
 }
 
-function retainThreadActivitiesAfterRevert(
-  activities: ReadonlyArray<OrchestrationThread["activities"][number]>,
+function retainSessionActivitiesAfterRevert(
+  activities: ReadonlyArray<OrchestrationSession["activities"][number]>,
   retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationThread["activities"][number]> {
+): ReadonlyArray<OrchestrationSession["activities"][number]> {
   return activities.filter(
     (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
   );
 }
 
-function retainThreadProposedPlansAfterRevert(
-  proposedPlans: ReadonlyArray<OrchestrationThread["proposedPlans"][number]>,
+function retainSessionProposedPlansAfterRevert(
+  proposedPlans: ReadonlyArray<OrchestrationSession["proposedPlans"][number]>,
   retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationThread["proposedPlans"][number]> {
+): ReadonlyArray<OrchestrationSession["proposedPlans"][number]> {
   return proposedPlans.filter(
     (proposedPlan) => proposedPlan.turnId === null || retainedTurnIds.has(proposedPlan.turnId),
   );
 }
 
-function compareThreadActivities(
-  left: OrchestrationThread["activities"][number],
-  right: OrchestrationThread["activities"][number],
+function compareSessionActivities(
+  left: OrchestrationSession["activities"][number],
+  right: OrchestrationSession["activities"][number],
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -159,7 +159,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     projects: [],
-    threads: [],
+    sessions: [],
     updatedAt: nowIso,
   };
 }
@@ -240,18 +240,18 @@ export function projectEvent(
         })),
       );
 
-    case "thread.created":
+    case "session.created":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadCreatedPayload,
+          SessionCreatedPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread: OrchestrationThread = yield* decodeForEvent(
-          OrchestrationThread,
+        const session: OrchestrationSession = yield* decodeForEvent(
+          OrchestrationSession,
           {
-            id: payload.threadId,
+            id: payload.sessionId,
             projectId: payload.projectId,
             title: payload.title,
             modelSelection: payload.modelSelection,
@@ -270,55 +270,55 @@ export function projectEvent(
             session: null,
           },
           event.type,
-          "thread",
+          "session",
         );
-        const existing = nextBase.threads.find((entry) => entry.id === thread.id);
+        const existing = nextBase.sessions.find((entry) => entry.id === session.id);
         return {
           ...nextBase,
-          threads: existing
-            ? nextBase.threads.map((entry) => (entry.id === thread.id ? thread : entry))
-            : [...nextBase.threads, thread],
+          sessions: existing
+            ? nextBase.sessions.map((entry) => (entry.id === session.id ? session : entry))
+            : [...nextBase.sessions, session],
         };
       });
 
-    case "thread.deleted":
-      return decodeForEvent(ThreadDeletedPayload, event.payload, event.type, "payload").pipe(
+    case "session.deleted":
+      return decodeForEvent(SessionDeletedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             deletedAt: payload.deletedAt,
             updatedAt: payload.deletedAt,
           }),
         })),
       );
 
-    case "thread.archived":
-      return decodeForEvent(ThreadArchivedPayload, event.payload, event.type, "payload").pipe(
+    case "session.archived":
+      return decodeForEvent(SessionArchivedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             archivedAt: payload.archivedAt,
             updatedAt: payload.updatedAt,
           }),
         })),
       );
 
-    case "thread.unarchived":
-      return decodeForEvent(ThreadUnarchivedPayload, event.payload, event.type, "payload").pipe(
+    case "session.unarchived":
+      return decodeForEvent(SessionUnarchivedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             archivedAt: null,
             updatedAt: payload.updatedAt,
           }),
         })),
       );
 
-    case "thread.meta-updated":
-      return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
+    case "session.meta-updated":
+      return decodeForEvent(SessionMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             ...(payload.title !== undefined ? { title: payload.title } : {}),
             ...(payload.modelSelection !== undefined
               ? { modelSelection: payload.modelSelection }
@@ -330,34 +330,39 @@ export function projectEvent(
         })),
       );
 
-    case "thread.runtime-mode-set":
-      return decodeForEvent(ThreadRuntimeModeSetPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            runtimeMode: payload.runtimeMode,
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
-
-    case "thread.interaction-mode-set":
+    case "session.runtime-mode-set":
       return decodeForEvent(
-        ThreadInteractionModeSetPayload,
+        SessionRuntimeModeSetPayload,
         event.payload,
         event.type,
         "payload",
       ).pipe(
         Effect.map((payload) => ({
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            runtimeMode: payload.runtimeMode,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "session.interaction-mode-set":
+      return decodeForEvent(
+        SessionInteractionModeSetPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             interactionMode: payload.interactionMode,
             updatedAt: payload.updatedAt,
           }),
         })),
       );
 
-    case "thread.message-sent":
+    case "session.message-sent":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
           MessageSentPayloadSchema,
@@ -365,8 +370,8 @@ export function projectEvent(
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const targetSession = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!targetSession) {
           return nextBase;
         }
 
@@ -386,9 +391,9 @@ export function projectEvent(
           "message",
         );
 
-        const existingMessage = thread.messages.find((entry) => entry.id === message.id);
+        const existingMessage = targetSession.messages.find((entry) => entry.id === message.id);
         const messages = existingMessage
-          ? thread.messages.map((entry) =>
+          ? targetSession.messages.map((entry) =>
               entry.id === message.id
                 ? {
                     ...entry,
@@ -406,33 +411,33 @@ export function projectEvent(
                   }
                 : entry,
             )
-          : [...thread.messages, message];
+          : [...targetSession.messages, message];
         const cappedMessages = messages.slice(-MAX_THREAD_MESSAGES);
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             messages: cappedMessages,
             updatedAt: event.occurredAt,
           }),
         };
       });
 
-    case "thread.session-set":
+    case "session.session-set":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadSessionSetPayload,
+          ProviderRuntimeSetPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const targetSession = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!targetSession) {
           return nextBase;
         }
 
-        const session: OrchestrationSession = yield* decodeForEvent(
-          OrchestrationSession,
+        const providerRuntime: OrchestrationProviderRuntime = yield* decodeForEvent(
+          OrchestrationProviderRuntime,
           payload.session,
           event.type,
           "session",
@@ -440,48 +445,48 @@ export function projectEvent(
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            session,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            session: providerRuntime,
             latestTurn:
-              session.status === "running" && session.activeTurnId !== null
+              providerRuntime.status === "running" && providerRuntime.activeTurnId !== null
                 ? {
-                    turnId: session.activeTurnId,
+                    turnId: providerRuntime.activeTurnId,
                     state: "running",
                     requestedAt:
-                      thread.latestTurn?.turnId === session.activeTurnId
-                        ? thread.latestTurn.requestedAt
-                        : session.updatedAt,
+                      targetSession.latestTurn?.turnId === providerRuntime.activeTurnId
+                        ? targetSession.latestTurn.requestedAt
+                        : providerRuntime.updatedAt,
                     startedAt:
-                      thread.latestTurn?.turnId === session.activeTurnId
-                        ? (thread.latestTurn.startedAt ?? session.updatedAt)
-                        : session.updatedAt,
+                      targetSession.latestTurn?.turnId === providerRuntime.activeTurnId
+                        ? (targetSession.latestTurn.startedAt ?? providerRuntime.updatedAt)
+                        : providerRuntime.updatedAt,
                     completedAt: null,
                     assistantMessageId:
-                      thread.latestTurn?.turnId === session.activeTurnId
-                        ? thread.latestTurn.assistantMessageId
+                      targetSession.latestTurn?.turnId === providerRuntime.activeTurnId
+                        ? targetSession.latestTurn.assistantMessageId
                         : null,
                   }
-                : thread.latestTurn,
+                : targetSession.latestTurn,
             updatedAt: event.occurredAt,
           }),
         };
       });
 
-    case "thread.proposed-plan-upserted":
+    case "session.proposed-plan-upserted":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadProposedPlanUpsertedPayload,
+          SessionProposedPlanUpsertedPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
           return nextBase;
         }
 
         const proposedPlans = [
-          ...thread.proposedPlans.filter((entry) => entry.id !== payload.proposedPlan.id),
+          ...session.proposedPlans.filter((entry) => entry.id !== payload.proposedPlan.id),
           payload.proposedPlan,
         ]
           .toSorted(
@@ -492,23 +497,23 @@ export function projectEvent(
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             proposedPlans,
             updatedAt: event.occurredAt,
           }),
         };
       });
 
-    case "thread.turn-diff-completed":
+    case "session.turn-diff-completed":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
-          ThreadTurnDiffCompletedPayload,
+          SessionTurnDiffCompletedPayload,
           event.payload,
           event.type,
           "payload",
         );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
           return nextBase;
         }
 
@@ -532,13 +537,13 @@ export function projectEvent(
         // ProviderRuntimeIngestion may fire multiple turn.diff.updated events
         // per turn; without this guard later placeholders would clobber the
         // real capture dispatched by CheckpointReactor.
-        const existing = thread.checkpoints.find((entry) => entry.turnId === checkpoint.turnId);
+        const existing = session.checkpoints.find((entry) => entry.turnId === checkpoint.turnId);
         if (existing && existing.status !== "missing" && checkpoint.status === "missing") {
           return nextBase;
         }
 
         const checkpoints = [
-          ...thread.checkpoints.filter((entry) => entry.turnId !== checkpoint.turnId),
+          ...session.checkpoints.filter((entry) => entry.turnId !== checkpoint.turnId),
           checkpoint,
         ]
           .toSorted((left, right) => left.checkpointTurnCount - right.checkpointTurnCount)
@@ -546,18 +551,18 @@ export function projectEvent(
 
         return {
           ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
             checkpoints,
             latestTurn: {
               turnId: payload.turnId,
               state: checkpointStatusToLatestTurnState(payload.status),
               requestedAt:
-                thread.latestTurn?.turnId === payload.turnId
-                  ? thread.latestTurn.requestedAt
+                session.latestTurn?.turnId === payload.turnId
+                  ? session.latestTurn.requestedAt
                   : payload.completedAt,
               startedAt:
-                thread.latestTurn?.turnId === payload.turnId
-                  ? (thread.latestTurn.startedAt ?? payload.completedAt)
+                session.latestTurn?.turnId === payload.turnId
+                  ? (session.latestTurn.startedAt ?? payload.completedAt)
                   : payload.completedAt,
               completedAt: payload.completedAt,
               assistantMessageId: payload.assistantMessageId,
@@ -567,29 +572,32 @@ export function projectEvent(
         };
       });
 
-    case "thread.reverted":
-      return decodeForEvent(ThreadRevertedPayload, event.payload, event.type, "payload").pipe(
+    case "session.reverted":
+      return decodeForEvent(SessionRevertedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => {
-          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-          if (!thread) {
+          const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+          if (!session) {
             return nextBase;
           }
 
-          const checkpoints = thread.checkpoints
+          const checkpoints = session.checkpoints
             .filter((entry) => entry.checkpointTurnCount <= payload.turnCount)
             .toSorted((left, right) => left.checkpointTurnCount - right.checkpointTurnCount)
             .slice(-MAX_THREAD_CHECKPOINTS);
           const retainedTurnIds = new Set(checkpoints.map((checkpoint) => checkpoint.turnId));
-          const messages = retainThreadMessagesAfterRevert(
-            thread.messages,
+          const messages = retainSessionMessagesAfterRevert(
+            session.messages,
             retainedTurnIds,
             payload.turnCount,
           ).slice(-MAX_THREAD_MESSAGES);
-          const proposedPlans = retainThreadProposedPlansAfterRevert(
-            thread.proposedPlans,
+          const proposedPlans = retainSessionProposedPlansAfterRevert(
+            session.proposedPlans,
             retainedTurnIds,
           ).slice(-200);
-          const activities = retainThreadActivitiesAfterRevert(thread.activities, retainedTurnIds);
+          const activities = retainSessionActivitiesAfterRevert(
+            session.activities,
+            retainedTurnIds,
+          );
 
           const latestCheckpoint = checkpoints.at(-1) ?? null;
           const latestTurn =
@@ -606,7 +614,7 @@ export function projectEvent(
 
           return {
             ...nextBase,
-            threads: updateThread(nextBase.threads, payload.threadId, {
+            sessions: updateSession(nextBase.sessions, payload.sessionId, {
               checkpoints,
               messages,
               proposedPlans,
@@ -618,29 +626,29 @@ export function projectEvent(
         }),
       );
 
-    case "thread.activity-appended":
+    case "session.activity-appended":
       return decodeForEvent(
-        ThreadActivityAppendedPayload,
+        SessionActivityAppendedPayload,
         event.payload,
         event.type,
         "payload",
       ).pipe(
         Effect.map((payload) => {
-          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-          if (!thread) {
+          const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+          if (!session) {
             return nextBase;
           }
 
           const activities = [
-            ...thread.activities.filter((entry) => entry.id !== payload.activity.id),
+            ...session.activities.filter((entry) => entry.id !== payload.activity.id),
             payload.activity,
           ]
-            .toSorted(compareThreadActivities)
+            .toSorted(compareSessionActivities)
             .slice(-500);
 
           return {
             ...nextBase,
-            threads: updateThread(nextBase.threads, payload.threadId, {
+            sessions: updateSession(nextBase.sessions, payload.sessionId, {
               activities,
               updatedAt: event.occurredAt,
             }),

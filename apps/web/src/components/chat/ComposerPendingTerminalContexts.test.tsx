@@ -1,4 +1,4 @@
-import { ThreadId } from "@t3tools/contracts";
+import { SessionId } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +10,7 @@ describe("ComposerPendingTerminalContextChip", () => {
       <ComposerPendingTerminalContextChip
         context={{
           id: "ctx-expired",
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 2,

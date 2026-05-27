@@ -2,28 +2,35 @@ import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { useCommandPaletteStore } from "../commandPaletteStore";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useHandleNewSession } from "../hooks/useHandleNewSession";
 import {
-  startNewLocalThreadFromContext,
-  startNewThreadFromContext,
-} from "../lib/chatThreadActions";
+  startNewLocalSessionFromContext,
+  startNewSessionFromContext,
+} from "../lib/chatSessionActions";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { resolveShortcutCommand } from "../keybindings";
-import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
-import { useThreadSelectionStore } from "../threadSelectionStore";
-import { resolveSidebarNewThreadEnvMode } from "~/components/Sidebar.logic";
+import { selectSessionTerminalState, useTerminalStateStore } from "../terminalStateStore";
+import { useSessionSelectionStore } from "../sessionSelectionStore";
+import { resolveSidebarNewSessionEnvMode } from "~/components/Sidebar.logic";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 
 function ChatRouteGlobalShortcuts() {
-  const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
-  const selectedThreadKeysSize = useThreadSelectionStore((state) => state.selectedThreadKeys.size);
-  const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread, routeThreadRef } =
-    useHandleNewThread();
+  const clearSelection = useSessionSelectionStore((state) => state.clearSelection);
+  const selectedSessionKeysSize = useSessionSelectionStore(
+    (state) => state.selectedSessionKeys.size,
+  );
+  const {
+    activeDraftSession,
+    activeSession,
+    defaultProjectRef,
+    handleNewSession,
+    routeSessionRef,
+  } = useHandleNewSession();
   const keybindings = useServerKeybindings();
   const terminalOpen = useTerminalStateStore((state) =>
-    routeThreadRef
-      ? selectThreadTerminalState(state.terminalStateByThreadKey, routeThreadRef).terminalOpen
+    routeSessionRef
+      ? selectSessionTerminalState(state.terminalStateBySessionKey, routeSessionRef).terminalOpen
       : false,
   );
   const appSettings = useSettings();
@@ -42,7 +49,7 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
-      if (event.key === "Escape" && selectedThreadKeysSize > 0) {
+      if (event.key === "Escape" && selectedSessionKeysSize > 0) {
         event.preventDefault();
         clearSelection();
         return;
@@ -51,14 +58,14 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.newLocal") {
         event.preventDefault();
         event.stopPropagation();
-        void startNewLocalThreadFromContext({
-          activeDraftThread,
-          activeThread,
+        void startNewLocalSessionFromContext({
+          activeDraftSession,
+          activeSession,
           defaultProjectRef,
-          defaultThreadEnvMode: resolveSidebarNewThreadEnvMode({
-            defaultEnvMode: appSettings.defaultThreadEnvMode,
+          defaultSessionEnvMode: resolveSidebarNewSessionEnvMode({
+            defaultEnvMode: appSettings.defaultSessionEnvMode,
           }),
-          handleNewThread,
+          handleNewSession,
         });
         return;
       }
@@ -66,14 +73,14 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
-        void startNewThreadFromContext({
-          activeDraftThread,
-          activeThread,
+        void startNewSessionFromContext({
+          activeDraftSession,
+          activeSession,
           defaultProjectRef,
-          defaultThreadEnvMode: resolveSidebarNewThreadEnvMode({
-            defaultEnvMode: appSettings.defaultThreadEnvMode,
+          defaultSessionEnvMode: resolveSidebarNewSessionEnvMode({
+            defaultEnvMode: appSettings.defaultSessionEnvMode,
           }),
-          handleNewThread,
+          handleNewSession,
         });
       }
     };
@@ -83,15 +90,15 @@ function ChatRouteGlobalShortcuts() {
       window.removeEventListener("keydown", onWindowKeyDown);
     };
   }, [
-    activeDraftThread,
-    activeThread,
+    activeDraftSession,
+    activeSession,
     clearSelection,
-    handleNewThread,
+    handleNewSession,
     keybindings,
     defaultProjectRef,
-    selectedThreadKeysSize,
+    selectedSessionKeysSize,
     terminalOpen,
-    appSettings.defaultThreadEnvMode,
+    appSettings.defaultSessionEnvMode,
   ]);
 
   return null;

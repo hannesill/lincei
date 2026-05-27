@@ -4,7 +4,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ProjectId,
-  ThreadId,
+  SessionId,
   type ServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
@@ -230,7 +230,7 @@ describe("serverState", () => {
         cwd: "/tmp/workspace",
         projectName: "t3-code",
         bootstrapProjectId: ProjectId.make("project-1"),
-        bootstrapThreadId: ThreadId.make("thread-1"),
+        bootstrapSessionId: SessionId.make("session-1"),
       },
     });
 
@@ -239,7 +239,7 @@ describe("serverState", () => {
       cwd: "/tmp/workspace",
       projectName: "t3-code",
       bootstrapProjectId: ProjectId.make("project-1"),
-      bootstrapThreadId: ThreadId.make("thread-1"),
+      bootstrapSessionId: SessionId.make("session-1"),
     });
 
     const lateListener = vi.fn();
@@ -249,7 +249,7 @@ describe("serverState", () => {
       cwd: "/tmp/workspace",
       projectName: "t3-code",
       bootstrapProjectId: ProjectId.make("project-1"),
-      bootstrapThreadId: ThreadId.make("thread-1"),
+      bootstrapSessionId: SessionId.make("session-1"),
     });
 
     unsubscribeLate();

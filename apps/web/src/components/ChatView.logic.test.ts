@@ -1,15 +1,15 @@
-import { scopeThreadRef } from "@t3tools/client-runtime";
+import { scopeSessionRef } from "@t3tools/client-runtime";
 import {
   EnvironmentId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
-  ThreadId,
+  SessionId,
   TurnId,
 } from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type EnvironmentState, useStore } from "../store";
-import { type Thread } from "../types";
+import { type Session } from "../types";
 
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
@@ -17,10 +17,10 @@ import {
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
-  reconcileMountedTerminalThreadIds,
+  reconcileMountedTerminalSessionIds,
   resolveSendEnvMode,
-  shouldWriteThreadErrorToCurrentServerThread,
-  waitForStartedServerThread,
+  shouldWriteSessionErrorToCurrentServerSession,
+  waitForStartedServerSession,
 } from "./ChatView.logic";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
@@ -33,7 +33,7 @@ describe("deriveComposerSendState", () => {
       terminalContexts: [
         {
           id: "ctx-expired",
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 4,
@@ -57,7 +57,7 @@ describe("deriveComposerSendState", () => {
       terminalContexts: [
         {
           id: "ctx-expired",
-          threadId: ThreadId.make("thread-1"),
+          sessionId: SessionId.make("session-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 4,
@@ -101,119 +101,127 @@ describe("resolveSendEnvMode", () => {
   });
 });
 
-describe("reconcileMountedTerminalThreadIds", () => {
-  it("keeps previously mounted open threads and adds the active open thread", () => {
+describe("reconcileMountedTerminalSessionIds", () => {
+  it("keeps previously mounted open sessions and adds the active open session", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [ThreadId.make("thread-hidden"), ThreadId.make("thread-stale")],
-        openThreadIds: [ThreadId.make("thread-hidden"), ThreadId.make("thread-active")],
-        activeThreadId: ThreadId.make("thread-active"),
-        activeThreadTerminalOpen: true,
+      reconcileMountedTerminalSessionIds({
+        currentSessionIds: [SessionId.make("session-hidden"), SessionId.make("session-stale")],
+        openSessionIds: [SessionId.make("session-hidden"), SessionId.make("session-active")],
+        activeSessionId: SessionId.make("session-active"),
+        activeSessionTerminalOpen: true,
       }),
-    ).toEqual([ThreadId.make("thread-hidden"), ThreadId.make("thread-active")]);
+    ).toEqual([SessionId.make("session-hidden"), SessionId.make("session-active")]);
   });
 
-  it("drops mounted threads once their terminal drawer is no longer open", () => {
+  it("drops mounted sessions once their terminal drawer is no longer open", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [ThreadId.make("thread-closed")],
-        openThreadIds: [],
-        activeThreadId: ThreadId.make("thread-closed"),
-        activeThreadTerminalOpen: false,
+      reconcileMountedTerminalSessionIds({
+        currentSessionIds: [SessionId.make("session-closed")],
+        openSessionIds: [],
+        activeSessionId: SessionId.make("session-closed"),
+        activeSessionTerminalOpen: false,
       }),
     ).toEqual([]);
   });
 
-  it("keeps only the most recently active hidden terminal threads", () => {
+  it("keeps only the most recently active hidden terminal sessions", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.make("thread-1"),
-          ThreadId.make("thread-2"),
-          ThreadId.make("thread-3"),
+      reconcileMountedTerminalSessionIds({
+        currentSessionIds: [
+          SessionId.make("session-1"),
+          SessionId.make("session-2"),
+          SessionId.make("session-3"),
         ],
-        openThreadIds: [
-          ThreadId.make("thread-1"),
-          ThreadId.make("thread-2"),
-          ThreadId.make("thread-3"),
-          ThreadId.make("thread-4"),
+        openSessionIds: [
+          SessionId.make("session-1"),
+          SessionId.make("session-2"),
+          SessionId.make("session-3"),
+          SessionId.make("session-4"),
         ],
-        activeThreadId: ThreadId.make("thread-4"),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
+        activeSessionId: SessionId.make("session-4"),
+        activeSessionTerminalOpen: true,
+        maxHiddenSessionCount: 2,
       }),
-    ).toEqual([ThreadId.make("thread-2"), ThreadId.make("thread-3"), ThreadId.make("thread-4")]);
+    ).toEqual([
+      SessionId.make("session-2"),
+      SessionId.make("session-3"),
+      SessionId.make("session-4"),
+    ]);
   });
 
-  it("moves the active thread to the end so it is treated as most recently used", () => {
+  it("moves the active session to the end so it is treated as most recently used", () => {
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.make("thread-a"),
-          ThreadId.make("thread-b"),
-          ThreadId.make("thread-c"),
+      reconcileMountedTerminalSessionIds({
+        currentSessionIds: [
+          SessionId.make("session-a"),
+          SessionId.make("session-b"),
+          SessionId.make("session-c"),
         ],
-        openThreadIds: [
-          ThreadId.make("thread-a"),
-          ThreadId.make("thread-b"),
-          ThreadId.make("thread-c"),
+        openSessionIds: [
+          SessionId.make("session-a"),
+          SessionId.make("session-b"),
+          SessionId.make("session-c"),
         ],
-        activeThreadId: ThreadId.make("thread-a"),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
+        activeSessionId: SessionId.make("session-a"),
+        activeSessionTerminalOpen: true,
+        maxHiddenSessionCount: 2,
       }),
-    ).toEqual([ThreadId.make("thread-b"), ThreadId.make("thread-c"), ThreadId.make("thread-a")]);
+    ).toEqual([
+      SessionId.make("session-b"),
+      SessionId.make("session-c"),
+      SessionId.make("session-a"),
+    ]);
   });
 
   it("defaults to the hidden mounted terminal cap", () => {
-    const currentThreadIds = Array.from(
+    const currentSessionIds = Array.from(
       { length: MAX_HIDDEN_MOUNTED_TERMINAL_THREADS + 2 },
-      (_, index) => ThreadId.make(`thread-${index + 1}`),
+      (_, index) => SessionId.make(`session-${index + 1}`),
     );
 
     expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds,
-        openThreadIds: currentThreadIds,
-        activeThreadId: null,
-        activeThreadTerminalOpen: false,
+      reconcileMountedTerminalSessionIds({
+        currentSessionIds,
+        openSessionIds: currentSessionIds,
+        activeSessionId: null,
+        activeSessionTerminalOpen: false,
       }),
-    ).toEqual(currentThreadIds.slice(-MAX_HIDDEN_MOUNTED_TERMINAL_THREADS));
+    ).toEqual(currentSessionIds.slice(-MAX_HIDDEN_MOUNTED_TERMINAL_THREADS));
   });
 });
 
-describe("shouldWriteThreadErrorToCurrentServerThread", () => {
-  it("routes errors to the active server thread when route and target match", () => {
-    const threadId = ThreadId.make("thread-1");
-    const routeThreadRef = scopeThreadRef(localEnvironmentId, threadId);
+describe("shouldWriteSessionErrorToCurrentServerSession", () => {
+  it("routes errors to the active server session when route and target match", () => {
+    const sessionId = SessionId.make("session-1");
+    const routeSessionRef = scopeSessionRef(localEnvironmentId, sessionId);
 
     expect(
-      shouldWriteThreadErrorToCurrentServerThread({
-        serverThread: {
+      shouldWriteSessionErrorToCurrentServerSession({
+        serverSession: {
           environmentId: localEnvironmentId,
-          id: threadId,
+          id: sessionId,
         },
-        routeThreadRef,
-        targetThreadId: threadId,
+        routeSessionRef,
+        targetSessionId: sessionId,
       }),
     ).toBe(true);
   });
 
-  it("does not route draft-thread errors into server-backed state", () => {
-    const threadId = ThreadId.make("thread-1");
+  it("does not route draft-session errors into server-backed state", () => {
+    const sessionId = SessionId.make("session-1");
 
     expect(
-      shouldWriteThreadErrorToCurrentServerThread({
-        serverThread: undefined,
-        routeThreadRef: scopeThreadRef(localEnvironmentId, threadId),
-        targetThreadId: threadId,
+      shouldWriteSessionErrorToCurrentServerSession({
+        serverSession: undefined,
+        routeSessionRef: scopeSessionRef(localEnvironmentId, sessionId),
+        targetSessionId: sessionId,
       }),
     ).toBe(false);
   });
 });
 
-const makeThread = (input?: {
-  id?: ThreadId;
+const makeSession = (input?: {
+  id?: SessionId;
   latestTurn?: {
     turnId: TurnId;
     state: "running" | "completed";
@@ -221,12 +229,12 @@ const makeThread = (input?: {
     startedAt: string | null;
     completedAt: string | null;
   } | null;
-}): Thread => ({
-  id: input?.id ?? ThreadId.make("thread-1"),
+}): Session => ({
+  id: input?.id ?? SessionId.make("session-1"),
   environmentId: localEnvironmentId,
-  codexThreadId: null,
+  codexSessionId: null,
   projectId: ProjectId.make("project-1"),
-  title: "Thread",
+  title: "Session",
   modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
   runtimeMode: "full-access" as const,
   interactionMode: "default" as const,
@@ -249,7 +257,7 @@ const makeThread = (input?: {
   activities: [],
 });
 
-function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) {
+function setStoreSessions(sessions: ReadonlyArray<ReturnType<typeof makeSession>>) {
   const projectId = ProjectId.make("project-1");
   const environmentState: EnvironmentState = {
     projectIds: [projectId],
@@ -268,83 +276,85 @@ function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) 
         scripts: [],
       },
     },
-    threadIds: threads.map((thread) => thread.id),
-    threadIdsByProjectId: {
-      [projectId]: threads.map((thread) => thread.id),
+    sessionIds: sessions.map((session) => session.id),
+    sessionIdsByProjectId: {
+      [projectId]: sessions.map((session) => session.id),
     },
-    threadShellById: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
+    sessionShellById: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
         {
-          id: thread.id,
-          environmentId: thread.environmentId,
-          codexThreadId: thread.codexThreadId,
-          projectId: thread.projectId,
-          title: thread.title,
-          modelSelection: thread.modelSelection,
-          runtimeMode: thread.runtimeMode,
-          interactionMode: thread.interactionMode,
-          error: thread.error,
-          createdAt: thread.createdAt,
-          archivedAt: thread.archivedAt,
-          updatedAt: thread.updatedAt,
-          branch: thread.branch,
-          worktreePath: thread.worktreePath,
+          id: session.id,
+          environmentId: session.environmentId,
+          codexSessionId: session.codexSessionId,
+          projectId: session.projectId,
+          title: session.title,
+          modelSelection: session.modelSelection,
+          runtimeMode: session.runtimeMode,
+          interactionMode: session.interactionMode,
+          error: session.error,
+          createdAt: session.createdAt,
+          archivedAt: session.archivedAt,
+          updatedAt: session.updatedAt,
+          branch: session.branch,
+          worktreePath: session.worktreePath,
         },
       ]),
     ),
-    threadSessionById: Object.fromEntries(threads.map((thread) => [thread.id, thread.session])),
-    threadTurnStateById: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
+    providerRuntimeById: Object.fromEntries(
+      sessions.map((session) => [session.id, session.session]),
+    ),
+    sessionTurnStateById: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
         {
-          latestTurn: thread.latestTurn,
-          ...(thread.pendingSourceProposedPlan
-            ? { pendingSourceProposedPlan: thread.pendingSourceProposedPlan }
+          latestTurn: session.latestTurn,
+          ...(session.pendingSourceProposedPlan
+            ? { pendingSourceProposedPlan: session.pendingSourceProposedPlan }
             : {}),
         },
       ]),
     ),
-    messageIdsByThreadId: Object.fromEntries(
-      threads.map((thread) => [thread.id, thread.messages.map((message) => message.id)]),
+    messageIdsBySessionId: Object.fromEntries(
+      sessions.map((session) => [session.id, session.messages.map((message) => message.id)]),
     ),
-    messageByThreadId: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
-        Object.fromEntries(thread.messages.map((message) => [message.id, message])),
+    messageBySessionId: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
+        Object.fromEntries(session.messages.map((message) => [message.id, message])),
       ]),
     ),
-    activityIdsByThreadId: Object.fromEntries(
-      threads.map((thread) => [thread.id, thread.activities.map((activity) => activity.id)]),
+    activityIdsBySessionId: Object.fromEntries(
+      sessions.map((session) => [session.id, session.activities.map((activity) => activity.id)]),
     ),
-    activityByThreadId: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
-        Object.fromEntries(thread.activities.map((activity) => [activity.id, activity])),
+    activityBySessionId: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
+        Object.fromEntries(session.activities.map((activity) => [activity.id, activity])),
       ]),
     ),
-    proposedPlanIdsByThreadId: Object.fromEntries(
-      threads.map((thread) => [thread.id, thread.proposedPlans.map((plan) => plan.id)]),
+    proposedPlanIdsBySessionId: Object.fromEntries(
+      sessions.map((session) => [session.id, session.proposedPlans.map((plan) => plan.id)]),
     ),
-    proposedPlanByThreadId: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
-        Object.fromEntries(thread.proposedPlans.map((plan) => [plan.id, plan])),
+    proposedPlanBySessionId: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
+        Object.fromEntries(session.proposedPlans.map((plan) => [plan.id, plan])),
       ]),
     ),
-    turnDiffIdsByThreadId: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
-        thread.turnDiffSummaries.map((summary) => summary.turnId),
+    turnDiffIdsBySessionId: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
+        session.turnDiffSummaries.map((summary) => summary.turnId),
       ]),
     ),
-    turnDiffSummaryByThreadId: Object.fromEntries(
-      threads.map((thread) => [
-        thread.id,
-        Object.fromEntries(thread.turnDiffSummaries.map((summary) => [summary.turnId, summary])),
+    turnDiffSummaryBySessionId: Object.fromEntries(
+      sessions.map((session) => [
+        session.id,
+        Object.fromEntries(session.turnDiffSummaries.map((summary) => [summary.turnId, summary])),
       ]),
     ),
-    sidebarThreadSummaryById: {},
+    sidebarSessionSummaryById: {},
     bootstrapComplete: true,
   };
   useStore.setState({
@@ -358,15 +368,15 @@ function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  setStoreThreads([]);
+  setStoreSessions([]);
 });
 
-describe("waitForStartedServerThread", () => {
-  it("resolves immediately when the thread is already started", async () => {
-    const threadId = ThreadId.make("thread-started");
-    setStoreThreads([
-      makeThread({
-        id: threadId,
+describe("waitForStartedServerSession", () => {
+  it("resolves immediately when the session is already started", async () => {
+    const sessionId = SessionId.make("session-started");
+    setStoreSessions([
+      makeSession({
+        id: sessionId,
         latestTurn: {
           turnId: TurnId.make("turn-started"),
           state: "running",
@@ -378,19 +388,22 @@ describe("waitForStartedServerThread", () => {
     ]);
 
     await expect(
-      waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId)),
+      waitForStartedServerSession(scopeSessionRef(localEnvironmentId, sessionId)),
     ).resolves.toBe(true);
   });
 
-  it("waits for the thread to start via subscription updates", async () => {
-    const threadId = ThreadId.make("thread-wait");
-    setStoreThreads([makeThread({ id: threadId })]);
+  it("waits for the session to start via subscription updates", async () => {
+    const sessionId = SessionId.make("session-wait");
+    setStoreSessions([makeSession({ id: sessionId })]);
 
-    const promise = waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500);
+    const promise = waitForStartedServerSession(
+      scopeSessionRef(localEnvironmentId, sessionId),
+      500,
+    );
 
-    setStoreThreads([
-      makeThread({
-        id: threadId,
+    setStoreSessions([
+      makeSession({
+        id: sessionId,
         latestTurn: {
           turnId: TurnId.make("turn-started"),
           state: "running",
@@ -404,18 +417,18 @@ describe("waitForStartedServerThread", () => {
     await expect(promise).resolves.toBe(true);
   });
 
-  it("handles the thread starting between the initial read and subscription setup", async () => {
-    const threadId = ThreadId.make("thread-race");
-    setStoreThreads([makeThread({ id: threadId })]);
+  it("handles the session starting between the initial read and subscription setup", async () => {
+    const sessionId = SessionId.make("session-race");
+    setStoreSessions([makeSession({ id: sessionId })]);
 
     const originalSubscribe = useStore.subscribe.bind(useStore);
     let raced = false;
     vi.spyOn(useStore, "subscribe").mockImplementation((listener) => {
       if (!raced) {
         raced = true;
-        setStoreThreads([
-          makeThread({
-            id: threadId,
+        setStoreSessions([
+          makeSession({
+            id: sessionId,
             latestTurn: {
               turnId: TurnId.make("turn-race"),
               state: "running",
@@ -430,16 +443,19 @@ describe("waitForStartedServerThread", () => {
     });
 
     await expect(
-      waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500),
+      waitForStartedServerSession(scopeSessionRef(localEnvironmentId, sessionId), 500),
     ).resolves.toBe(true);
   });
 
-  it("returns false after the timeout when the thread never starts", async () => {
+  it("returns false after the timeout when the session never starts", async () => {
     vi.useFakeTimers();
 
-    const threadId = ThreadId.make("thread-timeout");
-    setStoreThreads([makeThread({ id: threadId })]);
-    const promise = waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500);
+    const sessionId = SessionId.make("session-timeout");
+    setStoreSessions([makeSession({ id: sessionId })]);
+    const promise = waitForStartedServerSession(
+      scopeSessionRef(localEnvironmentId, sessionId),
+      500,
+    );
 
     await vi.advanceTimersByTimeAsync(500);
 
@@ -468,11 +484,11 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
 
   it("does not clear local dispatch before server state changes", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       environmentId: localEnvironmentId,
-      codexThreadId: null,
+      codexSessionId: null,
       projectId,
-      title: "Thread",
+      title: "Session",
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -498,18 +514,18 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         session: previousSession,
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        sessionError: null,
       }),
     ).toBe(false);
   });
 
   it("clears local dispatch when a new turn is already settled", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       environmentId: localEnvironmentId,
-      codexThreadId: null,
+      codexSessionId: null,
       projectId,
-      title: "Thread",
+      title: "Session",
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -544,18 +560,18 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        sessionError: null,
       }),
     ).toBe(true);
   });
 
   it("does not clear local dispatch while the session is running a newer turn than latestTurn", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       environmentId: localEnvironmentId,
-      codexThreadId: null,
+      codexSessionId: null,
       projectId,
-      title: "Thread",
+      title: "Session",
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -587,18 +603,18 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        sessionError: null,
       }),
     ).toBe(false);
   });
 
   it("does not clear local dispatch while the session is running but latestTurn has not advanced yet", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       environmentId: localEnvironmentId,
-      codexThreadId: null,
+      codexSessionId: null,
       projectId,
-      title: "Thread",
+      title: "Session",
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -630,18 +646,18 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        sessionError: null,
       }),
     ).toBe(false);
   });
 
   it("clears local dispatch once the running latestTurn matches the active session turn", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       environmentId: localEnvironmentId,
-      codexThreadId: null,
+      codexSessionId: null,
       projectId,
-      title: "Thread",
+      title: "Session",
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -680,18 +696,18 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        sessionError: null,
       }),
     ).toBe(true);
   });
 
   it("clears local dispatch when the session changes without an observed running phase", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.make("thread-1"),
+      id: SessionId.make("session-1"),
       environmentId: localEnvironmentId,
-      codexThreadId: null,
+      codexSessionId: null,
       projectId,
-      title: "Thread",
+      title: "Session",
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
       runtimeMode: "full-access",
       interactionMode: "default",
@@ -720,7 +736,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         },
         hasPendingApproval: false,
         hasPendingUserInput: false,
-        threadError: null,
+        sessionError: null,
       }),
     ).toBe(true);
   });

@@ -20,7 +20,7 @@ import {
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
   type OrchestrationShellStreamEvent,
-  OrchestrationGetFullThreadDiffError,
+  OrchestrationGetFullSessionDiffError,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
@@ -28,7 +28,7 @@ import {
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
-  ThreadId,
+  SessionId,
   type TerminalEvent,
   WS_METHODS,
   WsRpcGroup,
@@ -93,25 +93,25 @@ const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError)
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
-function isThreadDetailEvent(event: OrchestrationEvent): event is Extract<
+function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
   OrchestrationEvent,
   {
     type:
-      | "thread.message-sent"
-      | "thread.proposed-plan-upserted"
-      | "thread.activity-appended"
-      | "thread.turn-diff-completed"
-      | "thread.reverted"
-      | "thread.session-set";
+      | "session.message-sent"
+      | "session.proposed-plan-upserted"
+      | "session.activity-appended"
+      | "session.turn-diff-completed"
+      | "session.reverted"
+      | "session.session-set";
   }
 > {
   return (
-    event.type === "thread.message-sent" ||
-    event.type === "thread.proposed-plan-upserted" ||
-    event.type === "thread.activity-appended" ||
-    event.type === "thread.turn-diff-completed" ||
-    event.type === "thread.reverted" ||
-    event.type === "thread.session-set"
+    event.type === "session.message-sent" ||
+    event.type === "session.proposed-plan-upserted" ||
+    event.type === "session.activity-appended" ||
+    event.type === "session.turn-diff-completed" ||
+    event.type === "session.reverted" ||
+    event.type === "session.session-set"
   );
 }
 
@@ -205,7 +205,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         });
 
       const appendSetupScriptActivity = (input: {
-        readonly threadId: ThreadId;
+        readonly sessionId: SessionId;
         readonly kind: "setup-script.requested" | "setup-script.started" | "setup-script.failed";
         readonly summary: string;
         readonly createdAt: string;
@@ -213,9 +213,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         readonly tone: "info" | "error";
       }) =>
         orchestrationEngine.dispatch({
-          type: "thread.activity.append",
+          type: "session.activity.append",
           commandId: serverCommandId("setup-script-activity"),
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           activity: {
             id: EventId.make(crypto.randomUUID()),
             tone: input.tone,
@@ -242,7 +242,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           ? error
           : new OrchestrationDispatchCommandError({
               message:
-                error instanceof Error ? error.message : "Failed to bootstrap thread turn start.",
+                error instanceof Error ? error.message : "Failed to bootstrap session turn start.",
               cause,
             });
       };
@@ -318,38 +318,38 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 projectId: event.payload.projectId,
               }),
             );
-          case "thread.deleted":
-          case "thread.archived":
+          case "session.deleted":
+          case "session.archived":
             return Effect.succeed(
               Option.some({
-                kind: "thread-removed" as const,
+                kind: "session-removed" as const,
                 sequence: event.sequence,
-                threadId: event.payload.threadId,
+                sessionId: event.payload.sessionId,
               }),
             );
-          case "thread.unarchived":
-            return projectionSnapshotQuery.getThreadShellById(event.payload.threadId).pipe(
-              Effect.map((thread) =>
-                Option.map(thread, (nextThread) => ({
-                  kind: "thread-upserted" as const,
+          case "session.unarchived":
+            return projectionSnapshotQuery.getSessionShellById(event.payload.sessionId).pipe(
+              Effect.map((session) =>
+                Option.map(session, (nextSession) => ({
+                  kind: "session-upserted" as const,
                   sequence: event.sequence,
-                  thread: nextThread,
+                  session: nextSession,
                 })),
               ),
               Effect.catch(() => Effect.succeed(Option.none())),
             );
           default:
-            if (event.aggregateKind !== "thread") {
+            if (event.aggregateKind !== "session") {
               return Effect.succeed(Option.none());
             }
             return projectionSnapshotQuery
-              .getThreadShellById(ThreadId.make(event.aggregateId))
+              .getSessionShellById(SessionId.make(event.aggregateId))
               .pipe(
-                Effect.map((thread) =>
-                  Option.map(thread, (nextThread) => ({
-                    kind: "thread-upserted" as const,
+                Effect.map((session) =>
+                  Option.map(session, (nextSession) => ({
+                    kind: "session-upserted" as const,
                     sequence: event.sequence,
-                    thread: nextThread,
+                    session: nextSession,
                   })),
                 ),
                 Effect.catch(() => Effect.succeed(Option.none())),
@@ -358,23 +358,23 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       };
 
       const dispatchBootstrapTurnStart = (
-        command: Extract<OrchestrationCommand, { type: "thread.turn.start" }>,
+        command: Extract<OrchestrationCommand, { type: "session.turn.start" }>,
       ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> =>
         Effect.gen(function* () {
           const bootstrap = command.bootstrap;
           const { bootstrap: _bootstrap, ...finalTurnStartCommand } = command;
-          let createdThread = false;
-          let targetProjectId = bootstrap?.createThread?.projectId;
+          let createdSession = false;
+          let targetProjectId = bootstrap?.createSession?.projectId;
           let targetProjectCwd = bootstrap?.prepareWorktree?.projectCwd;
-          let targetWorktreePath = bootstrap?.createThread?.worktreePath ?? null;
+          let targetWorktreePath = bootstrap?.createSession?.worktreePath ?? null;
 
-          const cleanupCreatedThread = () =>
-            createdThread
+          const cleanupCreatedSession = () =>
+            createdSession
               ? orchestrationEngine
                   .dispatch({
-                    type: "thread.delete",
-                    commandId: serverCommandId("bootstrap-thread-delete"),
-                    threadId: command.threadId,
+                    type: "session.delete",
+                    commandId: serverCommandId("bootstrap-session-delete"),
+                    sessionId: command.sessionId,
                   })
                   .pipe(Effect.ignoreCause({ log: true }))
               : Effect.void;
@@ -387,7 +387,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             const detail =
               input.error instanceof Error ? input.error.message : "Unknown setup failure.";
             return appendSetupScriptActivity({
-              threadId: command.threadId,
+              sessionId: command.sessionId,
               kind: "setup-script.failed",
               summary: "Setup script failed to start",
               createdAt: input.requestedAt,
@@ -400,7 +400,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               Effect.ignoreCause({ log: false }),
               Effect.flatMap(() =>
                 Effect.logWarning("bootstrap turn start failed to launch setup script", {
-                  threadId: command.threadId,
+                  sessionId: command.sessionId,
                   worktreePath: input.worktreePath,
                   detail,
                 }),
@@ -425,7 +425,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               };
               yield* Effect.all([
                 appendSetupScriptActivity({
-                  threadId: command.threadId,
+                  sessionId: command.sessionId,
                   kind: "setup-script.requested",
                   summary: "Starting setup script",
                   createdAt: input.requestedAt,
@@ -433,7 +433,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   tone: "info",
                 }),
                 appendSetupScriptActivity({
-                  threadId: command.threadId,
+                  sessionId: command.sessionId,
                   kind: "setup-script.started",
                   summary: "Setup script started",
                   createdAt: startedAt,
@@ -446,7 +446,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   Effect.logWarning(
                     "bootstrap turn start launched setup script but failed to record setup activity",
                     {
-                      threadId: command.threadId,
+                      sessionId: command.sessionId,
                       worktreePath: input.worktreePath,
                       scriptId: input.scriptId,
                       terminalId: input.terminalId,
@@ -465,8 +465,8 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               const worktreePath = targetWorktreePath;
               const requestedAt = yield* nowIso;
               yield* projectSetupScriptRunner
-                .runForThread({
-                  threadId: command.threadId,
+                .runForSession({
+                  sessionId: command.sessionId,
                   ...(targetProjectId ? { projectId: targetProjectId } : {}),
                   ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
                   worktreePath,
@@ -496,21 +496,21 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             });
 
           const bootstrapProgram = Effect.gen(function* () {
-            if (bootstrap?.createThread) {
+            if (bootstrap?.createSession) {
               yield* orchestrationEngine.dispatch({
-                type: "thread.create",
-                commandId: serverCommandId("bootstrap-thread-create"),
-                threadId: command.threadId,
-                projectId: bootstrap.createThread.projectId,
-                title: bootstrap.createThread.title,
-                modelSelection: bootstrap.createThread.modelSelection,
-                runtimeMode: bootstrap.createThread.runtimeMode,
-                interactionMode: bootstrap.createThread.interactionMode,
-                branch: bootstrap.createThread.branch,
-                worktreePath: bootstrap.createThread.worktreePath,
-                createdAt: bootstrap.createThread.createdAt,
+                type: "session.create",
+                commandId: serverCommandId("bootstrap-session-create"),
+                sessionId: command.sessionId,
+                projectId: bootstrap.createSession.projectId,
+                title: bootstrap.createSession.title,
+                modelSelection: bootstrap.createSession.modelSelection,
+                runtimeMode: bootstrap.createSession.runtimeMode,
+                interactionMode: bootstrap.createSession.interactionMode,
+                branch: bootstrap.createSession.branch,
+                worktreePath: bootstrap.createSession.worktreePath,
+                createdAt: bootstrap.createSession.createdAt,
               });
-              createdThread = true;
+              createdSession = true;
             }
 
             if (bootstrap?.prepareWorktree) {
@@ -522,9 +522,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               });
               targetWorktreePath = worktree.worktree.path;
               yield* orchestrationEngine.dispatch({
-                type: "thread.meta.update",
-                commandId: serverCommandId("bootstrap-thread-meta-update"),
-                threadId: command.threadId,
+                type: "session.meta.update",
+                commandId: serverCommandId("bootstrap-session-meta-update"),
+                sessionId: command.sessionId,
                 branch: worktree.worktree.refName,
                 worktreePath: targetWorktreePath,
               });
@@ -542,7 +542,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               if (Cause.hasInterruptsOnly(cause)) {
                 return Effect.fail(dispatchError);
               }
-              return cleanupCreatedThread().pipe(Effect.flatMap(() => Effect.fail(dispatchError)));
+              return cleanupCreatedSession().pipe(Effect.flatMap(() => Effect.fail(dispatchError)));
             }),
           );
         });
@@ -551,7 +551,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         normalizedCommand: OrchestrationCommand,
       ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
         const dispatchEffect =
-          normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
+          normalizedCommand.type === "session.turn.start" && normalizedCommand.bootstrap
             ? dispatchBootstrapTurnStart(normalizedCommand)
             : orchestrationEngine
                 .dispatch(normalizedCommand)
@@ -612,30 +612,30 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             Effect.gen(function* () {
               const normalizedCommand = yield* normalizeDispatchCommand(command);
               const shouldStopSessionAfterArchive =
-                normalizedCommand.type === "thread.archive"
+                normalizedCommand.type === "session.archive"
                   ? yield* projectionSnapshotQuery
-                      .getThreadShellById(normalizedCommand.threadId)
+                      .getSessionShellById(normalizedCommand.sessionId)
                       .pipe(
                         Effect.map(
                           Option.match({
                             onNone: () => false,
-                            onSome: (thread) =>
-                              thread.session !== null && thread.session.status !== "stopped",
+                            onSome: (session) =>
+                              session.session !== null && session.session.status !== "stopped",
                           }),
                         ),
                         Effect.catch(() => Effect.succeed(false)),
                       )
                   : false;
               const result = yield* dispatchNormalizedCommand(normalizedCommand);
-              if (normalizedCommand.type === "thread.archive") {
+              if (normalizedCommand.type === "session.archive") {
                 if (shouldStopSessionAfterArchive) {
                   yield* Effect.gen(function* () {
                     const stopCommand = yield* normalizeDispatchCommand({
-                      type: "thread.session.stop",
+                      type: "session.session.stop",
                       commandId: CommandId.make(
                         `session-stop-for-archive:${normalizedCommand.commandId}`,
                       ),
-                      threadId: normalizedCommand.threadId,
+                      sessionId: normalizedCommand.sessionId,
                       createdAt: yield* nowIso,
                     });
 
@@ -643,17 +643,17 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   }).pipe(
                     Effect.catchCause((cause) =>
                       Effect.logWarning("failed to stop provider session during archive", {
-                        threadId: normalizedCommand.threadId,
+                        sessionId: normalizedCommand.sessionId,
                         cause,
                       }),
                     ),
                   );
                 }
 
-                yield* terminalManager.close({ threadId: normalizedCommand.threadId }).pipe(
+                yield* terminalManager.close({ sessionId: normalizedCommand.sessionId }).pipe(
                   Effect.catch((error) =>
-                    Effect.logWarning("failed to close thread terminals after archive", {
-                      threadId: normalizedCommand.threadId,
+                    Effect.logWarning("failed to close session terminals after archive", {
+                      sessionId: normalizedCommand.sessionId,
                       error: error.message,
                     }),
                   ),
@@ -686,14 +686,14 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "orchestration" },
           ),
-        [ORCHESTRATION_WS_METHODS.getFullThreadDiff]: (input) =>
+        [ORCHESTRATION_WS_METHODS.getFullSessionDiff]: (input) =>
           observeRpcEffect(
-            ORCHESTRATION_WS_METHODS.getFullThreadDiff,
-            checkpointDiffQuery.getFullThreadDiff(input).pipe(
+            ORCHESTRATION_WS_METHODS.getFullSessionDiff,
+            checkpointDiffQuery.getFullSessionDiff(input).pipe(
               Effect.mapError(
                 (cause) =>
-                  new OrchestrationGetFullThreadDiffError({
-                    message: "Failed to load full thread diff",
+                  new OrchestrationGetFullSessionDiffError({
+                    message: "Failed to load full session diff",
                     cause,
                   }),
               ),
@@ -774,16 +774,16 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "orchestration" },
           ),
-        [ORCHESTRATION_WS_METHODS.subscribeThread]: (input) =>
+        [ORCHESTRATION_WS_METHODS.subscribeSession]: (input) =>
           observeRpcStreamEffect(
-            ORCHESTRATION_WS_METHODS.subscribeThread,
+            ORCHESTRATION_WS_METHODS.subscribeSession,
             Effect.gen(function* () {
-              const [threadDetail, snapshotSequence] = yield* Effect.all([
-                projectionSnapshotQuery.getThreadDetailById(input.threadId).pipe(
+              const [sessionDetail, snapshotSequence] = yield* Effect.all([
+                projectionSnapshotQuery.getSessionDetailById(input.sessionId).pipe(
                   Effect.mapError(
                     (cause) =>
                       new OrchestrationGetSnapshotError({
-                        message: `Failed to load thread ${input.threadId}`,
+                        message: `Failed to load session ${input.sessionId}`,
                         cause,
                       }),
                   ),
@@ -800,19 +800,19 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 ),
               ]);
 
-              if (Option.isNone(threadDetail)) {
+              if (Option.isNone(sessionDetail)) {
                 return yield* new OrchestrationGetSnapshotError({
-                  message: `Thread ${input.threadId} was not found`,
-                  cause: input.threadId,
+                  message: `Session ${input.sessionId} was not found`,
+                  cause: input.sessionId,
                 });
               }
 
               const liveStream = orchestrationEngine.streamDomainEvents.pipe(
                 Stream.filter(
                   (event) =>
-                    event.aggregateKind === "thread" &&
-                    event.aggregateId === input.threadId &&
-                    isThreadDetailEvent(event),
+                    event.aggregateKind === "session" &&
+                    event.aggregateId === input.sessionId &&
+                    isSessionDetailEvent(event),
                 ),
                 Stream.map((event) => ({
                   kind: "event" as const,
@@ -825,7 +825,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   kind: "snapshot" as const,
                   snapshot: {
                     snapshotSequence,
-                    thread: threadDetail.value,
+                    session: sessionDetail.value,
                   },
                 }),
                 liveStream,
@@ -1058,11 +1058,11 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               "rpc.aggregate": "git",
             },
           ),
-        [WS_METHODS.gitPreparePullRequestThread]: (input) =>
+        [WS_METHODS.gitPreparePullRequestSession]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitPreparePullRequestThread,
+            WS_METHODS.gitPreparePullRequestSession,
             gitWorkflow
-              .preparePullRequestThread(input)
+              .preparePullRequestSession(input)
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),

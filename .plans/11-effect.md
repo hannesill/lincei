@@ -32,7 +32,7 @@ Map decode failures to typed tagged errors (with root cause).
 Add regression tests for malformed/partial protocol messages.
 PR 9: Native ProviderService orchestration
 Rebuild provider logic in Effect using CodexService + CheckpointStore dependencies.
-Move event fanout, checkpoint capture/revert orchestration, thread-log routing to Effect state/services.
+Move event fanout, checkpoint capture/revert orchestration, session-log routing to Effect state/services.
 Remove throw-based flow entirely from provider path.
 PR 10: Cleanup + deprecation removal
 Remove legacy class implementations/adapters once parity is proven.

@@ -407,7 +407,7 @@ Use span annotations for IDs, paths, and other detailed context:
 ```ts
 yield *
   Effect.annotateCurrentSpan({
-    "provider.thread_id": input.threadId,
+    "provider.session_id": input.sessionId,
     "provider.request_id": input.requestId,
     "git.cwd": input.cwd,
   });
@@ -425,7 +425,7 @@ Good metric labels:
 
 Bad metric labels:
 
-- raw thread IDs
+- raw session IDs
 - command IDs
 - file paths
 - cwd

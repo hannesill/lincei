@@ -42,8 +42,8 @@ export function sanitizePrTitle(raw: string): string {
   return "Update project changes";
 }
 
-/** Normalise a raw thread title to a compact single-line sidebar-safe label. */
-export function sanitizeThreadTitle(raw: string): string {
+/** Normalise a raw session title to a compact single-line sidebar-safe label. */
+export function sanitizeSessionTitle(raw: string): string {
   const normalized = raw
     .trim()
     .split(/\r?\n/g)[0]
@@ -53,7 +53,7 @@ export function sanitizeThreadTitle(raw: string): string {
     .replace(/\s+/g, " ");
 
   if (!normalized || normalized.trim().length === 0) {
-    return "New thread";
+    return "New session";
   }
 
   if (normalized.length <= 50) {

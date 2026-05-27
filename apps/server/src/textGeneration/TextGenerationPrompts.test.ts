@@ -4,9 +4,9 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-  buildThreadTitlePrompt,
+  buildSessionTitlePrompt,
 } from "./TextGenerationPrompts.ts";
-import { normalizeCliError, sanitizeThreadTitle } from "./TextGenerationUtils.ts";
+import { normalizeCliError, sanitizeSessionTitle } from "./TextGenerationUtils.ts";
 import { TextGenerationError } from "@t3tools/contracts";
 
 describe("buildCommitMessagePrompt", () => {
@@ -104,9 +104,9 @@ describe("buildBranchNamePrompt", () => {
   });
 });
 
-describe("buildThreadTitlePrompt", () => {
+describe("buildSessionTitlePrompt", () => {
   it("includes the user message in the prompt", () => {
-    const result = buildThreadTitlePrompt({
+    const result = buildSessionTitlePrompt({
       message: "Investigate reconnect regressions after session restore",
     });
 
@@ -116,13 +116,13 @@ describe("buildThreadTitlePrompt", () => {
   });
 
   it("includes attachment metadata when attachments are provided", () => {
-    const result = buildThreadTitlePrompt({
-      message: "Name this thread from the screenshot",
+    const result = buildSessionTitlePrompt({
+      message: "Name this session from the screenshot",
       attachments: [
         {
           type: "image" as const,
           id: "att-456",
-          name: "thread.png",
+          name: "session.png",
           mimeType: "image/png",
           sizeBytes: 67890,
         },
@@ -130,16 +130,16 @@ describe("buildThreadTitlePrompt", () => {
     });
 
     expect(result.prompt).toContain("Attachment metadata:");
-    expect(result.prompt).toContain("thread.png");
+    expect(result.prompt).toContain("session.png");
     expect(result.prompt).toContain("image/png");
     expect(result.prompt).toContain("67890 bytes");
   });
 });
 
-describe("sanitizeThreadTitle", () => {
+describe("sanitizeSessionTitle", () => {
   it("truncates long titles with the shared sidebar-safe limit", () => {
     expect(
-      sanitizeThreadTitle(
+      sanitizeSessionTitle(
         '  "Reconnect failures after restart because the session state does not recover"  ',
       ),
     ).toBe("Reconnect failures after restart because the se...");

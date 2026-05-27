@@ -153,7 +153,7 @@ const waitFor = <E, R>(
 
 function openInput(overrides: Partial<TerminalOpenInput> = {}): TerminalOpenInput {
   return {
-    threadId: "thread-1",
+    sessionId: "session-1",
     terminalId: DEFAULT_TERMINAL_ID,
     cwd: process.cwd(),
     cols: 100,
@@ -164,7 +164,7 @@ function openInput(overrides: Partial<TerminalOpenInput> = {}): TerminalOpenInpu
 
 function restartInput(overrides: Partial<TerminalRestartInput> = {}): TerminalRestartInput {
   return {
-    threadId: "thread-1",
+    sessionId: "session-1",
     terminalId: DEFAULT_TERMINAL_ID,
     cwd: process.cwd(),
     cols: 100,
@@ -173,24 +173,24 @@ function restartInput(overrides: Partial<TerminalRestartInput> = {}): TerminalRe
   };
 }
 
-const historyLogPath = (logsDir: string, threadId = "thread-1") =>
+const historyLogPath = (logsDir: string, sessionId = "session-1") =>
   Effect.service(Path.Path).pipe(
-    Effect.map(({ join }) => join(logsDir, `terminal_${Encoding.encodeBase64Url(threadId)}.log`)),
+    Effect.map(({ join }) => join(logsDir, `terminal_${Encoding.encodeBase64Url(sessionId)}.log`)),
   );
 
 const multiTerminalHistoryLogPath = (
   logsDir: string,
-  threadId = "thread-1",
+  sessionId = "session-1",
   terminalId = DEFAULT_TERMINAL_ID,
 ) =>
   Effect.service(Path.Path).pipe(
     Effect.map(({ join }) => {
-      const threadPart = `terminal_${Encoding.encodeBase64Url(threadId)}`;
+      const sessionPart = `terminal_${Encoding.encodeBase64Url(sessionId)}`;
       return join(
         logsDir,
         terminalId === DEFAULT_TERMINAL_ID
-          ? `${threadPart}.log`
-          : `${threadPart}_${Encoding.encodeBase64Url(terminalId)}.log`,
+          ? `${sessionPart}.log`
+          : `${sessionPart}_${Encoding.encodeBase64Url(terminalId)}.log`,
       );
     }),
   );
@@ -271,7 +271,7 @@ it.layer(
 )("TerminalManager", (it) => {
   const itEffectSkipOnWindows = process.platform === "win32" ? it.effect.skip : it.effect;
 
-  it.effect("spawns lazily and reuses running terminal per thread", () =>
+  it.effect("spawns lazily and reuses running terminal per session", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
       const [first, second] = yield* Effect.all(
@@ -280,10 +280,10 @@ it.layer(
       );
       const third = yield* manager.open(openInput());
 
-      assert.equal(first.threadId, "thread-1");
+      assert.equal(first.sessionId, "session-1");
       assert.equal(first.terminalId, "default");
-      assert.equal(second.threadId, "thread-1");
-      assert.equal(third.threadId, "thread-1");
+      assert.equal(second.sessionId, "session-1");
+      assert.equal(third.sessionId, "session-1");
       expect(ptyAdapter.spawnInputs).toHaveLength(1);
     }),
   );
@@ -352,12 +352,12 @@ it.layer(
       if (!process) return;
 
       yield* manager.write({
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         data: "ls\n",
       });
       yield* manager.resize({
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         cols: 120,
         rows: 30,
@@ -383,7 +383,7 @@ it.layer(
     }),
   );
 
-  it.effect("supports multiple terminals per thread independently", () =>
+  it.effect("supports multiple terminals per session independently", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
       yield* manager.open(openInput({ terminalId: "default" }));
@@ -395,8 +395,8 @@ it.layer(
       expect(second).toBeDefined();
       if (!first || !second) return;
 
-      yield* manager.write({ threadId: "thread-1", terminalId: "default", data: "pwd\n" });
-      yield* manager.write({ threadId: "thread-1", terminalId: "term-2", data: "ls\n" });
+      yield* manager.write({ sessionId: "session-1", terminalId: "default", data: "pwd\n" });
+      yield* manager.write({ sessionId: "session-1", terminalId: "term-2", data: "ls\n" });
 
       expect(first.writes).toEqual(["pwd\n"]);
       expect(second.writes).toEqual(["ls\n"]);
@@ -420,7 +420,7 @@ it.layer(
           Effect.flatMap(pathExists),
         ),
       );
-      yield* manager.clear({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+      yield* manager.clear({ sessionId: "session-1", terminalId: DEFAULT_TERMINAL_ID });
       yield* waitFor(
         historyLogPath(logsDir).pipe(
           Effect.provideService(Path.Path, path),
@@ -435,7 +435,7 @@ it.layer(
         events.some(
           (event) =>
             event.type === "cleared" &&
-            event.threadId === "thread-1" &&
+            event.sessionId === "session-1" &&
             event.terminalId === "default",
         ),
       ).toBe(true);
@@ -597,7 +597,7 @@ it.layer(
       process.emitExit({ exitCode: 0, signal: 0 });
 
       yield* manager.write({
-        threadId: "thread-1",
+        sessionId: "session-1",
         terminalId: DEFAULT_TERMINAL_ID,
         data: "\r",
       });
@@ -665,7 +665,7 @@ it.layer(
       if (!process) return;
 
       process.emitData("line1\nline2\nline3\nline4\n");
-      yield* manager.close({ threadId: "thread-1" });
+      yield* manager.close({ sessionId: "session-1" });
 
       const reopened = yield* manager.open(openInput());
       const nonEmptyLines = reopened.history.split("\n").filter((line) => line.length > 0);
@@ -687,7 +687,7 @@ it.layer(
       process.emitData("\u001b[1;1R");
       process.emitData("done\n");
 
-      yield* manager.close({ threadId: "thread-1" });
+      yield* manager.close({ sessionId: "session-1" });
 
       const reopened = yield* manager.open(openInput());
       assert.equal(reopened.history, "prompt \u001b[32mok\u001b[0m done\n");
@@ -711,7 +711,7 @@ it.layer(
         process.emitData("rgb:ffff/ffff/ffff\u0007\u001b[1;1");
         process.emitData("R\u001b[36mdone\u001b[0m\n");
 
-        yield* manager.close({ threadId: "thread-1" });
+        yield* manager.close({ sessionId: "session-1" });
 
         const reopened = yield* manager.open(openInput());
         assert.equal(
@@ -733,7 +733,7 @@ it.layer(
       process.emitData("\u001b(B");
       process.emitData("after\n");
 
-      yield* manager.close({ threadId: "thread-1" });
+      yield* manager.close({ sessionId: "session-1" });
 
       const reopened = yield* manager.open(openInput());
       assert.equal(reopened.history, "before \u001b(Bafter\n");
@@ -754,7 +754,7 @@ it.layer(
         process.emitData("\u001b(");
         process.emitData("Bafter\n");
 
-        yield* manager.close({ threadId: "thread-1" });
+        yield* manager.close({ sessionId: "session-1" });
 
         const reopened = yield* manager.open(openInput());
         assert.equal(reopened.history, "before \u001b(Bafter\n");
@@ -777,7 +777,7 @@ it.layer(
         ),
       );
 
-      yield* manager.close({ threadId: "thread-1", deleteHistory: true });
+      yield* manager.close({ sessionId: "session-1", deleteHistory: true });
       expect(
         yield* historyLogPath(logsDir).pipe(
           Effect.provideService(Path.Path, path),
@@ -787,7 +787,7 @@ it.layer(
     }),
   );
 
-  it.effect("closes all terminals for a thread when close omits terminalId", () =>
+  it.effect("closes all terminals for a session when close omits terminalId", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter, logsDir } = yield* createManager();
       yield* manager.open(openInput({ terminalId: "default" }));
@@ -802,30 +802,30 @@ it.layer(
       sidecarProcess.emitData("sidecar\n");
       const path = yield* Path.Path;
       yield* waitFor(
-        multiTerminalHistoryLogPath(logsDir, "thread-1", "default").pipe(
+        multiTerminalHistoryLogPath(logsDir, "session-1", "default").pipe(
           Effect.provideService(Path.Path, path),
           Effect.flatMap(pathExists),
         ),
       );
       yield* waitFor(
-        multiTerminalHistoryLogPath(logsDir, "thread-1", "sidecar").pipe(
+        multiTerminalHistoryLogPath(logsDir, "session-1", "sidecar").pipe(
           Effect.provideService(Path.Path, path),
           Effect.flatMap(pathExists),
         ),
       );
 
-      yield* manager.close({ threadId: "thread-1", deleteHistory: true });
+      yield* manager.close({ sessionId: "session-1", deleteHistory: true });
 
       assert.equal(defaultProcess.killed, true);
       assert.equal(sidecarProcess.killed, true);
       expect(
-        yield* multiTerminalHistoryLogPath(logsDir, "thread-1", "default").pipe(
+        yield* multiTerminalHistoryLogPath(logsDir, "session-1", "default").pipe(
           Effect.provideService(Path.Path, path),
           Effect.flatMap(pathExists),
         ),
       ).toBe(false);
       expect(
-        yield* multiTerminalHistoryLogPath(logsDir, "thread-1", "sidecar").pipe(
+        yield* multiTerminalHistoryLogPath(logsDir, "session-1", "sidecar").pipe(
           Effect.provideService(Path.Path, path),
           Effect.flatMap(pathExists),
         ),
@@ -841,7 +841,7 @@ it.layer(
       expect(process).toBeDefined();
       if (!process) return;
 
-      const closeFiber = yield* manager.close({ threadId: "thread-1" }).pipe(Effect.forkScoped);
+      const closeFiber = yield* manager.close({ sessionId: "session-1" }).pipe(Effect.forkScoped);
       yield* Effect.yieldNow;
       yield* TestClock.adjust("10 millis");
       yield* Fiber.join(closeFiber);
@@ -857,8 +857,8 @@ it.layer(
         maxRetainedInactiveSessions: 1,
       });
 
-      yield* manager.open(openInput({ threadId: "thread-1" }));
-      yield* manager.open(openInput({ threadId: "thread-2" }));
+      yield* manager.open(openInput({ sessionId: "session-1" }));
+      yield* manager.open(openInput({ sessionId: "session-2" }));
 
       const first = ptyAdapter.processes[0];
       const second = ptyAdapter.processes[1];
@@ -870,7 +870,7 @@ it.layer(
       second.emitData("second-history\n");
       const path = yield* Path.Path;
       yield* waitFor(
-        historyLogPath(logsDir, "thread-1").pipe(
+        historyLogPath(logsDir, "session-1").pipe(
           Effect.provideService(Path.Path, path),
           Effect.flatMap(pathExists),
         ),
@@ -886,8 +886,8 @@ it.layer(
         ),
       );
 
-      const reopenedSecond = yield* manager.open(openInput({ threadId: "thread-2" }));
-      const reopenedFirst = yield* manager.open(openInput({ threadId: "thread-1" }));
+      const reopenedSecond = yield* manager.open(openInput({ sessionId: "session-2" }));
+      const reopenedFirst = yield* manager.open(openInput({ sessionId: "session-1" }));
 
       assert.equal(reopenedFirst.history, "first-history\n");
       assert.equal(reopenedSecond.history, "");
@@ -898,7 +898,7 @@ it.layer(
     Effect.gen(function* () {
       const { manager, logsDir } = yield* createManager();
       const path = yield* Path.Path;
-      const legacyPath = path.join(logsDir, "thread-1.log");
+      const legacyPath = path.join(logsDir, "session-1.log");
       const nextPath = yield* historyLogPath(logsDir);
       yield* writeFileString(legacyPath, "legacy-line\n");
 

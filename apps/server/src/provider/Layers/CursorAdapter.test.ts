@@ -20,7 +20,7 @@ import {
   CursorSettings,
   ProviderDriverKind,
   type ProviderRuntimeEvent,
-  ThreadId,
+  SessionId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 
@@ -153,7 +153,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const settings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-mock-thread");
+      const sessionId = SessionId.make("cursor-mock-session");
 
       const wrapperPath = yield* Effect.promise(() => makeMockAgentWrapper());
       yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
@@ -164,7 +164,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       );
 
       const session = yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -178,7 +178,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       });
 
       yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "hello mock",
         attachments: [],
       });
@@ -187,9 +187,9 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const types = runtimeEvents.map((e) => e.type);
 
       for (const t of [
+        "runtime.started",
+        "runtime.state.changed",
         "session.started",
-        "session.state.changed",
-        "thread.started",
         "turn.started",
         "turn.plan.updated",
         "item.started",
@@ -227,7 +227,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         ]);
       }
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
     }),
   );
 
@@ -235,7 +235,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const settings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-stop-session-close");
+      const sessionId = SessionId.make("cursor-stop-session-close");
       const tempDir = yield* Effect.promise(() =>
         mkdtemp(path.join(os.tmpdir(), "cursor-adapter-exit-log-")),
       );
@@ -249,14 +249,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
         modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
       });
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
 
       const exitLog = yield* Effect.promise(() => waitForFileContent(exitLogPath));
       assert.include(exitLog, "SIGTERM");
@@ -264,12 +264,12 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
   );
 
   it.effect(
-    "serializes concurrent startSession calls for the same thread and closes the replaced ACP session",
+    "serializes concurrent startSession calls for the same session and closes the replaced ACP session",
     () =>
       Effect.gen(function* () {
         const adapter = yield* CursorAdapter;
         const settings = yield* ServerSettingsService;
-        const threadId = ThreadId.make("cursor-concurrent-start-session");
+        const sessionId = SessionId.make("cursor-concurrent-start-session");
         const tempDir = yield* Effect.promise(() =>
           mkdtemp(path.join(os.tmpdir(), "cursor-adapter-concurrent-exit-log-")),
         );
@@ -288,14 +288,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         const [firstSession, secondSession] = yield* Effect.all(
           [
             adapter.startSession({
-              threadId,
+              sessionId,
               provider: ProviderDriverKind.make("cursor"),
               cwd: process.cwd(),
               runtimeMode: "full-access",
               modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
             }),
             adapter.startSession({
-              threadId,
+              sessionId,
               provider: ProviderDriverKind.make("cursor"),
               cwd: process.cwd(),
               runtimeMode: "full-access",
@@ -305,10 +305,10 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
           { concurrency: "unbounded" },
         );
 
-        assert.equal(firstSession.threadId, threadId);
-        assert.equal(secondSession.threadId, threadId);
+        assert.equal(firstSession.sessionId, sessionId);
+        assert.equal(secondSession.sessionId, sessionId);
 
-        yield* adapter.stopSession(threadId);
+        yield* adapter.stopSession(sessionId);
 
         const exitLog = yield* Effect.promise(() => waitForFileContent(exitLogPath));
         assert.equal(exitLog.match(/SIGTERM/g)?.length ?? 0, 2);
@@ -320,7 +320,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const adapter = yield* CursorAdapter;
       const result = yield* adapter
         .startSession({
-          threadId: ThreadId.make("bad-provider"),
+          sessionId: SessionId.make("bad-provider"),
           provider: ProviderDriverKind.make("codex"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
@@ -335,7 +335,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-plan-mode-probe");
+      const sessionId = SessionId.make("cursor-plan-mode-probe");
       const tempDir = yield* Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "cursor-acp-")));
       const requestLogPath = path.join(tempDir, "requests.ndjson");
       const argvLogPath = path.join(tempDir, "argv.txt");
@@ -346,7 +346,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -354,12 +354,12 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       });
 
       yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "plan this change",
         attachments: [],
         interactionMode: "plan",
       });
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
 
       const requests = yield* Effect.promise(() => readJsonLines(requestLogPath));
       const modeRequest = requests
@@ -391,7 +391,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       Effect.gen(function* () {
         const adapter = yield* CursorAdapter;
         const serverSettings = yield* ServerSettingsService;
-        const threadId = ThreadId.make("cursor-initial-config-probe");
+        const sessionId = SessionId.make("cursor-initial-config-probe");
         const tempDir = yield* Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "cursor-acp-")));
         const requestLogPath = path.join(tempDir, "requests.ndjson");
         const argvLogPath = path.join(tempDir, "argv.txt");
@@ -410,7 +410,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         ]);
 
         yield* adapter.startSession({
-          threadId,
+          sessionId,
           provider: ProviderDriverKind.make("cursor"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
@@ -435,13 +435,13 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         ]);
 
         yield* adapter.sendTurn({
-          threadId,
+          sessionId,
           input: "hello mock",
           attachments: [],
           modelSelection,
           interactionMode: "default",
         });
-        yield* adapter.stopSession(threadId);
+        yield* adapter.stopSession(sessionId);
 
         const finalRequests = yield* Effect.promise(() => readJsonLines(requestLogPath));
         const finalConfigIds = finalRequests.flatMap((entry) =>
@@ -464,7 +464,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
         const adapter = yield* CursorAdapter;
         const serverSettings = yield* ServerSettingsService;
-        const threadId = ThreadId.make("cursor-tool-call-probe");
+        const sessionId = SessionId.make("cursor-tool-call-probe");
         const runtimeEvents: Array<ProviderRuntimeEvent> = [];
         const settledEventTypes = new Set<string>();
         const settledEventsReady = yield* Deferred.make<void>();
@@ -479,12 +479,12 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         yield* Stream.runForEach(adapter.streamEvents, (event) =>
           Effect.gen(function* () {
             runtimeEvents.push(event);
-            if (String(event.threadId) !== String(threadId)) {
+            if (String(event.sessionId) !== String(sessionId)) {
               return;
             }
             if (event.type === "request.opened" && event.requestId) {
               yield* adapter.respondToRequest(
-                threadId,
+                sessionId,
                 ApprovalRequestId.make(String(event.requestId)),
                 "accept",
               );
@@ -504,7 +504,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
         const program = Effect.gen(function* () {
           yield* adapter.startSession({
-            threadId,
+            sessionId,
             provider: ProviderDriverKind.make("cursor"),
             cwd: process.cwd(),
             runtimeMode: "approval-required",
@@ -512,21 +512,21 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
           });
 
           const turn = yield* adapter.sendTurn({
-            threadId,
+            sessionId,
             input: "run a tool call",
             attachments: [],
           });
           yield* Deferred.await(settledEventsReady);
 
-          const threadEvents = runtimeEvents.filter(
-            (event) => String(event.threadId) === String(threadId),
+          const sessionEvents = runtimeEvents.filter(
+            (event) => String(event.sessionId) === String(sessionId),
           );
           assert.includeMembers(
-            threadEvents.map((event) => event.type),
+            sessionEvents.map((event) => event.type),
             [
+              "runtime.started",
+              "runtime.state.changed",
               "session.started",
-              "session.state.changed",
-              "thread.started",
               "turn.started",
               "request.opened",
               "request.resolved",
@@ -537,7 +537,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
             ],
           );
 
-          const turnEvents = threadEvents.filter(
+          const turnEvents = sessionEvents.filter(
             (event) => String(event.turnId) === String(turn.turnId),
           );
           const toolUpdates = turnEvents.filter((event) => event.type === "item.updated");
@@ -631,7 +631,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       Effect.gen(function* () {
         const adapter = yield* CursorAdapter;
         const serverSettings = yield* ServerSettingsService;
-        const threadId = ThreadId.make("cursor-full-access-auto-approve");
+        const sessionId = SessionId.make("cursor-full-access-auto-approve");
         const runtimeEvents: Array<ProviderRuntimeEvent> = [];
         const settledEventTypes = new Set<string>();
         const settledEventsReady = yield* Deferred.make<void>();
@@ -649,7 +649,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
           Effect.gen(function* () {
             runtimeEvents.push(event);
-            if (String(event.threadId) !== String(threadId)) {
+            if (String(event.sessionId) !== String(sessionId)) {
               return;
             }
             if (
@@ -666,7 +666,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         ).pipe(Effect.forkChild);
 
         yield* adapter.startSession({
-          threadId,
+          sessionId,
           provider: ProviderDriverKind.make("cursor"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
@@ -674,7 +674,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         });
 
         const turn = yield* adapter.sendTurn({
-          threadId,
+          sessionId,
           input: "run a tool call",
           attachments: [],
         });
@@ -684,7 +684,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
         const turnEvents = runtimeEvents.filter(
           (event) =>
-            String(event.threadId) === String(threadId) &&
+            String(event.sessionId) === String(sessionId) &&
             String(event.turnId) === String(turn.turnId),
         );
         assert.notInclude(
@@ -716,7 +716,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         );
         assert.isDefined(permissionResponse);
 
-        yield* adapter.stopSession(threadId);
+        yield* adapter.stopSession(sessionId);
       }),
   );
 
@@ -724,7 +724,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-assistant-tool-segmentation");
+      const sessionId = SessionId.make("cursor-assistant-tool-segmentation");
       const runtimeEvents: Array<ProviderRuntimeEvent> = [];
       const settledEventTypes = new Set<string>();
       const settledEventsReady = yield* Deferred.make<void>();
@@ -739,7 +739,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
         Effect.gen(function* () {
           runtimeEvents.push(event);
-          if (String(event.threadId) !== String(threadId)) {
+          if (String(event.sessionId) !== String(sessionId)) {
             return;
           }
           if (
@@ -765,7 +765,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       ).pipe(Effect.forkChild);
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -773,7 +773,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "run an interleaved tool call",
         attachments: [],
       });
@@ -783,7 +783,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const turnEvents = runtimeEvents.filter(
         (event) =>
-          String(event.threadId) === String(threadId) &&
+          String(event.sessionId) === String(sessionId) &&
           String(event.turnId) === String(turn.turnId),
       );
       const firstAssistantStartIndex = turnEvents.findIndex(
@@ -844,7 +844,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         assert.equal(String(assistantDeltas[1].itemId), String(assistantStarts[1].itemId));
       }
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
     }),
   );
 
@@ -852,7 +852,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-cancel-probe");
+      const sessionId = SessionId.make("cursor-cancel-probe");
       const tempDir = yield* Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "cursor-acp-")));
       const requestLogPath = path.join(tempDir, "requests.ndjson");
       const argvLogPath = path.join(tempDir, "argv.txt");
@@ -868,12 +868,12 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
         Effect.gen(function* () {
-          if (String(event.threadId) !== String(threadId)) {
+          if (String(event.sessionId) !== String(sessionId)) {
             return;
           }
           if (event.type === "request.opened" && !interrupted) {
             interrupted = true;
-            yield* adapter.interruptTurn(threadId);
+            yield* adapter.interruptTurn(sessionId);
             return;
           }
           if (event.type === "request.resolved") {
@@ -887,7 +887,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       ).pipe(Effect.forkChild);
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "approval-required",
@@ -896,7 +896,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const sendTurnFiber = yield* adapter
         .sendTurn({
-          threadId,
+          sessionId,
           input: "cancel this turn",
           attachments: [],
         })
@@ -934,14 +934,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         ),
       );
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
     }),
   );
   it.effect("stopping a session settles pending approval waits", () =>
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-stop-pending-approval");
+      const sessionId = SessionId.make("cursor-stop-pending-approval");
       const approvalRequested = yield* Deferred.make<void>();
 
       const wrapperPath = yield* Effect.promise(() =>
@@ -950,14 +950,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* Stream.runForEach(adapter.streamEvents, (event) => {
-        if (String(event.threadId) !== String(threadId) || event.type !== "request.opened") {
+        if (String(event.sessionId) !== String(sessionId) || event.type !== "request.opened") {
           return Effect.void;
         }
         return Deferred.succeed(approvalRequested, undefined).pipe(Effect.ignore);
       }).pipe(Effect.forkChild);
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "approval-required",
@@ -966,17 +966,17 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const sendTurnFiber = yield* adapter
         .sendTurn({
-          threadId,
+          sessionId,
           input: "run a tool call and then stop",
           attachments: [],
         })
         .pipe(Effect.forkChild);
 
       yield* Deferred.await(approvalRequested);
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
       yield* Fiber.await(sendTurnFiber);
 
-      assert.equal(yield* adapter.hasSession(threadId), false);
+      assert.equal(yield* adapter.hasSession(sessionId), false);
     }),
   );
 
@@ -984,7 +984,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-stop-pending-user-input");
+      const sessionId = SessionId.make("cursor-stop-pending-user-input");
       const userInputRequested = yield* Deferred.make<void>();
 
       const wrapperPath = yield* Effect.promise(() =>
@@ -993,14 +993,17 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* Stream.runForEach(adapter.streamEvents, (event) => {
-        if (String(event.threadId) !== String(threadId) || event.type !== "user-input.requested") {
+        if (
+          String(event.sessionId) !== String(sessionId) ||
+          event.type !== "user-input.requested"
+        ) {
           return Effect.void;
         }
         return Deferred.succeed(userInputRequested, undefined).pipe(Effect.ignore);
       }).pipe(Effect.forkChild);
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -1009,17 +1012,17 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const sendTurnFiber = yield* adapter
         .sendTurn({
-          threadId,
+          sessionId,
           input: "ask me a question and then stop",
           attachments: [],
         })
         .pipe(Effect.forkChild);
 
       yield* Deferred.await(userInputRequested);
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
       yield* Fiber.await(sendTurnFiber);
 
-      assert.equal(yield* adapter.hasSession(threadId), false);
+      assert.equal(yield* adapter.hasSession(sessionId), false);
     }),
   );
 
@@ -1027,7 +1030,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-interrupt-pending-user-input");
+      const sessionId = SessionId.make("cursor-interrupt-pending-user-input");
       const userInputRequested = yield* Deferred.make<void>();
 
       const wrapperPath = yield* Effect.promise(() =>
@@ -1036,14 +1039,17 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* Stream.runForEach(adapter.streamEvents, (event) => {
-        if (String(event.threadId) !== String(threadId) || event.type !== "user-input.requested") {
+        if (
+          String(event.sessionId) !== String(sessionId) ||
+          event.type !== "user-input.requested"
+        ) {
           return Effect.void;
         }
         return Deferred.succeed(userInputRequested, undefined).pipe(Effect.ignore);
       }).pipe(Effect.forkChild);
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -1052,18 +1058,18 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       const sendTurnFiber = yield* adapter
         .sendTurn({
-          threadId,
+          sessionId,
           input: "ask me a question and then interrupt",
           attachments: [],
         })
         .pipe(Effect.forkChild);
 
       yield* Deferred.await(userInputRequested);
-      yield* adapter.interruptTurn(threadId);
+      yield* adapter.interruptTurn(sessionId);
       yield* Fiber.await(sendTurnFiber);
 
-      assert.equal(yield* adapter.hasSession(threadId), true);
-      yield* adapter.stopSession(threadId);
+      assert.equal(yield* adapter.hasSession(sessionId), true);
+      yield* adapter.stopSession(sessionId);
     }),
   );
 
@@ -1071,7 +1077,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const settings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-runtime-event-broadcast");
+      const sessionId = SessionId.make("cursor-runtime-event-broadcast");
 
       const wrapperPath = yield* Effect.promise(() => makeMockAgentWrapper());
       yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
@@ -1086,7 +1092,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       );
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -1098,14 +1104,14 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
 
       assert.deepStrictEqual(
         firstEvents.map((event) => event.type),
-        ["session.started", "session.state.changed", "thread.started"],
+        ["runtime.started", "runtime.state.changed", "session.started"],
       );
       assert.deepStrictEqual(
         secondEvents.map((event) => event.type),
-        ["session.started", "session.state.changed", "thread.started"],
+        ["runtime.started", "runtime.state.changed", "session.started"],
       );
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
     }),
   );
 
@@ -1113,7 +1119,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-model-switch");
+      const sessionId = SessionId.make("cursor-model-switch");
       const tempDir = yield* Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "cursor-acp-")));
       const requestLogPath = path.join(tempDir, "requests.ndjson");
       const argvLogPath = path.join(tempDir, "argv.txt");
@@ -1124,7 +1130,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -1132,13 +1138,13 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       });
 
       yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "first turn",
         attachments: [],
       });
 
       yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "second turn after switching model",
         attachments: [],
         modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
@@ -1168,7 +1174,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const lastFastConfig = fastConfigRequests[fastConfigRequests.length - 1];
       assert.equal((lastFastConfig?.params as Record<string, unknown>)?.value, "true");
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
     }),
   );
 
@@ -1176,7 +1182,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
       const serverSettings = yield* ServerSettingsService;
-      const threadId = ThreadId.make("cursor-fast-mode-reset");
+      const sessionId = SessionId.make("cursor-fast-mode-reset");
       const tempDir = yield* Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "cursor-acp-")));
       const requestLogPath = path.join(tempDir, "requests.ndjson");
       const argvLogPath = path.join(tempDir, "argv.txt");
@@ -1187,7 +1193,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
 
       yield* adapter.startSession({
-        threadId,
+        sessionId,
         provider: ProviderDriverKind.make("cursor"),
         cwd: process.cwd(),
         runtimeMode: "full-access",
@@ -1195,7 +1201,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       });
 
       yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "first turn with fast mode",
         attachments: [],
         modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
@@ -1204,7 +1210,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       });
 
       yield* adapter.sendTurn({
-        threadId,
+        sessionId,
         input: "second turn without fast mode",
         attachments: [],
         modelSelection: createModelSelection(ProviderInstanceId.make("cursor"), "composer-2", [
@@ -1223,7 +1229,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const lastFastConfig = fastConfigRequests[fastConfigRequests.length - 1];
       assert.equal((lastFastConfig?.params as Record<string, unknown>)?.value, "false");
 
-      yield* adapter.stopSession(threadId);
+      yield* adapter.stopSession(sessionId);
     }),
   );
 
@@ -1260,7 +1266,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       return Effect.gen(function* () {
         const adapter = yield* CursorAdapter;
         const serverSettings = yield* ServerSettingsService;
-        const threadId = ThreadId.make("cursor-fast-mode-custom-instance");
+        const sessionId = SessionId.make("cursor-fast-mode-custom-instance");
         const tempDir = yield* Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "cursor-acp-")));
         const requestLogPath = path.join(tempDir, "requests.ndjson");
         const argvLogPath = path.join(tempDir, "argv.txt");
@@ -1273,7 +1279,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         });
 
         yield* adapter.startSession({
-          threadId,
+          sessionId,
           provider: ProviderDriverKind.make("cursor"),
           cwd: process.cwd(),
           runtimeMode: "full-access",
@@ -1284,7 +1290,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         });
 
         yield* adapter.sendTurn({
-          threadId,
+          sessionId,
           input: "first turn with fast mode",
           attachments: [],
           modelSelection: {
@@ -1309,7 +1315,7 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
         const lastFastConfig = fastConfigRequests[fastConfigRequests.length - 1];
         assert.equal((lastFastConfig?.params as Record<string, unknown>)?.value, "true");
 
-        yield* adapter.stopSession(threadId);
+        yield* adapter.stopSession(sessionId);
       }).pipe(Effect.provide(customAdapterLayer));
     },
   );

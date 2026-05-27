@@ -22,8 +22,8 @@ import {
   VcsListRefsInput,
   VcsListRefsResult,
   GitManagerServiceError,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
+  GitPreparePullRequestSessionInput,
+  GitPreparePullRequestSessionResult,
   VcsPullInput,
   GitPullRequestRefInput,
   VcsPullResult,
@@ -39,8 +39,8 @@ import {
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
-  OrchestrationGetFullThreadDiffError,
-  OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetFullSessionDiffError,
+  OrchestrationGetFullSessionDiffInput,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   OrchestrationGetTurnDiffInput,
@@ -126,7 +126,7 @@ export const WS_METHODS = {
   // Git workflow methods
   gitRunStackedAction: "git.runStackedAction",
   gitResolvePullRequest: "git.resolvePullRequest",
-  gitPreparePullRequestThread: "git.preparePullRequestThread",
+  gitPreparePullRequestSession: "git.preparePullRequestSession",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -319,9 +319,9 @@ export const WsGitResolvePullRequestRpc = Rpc.make(WS_METHODS.gitResolvePullRequ
   error: GitManagerServiceError,
 });
 
-export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePullRequestThread, {
-  payload: GitPreparePullRequestThreadInput,
-  success: GitPreparePullRequestThreadResult,
+export const WsGitPreparePullRequestSessionRpc = Rpc.make(WS_METHODS.gitPreparePullRequestSession, {
+  payload: GitPreparePullRequestSessionInput,
+  success: GitPreparePullRequestSessionResult,
   error: GitManagerServiceError,
 });
 
@@ -406,12 +406,12 @@ export const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.g
   error: OrchestrationGetTurnDiffError,
 });
 
-export const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(
-  ORCHESTRATION_WS_METHODS.getFullThreadDiff,
+export const WsOrchestrationGetFullSessionDiffRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getFullSessionDiff,
   {
-    payload: OrchestrationGetFullThreadDiffInput,
-    success: OrchestrationRpcSchemas.getFullThreadDiff.output,
-    error: OrchestrationGetFullThreadDiffError,
+    payload: OrchestrationGetFullSessionDiffInput,
+    success: OrchestrationRpcSchemas.getFullSessionDiff.output,
+    error: OrchestrationGetFullSessionDiffError,
   },
 );
 
@@ -437,11 +437,11 @@ export const WsOrchestrationSubscribeShellRpc = Rpc.make(ORCHESTRATION_WS_METHOD
   stream: true,
 });
 
-export const WsOrchestrationSubscribeThreadRpc = Rpc.make(
-  ORCHESTRATION_WS_METHODS.subscribeThread,
+export const WsOrchestrationSubscribeSessionRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.subscribeSession,
   {
-    payload: OrchestrationRpcSchemas.subscribeThread.input,
-    success: OrchestrationRpcSchemas.subscribeThread.output,
+    payload: OrchestrationRpcSchemas.subscribeSession.input,
+    success: OrchestrationRpcSchemas.subscribeSession.output,
     error: OrchestrationGetSnapshotError,
     stream: true,
   },
@@ -497,7 +497,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsRefreshStatusRpc,
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
-  WsGitPreparePullRequestThreadRpc,
+  WsGitPreparePullRequestSessionRpc,
   WsVcsListRefsRpc,
   WsVcsCreateWorktreeRpc,
   WsVcsRemoveWorktreeRpc,
@@ -516,9 +516,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeAuthAccessRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
-  WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationGetFullSessionDiffRpc,
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
-  WsOrchestrationSubscribeThreadRpc,
+  WsOrchestrationSubscribeSessionRpc,
 );

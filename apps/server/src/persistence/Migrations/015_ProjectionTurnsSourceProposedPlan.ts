@@ -6,7 +6,7 @@ export default Effect.gen(function* () {
 
   yield* sql`
     ALTER TABLE projection_turns
-    ADD COLUMN source_proposed_plan_thread_id TEXT
+    ADD COLUMN source_proposed_plan_session_id TEXT
   `;
 
   yield* sql`

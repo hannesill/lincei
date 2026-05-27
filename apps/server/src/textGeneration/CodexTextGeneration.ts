@@ -17,20 +17,20 @@ import { expandHomePath } from "../pathExpansion.ts";
 import { TextGenerationError } from "@t3tools/contracts";
 import {
   type BranchNameGenerationInput,
-  type ThreadTitleGenerationResult,
+  type SessionTitleGenerationResult,
   type TextGenerationShape,
 } from "./TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-  buildThreadTitlePrompt,
+  buildSessionTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
-  sanitizeThreadTitle,
+  sanitizeSessionTitle,
   toJsonSchemaObject,
 } from "./TextGenerationUtils.ts";
 import {
@@ -105,7 +105,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateSessionTitle",
     value: unknown,
   ): Effect.Effect<string, TextGenerationError> =>
     encodeJsonString(value).pipe(
@@ -124,7 +124,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateSessionTitle",
     attachments: BranchNameGenerationInput["attachments"],
   ): Effect.fn.Return<MaterializedImageAttachments, TextGenerationError> {
     if (!attachments || attachments.length === 0) {
@@ -168,7 +168,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateSessionTitle";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -382,20 +382,20 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
     };
   });
 
-  const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
-    "CodexTextGeneration.generateThreadTitle",
+  const generateSessionTitle: TextGenerationShape["generateSessionTitle"] = Effect.fn(
+    "CodexTextGeneration.generateSessionTitle",
   )(function* (input) {
     const { imagePaths } = yield* materializeImageAttachments(
-      "generateThreadTitle",
+      "generateSessionTitle",
       input.attachments,
     );
-    const { prompt, outputSchema } = buildThreadTitlePrompt({
+    const { prompt, outputSchema } = buildSessionTitlePrompt({
       message: input.message,
       attachments: input.attachments,
     });
 
     const generated = yield* runCodexJson({
-      operation: "generateThreadTitle",
+      operation: "generateSessionTitle",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
@@ -404,14 +404,14 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
     });
 
     return {
-      title: sanitizeThreadTitle(generated.title),
-    } satisfies ThreadTitleGenerationResult;
+      title: sanitizeSessionTitle(generated.title),
+    } satisfies SessionTitleGenerationResult;
   });
 
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
-    generateThreadTitle,
+    generateSessionTitle,
   } satisfies TextGenerationShape;
 });

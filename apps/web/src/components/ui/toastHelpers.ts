@@ -3,9 +3,9 @@
 import type { ToastManagerAddOptions } from "@base-ui/react/toast";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
-import type { ThreadToastData } from "./toast";
+import type { SessionToastData } from "./toast";
 
-export type StackedThreadToastOptions = {
+export type StackedSessionToastOptions = {
   type: "error" | "warning" | "success" | "info" | "loading";
   title: ReactNode;
   description?: ReactNode;
@@ -13,21 +13,21 @@ export type StackedThreadToastOptions = {
   priority?: "low" | "high";
   actionProps?: ComponentPropsWithoutRef<"button">;
   /** Merged into `data`; `actionLayout` is always forced to `"stacked-end"` by the helper. */
-  actionVariant?: ThreadToastData["actionVariant"];
-  data?: Omit<ThreadToastData, "actionLayout">;
+  actionVariant?: SessionToastData["actionVariant"];
+  data?: Omit<SessionToastData, "actionLayout">;
 };
 
 /**
- * Thread toast using the stacked body + bottom action row (copy for errors, CTA on its own row).
+ * Session toast using the stacked body + bottom action row (copy for errors, CTA on its own row).
  */
-export function stackedThreadToast(
-  options: StackedThreadToastOptions,
-): ToastManagerAddOptions<ThreadToastData> {
+export function stackedSessionToast(
+  options: StackedSessionToastOptions,
+): ToastManagerAddOptions<SessionToastData> {
   const { type, title, description, timeout, priority, actionProps, actionVariant, data } = options;
 
   // Helper-owned `actionLayout` must win over any caller-provided `data`, so spread
   // the caller's data first and apply `actionLayout: "stacked-end"` last.
-  const mergedData: ThreadToastData = {
+  const mergedData: SessionToastData = {
     ...(data !== undefined ? data : {}),
     actionLayout: "stacked-end",
   };
@@ -35,7 +35,7 @@ export function stackedThreadToast(
     mergedData.actionVariant = actionVariant;
   }
 
-  const payload: ToastManagerAddOptions<ThreadToastData> = {
+  const payload: ToastManagerAddOptions<SessionToastData> = {
     type,
     title,
     data: mergedData,

@@ -12,7 +12,7 @@
 import {
   ModelSelection,
   NonNegativeInt,
-  ThreadId,
+  SessionId,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
@@ -68,7 +68,7 @@ export interface ProviderServiceLiveOptions {
 }
 
 const ProviderRollbackConversationInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
   numTurns: NonNegativeInt,
 });
 
@@ -217,7 +217,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     Effect.succeed(event).pipe(
       Effect.tap((canonicalEvent) =>
         canonicalEventLogger
-          ? canonicalEventLogger.write(canonicalEvent, canonicalEvent.threadId)
+          ? canonicalEventLogger.write(canonicalEvent, canonicalEvent.sessionId)
           : Effect.void,
       ),
       Effect.flatMap((canonicalEvent) => PubSub.publish(runtimeEventPubSub, canonicalEvent)),
@@ -244,7 +244,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const upsertSessionBinding = (
     session: ProviderSession,
-    threadId: ThreadId,
+    sessionId: SessionId,
     extra?: {
       readonly modelSelection?: unknown;
       readonly lastRuntimeEvent?: string;
@@ -257,7 +257,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         session,
       );
       yield* directory.upsert({
-        threadId,
+        sessionId,
         provider: session.provider,
         providerInstanceId,
         runtimeMode: session.runtimeMode,
@@ -287,7 +287,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   // are currently wired into the runtime event bus". It both tracks the set
   // of live subscriptions (so `reconcileInstanceSubscriptions` can diff and
   // fork only the *new* or *rebuilt* ones) and serves as the dynamic adapter
-  // list consumed by `stopStaleSessionsForThread`, `listSessions`, and
+  // list consumed by `stopStaleSessionsForSession`, `listSessions`, and
   // `runStopAll` — replacing the pre-Slice-D startup snapshot so hot-added
   // instances become visible to those call sites as soon as settings edits
   // land.
@@ -338,7 +338,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     () => reconcileInstanceSubscriptions,
   ).pipe(Effect.forkScoped);
 
-  const recoverSessionForThread = Effect.fn("recoverSessionForThread")(function* (input: {
+  const recoverSessionForSession = Effect.fn("recoverSessionForSession")(function* (input: {
     readonly binding: ProviderRuntimeBinding;
     readonly operation: string;
   }) {
@@ -347,22 +347,22 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       "provider.operation": "recover-session",
       "provider.kind": input.binding.provider,
       "provider.instance_id": bindingInstanceId,
-      "provider.thread_id": input.binding.threadId,
+      "provider.session_id": input.binding.sessionId,
     });
     return yield* Effect.gen(function* () {
       const adapter = yield* registry.getByInstance(bindingInstanceId);
       const hasResumeCursor =
         input.binding.resumeCursor !== null && input.binding.resumeCursor !== undefined;
-      const hasActiveSession = yield* adapter.hasSession(input.binding.threadId);
+      const hasActiveSession = yield* adapter.hasSession(input.binding.sessionId);
       if (hasActiveSession) {
         const activeSessions = yield* adapter.listSessions();
         const existing = activeSessions.find(
-          (session) => session.threadId === input.binding.threadId,
+          (session) => session.sessionId === input.binding.sessionId,
         );
         if (existing) {
           yield* upsertSessionBinding(
             { ...existing, providerInstanceId: bindingInstanceId },
-            input.binding.threadId,
+            input.binding.sessionId,
           );
           yield* analytics.record("provider.session.recovered", {
             provider: existing.provider,
@@ -376,7 +376,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       if (!hasResumeCursor) {
         return yield* toValidationError(
           input.operation,
-          `Cannot recover thread '${input.binding.threadId}' because no provider resume state is persisted.`,
+          `Cannot recover session '${input.binding.sessionId}' because no provider resume state is persisted.`,
         );
       }
 
@@ -384,7 +384,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       const persistedModelSelection = readPersistedModelSelection(input.binding.runtimePayload);
 
       const resumed = yield* adapter.startSession({
-        threadId: input.binding.threadId,
+        sessionId: input.binding.sessionId,
         provider: input.binding.provider,
         providerInstanceId: bindingInstanceId,
         ...(persistedCwd ? { cwd: persistedCwd } : {}),
@@ -395,17 +395,17 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       if (resumed.provider !== adapter.provider) {
         return yield* toValidationError(
           input.operation,
-          `Adapter/provider mismatch while recovering thread '${input.binding.threadId}'. Expected '${adapter.provider}', received '${resumed.provider}'.`,
+          `Adapter/provider mismatch while recovering session '${input.binding.sessionId}'. Expected '${adapter.provider}', received '${resumed.provider}'.`,
         );
       }
 
       yield* upsertSessionBinding(
         { ...resumed, providerInstanceId: bindingInstanceId },
-        input.binding.threadId,
+        input.binding.sessionId,
       );
       yield* analytics.record("provider.session.recovered", {
         provider: resumed.provider,
-        strategy: "resume-thread",
+        strategy: "resume-session",
         hasResumeCursor: resumed.resumeCursor !== undefined,
       });
       return { adapter, session: resumed } as const;
@@ -420,27 +420,27 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   });
 
   const resolveRoutableSession = Effect.fn("resolveRoutableSession")(function* (input: {
-    readonly threadId: ThreadId;
+    readonly sessionId: SessionId;
     readonly operation: string;
     readonly allowRecovery: boolean;
   }) {
-    const bindingOption = yield* directory.getBinding(input.threadId);
+    const bindingOption = yield* directory.getBinding(input.sessionId);
     const binding = Option.getOrUndefined(bindingOption);
     if (!binding) {
       return yield* toValidationError(
         input.operation,
-        `Cannot route thread '${input.threadId}' because no persisted provider binding exists.`,
+        `Cannot route session '${input.sessionId}' because no persisted provider binding exists.`,
       );
     }
     const instanceId = yield* requireBindingInstanceId(input.operation, binding);
     const adapter = yield* registry.getByInstance(instanceId);
 
-    const hasRequestedSession = yield* adapter.hasSession(input.threadId);
+    const hasRequestedSession = yield* adapter.hasSession(input.sessionId);
     if (hasRequestedSession) {
       return {
         adapter,
         instanceId,
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         isActive: true,
       } as const;
     }
@@ -449,25 +449,25 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       return {
         adapter,
         instanceId,
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         isActive: false,
       } as const;
     }
 
-    const recovered = yield* recoverSessionForThread({
+    const recovered = yield* recoverSessionForSession({
       binding,
       operation: input.operation,
     });
     return {
       adapter: recovered.adapter,
       instanceId,
-      threadId: input.threadId,
+      sessionId: input.sessionId,
       isActive: true,
     } as const;
   });
 
-  const stopStaleSessionsForThread = Effect.fn("stopStaleSessionsForThread")(function* (input: {
-    readonly threadId: ThreadId;
+  const stopStaleSessionsForSession = Effect.fn("stopStaleSessionsForSession")(function* (input: {
+    readonly sessionId: SessionId;
     readonly currentInstanceId: ProviderInstanceId;
   }) {
     const currentAdapters = yield* getAdapterEntries;
@@ -477,12 +477,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         instanceId === input.currentInstanceId
           ? Effect.void
           : Effect.gen(function* () {
-              const hasSession = yield* adapter.hasSession(input.threadId);
+              const hasSession = yield* adapter.hasSession(input.sessionId);
               if (!hasSession) {
                 return;
               }
 
-              yield* adapter.stopSession(input.threadId).pipe(
+              yield* adapter.stopSession(input.sessionId).pipe(
                 Effect.tap(() =>
                   analytics.record("provider.session.stopped", {
                     provider: adapter.provider,
@@ -490,7 +490,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
                 ),
                 Effect.catchCause((cause) =>
                   Effect.logWarning("provider.session.stop-stale-failed", {
-                    threadId: input.threadId,
+                    sessionId: input.sessionId,
                     provider: adapter.provider,
                     cause,
                   }),
@@ -502,7 +502,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   });
 
   const startSession: ProviderServiceShape["startSession"] = Effect.fn("startSession")(
-    function* (threadId, rawInput) {
+    function* (sessionId, rawInput) {
       const parsed = yield* decodeInputOrValidationError({
         operation: "ProviderService.startSession",
         schema: ProviderSessionStartInput,
@@ -517,7 +517,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       yield* Effect.annotateCurrentSpan({
         "provider.operation": "start-session",
         "provider.instance_id": resolvedInstanceId,
-        "provider.thread_id": threadId,
+        "provider.session_id": sessionId,
         "provider.runtime_mode": parsed.runtimeMode,
       });
       return yield* Effect.gen(function* () {
@@ -532,7 +532,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }
         const input = {
           ...parsed,
-          threadId,
+          sessionId,
           provider: resolvedProvider,
         };
         if (!instanceInfo.enabled) {
@@ -541,7 +541,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             `Provider instance '${resolvedInstanceId}' is disabled in Lincei settings.`,
           );
         }
-        const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
+        const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(sessionId));
         const effectiveResumeCursor =
           input.resumeCursor ??
           (persistedBinding?.providerInstanceId === resolvedInstanceId
@@ -590,11 +590,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           providerInstanceId: resolvedInstanceId,
         };
 
-        yield* stopStaleSessionsForThread({
-          threadId,
+        yield* stopStaleSessionsForSession({
+          sessionId,
           currentInstanceId: resolvedInstanceId,
         });
-        yield* upsertSessionBinding(sessionWithInstance, threadId, {
+        yield* upsertSessionBinding(sessionWithInstance, sessionId, {
           modelSelection: input.modelSelection,
         });
         yield* analytics.record("provider.session.started", {
@@ -639,7 +639,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     }
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "send-turn",
-      "provider.thread_id": input.threadId,
+      "provider.session_id": input.sessionId,
       "provider.interaction_mode": input.interactionMode,
       "provider.attachment_count": input.attachments.length,
     });
@@ -647,7 +647,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     let metricModel = input.modelSelection?.model;
     return yield* Effect.gen(function* () {
       const routed = yield* resolveRoutableSession({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         operation: "ProviderService.sendTurn",
         allowRecovery: true,
       });
@@ -659,7 +659,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       });
       const turn = yield* routed.adapter.sendTurn(input);
       yield* directory.upsert({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         provider: routed.adapter.provider,
         providerInstanceId: routed.instanceId,
         status: "running",
@@ -705,7 +705,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       let metricProvider = "unknown";
       return yield* Effect.gen(function* () {
         const routed = yield* resolveRoutableSession({
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           operation: "ProviderService.interruptTurn",
           allowRecovery: true,
         });
@@ -713,10 +713,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* Effect.annotateCurrentSpan({
           "provider.operation": "interrupt-turn",
           "provider.kind": routed.adapter.provider,
-          "provider.thread_id": input.threadId,
+          "provider.session_id": input.sessionId,
           "provider.turn_id": input.turnId,
         });
-        yield* routed.adapter.interruptTurn(routed.threadId, input.turnId);
+        yield* routed.adapter.interruptTurn(routed.sessionId, input.turnId);
         yield* analytics.record("provider.turn.interrupted", {
           provider: routed.adapter.provider,
         });
@@ -742,7 +742,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       let metricProvider = "unknown";
       return yield* Effect.gen(function* () {
         const routed = yield* resolveRoutableSession({
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           operation: "ProviderService.respondToRequest",
           allowRecovery: true,
         });
@@ -750,10 +750,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* Effect.annotateCurrentSpan({
           "provider.operation": "respond-to-request",
           "provider.kind": routed.adapter.provider,
-          "provider.thread_id": input.threadId,
+          "provider.session_id": input.sessionId,
           "provider.request_id": input.requestId,
         });
-        yield* routed.adapter.respondToRequest(routed.threadId, input.requestId, input.decision);
+        yield* routed.adapter.respondToRequest(routed.sessionId, input.requestId, input.decision);
         yield* analytics.record("provider.request.responded", {
           provider: routed.adapter.provider,
           decision: input.decision,
@@ -781,7 +781,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     let metricProvider = "unknown";
     return yield* Effect.gen(function* () {
       const routed = yield* resolveRoutableSession({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         operation: "ProviderService.respondToUserInput",
         allowRecovery: true,
       });
@@ -789,10 +789,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       yield* Effect.annotateCurrentSpan({
         "provider.operation": "respond-to-user-input",
         "provider.kind": routed.adapter.provider,
-        "provider.thread_id": input.threadId,
+        "provider.session_id": input.sessionId,
         "provider.request_id": input.requestId,
       });
-      yield* routed.adapter.respondToUserInput(routed.threadId, input.requestId, input.answers);
+      yield* routed.adapter.respondToUserInput(routed.sessionId, input.requestId, input.answers);
     }).pipe(
       withMetrics({
         counter: providerTurnsTotal,
@@ -814,7 +814,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       let metricProvider = "unknown";
       return yield* Effect.gen(function* () {
         const routed = yield* resolveRoutableSession({
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           operation: "ProviderService.stopSession",
           allowRecovery: false,
         });
@@ -822,13 +822,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* Effect.annotateCurrentSpan({
           "provider.operation": "stop-session",
           "provider.kind": routed.adapter.provider,
-          "provider.thread_id": input.threadId,
+          "provider.session_id": input.sessionId,
         });
         if (routed.isActive) {
-          yield* routed.adapter.stopSession(routed.threadId);
+          yield* routed.adapter.stopSession(routed.sessionId);
         }
         yield* directory.upsert({
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           provider: routed.adapter.provider,
           providerInstanceId: routed.instanceId,
           status: "stopped",
@@ -865,30 +865,30 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         ),
       );
       const activeSessions = sessionsByProvider.flatMap((sessions) => sessions);
-      const persistedBindings = yield* directory.listThreadIds().pipe(
-        Effect.flatMap((threadIds) =>
+      const persistedBindings = yield* directory.listSessionIds().pipe(
+        Effect.flatMap((sessionIds) =>
           Effect.forEach(
-            threadIds,
-            (threadId) =>
+            sessionIds,
+            (sessionId) =>
               directory
-                .getBinding(threadId)
+                .getBinding(sessionId)
                 .pipe(Effect.orElseSucceed(() => Option.none<ProviderRuntimeBinding>())),
             { concurrency: "unbounded" },
           ),
         ),
         Effect.orElseSucceed(() => [] as Array<Option.Option<ProviderRuntimeBinding>>),
       );
-      const bindingsByThreadId = new Map<ThreadId, ProviderRuntimeBinding>();
+      const bindingsBySessionId = new Map<SessionId, ProviderRuntimeBinding>();
       for (const bindingOption of persistedBindings) {
         const binding = Option.getOrUndefined(bindingOption);
         if (binding) {
-          bindingsByThreadId.set(binding.threadId, binding);
+          bindingsBySessionId.set(binding.sessionId, binding);
         }
       }
 
       const sessions: ProviderSession[] = [];
       for (const session of activeSessions) {
-        const binding = bindingsByThreadId.get(session.threadId);
+        const binding = bindingsBySessionId.get(session.sessionId);
         if (!binding) {
           sessions.push(session);
           continue;
@@ -906,14 +906,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         if (binding.provider !== session.provider) {
           return yield* Effect.die(
             new Error(
-              `ProviderService.listSessions: thread '${session.threadId}' is active on provider '${session.provider}' but persisted binding names provider '${binding.provider}'.`,
+              `ProviderService.listSessions: session '${session.sessionId}' is active on provider '${session.provider}' but persisted binding names provider '${binding.provider}'.`,
             ),
           );
         }
         if (overrides.providerInstanceId !== session.providerInstanceId) {
           return yield* Effect.die(
             new Error(
-              `ProviderService.listSessions: thread '${session.threadId}' is active on provider instance '${session.providerInstanceId}' but persisted binding names '${overrides.providerInstanceId}'.`,
+              `ProviderService.listSessions: session '${session.sessionId}' is active on provider instance '${session.providerInstanceId}' but persisted binding names '${overrides.providerInstanceId}'.`,
             ),
           );
         }
@@ -949,7 +949,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     let metricProvider = "unknown";
     return yield* Effect.gen(function* () {
       const routed = yield* resolveRoutableSession({
-        threadId: input.threadId,
+        sessionId: input.sessionId,
         operation: "ProviderService.rollbackConversation",
         allowRecovery: true,
       });
@@ -957,10 +957,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       yield* Effect.annotateCurrentSpan({
         "provider.operation": "rollback-conversation",
         "provider.kind": routed.adapter.provider,
-        "provider.thread_id": input.threadId,
+        "provider.session_id": input.sessionId,
         "provider.rollback_turns": input.numTurns,
       });
-      yield* routed.adapter.rollbackThread(routed.threadId, input.numTurns);
+      yield* routed.adapter.rollbackSession(routed.sessionId, input.numTurns);
       yield* analytics.record("provider.conversation.rolled_back", {
         provider: routed.adapter.provider,
         turns: input.numTurns,
@@ -977,7 +977,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   });
 
   const runStopAll = Effect.fn("runStopAll")(function* () {
-    const threadIds = yield* directory.listThreadIds();
+    const sessionIds = yield* directory.listSessionIds();
     const currentAdapters = yield* getAdapterEntries;
     const activeSessions = yield* Effect.forEach(currentAdapters, ([instanceId, adapter]) =>
       adapter.listSessions().pipe(
@@ -991,7 +991,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     ).pipe(Effect.map((sessionsByAdapter) => sessionsByAdapter.flatMap((sessions) => sessions)));
     yield* Effect.forEach(activeSessions, (session) =>
       Effect.flatMap(nowIso, (lastRuntimeEventAt) =>
-        upsertSessionBinding(session, session.threadId, {
+        upsertSessionBinding(session, session.sessionId, {
           lastRuntimeEvent: "provider.stopAll",
           lastRuntimeEventAt,
         }),
@@ -1006,7 +1006,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           binding,
         );
         return yield* directory.upsert({
-          threadId: binding.threadId,
+          sessionId: binding.sessionId,
           provider: binding.provider,
           providerInstanceId,
           status: "stopped",
@@ -1019,7 +1019,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }),
     ).pipe(Effect.asVoid);
     yield* analytics.record("provider.sessions.stopped_all", {
-      sessionCount: threadIds.length,
+      sessionCount: sessionIds.length,
     });
     yield* analytics.flush;
   });

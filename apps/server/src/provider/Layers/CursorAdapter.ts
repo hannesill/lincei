@@ -18,7 +18,7 @@ import {
   ProviderInstanceId,
   RuntimeRequestId,
   type RuntimeMode,
-  type ThreadId,
+  type SessionId,
   TurnId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -121,7 +121,7 @@ interface PendingUserInput {
 }
 
 interface CursorSessionContext {
-  readonly threadId: ThreadId;
+  readonly sessionId: SessionId;
   session: ProviderSession;
   readonly scope: Scope.Closeable;
   readonly acp: AcpSessionRuntimeShape;
@@ -324,8 +324,8 @@ export function makeCursorAdapter(
     const managedNativeEventLogger =
       options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
 
-    const sessions = new Map<ThreadId, CursorSessionContext>();
-    const threadLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
+    const sessions = new Map<SessionId, CursorSessionContext>();
+    const sessionLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
     const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
 
     const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -335,17 +335,17 @@ export function makeCursorAdapter(
     const offerRuntimeEvent = (event: ProviderRuntimeEvent) =>
       PubSub.publish(runtimeEventPubSub, event).pipe(Effect.asVoid);
 
-    const getThreadSemaphore = (threadId: string) =>
-      SynchronizedRef.modifyEffect(threadLocksRef, (current) => {
+    const getSessionSemaphore = (sessionId: string) =>
+      SynchronizedRef.modifyEffect(sessionLocksRef, (current) => {
         const existing: Option.Option<Semaphore.Semaphore> = Option.fromNullishOr(
-          current.get(threadId),
+          current.get(sessionId),
         );
         return Option.match(existing, {
           onNone: () =>
             Semaphore.make(1).pipe(
               Effect.map((semaphore) => {
                 const next = new Map(current);
-                next.set(threadId, semaphore);
+                next.set(sessionId, semaphore);
                 return [semaphore, next] as const;
               }),
             ),
@@ -353,11 +353,11 @@ export function makeCursorAdapter(
         });
       });
 
-    const withThreadLock = <A, E, R>(threadId: string, effect: Effect.Effect<A, E, R>) =>
-      Effect.flatMap(getThreadSemaphore(threadId), (semaphore) => semaphore.withPermit(effect));
+    const withSessionLock = <A, E, R>(sessionId: string, effect: Effect.Effect<A, E, R>) =>
+      Effect.flatMap(getSessionSemaphore(sessionId), (semaphore) => semaphore.withPermit(effect));
 
     const logNative = (
-      threadId: ThreadId,
+      sessionId: SessionId,
       method: string,
       payload: unknown,
       _source: "acp.jsonrpc" | "acp.cursor.extension",
@@ -374,11 +374,11 @@ export function makeCursorAdapter(
               provider: PROVIDER,
               createdAt: observedAt,
               method,
-              threadId,
+              sessionId,
               payload,
             },
           },
-          threadId,
+          sessionId,
         );
       });
 
@@ -405,7 +405,7 @@ export function makeCursorAdapter(
           makeAcpPlanUpdatedEvent({
             stamp: yield* makeEventStamp(),
             provider: PROVIDER,
-            threadId: ctx.threadId,
+            sessionId: ctx.sessionId,
             turnId: ctx.activeTurnId,
             payload,
             source,
@@ -416,12 +416,12 @@ export function makeCursorAdapter(
       });
 
     const requireSession = (
-      threadId: ThreadId,
+      sessionId: SessionId,
     ): Effect.Effect<CursorSessionContext, ProviderAdapterSessionNotFoundError> => {
-      const ctx = sessions.get(threadId);
+      const ctx = sessions.get(sessionId);
       if (!ctx || ctx.stopped) {
         return Effect.fail(
-          new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }),
+          new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, sessionId }),
         );
       }
       return Effect.succeed(ctx);
@@ -437,19 +437,19 @@ export function makeCursorAdapter(
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
         yield* Effect.ignore(Scope.close(ctx.scope, Exit.void));
-        sessions.delete(ctx.threadId);
+        sessions.delete(ctx.sessionId);
         yield* offerRuntimeEvent({
-          type: "session.exited",
+          type: "runtime.exited",
           ...(yield* makeEventStamp()),
           provider: PROVIDER,
-          threadId: ctx.threadId,
+          sessionId: ctx.sessionId,
           payload: { exitKind: "graceful" },
         });
       });
 
     const startSession: CursorAdapterShape["startSession"] = (input) =>
-      withThreadLock(
-        input.threadId,
+      withSessionLock(
+        input.sessionId,
         Effect.gen(function* () {
           if (input.provider !== undefined && input.provider !== PROVIDER) {
             return yield* new ProviderAdapterValidationError({
@@ -469,7 +469,7 @@ export function makeCursorAdapter(
           const cwd = path.resolve(input.cwd.trim());
           const cursorModelSelection =
             input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
-          const existing = sessions.get(input.threadId);
+          const existing = sessions.get(input.sessionId);
           if (existing && !existing.stopped) {
             yield* stopSessionInternal(existing);
           }
@@ -487,7 +487,7 @@ export function makeCursorAdapter(
           const acpNativeLoggers = makeAcpNativeLoggers({
             nativeEventLogger,
             provider: PROVIDER,
-            threadId: input.threadId,
+            sessionId: input.sessionId,
           });
 
           // Resolve the CursorSettings used to spawn the ACP child. Production
@@ -516,7 +516,7 @@ export function makeCursorAdapter(
               (cause) =>
                 new ProviderAdapterProcessError({
                   provider: PROVIDER,
-                  threadId: input.threadId,
+                  sessionId: input.sessionId,
                   detail: cause.message,
                   cause,
                 }),
@@ -526,7 +526,7 @@ export function makeCursorAdapter(
             yield* acp.handleExtRequest("cursor/ask_question", CursorAskQuestionRequest, (params) =>
               Effect.gen(function* () {
                 yield* logNative(
-                  input.threadId,
+                  input.sessionId,
                   "cursor/ask_question",
                   params,
                   "acp.cursor.extension",
@@ -539,7 +539,7 @@ export function makeCursorAdapter(
                   type: "user-input.requested",
                   ...(yield* makeEventStamp()),
                   provider: PROVIDER,
-                  threadId: input.threadId,
+                  sessionId: input.sessionId,
                   turnId: ctx?.activeTurnId,
                   requestId: runtimeRequestId,
                   payload: { questions: extractAskQuestions(params) },
@@ -555,7 +555,7 @@ export function makeCursorAdapter(
                   type: "user-input.resolved",
                   ...(yield* makeEventStamp()),
                   provider: PROVIDER,
-                  threadId: input.threadId,
+                  sessionId: input.sessionId,
                   turnId: ctx?.activeTurnId,
                   requestId: runtimeRequestId,
                   payload: { answers: resolved },
@@ -566,7 +566,7 @@ export function makeCursorAdapter(
             yield* acp.handleExtRequest("cursor/create_plan", CursorCreatePlanRequest, (params) =>
               Effect.gen(function* () {
                 yield* logNative(
-                  input.threadId,
+                  input.sessionId,
                   "cursor/create_plan",
                   params,
                   "acp.cursor.extension",
@@ -575,7 +575,7 @@ export function makeCursorAdapter(
                   type: "turn.proposed.completed",
                   ...(yield* makeEventStamp()),
                   provider: PROVIDER,
-                  threadId: input.threadId,
+                  sessionId: input.sessionId,
                   turnId: ctx?.activeTurnId,
                   payload: { planMarkdown: extractPlanMarkdown(params) },
                   raw: {
@@ -593,7 +593,7 @@ export function makeCursorAdapter(
               (params) =>
                 Effect.gen(function* () {
                   yield* logNative(
-                    input.threadId,
+                    input.sessionId,
                     "cursor/update_todos",
                     params,
                     "acp.cursor.extension",
@@ -612,7 +612,7 @@ export function makeCursorAdapter(
             yield* acp.handleRequestPermission((params) =>
               Effect.gen(function* () {
                 yield* logNative(
-                  input.threadId,
+                  input.sessionId,
                   "session/request_permission",
                   params,
                   "acp.jsonrpc",
@@ -640,7 +640,7 @@ export function makeCursorAdapter(
                   makeAcpRequestOpenedEvent({
                     stamp: yield* makeEventStamp(),
                     provider: PROVIDER,
-                    threadId: input.threadId,
+                    sessionId: input.sessionId,
                     turnId: ctx?.activeTurnId,
                     requestId: runtimeRequestId,
                     permissionRequest,
@@ -660,7 +660,7 @@ export function makeCursorAdapter(
                   makeAcpRequestResolvedEvent({
                     stamp: yield* makeEventStamp(),
                     provider: PROVIDER,
-                    threadId: input.threadId,
+                    sessionId: input.sessionId,
                     turnId: ctx?.activeTurnId,
                     requestId: runtimeRequestId,
                     permissionRequest,
@@ -681,7 +681,7 @@ export function makeCursorAdapter(
             return yield* acp.start();
           }).pipe(
             Effect.mapError((error) =>
-              mapAcpToAdapterError(PROVIDER, input.threadId, "session/start", error),
+              mapAcpToAdapterError(PROVIDER, input.sessionId, "session/start", error),
             ),
           );
 
@@ -691,7 +691,7 @@ export function makeCursorAdapter(
             interactionMode: undefined,
             modelSelection: cursorModelSelection,
             mapError: ({ cause, method }) =>
-              mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
+              mapAcpToAdapterError(PROVIDER, input.sessionId, method, cause),
           });
 
           const now = yield* nowIso;
@@ -702,7 +702,7 @@ export function makeCursorAdapter(
             runtimeMode: input.runtimeMode,
             cwd,
             model: cursorModelSelection?.model,
-            threadId: input.threadId,
+            sessionId: input.sessionId,
             resumeCursor: {
               schemaVersion: CURSOR_RESUME_VERSION,
               sessionId: started.sessionId,
@@ -712,7 +712,7 @@ export function makeCursorAdapter(
           };
 
           ctx = {
-            threadId: input.threadId,
+            sessionId: input.sessionId,
             session,
             scope: sessionScope,
             acp,
@@ -736,7 +736,7 @@ export function makeCursorAdapter(
                       makeAcpAssistantItemEvent({
                         stamp: yield* makeEventStamp(),
                         provider: PROVIDER,
-                        threadId: ctx.threadId,
+                        sessionId: ctx.sessionId,
                         turnId: ctx.activeTurnId,
                         itemId: event.itemId,
                         lifecycle: "item.started",
@@ -748,7 +748,7 @@ export function makeCursorAdapter(
                       makeAcpAssistantItemEvent({
                         stamp: yield* makeEventStamp(),
                         provider: PROVIDER,
-                        threadId: ctx.threadId,
+                        sessionId: ctx.sessionId,
                         turnId: ctx.activeTurnId,
                         itemId: event.itemId,
                         lifecycle: "item.completed",
@@ -757,7 +757,7 @@ export function makeCursorAdapter(
                     return;
                   case "PlanUpdated":
                     yield* logNative(
-                      ctx.threadId,
+                      ctx.sessionId,
                       "session/update",
                       event.rawPayload,
                       "acp.jsonrpc",
@@ -772,7 +772,7 @@ export function makeCursorAdapter(
                     return;
                   case "ToolCallUpdated":
                     yield* logNative(
-                      ctx.threadId,
+                      ctx.sessionId,
                       "session/update",
                       event.rawPayload,
                       "acp.jsonrpc",
@@ -781,7 +781,7 @@ export function makeCursorAdapter(
                       makeAcpToolCallEvent({
                         stamp: yield* makeEventStamp(),
                         provider: PROVIDER,
-                        threadId: ctx.threadId,
+                        sessionId: ctx.sessionId,
                         turnId: ctx.activeTurnId,
                         toolCall: event.toolCall,
                         rawPayload: event.rawPayload,
@@ -790,7 +790,7 @@ export function makeCursorAdapter(
                     return;
                   case "ContentDelta":
                     yield* logNative(
-                      ctx.threadId,
+                      ctx.sessionId,
                       "session/update",
                       event.rawPayload,
                       "acp.jsonrpc",
@@ -799,7 +799,7 @@ export function makeCursorAdapter(
                       makeAcpContentDeltaEvent({
                         stamp: yield* makeEventStamp(),
                         provider: PROVIDER,
-                        threadId: ctx.threadId,
+                        sessionId: ctx.sessionId,
                         turnId: ctx.activeTurnId,
                         ...(event.itemId ? { itemId: event.itemId } : {}),
                         text: event.text,
@@ -813,29 +813,29 @@ export function makeCursorAdapter(
           ).pipe(Effect.forkChild);
 
           ctx.notificationFiber = nf;
-          sessions.set(input.threadId, ctx);
+          sessions.set(input.sessionId, ctx);
           sessionScopeTransferred = true;
 
+          yield* offerRuntimeEvent({
+            type: "runtime.started",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            sessionId: input.sessionId,
+            payload: { resume: started.initializeResult },
+          });
+          yield* offerRuntimeEvent({
+            type: "runtime.state.changed",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            sessionId: input.sessionId,
+            payload: { state: "ready", reason: "Cursor ACP session ready" },
+          });
           yield* offerRuntimeEvent({
             type: "session.started",
             ...(yield* makeEventStamp()),
             provider: PROVIDER,
-            threadId: input.threadId,
-            payload: { resume: started.initializeResult },
-          });
-          yield* offerRuntimeEvent({
-            type: "session.state.changed",
-            ...(yield* makeEventStamp()),
-            provider: PROVIDER,
-            threadId: input.threadId,
-            payload: { state: "ready", reason: "Cursor ACP session ready" },
-          });
-          yield* offerRuntimeEvent({
-            type: "thread.started",
-            ...(yield* makeEventStamp()),
-            provider: PROVIDER,
-            threadId: input.threadId,
-            payload: { providerThreadId: started.sessionId },
+            sessionId: input.sessionId,
+            payload: { providerSessionId: started.sessionId },
           });
 
           return session;
@@ -844,7 +844,7 @@ export function makeCursorAdapter(
 
     const sendTurn: CursorAdapterShape["sendTurn"] = (input) =>
       Effect.gen(function* () {
-        const ctx = yield* requireSession(input.threadId);
+        const ctx = yield* requireSession(input.sessionId);
         const turnId = TurnId.make(crypto.randomUUID());
         const turnModelSelection =
           input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
@@ -862,7 +862,7 @@ export function makeCursorAdapter(
                   options: turnModelSelection?.options,
                 },
           mapError: ({ cause, method }) =>
-            mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
+            mapAcpToAdapterError(PROVIDER, input.sessionId, method, cause),
         });
         ctx.activeTurnId = turnId;
         ctx.lastPlanFingerprint = undefined;
@@ -876,7 +876,7 @@ export function makeCursorAdapter(
           type: "turn.started",
           ...(yield* makeEventStamp()),
           provider: PROVIDER,
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           turnId,
           payload: { model: resolvedModel },
         });
@@ -931,7 +931,7 @@ export function makeCursorAdapter(
           })
           .pipe(
             Effect.mapError((error) =>
-              mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
+              mapAcpToAdapterError(PROVIDER, input.sessionId, "session/prompt", error),
             ),
           );
 
@@ -947,7 +947,7 @@ export function makeCursorAdapter(
           type: "turn.completed",
           ...(yield* makeEventStamp()),
           provider: PROVIDER,
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           turnId,
           payload: {
             state: result.stopReason === "cancelled" ? "cancelled" : "completed",
@@ -956,33 +956,33 @@ export function makeCursorAdapter(
         });
 
         return {
-          threadId: input.threadId,
+          sessionId: input.sessionId,
           turnId,
           resumeCursor: ctx.session.resumeCursor,
         };
       });
 
-    const interruptTurn: CursorAdapterShape["interruptTurn"] = (threadId) =>
+    const interruptTurn: CursorAdapterShape["interruptTurn"] = (sessionId) =>
       Effect.gen(function* () {
-        const ctx = yield* requireSession(threadId);
+        const ctx = yield* requireSession(sessionId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
         yield* Effect.ignore(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>
-              mapAcpToAdapterError(PROVIDER, threadId, "session/cancel", error),
+              mapAcpToAdapterError(PROVIDER, sessionId, "session/cancel", error),
             ),
           ),
         );
       });
 
     const respondToRequest: CursorAdapterShape["respondToRequest"] = (
-      threadId,
+      sessionId,
       requestId,
       decision,
     ) =>
       Effect.gen(function* () {
-        const ctx = yield* requireSession(threadId);
+        const ctx = yield* requireSession(sessionId);
         const pending = ctx.pendingApprovals.get(requestId);
         if (!pending) {
           return yield* new ProviderAdapterRequestError({
@@ -995,12 +995,12 @@ export function makeCursorAdapter(
       });
 
     const respondToUserInput: CursorAdapterShape["respondToUserInput"] = (
-      threadId,
+      sessionId,
       requestId,
       answers,
     ) =>
       Effect.gen(function* () {
-        const ctx = yield* requireSession(threadId);
+        const ctx = yield* requireSession(sessionId);
         const pending = ctx.pendingUserInputs.get(requestId);
         if (!pending) {
           return yield* new ProviderAdapterRequestError({
@@ -1012,32 +1012,32 @@ export function makeCursorAdapter(
         yield* Deferred.succeed(pending.answers, answers);
       });
 
-    const readThread: CursorAdapterShape["readThread"] = (threadId) =>
+    const readSession: CursorAdapterShape["readSession"] = (sessionId) =>
       Effect.gen(function* () {
-        const ctx = yield* requireSession(threadId);
-        return { threadId, turns: ctx.turns };
+        const ctx = yield* requireSession(sessionId);
+        return { sessionId, turns: ctx.turns };
       });
 
-    const rollbackThread: CursorAdapterShape["rollbackThread"] = (threadId, numTurns) =>
+    const rollbackSession: CursorAdapterShape["rollbackSession"] = (sessionId, numTurns) =>
       Effect.gen(function* () {
-        const ctx = yield* requireSession(threadId);
+        const ctx = yield* requireSession(sessionId);
         if (!Number.isInteger(numTurns) || numTurns < 1) {
           return yield* new ProviderAdapterValidationError({
             provider: PROVIDER,
-            operation: "rollbackThread",
+            operation: "rollbackSession",
             issue: "numTurns must be an integer >= 1.",
           });
         }
         const nextLength = Math.max(0, ctx.turns.length - numTurns);
         ctx.turns.splice(nextLength);
-        return { threadId, turns: ctx.turns };
+        return { sessionId, turns: ctx.turns };
       });
 
-    const stopSession: CursorAdapterShape["stopSession"] = (threadId) =>
-      withThreadLock(
-        threadId,
+    const stopSession: CursorAdapterShape["stopSession"] = (sessionId) =>
+      withSessionLock(
+        sessionId,
         Effect.gen(function* () {
-          const ctx = yield* requireSession(threadId);
+          const ctx = yield* requireSession(sessionId);
           yield* stopSessionInternal(ctx);
         }),
       );
@@ -1045,9 +1045,9 @@ export function makeCursorAdapter(
     const listSessions: CursorAdapterShape["listSessions"] = () =>
       Effect.sync(() => Array.from(sessions.values(), (c) => ({ ...c.session })));
 
-    const hasSession: CursorAdapterShape["hasSession"] = (threadId) =>
+    const hasSession: CursorAdapterShape["hasSession"] = (sessionId) =>
       Effect.sync(() => {
-        const c = sessions.get(threadId);
+        const c = sessions.get(sessionId);
         return c !== undefined && !c.stopped;
       });
 
@@ -1069,8 +1069,8 @@ export function makeCursorAdapter(
       startSession,
       sendTurn,
       interruptTurn,
-      readThread,
-      rollbackThread,
+      readSession,
+      rollbackSession,
       respondToRequest,
       respondToUserInput,
       stopSession,

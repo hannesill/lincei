@@ -23,7 +23,7 @@ import {
 import { Button } from "../components/ui/button";
 import {
   AnchoredToastProvider,
-  stackedThreadToast,
+  stackedSessionToast,
   ToastProvider,
   toastManager,
 } from "../components/ui/toast";
@@ -284,7 +284,7 @@ function EventRouter() {
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
   const readPathname = useEffectEvent(() => pathname);
-  const handledBootstrapThreadIdRef = useRef<string | null>(null);
+  const handledBootstrapSessionIdRef = useRef<string | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
   const lastKeybindingsSuccessToastAtRef = useRef(0);
   const disposedRef = useRef(false);
@@ -301,7 +301,7 @@ function EventRouter() {
         return;
       }
 
-      if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
+      if (!payload.bootstrapProjectId || !payload.bootstrapSessionId) {
         return;
       }
       const bootstrapEnvironmentState =
@@ -323,18 +323,18 @@ function EventRouter() {
       if (readPathname() !== "/") {
         return;
       }
-      if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
+      if (handledBootstrapSessionIdRef.current === payload.bootstrapSessionId) {
         return;
       }
       await navigate({
-        to: "/$environmentId/$threadId",
+        to: "/$environmentId/$sessionId",
         params: {
           environmentId: payload.environment.environmentId,
-          threadId: payload.bootstrapThreadId,
+          sessionId: payload.bootstrapSessionId,
         },
         replace: true,
       });
-      handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
+      handledBootstrapSessionIdRef.current = payload.bootstrapSessionId;
     })().catch(() => undefined);
   });
 
@@ -367,7 +367,7 @@ function EventRouter() {
       }
 
       toastManager.add(
-        stackedThreadToast({
+        stackedSessionToast({
           type: "warning",
           title: "Invalid keybindings configuration",
           description: issue.message,
@@ -390,7 +390,7 @@ function EventRouter() {
                 })
                 .catch((error) => {
                   toastManager.add(
-                    stackedThreadToast({
+                    stackedSessionToast({
                       type: "error",
                       title: "Unable to open keybindings file",
                       description:

@@ -3,7 +3,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   EventId,
   ProjectId,
-  ThreadId,
+  SessionId,
   type OrchestrationCommand,
   type OrchestrationEvent,
   type OrchestrationReadModel,
@@ -18,7 +18,7 @@ import { createEmptyReadModel, projectEvent } from "./projector.ts";
 const asCommandId = (value: string): CommandId => CommandId.make(value);
 const asEventId = (value: string): EventId => EventId.make(value);
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
-const asThreadId = (value: string): ThreadId => ThreadId.make(value);
+const asSessionId = (value: string): SessionId => SessionId.make(value);
 
 async function seedReadModel(): Promise<OrchestrationReadModel> {
   const now = "2026-01-01T00:00:00.000Z";
@@ -47,22 +47,22 @@ async function seedReadModel(): Promise<OrchestrationReadModel> {
     }),
   );
 
-  const withFirstThread = await Effect.runPromise(
+  const withFirstSession = await Effect.runPromise(
     projectEvent(withProject, {
       sequence: 2,
-      eventId: asEventId("evt-thread-create-1"),
-      aggregateKind: "thread",
-      aggregateId: asThreadId("thread-delete-1"),
-      type: "thread.created",
+      eventId: asEventId("evt-session-create-1"),
+      aggregateKind: "session",
+      aggregateId: asSessionId("session-delete-1"),
+      type: "session.created",
       occurredAt: now,
-      commandId: asCommandId("cmd-thread-create-1"),
+      commandId: asCommandId("cmd-session-create-1"),
       causationEventId: null,
-      correlationId: asCommandId("cmd-thread-create-1"),
+      correlationId: asCommandId("cmd-session-create-1"),
       metadata: {},
       payload: {
-        threadId: asThreadId("thread-delete-1"),
+        sessionId: asSessionId("session-delete-1"),
         projectId: asProjectId("project-delete"),
-        title: "Thread Delete 1",
+        title: "Session Delete 1",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
@@ -78,21 +78,21 @@ async function seedReadModel(): Promise<OrchestrationReadModel> {
   );
 
   return Effect.runPromise(
-    projectEvent(withFirstThread, {
+    projectEvent(withFirstSession, {
       sequence: 3,
-      eventId: asEventId("evt-thread-create-2"),
-      aggregateKind: "thread",
-      aggregateId: asThreadId("thread-delete-2"),
-      type: "thread.created",
+      eventId: asEventId("evt-session-create-2"),
+      aggregateKind: "session",
+      aggregateId: asSessionId("session-delete-2"),
+      type: "session.created",
       occurredAt: now,
-      commandId: asCommandId("cmd-thread-create-2"),
+      commandId: asCommandId("cmd-session-create-2"),
       causationEventId: null,
-      correlationId: asCommandId("cmd-thread-create-2"),
+      correlationId: asCommandId("cmd-session-create-2"),
       metadata: {},
       payload: {
-        threadId: asThreadId("thread-delete-2"),
+        sessionId: asSessionId("session-delete-2"),
         projectId: asProjectId("project-delete"),
-        title: "Thread Delete 2",
+        title: "Session Delete 2",
         modelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5-codex",
@@ -114,7 +114,7 @@ function normalizeDeleteEvent(event: PlannedEvent | ReadonlyArray<PlannedEvent>)
   const events = Array.isArray(event) ? event : [event];
   return events.map((entry) => {
     switch (entry.type) {
-      case "thread.deleted":
+      case "session.deleted":
         return {
           type: entry.type,
           aggregateKind: entry.aggregateKind,
@@ -122,7 +122,7 @@ function normalizeDeleteEvent(event: PlannedEvent | ReadonlyArray<PlannedEvent>)
           commandId: entry.commandId,
           correlationId: entry.correlationId,
           payload: {
-            threadId: entry.payload.threadId,
+            sessionId: entry.payload.sessionId,
           },
         };
       case "project.deleted":
@@ -160,7 +160,7 @@ describe("decider deletion flows", () => {
     ).rejects.toThrow("cannot be deleted without force=true");
   });
 
-  it("reuses thread.delete semantics when force-deleting a non-empty project", async () => {
+  it("reuses session.delete semantics when force-deleting a non-empty project", async () => {
     const readModel = await seedReadModel();
     const projectDeleteCommand: Extract<OrchestrationCommand, { type: "project.delete" }> = {
       type: "project.delete",
@@ -178,8 +178,8 @@ describe("decider deletion flows", () => {
     const forcedEvents = Array.isArray(forcedResult) ? forcedResult : [forcedResult];
 
     expect(forcedEvents.map((event) => event.type)).toEqual([
-      "thread.deleted",
-      "thread.deleted",
+      "session.deleted",
+      "session.deleted",
       "project.deleted",
     ]);
 
@@ -188,14 +188,14 @@ describe("decider deletion flows", () => {
     const sequentialEvents: PlannedEvent[] = [];
     for (const nextCommand of [
       {
-        type: "thread.delete",
+        type: "session.delete",
         commandId: projectDeleteCommand.commandId,
-        threadId: asThreadId("thread-delete-1"),
+        sessionId: asSessionId("session-delete-1"),
       },
       {
-        type: "thread.delete",
+        type: "session.delete",
         commandId: projectDeleteCommand.commandId,
-        threadId: asThreadId("thread-delete-2"),
+        sessionId: asSessionId("session-delete-2"),
       },
       {
         type: "project.delete",

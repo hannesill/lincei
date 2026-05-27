@@ -58,7 +58,7 @@ export interface BranchNameGenerationResult {
   branch: string;
 }
 
-export interface ThreadTitleGenerationInput {
+export interface SessionTitleGenerationInput {
   cwd: string;
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
@@ -66,7 +66,7 @@ export interface ThreadTitleGenerationInput {
   modelSelection: ModelSelection;
 }
 
-export interface ThreadTitleGenerationResult {
+export interface SessionTitleGenerationResult {
   title: string;
 }
 
@@ -76,7 +76,7 @@ export interface TextGenerationService {
   ): Promise<CommitMessageGenerationResult>;
   generatePrContent(input: PrContentGenerationInput): Promise<PrContentGenerationResult>;
   generateBranchName(input: BranchNameGenerationInput): Promise<BranchNameGenerationResult>;
-  generateThreadTitle(input: ThreadTitleGenerationInput): Promise<ThreadTitleGenerationResult>;
+  generateSessionTitle(input: SessionTitleGenerationInput): Promise<SessionTitleGenerationResult>;
 }
 
 /**
@@ -105,11 +105,11 @@ export interface TextGenerationShape {
   ) => Effect.Effect<BranchNameGenerationResult, TextGenerationError>;
 
   /**
-   * Generate a concise thread title from a user's first message.
+   * Generate a concise session title from a user's first message.
    */
-  readonly generateThreadTitle: (
-    input: ThreadTitleGenerationInput,
-  ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+  readonly generateSessionTitle: (
+    input: SessionTitleGenerationInput,
+  ) => Effect.Effect<SessionTitleGenerationResult, TextGenerationError>;
 }
 
 /**
@@ -123,7 +123,7 @@ type TextGenerationOp =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateSessionTitle";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistryShape,
@@ -158,9 +158,9 @@ export const makeTextGenerationFromRegistry = (
     resolveInstance(registry, "generateBranchName", input.modelSelection.instanceId).pipe(
       Effect.flatMap((textGeneration) => textGeneration.generateBranchName(input)),
     ),
-  generateThreadTitle: (input) =>
-    resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(
-      Effect.flatMap((textGeneration) => textGeneration.generateThreadTitle(input)),
+  generateSessionTitle: (input) =>
+    resolveInstance(registry, "generateSessionTitle", input.modelSelection.instanceId).pipe(
+      Effect.flatMap((textGeneration) => textGeneration.generateSessionTitle(input)),
     ),
 });
 

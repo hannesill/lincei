@@ -16,17 +16,17 @@ Add `describe("SET_THREAD_BRANCH reducer")` with 6 tests:
 - Sets branch + worktreePath atomically
 - Clears both to null
 - Updates branch while preserving worktreePath
-- Does not affect other threads (multi-thread state)
-- No-op for nonexistent thread id
+- Does not affect other sessions (multi-session state)
+- No-op for nonexistent session id
 - Does not mutate messages, error, or session fields
 
-Uses existing `makeThread`, `makeState` factories.
+Uses existing `makeSession`, `makeState` factories.
 
 ## File 2: `apps/renderer/src/git-flows.test.ts` (new)
 
 ### Factories
 
-- `makeThread()`, `makeState()`, `makeSession()` — same pattern as store.test.ts
+- `makeSession()`, `makeState()`, `makeSession()` — same pattern as store.test.ts
 - `makeBranch()` — creates `GitBranch` objects
 - `makeMessage()` — creates `ChatMessage` objects
 - `makeGitApi()` — returns `{ checkout, createWorktree, createBranch, listBranches }` with `vi.fn()` mocks
@@ -38,11 +38,11 @@ Uses existing `makeThread`, `makeState` factories.
 - Successful checkout → SET_THREAD_BRANCH updates branch
 - Checkout failure → SET_ERROR, branch unchanged
 
-**2. Thread branch conflict on send** (3 tests)
+**2. Session branch conflict on send** (3 tests)
 
-- Two threads maintain independent branch state after SET_ACTIVE_THREAD
-- Branch state preserved through multiple thread switches + updates
-- Checkout failure on thread switch sets error only on target thread
+- Two sessions maintain independent branch state after SET_ACTIVE_THREAD
+- Branch state preserved through multiple session switches + updates
+- Checkout failure on session switch sets error only on target session
 
 **3. Worktree creation on send** (5 tests)
 
@@ -61,7 +61,7 @@ Uses existing `makeThread`, `makeState` factories.
 
 **5. Auto-fill current branch** (3 tests)
 
-- Dispatches SET_THREAD_BRANCH when thread has no branch and current branch exists
+- Dispatches SET_THREAD_BRANCH when session has no branch and current branch exists
 - Does not overwrite existing branch
 - No-op when no branch is marked current
 
@@ -84,9 +84,9 @@ Uses existing `makeThread`, `makeState` factories.
 
 **9. Error handling patterns** (4 tests)
 
-- SET_ERROR sets error on correct thread
+- SET_ERROR sets error on correct session
 - SET_ERROR with null clears error
-- Error on one thread doesn't affect others
+- Error on one session doesn't affect others
 - Error cleared before successful branch operations
 
 ## Verification

@@ -11,7 +11,7 @@ import {
   IsoDateTime,
   ProjectionPendingApprovalDecision,
   ProjectionPendingApprovalStatus,
-  ThreadId,
+  SessionId,
   TurnId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -23,7 +23,7 @@ import type { ProjectionRepositoryError } from "../Errors.ts";
 
 export const ProjectionPendingApproval = Schema.Struct({
   requestId: ApprovalRequestId,
-  threadId: ThreadId,
+  sessionId: SessionId,
   turnId: Schema.NullOr(TurnId),
   status: ProjectionPendingApprovalStatus,
   decision: ProjectionPendingApprovalDecision,
@@ -33,7 +33,7 @@ export const ProjectionPendingApproval = Schema.Struct({
 export type ProjectionPendingApproval = typeof ProjectionPendingApproval.Type;
 
 export const ListProjectionPendingApprovalsInput = Schema.Struct({
-  threadId: ThreadId,
+  sessionId: SessionId,
 });
 export type ListProjectionPendingApprovalsInput = typeof ListProjectionPendingApprovalsInput.Type;
 
@@ -61,11 +61,11 @@ export interface ProjectionPendingApprovalRepositoryShape {
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
   /**
-   * List pending approvals for a thread.
+   * List pending approvals for a session.
    *
    * Returned in ascending creation order.
    */
-  readonly listByThreadId: (
+  readonly listBySessionId: (
     input: ListProjectionPendingApprovalsInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionPendingApproval>, ProjectionRepositoryError>;
 

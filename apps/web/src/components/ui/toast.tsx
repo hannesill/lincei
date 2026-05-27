@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useParams } from "@tanstack/react-router";
-import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
+import { type ScopedSessionRef, type SessionId } from "@t3tools/contracts";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -29,16 +29,16 @@ import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { resolveThreadRouteTarget } from "~/threadRoutes";
+import { resolveSessionRouteTarget } from "~/sessionRoutes";
 import {
   buildVisibleToastLayout,
   shouldHideCollapsedToastContent,
-  shouldRenderThreadScopedToast,
+  shouldRenderSessionScopedToast,
 } from "./toast.logic";
 
-export type ThreadToastData = {
-  threadRef?: ScopedThreadRef | null;
-  threadId?: ThreadId | null;
+export type SessionToastData = {
+  sessionRef?: ScopedSessionRef | null;
+  sessionId?: SessionId | null;
   leadingIcon?: ReactNode;
   tooltipStyle?: boolean;
   onClose?: (() => void) | undefined;
@@ -69,10 +69,10 @@ export type ThreadToastData = {
     | "secondary";
 };
 
-const toastManager = Toast.createToastManager<ThreadToastData>();
-const anchoredToastManager = Toast.createToastManager<ThreadToastData>();
+const toastManager = Toast.createToastManager<SessionToastData>();
+const anchoredToastManager = Toast.createToastManager<SessionToastData>();
 type ToastId = ReturnType<typeof toastManager.add>;
-const threadToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
+const sessionToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
 
 const TOAST_ICONS = {
   error: CircleAlertIcon,
@@ -166,7 +166,7 @@ function ToastDescriptionAndExpandable({
   toastDescription,
   toastType,
 }: {
-  toastData: ThreadToastData | undefined;
+  toastData: SessionToastData | undefined;
   toastDescription: unknown;
   toastType: unknown;
 }) {
@@ -252,8 +252,8 @@ type ToastIconComponent = (typeof TOAST_ICONS)[keyof typeof TOAST_ICONS];
 interface ToastBodyDescriptor {
   readonly Icon: ToastIconComponent | null | undefined;
   readonly stackedActionLayout: boolean;
-  readonly actionVariant: NonNullable<ThreadToastData["actionVariant"]>;
-  readonly secondaryActionVariant: NonNullable<ThreadToastData["secondaryActionVariant"]>;
+  readonly actionVariant: NonNullable<SessionToastData["actionVariant"]>;
+  readonly secondaryActionVariant: NonNullable<SessionToastData["secondaryActionVariant"]>;
   readonly copyErrorText: string | null;
   readonly hasTrailingControls: boolean;
   readonly inlineContentEndPad: string;
@@ -263,14 +263,14 @@ function deriveToastBodyDescriptor(toast: {
   readonly type?: string | undefined;
   readonly description?: unknown;
   readonly actionProps?: unknown;
-  readonly data?: ThreadToastData | undefined;
+  readonly data?: SessionToastData | undefined;
 }): ToastBodyDescriptor {
   const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
   const stackedActionLayout =
     toast.actionProps !== undefined && toast.data?.actionLayout === "stacked-end";
-  const actionVariant: NonNullable<ThreadToastData["actionVariant"]> =
+  const actionVariant: NonNullable<SessionToastData["actionVariant"]> =
     toast.data?.actionVariant ?? "default";
-  const secondaryActionVariant: NonNullable<ThreadToastData["secondaryActionVariant"]> =
+  const secondaryActionVariant: NonNullable<SessionToastData["secondaryActionVariant"]> =
     toast.data?.secondaryActionVariant ?? "outline";
   const copyErrorText =
     toast.type === "error" && typeof toast.description === "string" && !toast.data?.hideCopyButton
@@ -293,7 +293,7 @@ function deriveToastBodyDescriptor(toast: {
 
 interface ToastBodyContentProps extends ToastBodyDescriptor {
   readonly actionProps: { readonly children?: ReactNode } | undefined;
-  readonly toastData: ThreadToastData | undefined;
+  readonly toastData: SessionToastData | undefined;
   readonly toastDescription: unknown;
   readonly toastType: unknown;
 }
@@ -391,10 +391,10 @@ interface ToastProviderProps extends Toast.Provider.Props {
   position?: ToastPosition;
 }
 
-function useActiveThreadRefFromRoute(): ScopedThreadRef | null {
+function useActiveSessionRefFromRoute(): ScopedSessionRef | null {
   const routeTarget = useParams({
     strict: false,
-    select: (params) => resolveThreadRouteTarget(params),
+    select: (params) => resolveSessionRouteTarget(params),
   });
   const activeDraftSession = useComposerDraftStore((store) =>
     routeTarget?.kind === "draft" ? store.getDraftSession(routeTarget.draftId) : null,
@@ -402,19 +402,19 @@ function useActiveThreadRefFromRoute(): ScopedThreadRef | null {
 
   return useMemo(() => {
     if (routeTarget?.kind === "server") {
-      return routeTarget.threadRef;
+      return routeTarget.sessionRef;
     }
     if (routeTarget?.kind === "draft" && activeDraftSession) {
       return {
         environmentId: activeDraftSession.environmentId,
-        threadId: activeDraftSession.threadId,
+        sessionId: activeDraftSession.sessionId,
       };
     }
     return null;
   }, [activeDraftSession, routeTarget]);
 }
 
-function ThreadToastVisibleAutoDismiss({
+function SessionToastVisibleAutoDismiss({
   toastId,
   dismissAfterVisibleMs,
 }: {
@@ -425,7 +425,7 @@ function ThreadToastVisibleAutoDismiss({
     if (!dismissAfterVisibleMs || dismissAfterVisibleMs <= 0) return;
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
-    let remainingMs = threadToastVisibleTimeoutRemainingMs.get(toastId) ?? dismissAfterVisibleMs;
+    let remainingMs = sessionToastVisibleTimeoutRemainingMs.get(toastId) ?? dismissAfterVisibleMs;
     let startedAtMs: number | null = null;
     let timeoutId: number | null = null;
     let closed = false;
@@ -439,7 +439,7 @@ function ThreadToastVisibleAutoDismiss({
     const closeToast = () => {
       if (closed) return;
       closed = true;
-      threadToastVisibleTimeoutRemainingMs.delete(toastId);
+      sessionToastVisibleTimeoutRemainingMs.delete(toastId);
       toastManager.close(toastId);
     };
 
@@ -448,7 +448,7 @@ function ThreadToastVisibleAutoDismiss({
       remainingMs = Math.max(0, remainingMs - (Date.now() - startedAtMs));
       startedAtMs = null;
       clearTimer();
-      threadToastVisibleTimeoutRemainingMs.set(toastId, remainingMs);
+      sessionToastVisibleTimeoutRemainingMs.set(toastId, remainingMs);
     };
 
     const start = () => {
@@ -502,19 +502,19 @@ function ToastProvider({ children, position = "top-right", ...props }: ToastProv
 }
 
 function Toasts({ position = "top-right" }: { position: ToastPosition }) {
-  const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadRef = useActiveThreadRefFromRoute();
+  const { toasts } = Toast.useToastManager<SessionToastData>();
+  const activeSessionRef = useActiveSessionRefFromRoute();
   const isTop = position.startsWith("top");
   const visibleToasts = toasts.filter((toast) =>
-    shouldRenderThreadScopedToast(toast.data, activeThreadRef),
+    shouldRenderSessionScopedToast(toast.data, activeSessionRef),
   );
   const visibleToastLayout = buildVisibleToastLayout(visibleToasts);
 
   useEffect(() => {
     const activeToastIds = new Set(toasts.map((toast) => toast.id));
-    for (const toastId of threadToastVisibleTimeoutRemainingMs.keys()) {
+    for (const toastId of sessionToastVisibleTimeoutRemainingMs.keys()) {
       if (!activeToastIds.has(toastId)) {
-        threadToastVisibleTimeoutRemainingMs.delete(toastId);
+        sessionToastVisibleTimeoutRemainingMs.delete(toastId);
       }
     }
   }, [toasts]);
@@ -620,7 +620,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
               }
               toast={toast}
             >
-              <ThreadToastVisibleAutoDismiss
+              <SessionToastVisibleAutoDismiss
                 dismissAfterVisibleMs={toast.data?.dismissAfterVisibleMs}
                 toastId={toast.id}
               />
@@ -675,14 +675,14 @@ function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
 }
 
 function AnchoredToasts() {
-  const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadRef = useActiveThreadRefFromRoute();
+  const { toasts } = Toast.useToastManager<SessionToastData>();
+  const activeSessionRef = useActiveSessionRefFromRoute();
 
   return (
     <Toast.Portal data-slot="toast-portal-anchored">
       <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
         {toasts
-          .filter((toast) => shouldRenderThreadScopedToast(toast.data, activeThreadRef))
+          .filter((toast) => shouldRenderSessionScopedToast(toast.data, activeSessionRef))
           .map((toast) => {
             const tooltipStyle = toast.data?.tooltipStyle ?? false;
             const positionerProps = toast.positionerProps;
@@ -765,8 +765,8 @@ function AnchoredToasts() {
   );
 }
 
-export { stackedThreadToast } from "./toastHelpers";
-export type { StackedThreadToastOptions } from "./toastHelpers";
+export { stackedSessionToast } from "./toastHelpers";
+export type { StackedSessionToastOptions } from "./toastHelpers";
 
 export {
   ToastProvider,

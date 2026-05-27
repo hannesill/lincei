@@ -10,7 +10,7 @@ Add a secondary toolbar below the ChatView input area (similar to Codex UI) that
 - Two controls:
   1. **Environment mode** (left side): toggles between "Local" and "New worktree" — **locked after first message** (no longer clickable, just shows current mode as label)
   2. **Branch picker** (right side): dropdown showing local branches — **always changeable**, even after messages are sent
-- If not a git repo, the toolbar is hidden entirely (thread uses project cwd as-is)
+- If not a git repo, the toolbar is hidden entirely (session uses project cwd as-is)
 
 ## Changes
 
@@ -23,10 +23,10 @@ Add dependency + wrap app in `QueryClientProvider`.
 Add a new action to the reducer:
 
 ```ts
-| { type: "SET_THREAD_BRANCH"; threadId: string; branch: string | null; worktreePath: string | null }
+| { type: "SET_THREAD_BRANCH"; sessionId: string; branch: string | null; worktreePath: string | null }
 ```
 
-Reducer case updates `branch` and `worktreePath` on the thread.
+Reducer case updates `branch` and `worktreePath` on the session.
 
 ### 2. `apps/renderer/src/components/ChatView.tsx` — MODIFY
 
@@ -53,9 +53,9 @@ const branchQuery = useQuery({
 **Behavior:**
 
 - Branch picker is always active — changing branch dispatches `SET_THREAD_BRANCH` immediately
-- Env mode is only clickable when `activeThread.messages.length === 0`. After first message, it becomes a static label showing the locked-in mode
+- Env mode is only clickable when `activeSession.messages.length === 0`. After first message, it becomes a static label showing the locked-in mode
 - On first send (`onSend`): if `envMode === "worktree"` and a branch is selected, call `api.git.createWorktree` before starting the session, then dispatch `SET_THREAD_BRANCH` with the worktreePath
-- `ensureSession` already uses `activeThread.worktreePath ?? activeProject.cwd`
+- `ensureSession` already uses `activeSession.worktreePath ?? activeProject.cwd`
 
 ### Files to modify
 
@@ -67,8 +67,8 @@ const branchQuery = useQuery({
 ## Verification
 
 1. `turbo build` — compiles
-2. Create a new thread → branch bar appears below input with "Local" + current branch
-3. Change branch in dropdown → branch updates on thread
+2. Create a new session → branch bar appears below input with "Local" + current branch
+3. Change branch in dropdown → branch updates on session
 4. Toggle "New worktree" → send message → worktree created, session uses worktree cwd
 5. After first message: env mode label locks to "Worktree" (not clickable), branch picker still works
 6. Non-git project → no branch bar shown

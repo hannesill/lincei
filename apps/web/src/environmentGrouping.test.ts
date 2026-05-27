@@ -1,12 +1,12 @@
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ProviderInstanceId, SessionId } from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime";
 import { describe, expect, it } from "vitest";
 
 import {
   selectProjectsAcrossEnvironments,
-  selectSidebarThreadsAcrossEnvironments,
-  selectSidebarThreadsForProjectRef,
-  selectSidebarThreadsForProjectRefs,
+  selectSidebarSessionsAcrossEnvironments,
+  selectSidebarSessionsForProjectRef,
+  selectSidebarSessionsForProjectRefs,
   type AppState,
   type EnvironmentState,
 } from "./store";
@@ -16,7 +16,7 @@ import {
   derivePhysicalProjectKey,
   resolveProjectGroupingMode,
 } from "./logicalProject";
-import type { Project, SidebarThreadSummary } from "./types";
+import type { Project, SidebarSessionSummary } from "./types";
 import { DEFAULT_INTERACTION_MODE } from "./types";
 
 // ── Fixture Identifiers ──────────────────────────────────────────────
@@ -29,11 +29,11 @@ const sharedProjectRemoteId = ProjectId.make("shared-proj-remote");
 const localOnlyProjectId = ProjectId.make("local-only-proj");
 const remoteOnlyProjectId = ProjectId.make("remote-only-proj");
 
-const threadP1 = ThreadId.make("thread-shared-primary-1");
-const threadP2 = ThreadId.make("thread-shared-primary-2");
-const threadR1 = ThreadId.make("thread-shared-remote-1");
-const threadL1 = ThreadId.make("thread-local-only-1");
-const threadRO1 = ThreadId.make("thread-remote-only-1");
+const sessionP1 = SessionId.make("session-shared-primary-1");
+const sessionP2 = SessionId.make("session-shared-primary-2");
+const sessionR1 = SessionId.make("session-shared-remote-1");
+const sessionL1 = SessionId.make("session-local-only-1");
+const sessionRO1 = SessionId.make("session-remote-only-1");
 
 const SHARED_REPO_CANONICAL_KEY = "github.com/example/shared-repo";
 const DEFAULT_GROUPING_SETTINGS = {
@@ -56,10 +56,10 @@ function makeProject(
   };
 }
 
-function makeSidebarThreadSummary(
-  overrides: Partial<SidebarThreadSummary> &
-    Pick<SidebarThreadSummary, "id" | "environmentId" | "projectId" | "title">,
-): SidebarThreadSummary {
+function makeSidebarSessionSummary(
+  overrides: Partial<SidebarSessionSummary> &
+    Pick<SidebarSessionSummary, "id" | "environmentId" | "projectId" | "title">,
+): SidebarSessionSummary {
   return {
     interactionMode: DEFAULT_INTERACTION_MODE,
     session: null,
@@ -81,20 +81,20 @@ function makeEmptyEnvironmentState(): EnvironmentState {
   return {
     projectIds: [],
     projectById: {},
-    threadIds: [],
-    threadIdsByProjectId: {},
-    threadShellById: {},
-    threadSessionById: {},
-    threadTurnStateById: {},
-    messageIdsByThreadId: {},
-    messageByThreadId: {},
-    activityIdsByThreadId: {},
-    activityByThreadId: {},
-    proposedPlanIdsByThreadId: {},
-    proposedPlanByThreadId: {},
-    turnDiffIdsByThreadId: {},
-    turnDiffSummaryByThreadId: {},
-    sidebarThreadSummaryById: {},
+    sessionIds: [],
+    sessionIdsByProjectId: {},
+    sessionShellById: {},
+    providerRuntimeById: {},
+    sessionTurnStateById: {},
+    messageIdsBySessionId: {},
+    messageBySessionId: {},
+    activityIdsBySessionId: {},
+    activityBySessionId: {},
+    proposedPlanIdsBySessionId: {},
+    proposedPlanBySessionId: {},
+    turnDiffIdsBySessionId: {},
+    turnDiffSummaryBySessionId: {},
+    sidebarSessionSummaryById: {},
     bootstrapComplete: true,
   };
 }
@@ -142,36 +142,36 @@ function makeFixtureState(): AppState {
     name: "remote-only",
   });
 
-  // Threads
-  const summaryP1 = makeSidebarThreadSummary({
-    id: threadP1,
+  // Sessions
+  const summaryP1 = makeSidebarSessionSummary({
+    id: sessionP1,
     environmentId: primaryEnvId,
     projectId: sharedProjectPrimaryId,
-    title: "Shared primary thread 1",
+    title: "Shared primary session 1",
   });
-  const summaryP2 = makeSidebarThreadSummary({
-    id: threadP2,
+  const summaryP2 = makeSidebarSessionSummary({
+    id: sessionP2,
     environmentId: primaryEnvId,
     projectId: sharedProjectPrimaryId,
-    title: "Shared primary thread 2",
+    title: "Shared primary session 2",
   });
-  const summaryR1 = makeSidebarThreadSummary({
-    id: threadR1,
+  const summaryR1 = makeSidebarSessionSummary({
+    id: sessionR1,
     environmentId: remoteEnvId,
     projectId: sharedProjectRemoteId,
-    title: "Shared remote thread 1",
+    title: "Shared remote session 1",
   });
-  const summaryL1 = makeSidebarThreadSummary({
-    id: threadL1,
+  const summaryL1 = makeSidebarSessionSummary({
+    id: sessionL1,
     environmentId: primaryEnvId,
     projectId: localOnlyProjectId,
-    title: "Local only thread 1",
+    title: "Local only session 1",
   });
-  const summaryRO1 = makeSidebarThreadSummary({
-    id: threadRO1,
+  const summaryRO1 = makeSidebarSessionSummary({
+    id: sessionRO1,
     environmentId: remoteEnvId,
     projectId: remoteOnlyProjectId,
-    title: "Remote only thread 1",
+    title: "Remote only session 1",
   });
 
   const primaryEnvState: EnvironmentState = {
@@ -181,15 +181,15 @@ function makeFixtureState(): AppState {
       [sharedProjectPrimaryId]: sharedProjectPrimary,
       [localOnlyProjectId]: localOnlyProject,
     },
-    threadIds: [threadP1, threadP2, threadL1],
-    threadIdsByProjectId: {
-      [sharedProjectPrimaryId]: [threadP1, threadP2],
-      [localOnlyProjectId]: [threadL1],
+    sessionIds: [sessionP1, sessionP2, sessionL1],
+    sessionIdsByProjectId: {
+      [sharedProjectPrimaryId]: [sessionP1, sessionP2],
+      [localOnlyProjectId]: [sessionL1],
     },
-    sidebarThreadSummaryById: {
-      [threadP1]: summaryP1,
-      [threadP2]: summaryP2,
-      [threadL1]: summaryL1,
+    sidebarSessionSummaryById: {
+      [sessionP1]: summaryP1,
+      [sessionP2]: summaryP2,
+      [sessionL1]: summaryL1,
     },
   };
 
@@ -200,14 +200,14 @@ function makeFixtureState(): AppState {
       [sharedProjectRemoteId]: sharedProjectRemote,
       [remoteOnlyProjectId]: remoteOnlyProject,
     },
-    threadIds: [threadR1, threadRO1],
-    threadIdsByProjectId: {
-      [sharedProjectRemoteId]: [threadR1],
-      [remoteOnlyProjectId]: [threadRO1],
+    sessionIds: [sessionR1, sessionRO1],
+    sessionIdsByProjectId: {
+      [sharedProjectRemoteId]: [sessionR1],
+      [remoteOnlyProjectId]: [sessionRO1],
     },
-    sidebarThreadSummaryById: {
-      [threadR1]: summaryR1,
-      [threadRO1]: summaryRO1,
+    sidebarSessionSummaryById: {
+      [sessionR1]: summaryR1,
+      [sessionRO1]: summaryRO1,
     },
   };
 
@@ -459,83 +459,83 @@ describe("environment grouping", () => {
     });
   });
 
-  describe("selectSidebarThreadsAcrossEnvironments", () => {
-    it("returns all sidebar thread summaries from all environments", () => {
+  describe("selectSidebarSessionsAcrossEnvironments", () => {
+    it("returns all sidebar session summaries from all environments", () => {
       const state = makeFixtureState();
-      const threads = selectSidebarThreadsAcrossEnvironments(state);
-      expect(threads).toHaveLength(5);
-      const ids = new Set(threads.map((t) => t.id));
-      expect(ids).toContain(threadP1);
-      expect(ids).toContain(threadP2);
-      expect(ids).toContain(threadR1);
-      expect(ids).toContain(threadL1);
-      expect(ids).toContain(threadRO1);
+      const sessions = selectSidebarSessionsAcrossEnvironments(state);
+      expect(sessions).toHaveLength(5);
+      const ids = new Set(sessions.map((t) => t.id));
+      expect(ids).toContain(sessionP1);
+      expect(ids).toContain(sessionP2);
+      expect(ids).toContain(sessionR1);
+      expect(ids).toContain(sessionL1);
+      expect(ids).toContain(sessionRO1);
     });
   });
 
-  describe("selectSidebarThreadsForProjectRef", () => {
-    it("returns threads for a single project ref", () => {
+  describe("selectSidebarSessionsForProjectRef", () => {
+    it("returns sessions for a single project ref", () => {
       const state = makeFixtureState();
       const ref = scopeProjectRef(primaryEnvId, sharedProjectPrimaryId);
-      const threads = selectSidebarThreadsForProjectRef(state, ref);
-      expect(threads).toHaveLength(2);
-      expect(threads.map((t) => t.id)).toEqual([threadP1, threadP2]);
+      const sessions = selectSidebarSessionsForProjectRef(state, ref);
+      expect(sessions).toHaveLength(2);
+      expect(sessions.map((t) => t.id)).toEqual([sessionP1, sessionP2]);
     });
 
     it("returns empty array for null ref", () => {
       const state = makeFixtureState();
-      expect(selectSidebarThreadsForProjectRef(state, null)).toEqual([]);
+      expect(selectSidebarSessionsForProjectRef(state, null)).toEqual([]);
     });
 
     it("returns empty array for nonexistent environment", () => {
       const state = makeFixtureState();
       const ref = scopeProjectRef(EnvironmentId.make("nonexistent"), sharedProjectPrimaryId);
-      expect(selectSidebarThreadsForProjectRef(state, ref)).toEqual([]);
+      expect(selectSidebarSessionsForProjectRef(state, ref)).toEqual([]);
     });
   });
 
-  describe("selectSidebarThreadsForProjectRefs", () => {
+  describe("selectSidebarSessionsForProjectRefs", () => {
     it("returns empty for empty refs", () => {
       const state = makeFixtureState();
-      expect(selectSidebarThreadsForProjectRefs(state, [])).toEqual([]);
+      expect(selectSidebarSessionsForProjectRefs(state, [])).toEqual([]);
     });
 
-    it("returns threads for a single ref", () => {
+    it("returns sessions for a single ref", () => {
       const state = makeFixtureState();
       const refs = [scopeProjectRef(primaryEnvId, sharedProjectPrimaryId)];
-      const threads = selectSidebarThreadsForProjectRefs(state, refs);
-      expect(threads).toHaveLength(2);
-      expect(threads.map((t) => t.id)).toEqual([threadP1, threadP2]);
+      const sessions = selectSidebarSessionsForProjectRefs(state, refs);
+      expect(sessions).toHaveLength(2);
+      expect(sessions.map((t) => t.id)).toEqual([sessionP1, sessionP2]);
     });
 
-    it("returns combined threads from multiple refs across environments", () => {
+    it("returns combined sessions from multiple refs across environments", () => {
       const state = makeFixtureState();
       const refs = [
         scopeProjectRef(primaryEnvId, sharedProjectPrimaryId),
         scopeProjectRef(remoteEnvId, sharedProjectRemoteId),
       ];
-      const threads = selectSidebarThreadsForProjectRefs(state, refs);
-      expect(threads).toHaveLength(3);
-      const ids = new Set(threads.map((t) => t.id));
-      expect(ids).toContain(threadP1);
-      expect(ids).toContain(threadP2);
-      expect(ids).toContain(threadR1);
+      const sessions = selectSidebarSessionsForProjectRefs(state, refs);
+      expect(sessions).toHaveLength(3);
+      const ids = new Set(sessions.map((t) => t.id));
+      expect(ids).toContain(sessionP1);
+      expect(ids).toContain(sessionP2);
+      expect(ids).toContain(sessionR1);
     });
 
-    it("returns threads from remote-only project", () => {
+    it("returns sessions from remote-only project", () => {
       const state = makeFixtureState();
       const refs = [scopeProjectRef(remoteEnvId, remoteOnlyProjectId)];
-      const threads = selectSidebarThreadsForProjectRefs(state, refs);
-      expect(threads).toHaveLength(1);
-      expect(threads[0]?.id).toBe(threadRO1);
+      const sessions = selectSidebarSessionsForProjectRefs(state, refs);
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.id).toBe(sessionRO1);
     });
 
-    it("returns threads from local-only project", () => {
+    it("returns sessions from local-only project", () => {
       const state = makeFixtureState();
       const refs = [scopeProjectRef(primaryEnvId, localOnlyProjectId)];
-      const threads = selectSidebarThreadsForProjectRefs(state, refs);
-      expect(threads).toHaveLength(1);
-      expect(threads[0]?.id).toBe(threadL1);
+      const sessions = selectSidebarSessionsForProjectRefs(state, refs);
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.id).toBe(sessionL1);
     });
 
     it("handles refs with nonexistent environment gracefully", () => {
@@ -544,15 +544,15 @@ describe("environment grouping", () => {
         scopeProjectRef(primaryEnvId, sharedProjectPrimaryId),
         scopeProjectRef(EnvironmentId.make("nonexistent"), ProjectId.make("nope")),
       ];
-      const threads = selectSidebarThreadsForProjectRefs(state, refs);
-      // Only returns threads from the valid ref
-      expect(threads).toHaveLength(2);
-      expect(threads.map((t) => t.id)).toEqual([threadP1, threadP2]);
+      const sessions = selectSidebarSessionsForProjectRefs(state, refs);
+      // Only returns sessions from the valid ref
+      expect(sessions).toHaveLength(2);
+      expect(sessions.map((t) => t.id)).toEqual([sessionP1, sessionP2]);
     });
   });
 
   describe("logical project grouping for sidebar", () => {
-    it("computes correct logical key for grouped projects and aggregates threads", () => {
+    it("computes correct logical key for grouped projects and aggregates sessions", () => {
       const state = makeFixtureState();
       const allProjects = selectProjectsAcrossEnvironments(state);
 
@@ -573,14 +573,14 @@ describe("environment grouping", () => {
         [primaryEnvId, remoteEnvId].toSorted(),
       );
 
-      // Build member refs for the grouped project and fetch threads
+      // Build member refs for the grouped project and fetch sessions
       const memberRefs = sharedGroup!.map((p) => scopeProjectRef(p.environmentId, p.id));
-      const threads = selectSidebarThreadsForProjectRefs(state, memberRefs);
-      expect(threads).toHaveLength(3);
-      const threadIds = threads.map((t) => t.id);
-      expect(threadIds).toContain(threadP1);
-      expect(threadIds).toContain(threadP2);
-      expect(threadIds).toContain(threadR1);
+      const sessions = selectSidebarSessionsForProjectRefs(state, memberRefs);
+      expect(sessions).toHaveLength(3);
+      const sessionIds = sessions.map((t) => t.id);
+      expect(sessionIds).toContain(sessionP1);
+      expect(sessionIds).toContain(sessionP2);
+      expect(sessionIds).toContain(sessionR1);
     });
 
     it("local-only and remote-only projects remain ungrouped", () => {

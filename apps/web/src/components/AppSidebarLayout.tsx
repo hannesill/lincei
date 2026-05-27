@@ -1,14 +1,14 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import ThreadSidebar from "./Sidebar";
+import SessionSidebar from "./Sidebar";
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 import {
   clearShortcutModifierState,
   syncShortcutModifierStateFromKeyboardEvent,
 } from "../shortcutModifierState";
 
-const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
+const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_session_sidebar_width";
 const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
 const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
@@ -66,7 +66,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        <ThreadSidebar />
+        <SessionSidebar />
         <SidebarRail />
       </Sidebar>
       {children}

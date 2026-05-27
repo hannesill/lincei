@@ -39,7 +39,7 @@ function createTestClient() {
     orchestration: {
       dispatchCommand: vi.fn(async () => undefined),
       getTurnDiff: vi.fn(async () => undefined),
-      getFullThreadDiff: vi.fn(async () => undefined),
+      getFullSessionDiff: vi.fn(async () => undefined),
       subscribeShell: vi.fn(
         (listener: (event: any) => void, options?: { onResubscribe?: () => void }) => {
           shellListeners.add(listener);
@@ -50,7 +50,7 @@ function createTestClient() {
               snapshot: {
                 snapshotSequence: 1,
                 projects: [],
-                threads: [],
+                sessions: [],
                 updatedAt: "2026-04-12T00:00:00.000Z",
               },
             });
@@ -63,7 +63,7 @@ function createTestClient() {
           };
         },
       ),
-      subscribeThread: vi.fn(() => () => undefined),
+      subscribeSession: vi.fn(() => () => undefined),
     },
     terminal: {
       open: vi.fn(async () => undefined),
@@ -87,7 +87,7 @@ function createTestClient() {
     git: {
       runStackedAction: vi.fn(async () => ({}) as any),
       resolvePullRequest: vi.fn(async () => undefined),
-      preparePullRequestThread: vi.fn(async () => undefined),
+      preparePullRequestSession: vi.fn(async () => undefined),
     },
   } as unknown as WsRpcClient;
 
@@ -124,7 +124,7 @@ function createTestClient() {
           snapshot: {
             snapshotSequence,
             projects: [],
-            threads: [],
+            sessions: [],
             updatedAt: "2026-04-12T00:00:00.000Z",
           },
         });

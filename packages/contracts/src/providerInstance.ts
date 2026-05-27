@@ -8,7 +8,7 @@
  *     handles the protocol, the probe, the adapter, and text generation.
  *
  *   - `ProviderInstanceId` is the routing key (a user-defined slug).
- *     Threads, sessions, runtime events, and persisted bindings reference
+ *     Sessions, sessions, runtime events, and persisted bindings reference
  *     instance ids — never driver kinds — so a user can configure multiple
  *     instances of the same driver (e.g. `codex_personal` + `codex_work`),
  *     each with independent driver-specific configuration.
@@ -18,7 +18,7 @@
  * `ProviderDriverKind` is intentionally an **open** branded slug, not a closed
  * literal union. The server hosts forks, ships in PRs that add drivers, and
  * users frequently roll between branches and forks. Any of those paths can
- * leave `ServerSettings`, persisted thread state, or session bindings
+ * leave `ServerSettings`, persisted session state, or session bindings
  * referencing a driver that the currently-running build does not know about.
  *
  * The rule: parsing any of those payloads must always succeed, and the
@@ -142,7 +142,7 @@ export type ProviderInstanceConfigMap = typeof ProviderInstanceConfigMap.Type;
  * Construct the canonical `ProviderInstanceId` used as a back-compat default
  * for a built-in driver. The legacy single-instance-per-driver world used
  * the driver kind itself as the instance id; preserving that mapping keeps
- * existing persisted threads, bindings, and cache files routable across the
+ * existing persisted sessions, bindings, and cache files routable across the
  * migration without rewriting their stored selection payloads.
  */
 export const defaultInstanceIdForDriver = (driver: ProviderDriverKind): ProviderInstanceId =>

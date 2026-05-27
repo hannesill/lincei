@@ -18,7 +18,7 @@ import {
   ProviderItemId,
   ProviderRuntimeEvent,
   type RuntimeMode,
-  ThreadId,
+  SessionId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
@@ -264,8 +264,8 @@ async function readFirstPromptMessage(
   return next.value;
 }
 
-const THREAD_ID = ThreadId.make("thread-claude-1");
-const RESUME_THREAD_ID = ThreadId.make("thread-claude-resume");
+const THREAD_ID = SessionId.make("session-claude-1");
+const RESUME_THREAD_ID = SessionId.make("session-claude-resume");
 
 describe("ClaudeAdapterLive", () => {
   it.effect("returns validation error for non-claude provider on startSession", () => {
@@ -274,7 +274,7 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
       const result = yield* adapter
         .startSession({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           provider: ProviderDriverKind.make("codex"),
           runtimeMode: "full-access",
         })
@@ -303,7 +303,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -323,7 +323,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "approval-required",
       });
@@ -343,7 +343,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -362,7 +362,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -385,7 +385,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -407,7 +407,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: {
           instanceId: ProviderInstanceId.make("claudeAgent"),
@@ -429,7 +429,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -452,7 +452,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -475,7 +475,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -498,7 +498,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -523,7 +523,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -546,7 +546,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -571,7 +571,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -594,7 +594,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -605,7 +605,7 @@ describe("ClaudeAdapterLive", () => {
       });
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "Investigate the edge cases",
         attachments: [],
         modelSelection: createModelSelection(
@@ -646,7 +646,7 @@ describe("ClaudeAdapterLive", () => {
 
       const attachment = {
         type: "image" as const,
-        id: "thread-claude-attachment-12345678-1234-1234-1234-123456789abc",
+        id: "session-claude-attachment-12345678-1234-1234-1234-123456789abc",
         name: "diagram.png",
         mimeType: "image/png",
         sizeBytes: 4,
@@ -656,13 +656,13 @@ describe("ClaudeAdapterLive", () => {
       writeFileSync(attachmentPath, Uint8Array.from([1, 2, 3, 4]));
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "What's in this image?",
         attachments: [attachment],
       });
@@ -701,7 +701,7 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         modelSelection: {
           instanceId: ProviderInstanceId.make("claudeAgent"),
@@ -711,7 +711,7 @@ describe("ClaudeAdapterLive", () => {
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -811,11 +811,11 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
           "content.delta",
           "item.completed",
           "item.started",
@@ -878,13 +878,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -977,11 +977,11 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
           "content.delta",
           "item.started",
           "item.updated",
@@ -1057,13 +1057,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -1148,13 +1148,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "delegate this",
         attachments: [],
       });
@@ -1224,13 +1224,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -1249,11 +1249,11 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
           "turn.completed",
         ],
       );
@@ -1290,13 +1290,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         input: "hello",
         attachments: [],
       });
@@ -1310,12 +1310,12 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
           "turn.completed",
-          "session.exited",
+          "runtime.exited",
         ],
       );
 
@@ -1328,7 +1328,7 @@ describe("ClaudeAdapterLive", () => {
       }
 
       const sessionExited = runtimeEvents[5];
-      assert.equal(sessionExited?.type, "session.exited");
+      assert.equal(sessionExited?.type, "runtime.exited");
 
       assert.equal(yield* adapter.hasSession(THREAD_ID), false);
       const sessions = yield* adapter.listSessions();
@@ -1340,7 +1340,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("closes the previous session before replacing an existing thread session", () => {
+  it.effect("closes the previous session before replacing an existing session session", () => {
     const queries: FakeClaudeQuery[] = [];
     const layer = Layer.effect(
       ClaudeAdapter,
@@ -1369,13 +1369,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const firstSession = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const secondSession = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
         resumeCursor: firstSession.resumeCursor,
@@ -1393,16 +1393,16 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
         ],
       );
       assert.equal(
-        runtimeEvents.some((event) => event.type === "session.exited"),
+        runtimeEvents.some((event) => event.type === "runtime.exited"),
         false,
       );
     }).pipe(
@@ -1462,7 +1462,7 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -1500,7 +1500,7 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -1536,7 +1536,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("emits thread token usage updates from Claude task progress", () => {
+  it.effect("emits session token usage updates from Claude task progress", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -1547,7 +1547,7 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -1567,10 +1567,12 @@ describe("ClaudeAdapterLive", () => {
       } as unknown as SDKMessage);
 
       const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
-      const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
+      const usageEvent = runtimeEvents.find(
+        (event) => event.type === "session.token-usage.updated",
+      );
       const progressEvent = runtimeEvents.find((event) => event.type === "task.progress");
-      assert.equal(usageEvent?.type, "thread.token-usage.updated");
-      if (usageEvent?.type === "thread.token-usage.updated") {
+      assert.equal(usageEvent?.type, "session.token-usage.updated");
+      if (usageEvent?.type === "session.token-usage.updated") {
         assert.deepEqual(usageEvent.payload, {
           usage: {
             usedTokens: 321,
@@ -1601,13 +1603,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         input: "hello",
         attachments: [],
       });
@@ -1638,9 +1640,11 @@ describe("ClaudeAdapterLive", () => {
       harness.query.finish();
 
       const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
-      const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
-      assert.equal(usageEvent?.type, "thread.token-usage.updated");
-      if (usageEvent?.type === "thread.token-usage.updated") {
+      const usageEvent = runtimeEvents.find(
+        (event) => event.type === "session.token-usage.updated",
+      );
+      assert.equal(usageEvent?.type, "session.token-usage.updated");
+      if (usageEvent?.type === "session.token-usage.updated") {
         assert.deepEqual(usageEvent.payload, {
           usage: {
             usedTokens: 24542,
@@ -1668,13 +1672,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         input: "hello",
         attachments: [],
       });
@@ -1702,9 +1706,11 @@ describe("ClaudeAdapterLive", () => {
       harness.query.finish();
 
       const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
-      const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
-      assert.equal(usageEvent?.type, "thread.token-usage.updated");
-      if (usageEvent?.type === "thread.token-usage.updated") {
+      const usageEvent = runtimeEvents.find(
+        (event) => event.type === "session.token-usage.updated",
+      );
+      assert.equal(usageEvent?.type, "session.token-usage.updated");
+      if (usageEvent?.type === "session.token-usage.updated") {
         assert.deepEqual(usageEvent.payload, {
           usage: {
             usedTokens: 200000,
@@ -1733,13 +1739,13 @@ describe("ClaudeAdapterLive", () => {
         );
 
         yield* adapter.startSession({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           provider: ProviderDriverKind.make("claudeAgent"),
           runtimeMode: "full-access",
         });
 
         yield* adapter.sendTurn({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           input: "hello",
           attachments: [],
         });
@@ -1780,11 +1786,11 @@ describe("ClaudeAdapterLive", () => {
 
         const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
         const usageEvents = runtimeEvents.filter(
-          (event) => event.type === "thread.token-usage.updated",
+          (event) => event.type === "session.token-usage.updated",
         );
         const finalUsageEvent = usageEvents.at(-1);
-        assert.equal(finalUsageEvent?.type, "thread.token-usage.updated");
-        if (finalUsageEvent?.type === "thread.token-usage.updated") {
+        assert.equal(finalUsageEvent?.type, "session.token-usage.updated");
+        if (finalUsageEvent?.type === "session.token-usage.updated") {
           assert.deepEqual(finalUsageEvent.payload, {
             usage: {
               usedTokens: 190000,
@@ -1814,13 +1820,13 @@ describe("ClaudeAdapterLive", () => {
         );
 
         const session = yield* adapter.startSession({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           provider: ProviderDriverKind.make("claudeAgent"),
           runtimeMode: "full-access",
         });
 
         const turn = yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "hello",
           attachments: [],
         });
@@ -1866,11 +1872,11 @@ describe("ClaudeAdapterLive", () => {
         assert.deepEqual(
           runtimeEvents.map((event) => event.type),
           [
-            "session.started",
-            "session.configured",
-            "session.state.changed",
+            "runtime.started",
+            "runtime.configured",
+            "runtime.state.changed",
             "turn.started",
-            "thread.started",
+            "session.started",
             "content.delta",
             "item.completed",
             "turn.completed",
@@ -1905,13 +1911,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -2011,11 +2017,11 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
           "content.delta",
           "item.completed",
           "content.delta",
@@ -2071,13 +2077,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -2106,11 +2112,11 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
           "content.delta",
           "item.completed",
           "turn.completed",
@@ -2140,13 +2146,13 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -2294,11 +2300,11 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
           "content.delta",
           "item.completed",
           "item.started",
@@ -2351,7 +2357,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("does not fabricate provider thread ids before first SDK session_id", () => {
+  it.effect("does not fabricate provider session ids before first SDK session_id", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -2362,28 +2368,28 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
-      assert.equal(session.threadId, THREAD_ID);
+      assert.equal(session.sessionId, THREAD_ID);
 
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
-      assert.equal(turn.threadId, THREAD_ID);
+      assert.equal(turn.sessionId, THREAD_ID);
 
       harness.query.emit({
         type: "stream_event",
-        session_id: "sdk-thread-real",
-        uuid: "stream-thread-real",
+        session_id: "sdk-session-real",
+        uuid: "stream-session-real",
         parent_tool_use_id: null,
         event: {
           type: "message_start",
           message: {
-            id: "msg-thread-real",
+            id: "msg-session-real",
           },
         },
       } as unknown as SDKMessage);
@@ -2393,34 +2399,34 @@ describe("ClaudeAdapterLive", () => {
         subtype: "success",
         is_error: false,
         errors: [],
-        session_id: "sdk-thread-real",
-        uuid: "result-thread-real",
+        session_id: "sdk-session-real",
+        uuid: "result-session-real",
       } as unknown as SDKMessage);
 
       const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [
-          "session.started",
-          "session.configured",
-          "session.state.changed",
+          "runtime.started",
+          "runtime.configured",
+          "runtime.state.changed",
           "turn.started",
-          "thread.started",
+          "session.started",
         ],
       );
 
-      const sessionStarted = runtimeEvents[0];
-      assert.equal(sessionStarted?.type, "session.started");
-      if (sessionStarted?.type === "session.started") {
-        assert.equal(sessionStarted.threadId, THREAD_ID);
+      const runtimeStarted = runtimeEvents[0];
+      assert.equal(runtimeStarted?.type, "runtime.started");
+      if (runtimeStarted?.type === "runtime.started") {
+        assert.equal(runtimeStarted.sessionId, THREAD_ID);
       }
 
-      const threadStarted = runtimeEvents[4];
-      assert.equal(threadStarted?.type, "thread.started");
-      if (threadStarted?.type === "thread.started") {
-        assert.equal(threadStarted.threadId, THREAD_ID);
-        assert.deepEqual(threadStarted.payload, {
-          providerThreadId: "sdk-thread-real",
+      const providerSessionStarted = runtimeEvents[4];
+      assert.equal(providerSessionStarted?.type, "session.started");
+      if (providerSessionStarted?.type === "session.started") {
+        assert.equal(providerSessionStarted.sessionId, THREAD_ID);
+        assert.deepEqual(providerSessionStarted.payload, {
+          providerSessionId: "sdk-session-real",
         });
       }
     }).pipe(
@@ -2435,7 +2441,7 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "approval-required",
       });
@@ -2443,7 +2449,7 @@ describe("ClaudeAdapterLive", () => {
       yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "approve this",
         attachments: [],
       });
@@ -2452,19 +2458,19 @@ describe("ClaudeAdapterLive", () => {
       harness.query.emit({
         type: "stream_event",
         session_id: "sdk-session-approval-1",
-        uuid: "stream-approval-thread",
+        uuid: "stream-approval-session",
         parent_tool_use_id: null,
         event: {
           type: "message_start",
           message: {
-            id: "msg-approval-thread",
+            id: "msg-approval-session",
           },
         },
       } as unknown as SDKMessage);
 
-      const threadStarted = yield* Stream.runHead(adapter.streamEvents);
-      assert.equal(threadStarted._tag, "Some");
-      if (threadStarted._tag !== "Some" || threadStarted.value.type !== "thread.started") {
+      const sessionStarted = yield* Stream.runHead(adapter.streamEvents);
+      assert.equal(sessionStarted._tag, "Some");
+      if (sessionStarted._tag !== "Some" || sessionStarted.value.type !== "session.started") {
         return;
       }
 
@@ -2510,7 +2516,7 @@ describe("ClaudeAdapterLive", () => {
       }
 
       yield* adapter.respondToRequest(
-        session.threadId,
+        session.sessionId,
         ApprovalRequestId.make(runtimeRequestId),
         "accept",
       );
@@ -2544,7 +2550,7 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "approval-required",
       });
@@ -2575,7 +2581,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(agentRequested.value.payload.requestType, "dynamic_tool_call");
 
       yield* adapter.respondToRequest(
-        session.threadId,
+        session.sessionId,
         ApprovalRequestId.make(String(agentRequested.value.requestId)),
         "accept",
       );
@@ -2599,7 +2605,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(grepRequested.value.payload.requestType, "file_read_approval");
 
       yield* adapter.respondToRequest(
-        session.threadId,
+        session.sessionId,
         ApprovalRequestId.make(String(grepRequested.value.requestId)),
         "accept",
       );
@@ -2617,10 +2623,10 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: RESUME_THREAD_ID,
+        sessionId: RESUME_THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         resumeCursor: {
-          threadId: "resume-thread-1",
+          sessionId: "resume-session-1",
           resume: "550e8400-e29b-41d4-a716-446655440000",
           resumeSessionAt: "assistant-99",
           turnCount: 3,
@@ -2628,9 +2634,9 @@ describe("ClaudeAdapterLive", () => {
         runtimeMode: "full-access",
       });
 
-      assert.equal(session.threadId, RESUME_THREAD_ID);
+      assert.equal(session.sessionId, RESUME_THREAD_ID);
       assert.deepEqual(session.resumeCursor, {
-        threadId: RESUME_THREAD_ID,
+        sessionId: "550e8400-e29b-41d4-a716-446655440000",
         resume: "550e8400-e29b-41d4-a716-446655440000",
         resumeSessionAt: "assistant-99",
         turnCount: 3,
@@ -2659,10 +2665,10 @@ describe("ClaudeAdapterLive", () => {
       );
 
       yield* adapter.startSession({
-        threadId: RESUME_THREAD_ID,
+        sessionId: RESUME_THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         resumeCursor: {
-          threadId: RESUME_THREAD_ID,
+          sessionId: RESUME_THREAD_ID,
           resume: durableSessionId,
           resumeSessionAt: "assistant-99",
           turnCount: 3,
@@ -2713,13 +2719,15 @@ describe("ClaudeAdapterLive", () => {
       } as unknown as SDKMessage);
 
       const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
-      const threadStartedEvents = runtimeEvents.filter((event) => event.type === "thread.started");
-      assert.equal(threadStartedEvents.length, 1);
-      const threadStarted = threadStartedEvents[0];
-      assert.equal(threadStarted?.type, "thread.started");
-      if (threadStarted?.type === "thread.started") {
-        assert.deepEqual(threadStarted.payload, {
-          providerThreadId: durableSessionId,
+      const sessionStartedEvents = runtimeEvents.filter(
+        (event) => event.type === "session.started",
+      );
+      assert.equal(sessionStartedEvents.length, 1);
+      const sessionStarted = sessionStartedEvents[0];
+      assert.equal(sessionStarted?.type, "session.started");
+      if (sessionStarted?.type === "session.started") {
+        assert.deepEqual(sessionStarted.payload, {
+          providerSessionId: durableSessionId,
         });
       }
 
@@ -2742,18 +2750,18 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       const createInput = harness.getLastCreateQueryInput();
       const sessionResumeCursor = session.resumeCursor as {
-        threadId?: string;
+        sessionId?: string;
         resume?: string;
         turnCount?: number;
       };
-      assert.equal(sessionResumeCursor.threadId, THREAD_ID);
+      assert.equal(sessionResumeCursor.sessionId, sessionResumeCursor.resume);
       assert.equal(typeof sessionResumeCursor.resume, "string");
       assert.equal(sessionResumeCursor.turnCount, 0);
       assert.match(
@@ -2769,20 +2777,20 @@ describe("ClaudeAdapterLive", () => {
   });
 
   it.effect(
-    "supports rollbackThread by trimming in-memory turns and preserving earlier turns",
+    "supports rollbackSession by trimming in-memory turns and preserving earlier turns",
     () => {
       const harness = makeHarness();
       return Effect.gen(function* () {
         const adapter = yield* ClaudeAdapter;
 
         const session = yield* adapter.startSession({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           provider: ProviderDriverKind.make("claudeAgent"),
           runtimeMode: "full-access",
         });
 
         const firstTurn = yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "first",
           attachments: [],
         });
@@ -2808,7 +2816,7 @@ describe("ClaudeAdapterLive", () => {
         }
 
         const secondTurn = yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "second",
           attachments: [],
         });
@@ -2833,16 +2841,16 @@ describe("ClaudeAdapterLive", () => {
           assert.equal(String(secondCompleted.value.turnId), String(secondTurn.turnId));
         }
 
-        const threadBeforeRollback = yield* adapter.readThread(session.threadId);
-        assert.equal(threadBeforeRollback.turns.length, 2);
+        const sessionBeforeRollback = yield* adapter.readSession(session.sessionId);
+        assert.equal(sessionBeforeRollback.turns.length, 2);
 
-        const rolledBack = yield* adapter.rollbackThread(session.threadId, 1);
+        const rolledBack = yield* adapter.rollbackSession(session.sessionId, 1);
         assert.equal(rolledBack.turns.length, 1);
         assert.equal(rolledBack.turns[0]?.id, firstTurn.turnId);
 
-        const threadAfterRollback = yield* adapter.readThread(session.threadId);
-        assert.equal(threadAfterRollback.turns.length, 1);
-        assert.equal(threadAfterRollback.turns[0]?.id, firstTurn.turnId);
+        const sessionAfterRollback = yield* adapter.readSession(session.sessionId);
+        assert.equal(sessionAfterRollback.turns.length, 1);
+        assert.equal(sessionAfterRollback.turns[0]?.id, firstTurn.turnId);
       }).pipe(
         Effect.provideService(Random.Random, makeDeterministicRandomService()),
         Effect.provide(harness.layer),
@@ -2856,12 +2864,12 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         modelSelection: {
           instanceId: ProviderInstanceId.make("claudeAgent"),
@@ -2884,12 +2892,12 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         modelSelection: {
           instanceId: customInstanceId,
@@ -2917,20 +2925,20 @@ describe("ClaudeAdapterLive", () => {
         };
 
         const session = yield* adapter.startSession({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           provider: ProviderDriverKind.make("claudeAgent"),
           modelSelection,
           runtimeMode: "full-access",
         });
 
         yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "hello",
           modelSelection,
           attachments: [],
         });
         yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "hello again",
           modelSelection,
           attachments: [],
@@ -2950,13 +2958,13 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         modelSelection: createModelSelection(
           ProviderInstanceId.make("claudeAgent"),
@@ -2966,7 +2974,7 @@ describe("ClaudeAdapterLive", () => {
         attachments: [],
       });
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello again",
         modelSelection: {
           instanceId: ProviderInstanceId.make("claudeAgent"),
@@ -2988,12 +2996,12 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "plan this for me",
         interactionMode: "plan",
         attachments: [],
@@ -3018,14 +3026,14 @@ describe("ClaudeAdapterLive", () => {
         const adapter = yield* ClaudeAdapter;
 
         const session = yield* adapter.startSession({
-          threadId: THREAD_ID,
+          sessionId: THREAD_ID,
           provider: ProviderDriverKind.make("claudeAgent"),
           runtimeMode,
         });
 
         // First turn in plan mode
         yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "plan this",
           interactionMode: "plan",
           attachments: [],
@@ -3050,7 +3058,7 @@ describe("ClaudeAdapterLive", () => {
 
         // Second turn back to default
         yield* adapter.sendTurn({
-          threadId: session.threadId,
+          sessionId: session.sessionId,
           input: "now do it",
           interactionMode: "default",
           attachments: [],
@@ -3070,12 +3078,12 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -3093,7 +3101,7 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -3101,7 +3109,7 @@ describe("ClaudeAdapterLive", () => {
       yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "plan this",
         interactionMode: "plan",
         attachments: [],
@@ -3159,7 +3167,7 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -3167,7 +3175,7 @@ describe("ClaudeAdapterLive", () => {
       yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "plan this",
         interactionMode: "plan",
         attachments: [],
@@ -3231,7 +3239,7 @@ describe("ClaudeAdapterLive", () => {
 
       // Start session in approval-required mode so canUseTool fires.
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "approval-required",
       });
@@ -3240,7 +3248,7 @@ describe("ClaudeAdapterLive", () => {
       yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
 
       yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "question turn",
         attachments: [],
       });
@@ -3249,19 +3257,19 @@ describe("ClaudeAdapterLive", () => {
       harness.query.emit({
         type: "stream_event",
         session_id: "sdk-session-user-input-1",
-        uuid: "stream-user-input-thread",
+        uuid: "stream-user-input-session",
         parent_tool_use_id: null,
         event: {
           type: "message_start",
           message: {
-            id: "msg-user-input-thread",
+            id: "msg-user-input-session",
           },
         },
       } as unknown as SDKMessage);
 
-      const threadStarted = yield* Stream.runHead(adapter.streamEvents);
-      assert.equal(threadStarted._tag, "Some");
-      if (threadStarted._tag !== "Some" || threadStarted.value.type !== "thread.started") {
+      const sessionStarted = yield* Stream.runHead(adapter.streamEvents);
+      assert.equal(sessionStarted._tag, "Some");
+      if (sessionStarted._tag !== "Some" || sessionStarted.value.type !== "session.started") {
         return;
       }
 
@@ -3314,7 +3322,7 @@ describe("ClaudeAdapterLive", () => {
       });
 
       // Respond with the user's answers.
-      yield* adapter.respondToUserInput(session.threadId, ApprovalRequestId.make(requestId!), {
+      yield* adapter.respondToUserInput(session.sessionId, ApprovalRequestId.make(requestId!), {
         "Which framework?": "React",
       });
 
@@ -3385,7 +3393,7 @@ describe("ClaudeAdapterLive", () => {
       // In full-access mode, regular tools are auto-approved.
       // AskUserQuestion should still go through the user-input flow.
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
@@ -3427,7 +3435,7 @@ describe("ClaudeAdapterLive", () => {
       }
       const requestId = requestedEvent.value.requestId;
 
-      yield* adapter.respondToUserInput(session.threadId, ApprovalRequestId.make(requestId!), {
+      yield* adapter.respondToUserInput(session.sessionId, ApprovalRequestId.make(requestId!), {
         "Deploy to which env?": "Staging",
       });
 
@@ -3451,7 +3459,7 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "approval-required",
       });
@@ -3490,7 +3498,7 @@ describe("ClaudeAdapterLive", () => {
         assert.fail("Expected user-input.requested event");
         return;
       }
-      assert.equal(requestedEvent.value.threadId, session.threadId);
+      assert.equal(requestedEvent.value.sessionId, session.sessionId);
 
       controller.abort();
 
@@ -3518,17 +3526,17 @@ describe("ClaudeAdapterLive", () => {
       event?: {
         provider?: string;
         method?: string;
-        threadId?: string;
+        sessionId?: string;
         turnId?: string;
       };
     }> = [];
-    const nativeThreadIds: Array<string | null> = [];
+    const nativeSessionIds: Array<string | null> = [];
     const harness = makeHarness({
       nativeEventLogger: {
         filePath: "memory://claude-native-events",
-        write: (event, threadId) => {
+        write: (event, sessionId) => {
           nativeEvents.push(event as (typeof nativeEvents)[number]);
-          nativeThreadIds.push(threadId ?? null);
+          nativeSessionIds.push(sessionId ?? null);
           return Effect.void;
         },
         close: () => Effect.void,
@@ -3538,12 +3546,12 @@ describe("ClaudeAdapterLive", () => {
       const adapter = yield* ClaudeAdapter;
 
       const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
+        sessionId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
         runtimeMode: "full-access",
       });
       const turn = yield* adapter.sendTurn({
-        threadId: session.threadId,
+        sessionId: session.sessionId,
         input: "hello",
         attachments: [],
       });
@@ -3589,8 +3597,8 @@ describe("ClaudeAdapterLive", () => {
         nativeEvents.some(
           (record) =>
             String(
-              (record.event as { readonly providerThreadId?: string } | undefined)
-                ?.providerThreadId,
+              (record.event as { readonly providerSessionId?: string } | undefined)
+                ?.providerSessionId,
             ) === "sdk-session-native-log",
         ),
         true,
@@ -3606,7 +3614,7 @@ describe("ClaudeAdapterLive", () => {
         true,
       );
       assert.equal(
-        nativeThreadIds.every((threadId) => threadId === String(THREAD_ID)),
+        nativeSessionIds.every((sessionId) => sessionId === String(THREAD_ID)),
         true,
       );
     }).pipe(

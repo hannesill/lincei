@@ -18,7 +18,7 @@
  *     the loggers on a single tag keeps that invariant intact.
  *   - Tests can swap one (or both) loggers with in-memory recorders by
  *     `Layer.succeed(ProviderEventLoggers, { native, canonical })` instead of
- *     juggling per-Layer option threading.
+ *     juggling per-Layer option sessioning.
  *
  * Both fields are optional. `makeEventNdjsonLogger` returns `undefined` when
  * the target directory cannot be created; we forward that as `undefined`

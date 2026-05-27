@@ -75,12 +75,12 @@ vi.mock("../../rpc/wsTransport", () => ({
 }));
 
 vi.mock("~/composerDraftStore", () => ({
-  markPromotedDraftThreadByRef: vi.fn(),
-  markPromotedDraftThreadsByRef: vi.fn(),
+  markPromotedDraftSessionByRef: vi.fn(),
+  markPromotedDraftSessionsByRef: vi.fn(),
   useComposerDraftStore: {
     getState: () => ({
-      getDraftThreadByRef: vi.fn(() => null),
-      clearDraftThread: vi.fn(),
+      getDraftSessionByRef: vi.fn(() => null),
+      clearDraftSession: vi.fn(),
     }),
   },
 }));
@@ -94,12 +94,12 @@ vi.mock("~/localApi", () => ({
 }));
 
 vi.mock("~/lib/terminalStateCleanup", () => ({
-  collectActiveTerminalThreadIds: vi.fn(() => []),
+  collectActiveTerminalSessionIds: vi.fn(() => []),
 }));
 
 vi.mock("~/orchestrationEventEffects", () => ({
   deriveOrchestrationBatchEffects: vi.fn(() => ({
-    promotedThreadRefs: [],
+    promotedSessionRefs: [],
     invalidatedProviderState: false,
   })),
 }));
@@ -120,15 +120,15 @@ vi.mock("~/store", () => ({
   useStore: {
     getState: () => ({
       syncServerShellSnapshot: vi.fn(),
-      syncServerThreadDetail: vi.fn(),
-      removeServerThreadDetail: vi.fn(),
+      syncServerSessionDetail: vi.fn(),
+      removeServerSessionDetail: vi.fn(),
       applyServerShellEvent: vi.fn(),
     }),
   },
   selectProjectsAcrossEnvironments: vi.fn(() => []),
-  selectSidebarThreadSummaryByRef: vi.fn(() => null),
-  selectThreadByRef: vi.fn(() => null),
-  selectThreadsAcrossEnvironments: vi.fn(() => []),
+  selectSidebarSessionSummaryByRef: vi.fn(() => null),
+  selectSessionByRef: vi.fn(() => null),
+  selectSessionsAcrossEnvironments: vi.fn(() => []),
 }));
 
 vi.mock("~/terminalStateStore", () => ({
@@ -144,8 +144,8 @@ vi.mock("~/terminalStateStore", () => ({
 vi.mock("~/uiStateStore", () => ({
   useUiStateStore: {
     getState: () => ({
-      clearThreadUi: vi.fn(),
-      syncPromotedDraftThreadRefs: vi.fn(),
+      clearSessionUi: vi.fn(),
+      syncPromotedDraftSessionRefs: vi.fn(),
     }),
   },
 }));
@@ -180,10 +180,10 @@ function createClient() {
     },
     orchestration: {
       subscribeShell: vi.fn(() => () => undefined),
-      subscribeThread: vi.fn(() => () => undefined),
+      subscribeSession: vi.fn(() => () => undefined),
       dispatchCommand: vi.fn(async () => undefined),
       getTurnDiff: vi.fn(async () => undefined),
-      getFullThreadDiff: vi.fn(async () => undefined),
+      getFullSessionDiff: vi.fn(async () => undefined),
     },
     terminal: {
       open: vi.fn(async () => undefined),
@@ -213,7 +213,7 @@ function createClient() {
       checkout: vi.fn(async () => undefined),
       init: vi.fn(async () => undefined),
       resolvePullRequest: vi.fn(async () => undefined),
-      preparePullRequestThread: vi.fn(async () => undefined),
+      preparePullRequestSession: vi.fn(async () => undefined),
     },
   };
 }

@@ -10,7 +10,7 @@
  * During the driver/instance migration this tag exposes both flavours:
  *
  *   - `getByInstance` / `listInstances` — new per-instance routing. Callers
- *     that already know an `instanceId` (threads, sessions, events)
+ *     that already know an `instanceId` (sessions, sessions, events)
  *     should prefer these.
  *     (`defaultInstanceIdForDriver(kind) === kind`), matching the pre-Slice-D
  *     behaviour. New code should not grow additional callers of the kind-keyed

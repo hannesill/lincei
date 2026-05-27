@@ -33,7 +33,7 @@ Use provider-neutral names:
 
 - `SourceControlProvider`: hosted repository and change-request mechanics.
 - `ChangeRequest`: GitHub pull request, GitLab merge request, Azure pull request.
-- `ChangeRequestThread`: review or discussion thread.
+- `ChangeRequestSession`: review or discussion session.
 - `ChangeRequestComment`: top-level or inline comment.
 - `ProviderRepository`: owner/project/repo identity plus clone URLs.
 
@@ -51,10 +51,10 @@ Core provider operations:
 
 Review-facing operations should be designed now, even if unimplemented:
 
-- `listReviewThreads(changeRequest)`
+- `listReviewSessions(changeRequest)`
 - `createReviewComment(changeRequest, input)`
-- `replyToReviewThread(thread, input)`
-- `resolveReviewThread(thread)`
+- `replyToReviewSession(session, input)`
+- `resolveReviewSession(session)`
 - `submitReview(changeRequest, input)`
 
 Each operation should be guarded by capabilities:
@@ -64,7 +64,7 @@ export interface SourceControlProviderCapabilities {
   readonly kind: "github" | "gitlab" | "azure-devops" | "unknown";
   readonly supportsCreateChangeRequest: boolean;
   readonly supportsCheckoutChangeRequest: boolean;
-  readonly supportsReviewThreads: boolean;
+  readonly supportsReviewSessions: boolean;
   readonly supportsInlineComments: boolean;
   readonly supportsDraftChangeRequests: boolean;
 }
@@ -95,7 +95,7 @@ Default behavior:
 - Repository metadata is cached.
 - Default branch metadata is cached.
 - Change-request lists are cached and refreshed on explicit user actions or coarse intervals.
-- Full review threads, comments, file diffs, and timeline data are fetched only when the user opens the relevant review surface or explicitly refreshes it.
+- Full review sessions, comments, file diffs, and timeline data are fetched only when the user opens the relevant review surface or explicitly refreshes it.
 - Create/update operations invalidate affected cache keys immediately after success.
 
 The provider API should make freshness explicit:
@@ -123,7 +123,7 @@ Use Effect `Cache` for provider data:
 - repository metadata/default branch: key by provider repository stable ID or normalized remote URL; TTL around tens of minutes
 - change-request summary lists: key by provider repository, state/filter, source ref, target ref; short TTL with stale-while-revalidate
 - individual change-request summaries: key by provider repository and provider CR ID; short TTL, invalidated after create/update/comment operations
-- review threads/comments/diffs: key by provider CR ID and head SHA/version when available; fetch on demand for T3 Review
+- review sessions/comments/diffs: key by provider CR ID and head SHA/version when available; fetch on demand for T3 Review
 
 Provider drivers should surface rate-limit signals when available:
 
@@ -140,7 +140,7 @@ Avoid rate-limit footguns:
 - no listing all PRs/MRs across all repos to infer one branch state
 - no silent GitHub fallback for unknown providers
 - no unbounded cache cardinality for branch names or free-form search queries
-- no per-thread duplicate provider refresh when multiple views observe the same repository
+- no per-session duplicate provider refresh when multiple views observe the same repository
 
 ## GitHub Provider Rewrite
 
@@ -201,7 +201,7 @@ Rules:
 Use the triaged references as implementation inputs, not merge targets:
 
 - GitLab PR #592 is useful for `glab mr` command mapping and JSON normalization.
-- Azure issue #1138 defines a good first Azure slice: remote/URL detection and change-request thread setup for same-repo URLs.
+- Azure issue #1138 defines a good first Azure slice: remote/URL detection and change-request session setup for same-repo URLs.
 
 The abstraction should let Phase 3 add:
 
@@ -217,7 +217,7 @@ Do not optimize only for creation/checkout. The provider layer must be able to s
 That means contracts should include stable IDs and enough metadata for:
 
 - file-level diffs
-- inline review threads
+- inline review sessions
 - resolved/unresolved state
 - top-level discussion comments
 - pending review submission

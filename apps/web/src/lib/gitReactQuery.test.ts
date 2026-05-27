@@ -16,7 +16,7 @@ import { EnvironmentId, type VcsListRefsResult } from "@t3tools/contracts";
 import {
   gitBranchSearchInfiniteQueryOptions,
   gitMutationKeys,
-  gitPreparePullRequestThreadMutationOptions,
+  gitPreparePullRequestSessionMutationOptions,
   gitPullMutationOptions,
   gitRunStackedActionMutationOptions,
   invalidateGitQueries,
@@ -50,9 +50,9 @@ describe("gitMutationKeys", () => {
     );
   });
 
-  it("scopes pull request thread preparation keys by cwd", () => {
-    expect(gitMutationKeys.preparePullRequestThread(ENVIRONMENT_A, "/repo/a")).not.toEqual(
-      gitMutationKeys.preparePullRequestThread(ENVIRONMENT_A, "/repo/b"),
+  it("scopes pull request session preparation keys by cwd", () => {
+    expect(gitMutationKeys.preparePullRequestSession(ENVIRONMENT_A, "/repo/a")).not.toEqual(
+      gitMutationKeys.preparePullRequestSession(ENVIRONMENT_A, "/repo/b"),
     );
   });
 });
@@ -78,14 +78,14 @@ describe("git mutation options", () => {
     expect(options.mutationKey).toEqual(gitMutationKeys.pull(ENVIRONMENT_A, "/repo/a"));
   });
 
-  it("attaches cwd-scoped mutation key for preparePullRequestThread", () => {
-    const options = gitPreparePullRequestThreadMutationOptions({
+  it("attaches cwd-scoped mutation key for preparePullRequestSession", () => {
+    const options = gitPreparePullRequestSessionMutationOptions({
       environmentId: ENVIRONMENT_A,
       cwd: "/repo/a",
       queryClient,
     });
     expect(options.mutationKey).toEqual(
-      gitMutationKeys.preparePullRequestThread(ENVIRONMENT_A, "/repo/a"),
+      gitMutationKeys.preparePullRequestSession(ENVIRONMENT_A, "/repo/a"),
     );
   });
 });

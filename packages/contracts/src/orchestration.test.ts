@@ -9,36 +9,36 @@ import {
   ModelSelection,
   OrchestrationCommand,
   OrchestrationEvent,
-  OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetFullSessionDiffInput,
   OrchestrationGetTurnDiffInput,
   OrchestrationLatestTurn,
   ProjectCreatedPayload,
   ProjectMetaUpdatedPayload,
   OrchestrationProposedPlan,
-  OrchestrationSession,
+  OrchestrationProviderRuntime,
   ProjectCreateCommand,
-  ThreadMetaUpdatedPayload,
-  ThreadTurnStartCommand,
-  ThreadCreatedPayload,
-  ThreadTurnDiff,
-  ThreadTurnStartRequestedPayload,
+  SessionMetaUpdatedPayload,
+  SessionTurnStartCommand,
+  SessionCreatedPayload,
+  SessionTurnDiff,
+  SessionTurnStartRequestedPayload,
 } from "./orchestration.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 
 const decodeTurnDiffInput = Schema.decodeUnknownEffect(OrchestrationGetTurnDiffInput);
-const decodeFullThreadDiffInput = Schema.decodeUnknownEffect(OrchestrationGetFullThreadDiffInput);
-const decodeThreadTurnDiff = Schema.decodeUnknownEffect(ThreadTurnDiff);
+const decodeFullSessionDiffInput = Schema.decodeUnknownEffect(OrchestrationGetFullSessionDiffInput);
+const decodeSessionTurnDiff = Schema.decodeUnknownEffect(SessionTurnDiff);
 const decodeProjectCreateCommand = Schema.decodeUnknownEffect(ProjectCreateCommand);
 const decodeProjectCreatedPayload = Schema.decodeUnknownEffect(ProjectCreatedPayload);
 const decodeProjectMetaUpdatedPayload = Schema.decodeUnknownEffect(ProjectMetaUpdatedPayload);
-const decodeThreadTurnStartCommand = Schema.decodeUnknownEffect(ThreadTurnStartCommand);
-const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
-  ThreadTurnStartRequestedPayload,
+const decodeSessionTurnStartCommand = Schema.decodeUnknownEffect(SessionTurnStartCommand);
+const decodeSessionTurnStartRequestedPayload = Schema.decodeUnknownEffect(
+  SessionTurnStartRequestedPayload,
 );
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
-const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
-const encodeThreadCreatedPayload = Schema.encodeEffect(ThreadCreatedPayload);
+const decodeOrchestrationProviderRuntime = Schema.decodeUnknownEffect(OrchestrationProviderRuntime);
+const encodeSessionCreatedPayload = Schema.encodeEffect(SessionCreatedPayload);
 
 function getOptionValue(
   options: ReadonlyArray<{ id: string; value: unknown }> | undefined,
@@ -46,15 +46,15 @@ function getOptionValue(
 ): unknown {
   return options?.find((option) => option.id === id)?.value;
 }
-const decodeThreadCreatedPayload = Schema.decodeUnknownEffect(ThreadCreatedPayload);
+const decodeSessionCreatedPayload = Schema.decodeUnknownEffect(SessionCreatedPayload);
 const decodeOrchestrationCommand = Schema.decodeUnknownEffect(OrchestrationCommand);
 const decodeOrchestrationEvent = Schema.decodeUnknownEffect(OrchestrationEvent);
-const decodeThreadMetaUpdatedPayload = Schema.decodeUnknownEffect(ThreadMetaUpdatedPayload);
+const decodeSessionMetaUpdatedPayload = Schema.decodeUnknownEffect(SessionMetaUpdatedPayload);
 
 it.effect("parses turn diff input when fromTurnCount <= toTurnCount", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeTurnDiffInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       fromTurnCount: 1,
       toTurnCount: 2,
     });
@@ -66,7 +66,7 @@ it.effect("parses turn diff input when fromTurnCount <= toTurnCount", () =>
 it.effect("parses turn diff input with whitespace ignoring enabled", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeTurnDiffInput({
-      threadId: "thread-1",
+      sessionId: "session-1",
       fromTurnCount: 1,
       toTurnCount: 2,
       ignoreWhitespace: true,
@@ -75,10 +75,10 @@ it.effect("parses turn diff input with whitespace ignoring enabled", () =>
   }),
 );
 
-it.effect("parses full thread diff input with whitespace ignoring enabled", () =>
+it.effect("parses full session diff input with whitespace ignoring enabled", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeFullThreadDiffInput({
-      threadId: "thread-1",
+    const parsed = yield* decodeFullSessionDiffInput({
+      sessionId: "session-1",
       toTurnCount: 2,
       ignoreWhitespace: true,
     });
@@ -90,7 +90,7 @@ it.effect("rejects turn diff input when fromTurnCount > toTurnCount", () =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(
       decodeTurnDiffInput({
-        threadId: "thread-1",
+        sessionId: "session-1",
         fromTurnCount: 3,
         toTurnCount: 2,
       }),
@@ -99,11 +99,11 @@ it.effect("rejects turn diff input when fromTurnCount > toTurnCount", () =>
   }),
 );
 
-it.effect("rejects thread turn diff when fromTurnCount > toTurnCount", () =>
+it.effect("rejects session turn diff when fromTurnCount > toTurnCount", () =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(
-      decodeThreadTurnDiff({
-        threadId: "thread-1",
+      decodeSessionTurnDiff({
+        sessionId: "session-1",
         fromTurnCount: 3,
         toTurnCount: 2,
         diff: "patch",
@@ -203,12 +203,12 @@ it.effect("rejects command fields that become empty after trim", () =>
   }),
 );
 
-it.effect("decodes thread.turn.start defaults for provider and runtime mode", () =>
+it.effect("decodes session.turn.start defaults for provider and runtime mode", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartCommand({
-      type: "thread.turn.start",
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
       commandId: "cmd-turn-1",
-      threadId: "thread-1",
+      sessionId: "session-1",
       message: {
         messageId: "msg-1",
         role: "user",
@@ -223,12 +223,12 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
   }),
 );
 
-it.effect("preserves explicit provider and runtime mode in thread.turn.start", () =>
+it.effect("preserves explicit provider and runtime mode in session.turn.start", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartCommand({
-      type: "thread.turn.start",
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
       commandId: "cmd-turn-2",
-      threadId: "thread-1",
+      sessionId: "session-1",
       message: {
         messageId: "msg-2",
         role: "user",
@@ -248,12 +248,12 @@ it.effect("preserves explicit provider and runtime mode in thread.turn.start", (
   }),
 );
 
-it.effect("accepts bootstrap metadata in thread.turn.start", () =>
+it.effect("accepts bootstrap metadata in session.turn.start", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartCommand({
-      type: "thread.turn.start",
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
       commandId: "cmd-turn-bootstrap",
-      threadId: "thread-1",
+      sessionId: "session-1",
       message: {
         messageId: "msg-bootstrap",
         role: "user",
@@ -261,9 +261,9 @@ it.effect("accepts bootstrap metadata in thread.turn.start", () =>
         attachments: [],
       },
       bootstrap: {
-        createThread: {
+        createSession: {
           projectId: "project-1",
-          title: "Bootstrap thread",
+          title: "Bootstrap session",
           modelSelection: {
             provider: "codex",
             model: "gpt-5.4",
@@ -283,18 +283,18 @@ it.effect("accepts bootstrap metadata in thread.turn.start", () =>
       },
       createdAt: "2026-01-01T00:00:00.000Z",
     });
-    assert.strictEqual(parsed.bootstrap?.createThread?.projectId, "project-1");
+    assert.strictEqual(parsed.bootstrap?.createSession?.projectId, "project-1");
     assert.strictEqual(parsed.bootstrap?.prepareWorktree?.baseBranch, "main");
     assert.strictEqual(parsed.bootstrap?.runSetupScript, true);
   }),
 );
 
-it.effect("decodes thread.created runtime mode for historical events", () =>
+it.effect("decodes session.created runtime mode for historical events", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadCreatedPayload({
-      threadId: "thread-1",
+    const parsed = yield* decodeSessionCreatedPayload({
+      sessionId: "session-1",
       projectId: "project-1",
-      title: "Thread title",
+      title: "Session title",
       modelSelection: {
         provider: "codex",
         model: "gpt-5.4",
@@ -311,10 +311,10 @@ it.effect("decodes thread.created runtime mode for historical events", () =>
   }),
 );
 
-it.effect("decodes thread.meta-updated payloads with explicit provider", () =>
+it.effect("decodes session.meta-updated payloads with explicit provider", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadMetaUpdatedPayload({
-      threadId: "thread-1",
+    const parsed = yield* decodeSessionMetaUpdatedPayload({
+      sessionId: "session-1",
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
@@ -325,39 +325,39 @@ it.effect("decodes thread.meta-updated payloads with explicit provider", () =>
   }),
 );
 
-it.effect("decodes thread archive and unarchive commands", () =>
+it.effect("decodes session archive and unarchive commands", () =>
   Effect.gen(function* () {
     const archive = yield* decodeOrchestrationCommand({
-      type: "thread.archive",
+      type: "session.archive",
       commandId: "cmd-archive-1",
-      threadId: "thread-1",
+      sessionId: "session-1",
     });
     const unarchive = yield* decodeOrchestrationCommand({
-      type: "thread.unarchive",
+      type: "session.unarchive",
       commandId: "cmd-unarchive-1",
-      threadId: "thread-1",
+      sessionId: "session-1",
     });
 
-    assert.strictEqual(archive.type, "thread.archive");
-    assert.strictEqual(unarchive.type, "thread.unarchive");
+    assert.strictEqual(archive.type, "session.archive");
+    assert.strictEqual(unarchive.type, "session.unarchive");
   }),
 );
 
-it.effect("decodes thread archived and unarchived events", () =>
+it.effect("decodes session archived and unarchived events", () =>
   Effect.gen(function* () {
     const archived = yield* decodeOrchestrationEvent({
       sequence: 1,
       eventId: "event-archive-1",
-      aggregateKind: "thread",
-      aggregateId: "thread-1",
-      type: "thread.archived",
+      aggregateKind: "session",
+      aggregateId: "session-1",
+      type: "session.archived",
       occurredAt: "2026-01-01T00:00:00.000Z",
       commandId: "cmd-archive-1",
       causationEventId: null,
       correlationId: "cmd-archive-1",
       metadata: {},
       payload: {
-        threadId: "thread-1",
+        sessionId: "session-1",
         archivedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
@@ -365,32 +365,32 @@ it.effect("decodes thread archived and unarchived events", () =>
     const unarchived = yield* decodeOrchestrationEvent({
       sequence: 2,
       eventId: "event-unarchive-1",
-      aggregateKind: "thread",
-      aggregateId: "thread-1",
-      type: "thread.unarchived",
+      aggregateKind: "session",
+      aggregateId: "session-1",
+      type: "session.unarchived",
       occurredAt: "2026-01-02T00:00:00.000Z",
       commandId: "cmd-unarchive-1",
       causationEventId: null,
       correlationId: "cmd-unarchive-1",
       metadata: {},
       payload: {
-        threadId: "thread-1",
+        sessionId: "session-1",
         updatedAt: "2026-01-02T00:00:00.000Z",
       },
     });
 
-    assert.strictEqual(archived.type, "thread.archived");
+    assert.strictEqual(archived.type, "session.archived");
     assert.strictEqual(archived.payload.archivedAt, "2026-01-01T00:00:00.000Z");
-    assert.strictEqual(unarchived.type, "thread.unarchived");
+    assert.strictEqual(unarchived.type, "session.unarchived");
   }),
 );
 
-it.effect("accepts provider-scoped model options in thread.turn.start", () =>
+it.effect("accepts provider-scoped model options in session.turn.start", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartCommand({
-      type: "thread.turn.start",
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
       commandId: "cmd-turn-options",
-      threadId: "thread-1",
+      sessionId: "session-1",
       message: {
         messageId: "msg-options",
         role: "user",
@@ -415,10 +415,10 @@ it.effect("accepts provider-scoped model options in thread.turn.start", () =>
 
 it.effect("normalizes legacy object-shaped modelSelection.options on decode", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadCreatedPayload({
-      threadId: "thread-1",
+    const parsed = yield* decodeSessionCreatedPayload({
+      sessionId: "session-1",
       projectId: "project-1",
-      title: "Legacy options thread",
+      title: "Legacy options session",
       modelSelection: {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
@@ -471,10 +471,10 @@ it.effect(
   "normalizes legacy object-shaped options on decode and re-encodes as canonical array",
   () =>
     Effect.gen(function* () {
-      const decoded = yield* decodeThreadCreatedPayload({
-        threadId: "thread-1",
+      const decoded = yield* decodeSessionCreatedPayload({
+        sessionId: "session-1",
         projectId: "project-1",
-        title: "Round trip thread",
+        title: "Round trip session",
         modelSelection: {
           provider: "codex",
           model: "gpt-5.4",
@@ -486,17 +486,17 @@ it.effect(
         updatedAt: "2026-01-01T00:00:00.000Z",
       });
 
-      const encoded = yield* encodeThreadCreatedPayload(decoded);
+      const encoded = yield* encodeSessionCreatedPayload(decoded);
       assert.deepStrictEqual(encoded.modelSelection.options, [{ id: "fastMode", value: true }]);
     }),
 );
 
-it.effect("accepts a title seed in thread.turn.start", () =>
+it.effect("accepts a title seed in session.turn.start", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartCommand({
-      type: "thread.turn.start",
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
       commandId: "cmd-turn-title-seed",
-      threadId: "thread-1",
+      sessionId: "session-1",
       message: {
         messageId: "msg-title-seed",
         role: "user",
@@ -510,12 +510,12 @@ it.effect("accepts a title seed in thread.turn.start", () =>
   }),
 );
 
-it.effect("accepts a source proposed plan reference in thread.turn.start", () =>
+it.effect("accepts a source proposed plan reference in session.turn.start", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartCommand({
-      type: "thread.turn.start",
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
       commandId: "cmd-turn-source-plan",
-      threadId: "thread-2",
+      sessionId: "session-2",
       message: {
         messageId: "msg-source-plan",
         role: "user",
@@ -523,24 +523,24 @@ it.effect("accepts a source proposed plan reference in thread.turn.start", () =>
         attachments: [],
       },
       sourceProposedPlan: {
-        threadId: "thread-1",
+        sessionId: "session-1",
         planId: "plan-1",
       },
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.deepStrictEqual(parsed.sourceProposedPlan, {
-      threadId: "thread-1",
+      sessionId: "session-1",
       planId: "plan-1",
     });
   }),
 );
 
 it.effect(
-  "decodes thread.turn-start-requested defaults for provider, runtime mode, and interaction mode",
+  "decodes session.turn-start-requested defaults for provider, runtime mode, and interaction mode",
   () =>
     Effect.gen(function* () {
-      const parsed = yield* decodeThreadTurnStartRequestedPayload({
-        threadId: "thread-1",
+      const parsed = yield* decodeSessionTurnStartRequestedPayload({
+        sessionId: "session-1",
         messageId: "msg-1",
         createdAt: "2026-01-01T00:00:00.000Z",
       });
@@ -551,28 +551,28 @@ it.effect(
     }),
 );
 
-it.effect("decodes thread.turn-start-requested source proposed plan metadata when present", () =>
+it.effect("decodes session.turn-start-requested source proposed plan metadata when present", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartRequestedPayload({
-      threadId: "thread-2",
+    const parsed = yield* decodeSessionTurnStartRequestedPayload({
+      sessionId: "session-2",
       messageId: "msg-2",
       sourceProposedPlan: {
-        threadId: "thread-1",
+        sessionId: "session-1",
         planId: "plan-1",
       },
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.deepStrictEqual(parsed.sourceProposedPlan, {
-      threadId: "thread-1",
+      sessionId: "session-1",
       planId: "plan-1",
     });
   }),
 );
 
-it.effect("decodes thread.turn-start-requested title seed when present", () =>
+it.effect("decodes session.turn-start-requested title seed when present", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeThreadTurnStartRequestedPayload({
-      threadId: "thread-2",
+    const parsed = yield* decodeSessionTurnStartRequestedPayload({
+      sessionId: "session-2",
       messageId: "msg-2",
       titleSeed: "Investigate reconnect failures",
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -591,12 +591,12 @@ it.effect("decodes latest turn source proposed plan metadata when present", () =
       completedAt: null,
       assistantMessageId: null,
       sourceProposedPlan: {
-        threadId: "thread-1",
+        sessionId: "session-1",
         planId: "plan-1",
       },
     });
     assert.deepStrictEqual(parsed.sourceProposedPlan, {
-      threadId: "thread-1",
+      sessionId: "session-1",
       planId: "plan-1",
     });
   }),
@@ -604,12 +604,10 @@ it.effect("decodes latest turn source proposed plan metadata when present", () =
 
 it.effect("decodes orchestration session runtime mode defaults", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeOrchestrationSession({
-      threadId: "thread-1",
+    const parsed = yield* decodeOrchestrationProviderRuntime({
+      sessionId: "session-1",
       status: "idle",
       providerName: null,
-      providerSessionId: null,
-      providerThreadId: null,
       activeTurnId: null,
       lastError: null,
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -628,7 +626,7 @@ it.effect("defaults proposed plan implementation metadata for historical rows", 
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.implementedAt, null);
-    assert.strictEqual(parsed.implementationThreadId, null);
+    assert.strictEqual(parsed.implementationSessionId, null);
   }),
 );
 
@@ -639,12 +637,12 @@ it.effect("preserves proposed plan implementation metadata when present", () =>
       turnId: "turn-2",
       planMarkdown: "# Plan",
       implementedAt: "2026-01-02T00:00:00.000Z",
-      implementationThreadId: "thread-2",
+      implementationSessionId: "session-2",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
     assert.strictEqual(parsed.implementedAt, "2026-01-02T00:00:00.000Z");
-    assert.strictEqual(parsed.implementationThreadId, "thread-2");
+    assert.strictEqual(parsed.implementationSessionId, "session-2");
   }),
 );
 

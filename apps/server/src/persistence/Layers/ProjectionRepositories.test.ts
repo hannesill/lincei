@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId, ProviderInstanceId } from "@t3tools/contracts";
+import { ProjectId, SessionId, ProviderInstanceId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,14 +7,14 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { ProjectionProjectRepositoryLive } from "./ProjectionProjects.ts";
-import { ProjectionThreadRepositoryLive } from "./ProjectionThreads.ts";
+import { ProjectionSessionRepositoryLive } from "./ProjectionSessions.ts";
 import { ProjectionProjectRepository } from "../Services/ProjectionProjects.ts";
-import { ProjectionThreadRepository } from "../Services/ProjectionThreads.ts";
+import { ProjectionSessionRepository } from "../Services/ProjectionSessions.ts";
 
 const projectionRepositoriesLayer = it.layer(
   Layer.mergeAll(
     ProjectionProjectRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    ProjectionThreadRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
+    ProjectionSessionRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
     SqlitePersistenceMemory,
   ),
 );
@@ -70,15 +70,15 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
     }),
   );
 
-  it.effect("stores JSON for thread model options", () =>
+  it.effect("stores JSON for session model options", () =>
     Effect.gen(function* () {
-      const threads = yield* ProjectionThreadRepository;
+      const sessions = yield* ProjectionSessionRepository;
       const sql = yield* SqlClient.SqlClient;
 
-      yield* threads.upsert({
-        threadId: ThreadId.make("thread-null-options"),
+      yield* sessions.upsert({
+        sessionId: SessionId.make("session-null-options"),
         projectId: ProjectId.make("project-null-options"),
-        title: "Null options thread",
+        title: "Null options session",
         modelSelection: {
           instanceId: ProviderInstanceId.make("claudeAgent"),
           model: "claude-opus-4-6",
@@ -102,12 +102,12 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         readonly modelSelection: string | null;
       }>`
         SELECT model_selection_json AS "modelSelection"
-        FROM projection_threads
-        WHERE thread_id = 'thread-null-options'
+        FROM projection_sessions
+        WHERE session_id = 'session-null-options'
       `;
       const row = rows[0];
       if (!row) {
-        return yield* Effect.die("Expected projection_threads row to exist.");
+        return yield* Effect.die("Expected projection_sessions row to exist.");
       }
 
       assert.strictEqual(
@@ -119,8 +119,8 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         }),
       );
 
-      const persisted = yield* threads.getById({
-        threadId: ThreadId.make("thread-null-options"),
+      const persisted = yield* sessions.getById({
+        sessionId: SessionId.make("session-null-options"),
       });
       assert.deepStrictEqual(Option.getOrNull(persisted)?.modelSelection, {
         instanceId: ProviderInstanceId.make("claudeAgent"),

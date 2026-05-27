@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CheckpointReactor } from "../Services/CheckpointReactor.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
-import { ThreadDeletionReactor } from "../Services/ThreadDeletionReactor.ts";
+import { SessionDeletionReactor } from "../Services/SessionDeletionReactor.ts";
 import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 
@@ -22,7 +22,7 @@ describe("OrchestrationReactor", () => {
     runtime = null;
   });
 
-  it("starts provider ingestion, provider command, checkpoint, and thread deletion reactors", async () => {
+  it("starts provider ingestion, provider command, checkpoint, and session deletion reactors", async () => {
     const started: string[] = [];
 
     runtime = ManagedRuntime.make(
@@ -55,9 +55,9 @@ describe("OrchestrationReactor", () => {
           }),
         ),
         Layer.provideMerge(
-          Layer.succeed(ThreadDeletionReactor, {
+          Layer.succeed(SessionDeletionReactor, {
             start: () => {
-              started.push("thread-deletion-reactor");
+              started.push("session-deletion-reactor");
               return Effect.void;
             },
             drain: Effect.void,
@@ -74,7 +74,7 @@ describe("OrchestrationReactor", () => {
       "provider-runtime-ingestion",
       "provider-command-reactor",
       "checkpoint-reactor",
-      "thread-deletion-reactor",
+      "session-deletion-reactor",
     ]);
 
     await Effect.runPromise(Scope.close(scope, Exit.void));

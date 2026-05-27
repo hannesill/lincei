@@ -223,7 +223,7 @@ describe("getComposerProviderState", () => {
 });
 
 describe("provider traits render guards", () => {
-  it("returns null when no thread target is provided", () => {
+  it("returns null when no session target is provided", () => {
     const models = modelWith([
       selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
     ]);

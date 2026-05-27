@@ -2,7 +2,7 @@ import {
   type ProviderDriverKind,
   type ProviderInstanceId,
   type ProviderOptionSelection,
-  type ScopedThreadRef,
+  type ScopedSessionRef,
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import {
@@ -37,7 +37,7 @@ export type ComposerProviderState = {
 type TraitsRenderInput = {
   provider: ProviderDriverKind;
   instanceId?: ProviderInstanceId;
-  threadRef?: ScopedThreadRef;
+  sessionRef?: ScopedSessionRef;
   draftId?: DraftId;
   model: string;
   models: ReadonlyArray<ServerProviderModel>;
@@ -81,7 +81,7 @@ function renderTraitsControl(
   const {
     provider,
     instanceId,
-    threadRef,
+    sessionRef,
     draftId,
     model,
     models,
@@ -89,7 +89,7 @@ function renderTraitsControl(
     prompt,
     onPromptChange,
   } = input;
-  const hasTarget = threadRef !== undefined || draftId !== undefined;
+  const hasTarget = sessionRef !== undefined || draftId !== undefined;
   if (
     !hasTarget ||
     !shouldRenderTraitsControls({ provider, models, model, modelOptions, prompt })
@@ -101,7 +101,7 @@ function renderTraitsControl(
       provider={provider}
       {...(instanceId ? { instanceId } : {})}
       models={models}
-      {...(threadRef ? { threadRef } : {})}
+      {...(sessionRef ? { sessionRef } : {})}
       {...(draftId ? { draftId } : {})}
       model={model}
       modelOptions={modelOptions}
