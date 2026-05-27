@@ -5,6 +5,16 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import { AuthAccessStreamEvent } from "./auth.ts";
 import {
+  DatasetClearCredentialsInput,
+  DatasetCredentialsResult,
+  DatasetInitializeInput,
+  DatasetRpcError,
+  DatasetSaveBigQueryCredentialsInput,
+  DatasetSavePhysioNetCredentialsInput,
+  DatasetSetActiveDatasetInput,
+  DatasetStatusResult,
+} from "./datasets.ts";
+import {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
   FilesystemBrowseError,
@@ -150,6 +160,14 @@ export const WS_METHODS = {
   serverGetProcessResourceHistory: "server.getProcessResourceHistory",
   serverSignalProcess: "server.signalProcess",
 
+  // Dataset methods
+  datasetsGetStatus: "datasets.getStatus",
+  datasetsSavePhysioNetCredentials: "datasets.savePhysioNetCredentials",
+  datasetsSaveBigQueryCredentials: "datasets.saveBigQueryCredentials",
+  datasetsInitialize: "datasets.initialize",
+  datasetsSetActiveDataset: "datasets.setActiveDataset",
+  datasetsClearCredentials: "datasets.clearCredentials",
+
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -238,6 +256,48 @@ export const WsServerGetProcessResourceHistoryRpc = Rpc.make(
 export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
   payload: ServerSignalProcessInput,
   success: ServerSignalProcessResult,
+});
+
+export const WsDatasetsGetStatusRpc = Rpc.make(WS_METHODS.datasetsGetStatus, {
+  payload: Schema.Struct({}),
+  success: DatasetStatusResult,
+  error: DatasetRpcError,
+});
+
+export const WsDatasetsSavePhysioNetCredentialsRpc = Rpc.make(
+  WS_METHODS.datasetsSavePhysioNetCredentials,
+  {
+    payload: DatasetSavePhysioNetCredentialsInput,
+    success: DatasetCredentialsResult,
+    error: DatasetRpcError,
+  },
+);
+
+export const WsDatasetsSaveBigQueryCredentialsRpc = Rpc.make(
+  WS_METHODS.datasetsSaveBigQueryCredentials,
+  {
+    payload: DatasetSaveBigQueryCredentialsInput,
+    success: DatasetCredentialsResult,
+    error: DatasetRpcError,
+  },
+);
+
+export const WsDatasetsInitializeRpc = Rpc.make(WS_METHODS.datasetsInitialize, {
+  payload: DatasetInitializeInput,
+  success: DatasetStatusResult,
+  error: DatasetRpcError,
+});
+
+export const WsDatasetsSetActiveDatasetRpc = Rpc.make(WS_METHODS.datasetsSetActiveDataset, {
+  payload: DatasetSetActiveDatasetInput,
+  success: DatasetStatusResult,
+  error: DatasetRpcError,
+});
+
+export const WsDatasetsClearCredentialsRpc = Rpc.make(WS_METHODS.datasetsClearCredentials, {
+  payload: DatasetClearCredentialsInput,
+  success: DatasetCredentialsResult,
+  error: DatasetRpcError,
 });
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(

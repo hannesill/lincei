@@ -11,6 +11,11 @@ const encodeServerSettings = Schema.encodeSync(ServerSettings);
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
     expect(DEFAULT_SERVER_SETTINGS.providerInstances).toEqual({});
+    expect(DEFAULT_SERVER_SETTINGS.datasets).toEqual({
+      workspacePath: "",
+      preferredBackendId: "duckdb",
+      m4Command: "",
+    });
   });
 
   it("decodes a fully empty config (legacy on-disk shape) without complaint", () => {
@@ -91,6 +96,26 @@ describe("ServerSettingsPatch.providerInstances", () => {
     });
     const ollamaId = ProviderInstanceId.make("ollama_local");
     expect(patch.providerInstances?.[ollamaId]?.driver).toBe("ollama");
+  });
+});
+
+describe("ServerSettingsPatch.datasets", () => {
+  it("keeps dataset preferences non-secret and patchable", () => {
+    const patch = decodeServerSettingsPatch({
+      datasets: {
+        workspacePath: "  ~/.lincei/m4  ",
+        preferredBackendId: "bigquery",
+        activeDatasetId: "mimic-iv-demo",
+        m4Command: "  uvx m4-infra  ",
+      },
+    });
+
+    expect(patch.datasets).toEqual({
+      workspacePath: "~/.lincei/m4",
+      preferredBackendId: "bigquery",
+      activeDatasetId: "mimic-iv-demo",
+      m4Command: "uvx m4-infra",
+    });
   });
 });
 
