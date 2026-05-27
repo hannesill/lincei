@@ -542,7 +542,7 @@ describe("ProviderModelPicker", () => {
         ...buildCodexProvider(isolatedCodexModels),
         instanceId: "codex_isolated" as ProviderInstanceId,
         displayName: "Codex Isolated",
-        accentColor: "#16a34a",
+        accentColor: "#52525b",
         continuation: { groupKey: "codex:home:/Users/julius/.codex_isolated" },
       },
       TEST_PROVIDERS[1]!,

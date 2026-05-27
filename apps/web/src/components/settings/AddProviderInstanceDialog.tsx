@@ -11,7 +11,7 @@ import {
 
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
-import { normalizeProviderAccentColor } from "../../providerInstances";
+import { PROVIDER_ACCENT_SWATCHES, normalizeProviderAccentColor } from "../../providerInstances";
 import { Button } from "../ui/button";
 import { ACPRegistryIcon, Gemini, GithubCopilotIcon, PiAgentIcon, type Icon } from "../Icons";
 import {
@@ -29,15 +29,6 @@ import { toastManager } from "../ui/toast";
 import { DRIVER_OPTION_BY_VALUE, DRIVER_OPTIONS } from "./providerDriverMeta";
 import { ProviderSettingsForm, deriveProviderSettingsFields } from "./ProviderSettingsForm";
 import { AnimatedHeight } from "../AnimatedHeight";
-
-const PROVIDER_ACCENT_SWATCHES = [
-  "#2563eb",
-  "#16a34a",
-  "#ea580c",
-  "#dc2626",
-  "#7c3aed",
-  "#0891b2",
-] as const;
 
 /**
  * Normalize a user-provided label into a slug suffix for the instance id.

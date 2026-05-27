@@ -23,7 +23,7 @@ import {
 
 import { cn } from "../../lib/utils";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { normalizeProviderAccentColor } from "../../providerInstances";
+import { PROVIDER_ACCENT_SWATCHES, normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
@@ -45,15 +45,6 @@ import {
   getProviderVersionLabel,
   type ProviderStatusKey,
 } from "./providerStatus";
-
-const PROVIDER_ACCENT_SWATCHES = [
-  "#2563eb",
-  "#16a34a",
-  "#ea580c",
-  "#dc2626",
-  "#7c3aed",
-  "#0891b2",
-] as const;
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 

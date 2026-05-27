@@ -85,6 +85,15 @@ export function normalizeProviderAccentColor(value: string | undefined): string 
   return /^#[0-9a-fA-F]{6}$/u.test(trimmed) ? trimmed : undefined;
 }
 
+export const PROVIDER_ACCENT_SWATCHES = [
+  "#2563eb",
+  "#52525b",
+  "#ea580c",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+] as const;
+
 /**
  * Resolve an entry's displayName with a tiered priority:
  *
