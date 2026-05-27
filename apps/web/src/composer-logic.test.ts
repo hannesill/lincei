@@ -67,6 +67,18 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("detects slash command trigger after existing text", () => {
+    const text = "Please /mo";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "mo",
+      rangeStart: "Please ".length,
+      rangeEnd: text.length,
+    });
+  });
+
   it("keeps slash command detection active for provider commands", () => {
     const text = "/rev";
     const trigger = detectComposerTrigger(text, text.length);
