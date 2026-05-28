@@ -1249,9 +1249,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setIsComposerFooterCompact(initialCompactness.footerCompact);
     if (typeof ResizeObserver === "undefined") return;
 
-    const observer = new ResizeObserver((entries) => {
-      const [entry] = entries;
-      if (!entry) return;
+    let pendingHeight = composerFormHeightRef.current;
+    let footerLayoutFrameId: number | null = null;
+
+    const flushFooterLayoutMeasurement = () => {
+      footerLayoutFrameId = null;
       const nextCompactness = measureFooterCompactness();
       setIsComposerPrimaryActionsCompact((previous) =>
         previous === nextCompactness.primaryActionsCompact
@@ -1261,17 +1263,28 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setIsComposerFooterCompact((previous) =>
         previous === nextCompactness.footerCompact ? previous : nextCompactness.footerCompact,
       );
-      const nextHeight = entry.contentRect.height;
+      const nextHeight = pendingHeight;
       const previousHeight = composerFormHeightRef.current;
       composerFormHeightRef.current = nextHeight;
       if (previousHeight > 0 && Math.abs(nextHeight - previousHeight) < 0.5) return;
       if (!shouldAutoScrollRef.current) return;
       scheduleStickToBottom();
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      const [entry] = entries;
+      if (!entry) return;
+      pendingHeight = entry.contentRect.height;
+      if (footerLayoutFrameId !== null) return;
+      footerLayoutFrameId = window.requestAnimationFrame(flushFooterLayoutMeasurement);
     });
 
     observer.observe(composerForm);
     return () => {
       observer.disconnect();
+      if (footerLayoutFrameId !== null) {
+        window.cancelAnimationFrame(footerLayoutFrameId);
+      }
     };
   }, [
     activeSessionId,

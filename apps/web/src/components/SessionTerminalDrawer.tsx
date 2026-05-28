@@ -1078,7 +1078,9 @@ export default function SessionTerminalDrawer({
       return;
     }
 
-    const onWindowResize = () => {
+    let resizeFrameId: number | null = null;
+    const flushWindowResize = () => {
+      resizeFrameId = null;
       const clampedHeight = clampDrawerHeight(drawerHeightRef.current);
       const changed = clampedHeight !== drawerHeightRef.current;
       if (changed) {
@@ -1090,9 +1092,19 @@ export default function SessionTerminalDrawer({
       }
       setResizeEpoch((value) => value + 1);
     };
+    const onWindowResize = () => {
+      if (resizeFrameId !== null) {
+        return;
+      }
+      resizeFrameId = window.requestAnimationFrame(flushWindowResize);
+    };
+
     window.addEventListener("resize", onWindowResize);
     return () => {
       window.removeEventListener("resize", onWindowResize);
+      if (resizeFrameId !== null) {
+        window.cancelAnimationFrame(resizeFrameId);
+      }
     };
   }, [syncHeight, visible]);
 
