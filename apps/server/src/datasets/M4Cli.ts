@@ -96,10 +96,12 @@ const decodeM4StatusSnapshot = decodeJsonResult(M4StatusSnapshot);
 export interface M4CliStatusInput {
   readonly cwd: string;
   readonly credentials: DatasetCredentialPresence;
+  readonly env?: NodeJS.ProcessEnv | undefined;
 }
 
 export interface M4CliCommandInput {
   readonly cwd: string;
+  readonly env?: NodeJS.ProcessEnv | undefined;
 }
 
 export interface M4CliInitializeInput extends M4CliCommandInput {
@@ -433,6 +435,7 @@ export const makeM4Cli = Effect.gen(function* () {
 
   const run = (input: {
     readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv | undefined;
     readonly lifecycleArgs: ReadonlyArray<string>;
     readonly timeout: Duration.Input;
   }) =>
@@ -446,6 +449,7 @@ export const makeM4Cli = Effect.gen(function* () {
           command: resolved.command,
           args,
           cwd: input.cwd,
+          env: input.env,
           timeout: input.timeout,
           maxOutputBytes: MAX_OUTPUT_BYTES,
           outputMode: "truncate",
@@ -522,6 +526,7 @@ export const makeM4Cli = Effect.gen(function* () {
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
+        env: input.env,
         lifecycleArgs: ["status", "--all", "--json"],
         timeout: STATUS_TIMEOUT,
       });
@@ -581,6 +586,7 @@ export const makeM4Cli = Effect.gen(function* () {
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
+        env: input.env,
         lifecycleArgs: ["init", input.datasetId, "--json"],
         timeout: COMMAND_TIMEOUT,
       });
@@ -591,6 +597,7 @@ export const makeM4Cli = Effect.gen(function* () {
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
+        env: input.env,
         lifecycleArgs: ["use", input.datasetId, "--json"],
         timeout: STATUS_TIMEOUT,
       });
@@ -601,6 +608,7 @@ export const makeM4Cli = Effect.gen(function* () {
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
+        env: input.env,
         lifecycleArgs: [
           "backend",
           input.backendId,

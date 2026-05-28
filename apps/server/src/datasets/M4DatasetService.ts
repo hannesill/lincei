@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -13,10 +14,12 @@ import {
   type DatasetCredentialPresence,
   type DatasetCredentialsResult,
   type DatasetId,
+  type DatasetInitOperationState,
   type DatasetInitializeInput,
   type DatasetSaveBigQueryCredentialsInput,
   type DatasetSavePhysioNetCredentialsInput,
   type DatasetSetActiveDatasetInput,
+  type DatasetStatusSnapshot,
   type DatasetStatusResult,
 } from "@t3tools/contracts";
 
@@ -43,8 +46,13 @@ const BigQuerySecret = Schema.Struct({
 });
 type BigQuerySecret = typeof BigQuerySecret.Type;
 
+const BigQueryServiceAccountJson = Schema.fromJsonString(
+  Schema.Record(Schema.String, Schema.Unknown),
+);
+
 const decodePhysioNetSecret = Schema.decodeUnknownEffect(PhysioNetSecret);
 const decodeBigQuerySecret = Schema.decodeUnknownEffect(BigQuerySecret);
+const decodeBigQueryServiceAccountJson = Schema.decodeUnknownEffect(BigQueryServiceAccountJson);
 
 export interface M4DatasetServiceShape {
   readonly getStatus: () => Effect.Effect<DatasetStatusResult, DatasetRpcError>;
@@ -105,7 +113,26 @@ function missingBigQueryCredentials(): DatasetRpcError {
   return new DatasetRpcError({
     code: "missing_credentials",
     detail: "BigQuery credentials must be saved before activating the BigQuery backend.",
-    actionableMessage: "Save a BigQuery project ID before using BigQuery datasets.",
+    actionableMessage:
+      "Save a BigQuery project ID with service-account JSON or application default credentials.",
+  });
+}
+
+function invalidBigQueryCredentials(detail: string): DatasetRpcError {
+  return new DatasetRpcError({
+    code: "invalid_credentials",
+    detail,
+    actionableMessage:
+      "Save a BigQuery project ID with valid service-account JSON or enable application default credentials.",
+  });
+}
+
+function credentialFileError(error: unknown): DatasetRpcError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new DatasetRpcError({
+    code: "secret_store_error",
+    detail,
+    actionableMessage: "Lincei could not prepare BigQuery credentials for M4.",
   });
 }
 
@@ -117,12 +144,49 @@ function operationInProgress(datasetId: DatasetId, backendId: DatasetBackendId):
   });
 }
 
+function operationKey(datasetId: DatasetId, backendId: DatasetBackendId): string {
+  return `${datasetId}:${backendId}`;
+}
+
+function credentialPresenceFromSecrets(input: {
+  readonly physioNet: PhysioNetSecret | null;
+  readonly bigQuery: BigQuerySecret | null;
+}): DatasetCredentialPresence {
+  return {
+    physioNet:
+      input.physioNet === null
+        ? { stored: false }
+        : {
+            stored: true,
+            username: input.physioNet.username,
+            updatedAt: input.physioNet.updatedAt,
+          },
+    bigQuery:
+      input.bigQuery === null
+        ? {
+            stored: false,
+            serviceAccountJsonStored: false,
+            applicationDefaultCredentials: false,
+          }
+        : {
+            stored: true,
+            projectId: input.bigQuery.projectId,
+            serviceAccountJsonStored: input.bigQuery.serviceAccountJson !== undefined,
+            applicationDefaultCredentials: input.bigQuery.useApplicationDefaultCredentials,
+            updatedAt: input.bigQuery.updatedAt,
+          },
+  };
+}
+
 export const makeM4DatasetService = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const serverSettings = yield* ServerSettingsService;
   const secretStore = yield* ServerSecretStore;
   const m4Cli = yield* M4Cli;
-  const initializingKeys = yield* Ref.make<ReadonlySet<string>>(new Set());
+  const fileSystem = yield* FileSystem.FileSystem;
+  const activeOperations = yield* Ref.make<ReadonlyMap<string, DatasetInitOperationState>>(
+    new Map(),
+  );
 
   const readPhysioNetSecret = secretStore.get(PHYSIONET_SECRET).pipe(
     Effect.mapError(secretStoreError),
@@ -156,48 +220,80 @@ export const makeM4DatasetService = Effect.gen(function* () {
     ),
   );
 
+  const readCredentialSecrets = Effect.all({
+    physioNet: readPhysioNetSecret,
+    bigQuery: readBigQuerySecret,
+  });
+
   const readCredentialPresence: Effect.Effect<DatasetCredentialPresence, DatasetRpcError> =
-    Effect.all({
-      physioNet: readPhysioNetSecret,
-      bigQuery: readBigQuerySecret,
-    }).pipe(
-      Effect.map(
-        ({ physioNet, bigQuery }): DatasetCredentialPresence => ({
-          physioNet:
-            physioNet === null
-              ? { stored: false }
-              : {
-                  stored: true,
-                  username: physioNet.username,
-                  updatedAt: physioNet.updatedAt,
-                },
-          bigQuery:
-            bigQuery === null
-              ? {
-                  stored: false,
-                  serviceAccountJsonStored: false,
-                  applicationDefaultCredentials: false,
-                }
-              : {
-                  stored: true,
-                  projectId: bigQuery.projectId,
-                  serviceAccountJsonStored: bigQuery.serviceAccountJson !== undefined,
-                  applicationDefaultCredentials: bigQuery.useApplicationDefaultCredentials,
-                  updatedAt: bigQuery.updatedAt,
-                },
-        }),
-      ),
-    );
+    readCredentialSecrets.pipe(Effect.map(credentialPresenceFromSecrets));
 
   const workspacePath = serverSettings.getSettings.pipe(
     Effect.map((settings) => settings.datasets.workspacePath || config.cwd),
     Effect.mapError(settingsError),
   );
 
+  const mergeActiveOperations = (
+    status: DatasetStatusResult,
+    operations: ReadonlyMap<string, DatasetInitOperationState>,
+  ): DatasetStatusResult => {
+    if (operations.size === 0) {
+      return status;
+    }
+
+    const datasets = status.datasets.map((dataset): DatasetStatusSnapshot => {
+      const operation = operations.get(operationKey(dataset.datasetId, dataset.backendId));
+      if (!operation || (operation.state !== "queued" && operation.state !== "running")) {
+        return dataset;
+      }
+      return {
+        ...dataset,
+        readiness: "initializing",
+        operation,
+        error: undefined,
+      };
+    });
+    const activeDataset = datasets.find((dataset) => dataset.active);
+    const appOperation =
+      activeDataset && activeDataset.operation
+        ? activeDataset.operation
+        : status.appReadiness.activeDatasetId && status.appReadiness.activeBackendId
+          ? operations.get(
+              operationKey(
+                status.appReadiness.activeDatasetId,
+                status.appReadiness.activeBackendId,
+              ),
+            )
+          : undefined;
+
+    return {
+      ...status,
+      datasets,
+      appReadiness:
+        appOperation && (appOperation.state === "queued" || appOperation.state === "running")
+          ? {
+              ...status.appReadiness,
+              readiness: "initializing",
+              clinicalDataReady: false,
+              error: undefined,
+            }
+          : status.appReadiness,
+    };
+  };
+
   const getStatus: M4DatasetServiceShape["getStatus"] = () =>
     Effect.gen(function* () {
-      const [cwd, credentials] = yield* Effect.all([workspacePath, readCredentialPresence]);
-      return yield* m4Cli.status({ cwd, credentials });
+      const [cwd, secrets] = yield* Effect.all([workspacePath, readCredentialSecrets]);
+      const credentials = credentialPresenceFromSecrets(secrets);
+      return yield* withBigQueryEnvironment(secrets.bigQuery, (env) =>
+        Effect.gen(function* () {
+          const [status, operations] = yield* Effect.all([
+            m4Cli.status({ cwd, credentials, env }),
+            Ref.get(activeOperations),
+          ]);
+          return mergeActiveOperations(status, operations);
+        }),
+      );
     });
 
   const savePhysioNetCredentials: M4DatasetServiceShape["savePhysioNetCredentials"] = (input) =>
@@ -215,9 +311,23 @@ export const makeM4DatasetService = Effect.gen(function* () {
 
   const saveBigQueryCredentials: M4DatasetServiceShape["saveBigQueryCredentials"] = (input) =>
     Effect.gen(function* () {
+      if (!input.useApplicationDefaultCredentials && input.serviceAccountJson === undefined) {
+        return yield* invalidBigQueryCredentials(
+          "BigQuery credentials require service-account JSON or application default credentials.",
+        );
+      }
+      if (!input.useApplicationDefaultCredentials && input.serviceAccountJson !== undefined) {
+        yield* decodeBigQueryServiceAccountJson(input.serviceAccountJson).pipe(
+          Effect.mapError(() =>
+            invalidBigQueryCredentials("BigQuery service-account JSON is invalid."),
+          ),
+        );
+      }
       const secret: BigQuerySecret = {
         projectId: input.projectId,
-        ...(input.serviceAccountJson ? { serviceAccountJson: input.serviceAccountJson } : {}),
+        ...(!input.useApplicationDefaultCredentials && input.serviceAccountJson
+          ? { serviceAccountJson: input.serviceAccountJson }
+          : {}),
         useApplicationDefaultCredentials: input.useApplicationDefaultCredentials,
         updatedAt: yield* currentIso,
       };
@@ -232,21 +342,28 @@ export const makeM4DatasetService = Effect.gen(function* () {
     backendId: DatasetBackendId,
     effect: Effect.Effect<A, DatasetRpcError>,
   ) => {
-    const key = `${datasetId}:${backendId}`;
+    const key = operationKey(datasetId, backendId);
     return Effect.gen(function* () {
-      const acquired = yield* Ref.modify(initializingKeys, (keys) => {
-        if (keys.has(key)) {
-          return [false, keys] as const;
+      const startedAt = yield* currentIso;
+      const operation: DatasetInitOperationState = {
+        datasetId,
+        backendId,
+        state: "running",
+        startedAt,
+      };
+      const acquired = yield* Ref.modify(activeOperations, (operations) => {
+        if (operations.has(key)) {
+          return [false, operations] as const;
         }
-        return [true, new Set([...keys, key])] as const;
+        return [true, new Map([...operations, [key, operation]])] as const;
       });
       if (!acquired) {
         return yield* operationInProgress(datasetId, backendId);
       }
       return yield* effect.pipe(
         Effect.ensuring(
-          Ref.update(initializingKeys, (keys) => {
-            const next = new Set(keys);
+          Ref.update(activeOperations, (operations) => {
+            const next = new Map(operations);
             next.delete(key);
             return next;
           }),
@@ -260,6 +377,30 @@ export const makeM4DatasetService = Effect.gen(function* () {
       secret ? Effect.succeed(secret) : Effect.fail(missingBigQueryCredentials()),
     ),
   );
+
+  const withBigQueryEnvironment = <A>(
+    secret: BigQuerySecret | null,
+    effect: (env: NodeJS.ProcessEnv | undefined) => Effect.Effect<A, DatasetRpcError>,
+  ): Effect.Effect<A, DatasetRpcError> =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        if (!secret?.serviceAccountJson) {
+          return yield* effect(undefined);
+        }
+        const credentialFilePath = yield* fileSystem
+          .makeTempFileScoped({
+            prefix: `lincei-bigquery-${process.pid}-`,
+            suffix: ".json",
+          })
+          .pipe(
+            Effect.tap((filePath) =>
+              fileSystem.writeFileString(filePath, secret.serviceAccountJson!),
+            ),
+            Effect.mapError(credentialFileError),
+          );
+        return yield* effect({ GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath });
+      }),
+    );
 
   const persistDatasetSelection = (input: {
     readonly datasetId: DatasetId;
@@ -286,8 +427,15 @@ export const makeM4DatasetService = Effect.gen(function* () {
         Effect.gen(function* () {
           if (backendId === "bigquery") {
             const secret = yield* requireBigQuerySecret;
-            yield* m4Cli.backend({ cwd, backendId, projectId: secret.projectId });
-            yield* m4Cli.use({ cwd, datasetId: input.datasetId });
+            return yield* withBigQueryEnvironment(secret, (env) =>
+              Effect.gen(function* () {
+                yield* m4Cli.backend({ cwd, backendId, projectId: secret.projectId, env });
+                yield* m4Cli.use({ cwd, datasetId: input.datasetId, env });
+                yield* persistDatasetSelection({ datasetId: input.datasetId, backendId });
+                const credentials = yield* readCredentialPresence;
+                return yield* m4Cli.status({ cwd, credentials, env });
+              }),
+            );
           } else {
             yield* m4Cli.initialize({ cwd, datasetId: input.datasetId });
           }
@@ -302,13 +450,21 @@ export const makeM4DatasetService = Effect.gen(function* () {
   const setActiveDataset: M4DatasetServiceShape["setActiveDataset"] = (input) =>
     Effect.gen(function* () {
       const cwd = yield* workspacePath;
-      const projectId =
-        input.backendId === "bigquery" ? (yield* requireBigQuerySecret).projectId : undefined;
-      yield* m4Cli.backend({ cwd, backendId: input.backendId, projectId });
-      yield* m4Cli.use({ cwd, datasetId: input.datasetId });
-      yield* persistDatasetSelection(input);
-      const credentials = yield* readCredentialPresence;
-      return yield* m4Cli.status({ cwd, credentials });
+      const secret = input.backendId === "bigquery" ? yield* requireBigQuerySecret : null;
+      return yield* withBigQueryEnvironment(secret, (env) =>
+        Effect.gen(function* () {
+          yield* m4Cli.backend({
+            cwd,
+            backendId: input.backendId,
+            projectId: secret?.projectId,
+            env,
+          });
+          yield* m4Cli.use({ cwd, datasetId: input.datasetId, env });
+          yield* persistDatasetSelection(input);
+          const credentials = yield* readCredentialPresence;
+          return yield* m4Cli.status({ cwd, credentials, env });
+        }),
+      );
     });
 
   const clearCredentials: M4DatasetServiceShape["clearCredentials"] = (input) =>

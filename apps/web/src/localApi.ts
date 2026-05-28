@@ -164,6 +164,30 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
           ? rpcClient.server.signalProcess(input)
           : Promise.reject(unavailableLocalBackendError()),
     },
+    datasets: {
+      getStatus: () =>
+        rpcClient ? rpcClient.datasets.getStatus() : Promise.reject(unavailableLocalBackendError()),
+      savePhysioNetCredentials: (input) =>
+        rpcClient
+          ? rpcClient.datasets.savePhysioNetCredentials(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      saveBigQueryCredentials: (input) =>
+        rpcClient
+          ? rpcClient.datasets.saveBigQueryCredentials(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      initialize: (input) =>
+        rpcClient
+          ? rpcClient.datasets.initialize(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      setActiveDataset: (input) =>
+        rpcClient
+          ? rpcClient.datasets.setActiveDataset(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      clearCredentials: (input) =>
+        rpcClient
+          ? rpcClient.datasets.clearCredentials(input)
+          : Promise.reject(unavailableLocalBackendError()),
+    },
   };
 }
 

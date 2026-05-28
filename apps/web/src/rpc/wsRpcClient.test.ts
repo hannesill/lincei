@@ -1,4 +1,5 @@
 import type {
+  DatasetStatusResult,
   VcsStatusLocalResult,
   VcsStatusRemoteResult,
   VcsStatusStreamEvent,
@@ -35,6 +36,58 @@ const baseRemoteStatus: VcsStatusRemoteResult = {
 };
 
 describe("wsRpcClient", () => {
+  it("exposes dataset RPC methods under a typed namespace", async () => {
+    const datasetStatus: DatasetStatusResult = {
+      runtime: {
+        available: true,
+        command: "uvx --from m4-infra m4",
+        checkedAt: "2026-05-28T10:00:00.000Z",
+      },
+      credentials: {
+        physioNet: { stored: false },
+        bigQuery: {
+          stored: false,
+          serviceAccountJsonStored: false,
+          applicationDefaultCredentials: false,
+        },
+      },
+      datasets: [],
+      appReadiness: {
+        clinicalDataReady: false,
+        readiness: "not_initialized",
+        lastCheckedAt: "2026-05-28T10:00:00.000Z",
+      },
+    };
+    const rpcMethods = {
+      "datasets.getStatus": vi.fn(async () => datasetStatus),
+      "datasets.initialize": vi.fn(async () => datasetStatus),
+      "datasets.setActiveDataset": vi.fn(async () => datasetStatus),
+    };
+    const request = vi.fn((connect: (client: unknown) => Promise<unknown>) => connect(rpcMethods));
+    const transport = {
+      dispose: vi.fn(async () => undefined),
+      reconnect: vi.fn(async () => undefined),
+      request,
+      requestStream: vi.fn(),
+      subscribe: vi.fn(),
+    };
+
+    const client = createWsRpcClient(transport as unknown as WsTransport);
+
+    await expect(client.datasets.getStatus()).resolves.toEqual(datasetStatus);
+    await expect(
+      client.datasets.initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" }),
+    ).resolves.toEqual(datasetStatus);
+    await expect(
+      client.datasets.setActiveDataset({ datasetId: "mimic-iv-demo", backendId: "duckdb" }),
+    ).resolves.toEqual(datasetStatus);
+    expect(rpcMethods["datasets.getStatus"]).toHaveBeenCalledWith({});
+    expect(rpcMethods["datasets.initialize"]).toHaveBeenCalledWith({
+      datasetId: "mimic-iv-demo",
+      backendId: "duckdb",
+    });
+  });
+
   it("reduces vcs status stream events into flat status snapshots", () => {
     const subscribe = vi.fn(<TValue>(_connect: unknown, listener: (value: TValue) => void) => {
       for (const event of [

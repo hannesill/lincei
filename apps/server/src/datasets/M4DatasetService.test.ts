@@ -3,6 +3,7 @@ import { assert, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
@@ -176,6 +177,75 @@ describe("M4DatasetService", () => {
       }).pipe(Effect.provide(makeLayer())),
     );
 
+    it.effect("materializes saved BigQuery service-account JSON only for scoped M4 calls", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        let credentialFilePath: string | undefined;
+        mockBackend.mockImplementationOnce((input) =>
+          Effect.gen(function* () {
+            credentialFilePath = input.env?.GOOGLE_APPLICATION_CREDENTIALS;
+            expect(credentialFilePath).toBeDefined();
+            const serviceAccountJson = yield* fileSystem
+              .readFileString(credentialFilePath!)
+              .pipe(Effect.orDie);
+            expect(serviceAccountJson).toBe('{"private_key":"secret"}');
+            return commandResult;
+          }),
+        );
+        const service = yield* M4DatasetService;
+
+        yield* service.saveBigQueryCredentials({
+          projectId: "clinical-project",
+          serviceAccountJson: '{"private_key":"secret"}',
+          useApplicationDefaultCredentials: false,
+        });
+        yield* service.initialize({ datasetId: "mimic-iv", backendId: "bigquery" });
+
+        expect(mockBackend).toHaveBeenCalledWith({
+          cwd: process.cwd(),
+          backendId: "bigquery",
+          projectId: "clinical-project",
+          env: { GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath },
+        });
+        expect(mockUse).toHaveBeenCalledWith({
+          cwd: process.cwd(),
+          datasetId: "mimic-iv",
+          env: { GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath },
+        });
+        expect(mockStatus).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: { GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath },
+          }),
+        );
+        const credentialFileStillExists =
+          credentialFilePath === undefined
+            ? false
+            : yield* fileSystem.exists(credentialFilePath).pipe(Effect.orDie);
+        expect(credentialFileStillExists).toBe(false);
+      }).pipe(Effect.provide(makeLayer())),
+    );
+
+    it.effect("rejects invalid BigQuery credential saves before storing secrets", () =>
+      Effect.gen(function* () {
+        const service = yield* M4DatasetService;
+
+        const result = yield* Effect.result(
+          service.saveBigQueryCredentials({
+            projectId: "clinical-project",
+            serviceAccountJson: "{not-json",
+            useApplicationDefaultCredentials: false,
+          }),
+        );
+
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure.code).toBe("invalid_credentials");
+        }
+        const status = yield* service.getStatus();
+        expect(status.credentials.bigQuery.stored).toBe(false);
+      }).pipe(Effect.provide(makeLayer())),
+    );
+
     it.effect("requires BigQuery credentials before activation", () =>
       Effect.gen(function* () {
         const service = yield* M4DatasetService;
@@ -213,6 +283,39 @@ describe("M4DatasetService", () => {
         if (Result.isFailure(duplicate)) {
           expect(duplicate.failure.code).toBe("dataset_operation_in_progress");
         }
+      }).pipe(Effect.provide(makeLayer())),
+    );
+
+    it.effect("reports running initialization through status snapshots", () =>
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        mockInitialize.mockImplementationOnce(() =>
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+        );
+        const service = yield* M4DatasetService;
+
+        const init = yield* service
+          .initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" })
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(entered);
+
+        const status = yield* service.getStatus();
+        yield* Fiber.interrupt(init);
+
+        expect(status.datasets[0]).toEqual(
+          expect.objectContaining({
+            datasetId: "mimic-iv-demo",
+            backendId: "duckdb",
+            readiness: "initializing",
+            operation: expect.objectContaining({
+              datasetId: "mimic-iv-demo",
+              backendId: "duckdb",
+              state: "running",
+            }),
+          }),
+        );
+        expect(status.appReadiness.readiness).toBe("initializing");
+        expect(status.appReadiness.clinicalDataReady).toBe(false);
       }).pipe(Effect.provide(makeLayer())),
     );
 

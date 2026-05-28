@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   BotIcon,
+  DatabaseIcon,
   GitBranchIcon,
   KeyboardIcon,
   Link2Icon,
@@ -23,6 +24,7 @@ import {
 
 export type SettingsSectionPath =
   | "/settings/general"
+  | "/settings/datasets"
   | "/settings/shortcuts"
   | "/settings/providers"
   | "/settings/source-control"
@@ -37,7 +39,8 @@ type SettingsNavItem = {
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<SettingsNavItem> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
-  // Future prototype tabs should slot here: Datasets first, then Skills.
+  { label: "Datasets", to: "/settings/datasets", icon: DatabaseIcon },
+  // Future prototype tabs should slot here: Skills next.
   { label: "Shortcuts", to: "/settings/shortcuts", icon: KeyboardIcon },
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },

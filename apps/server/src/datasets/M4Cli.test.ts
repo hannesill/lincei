@@ -169,6 +169,25 @@ describe("M4Cli", () => {
     }).pipe(Effect.provide(makeLayer())),
   );
 
+  it.effect("passes scoped credential environment to M4 subprocesses", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
+
+      const m4 = yield* M4Cli;
+      yield* m4.status({
+        cwd: "/repo",
+        credentials: emptyCredentials,
+        env: { GOOGLE_APPLICATION_CREDENTIALS: "/tmp/service-account.json" },
+      });
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: { GOOGLE_APPLICATION_CREDENTIALS: "/tmp/service-account.json" },
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
   it.effect("maps JSON command error envelopes to m4_command_failed", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(

@@ -69,6 +69,15 @@ import { EditorId } from "./editor.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import type { ClientSettings, ServerSettings, ServerSettingsPatch } from "./settings.ts";
 import type {
+  DatasetClearCredentialsInput,
+  DatasetCredentialsResult,
+  DatasetInitializeInput,
+  DatasetSaveBigQueryCredentialsInput,
+  DatasetSavePhysioNetCredentialsInput,
+  DatasetSetActiveDatasetInput,
+  DatasetStatusResult,
+} from "./datasets.ts";
+import type {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
   SourceControlDiscoveryResult,
@@ -488,6 +497,18 @@ export interface LocalApi {
       input: ServerProcessResourceHistoryInput,
     ) => Promise<ServerProcessResourceHistoryResult>;
     signalProcess: (input: ServerSignalProcessInput) => Promise<ServerSignalProcessResult>;
+  };
+  datasets: {
+    getStatus: () => Promise<DatasetStatusResult>;
+    savePhysioNetCredentials: (
+      input: DatasetSavePhysioNetCredentialsInput,
+    ) => Promise<DatasetCredentialsResult>;
+    saveBigQueryCredentials: (
+      input: DatasetSaveBigQueryCredentialsInput,
+    ) => Promise<DatasetCredentialsResult>;
+    initialize: (input: DatasetInitializeInput) => Promise<DatasetStatusResult>;
+    setActiveDataset: (input: DatasetSetActiveDatasetInput) => Promise<DatasetStatusResult>;
+    clearCredentials: (input: DatasetClearCredentialsInput) => Promise<DatasetCredentialsResult>;
   };
 }
 

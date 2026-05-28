@@ -93,6 +93,14 @@ const rpcClientMock = {
     subscribeLifecycle: vi.fn(),
     subscribeAuthAccess: vi.fn(),
   },
+  datasets: {
+    getStatus: vi.fn(),
+    savePhysioNetCredentials: vi.fn(),
+    saveBigQueryCredentials: vi.fn(),
+    initialize: vi.fn(),
+    setActiveDataset: vi.fn(),
+    clearCredentials: vi.fn(),
+  },
   orchestration: {
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
@@ -558,6 +566,42 @@ describe("wsApi", () => {
     );
     expect(rpcClientMock.server.updateSettings).toHaveBeenCalledWith({
       enableAssistantStreaming: true,
+    });
+  });
+
+  it("forwards dataset operations directly to the RPC client", async () => {
+    const datasetStatus = {
+      runtime: {
+        available: true,
+        command: "uvx --from m4-infra m4",
+        checkedAt: "2026-05-28T10:00:00.000Z",
+      },
+      credentials: {
+        physioNet: { stored: false },
+        bigQuery: {
+          stored: false,
+          serviceAccountJsonStored: false,
+          applicationDefaultCredentials: false,
+        },
+      },
+      datasets: [],
+      appReadiness: {
+        clinicalDataReady: false,
+        readiness: "not_initialized",
+        lastCheckedAt: "2026-05-28T10:00:00.000Z",
+      },
+    };
+    rpcClientMock.datasets.initialize.mockResolvedValue(datasetStatus);
+    const { createLocalApi } = await import("./localApi");
+
+    const api = createLocalApi(rpcClientMock as never);
+
+    await expect(
+      api.datasets.initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" }),
+    ).resolves.toEqual(datasetStatus);
+    expect(rpcClientMock.datasets.initialize).toHaveBeenCalledWith({
+      datasetId: "mimic-iv-demo",
+      backendId: "duckdb",
     });
   });
 

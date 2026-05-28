@@ -143,6 +143,18 @@ export interface WsRpcClient {
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
     readonly subscribeAuthAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
   };
+  readonly datasets: {
+    readonly getStatus: RpcUnaryNoArgMethod<typeof WS_METHODS.datasetsGetStatus>;
+    readonly savePhysioNetCredentials: RpcUnaryMethod<
+      typeof WS_METHODS.datasetsSavePhysioNetCredentials
+    >;
+    readonly saveBigQueryCredentials: RpcUnaryMethod<
+      typeof WS_METHODS.datasetsSaveBigQueryCredentials
+    >;
+    readonly initialize: RpcUnaryMethod<typeof WS_METHODS.datasetsInitialize>;
+    readonly setActiveDataset: RpcUnaryMethod<typeof WS_METHODS.datasetsSetActiveDataset>;
+    readonly clearCredentials: RpcUnaryMethod<typeof WS_METHODS.datasetsClearCredentials>;
+  };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
@@ -296,6 +308,19 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
           ...options,
           tag: WS_METHODS.subscribeAuthAccess,
         }),
+    },
+    datasets: {
+      getStatus: () => transport.request((client) => client[WS_METHODS.datasetsGetStatus]({})),
+      savePhysioNetCredentials: (input) =>
+        transport.request((client) => client[WS_METHODS.datasetsSavePhysioNetCredentials](input)),
+      saveBigQueryCredentials: (input) =>
+        transport.request((client) => client[WS_METHODS.datasetsSaveBigQueryCredentials](input)),
+      initialize: (input) =>
+        transport.request((client) => client[WS_METHODS.datasetsInitialize](input)),
+      setActiveDataset: (input) =>
+        transport.request((client) => client[WS_METHODS.datasetsSetActiveDataset](input)),
+      clearCredentials: (input) =>
+        transport.request((client) => client[WS_METHODS.datasetsClearCredentials](input)),
     },
     orchestration: {
       dispatchCommand: (input) =>
