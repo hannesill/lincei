@@ -2,6 +2,7 @@ import { Undo2Icon } from "lucide-react";
 import { type ComponentPropsWithoutRef, type ReactNode, useEffect, useState } from "react";
 
 import { cn } from "../../lib/utils";
+import { APP_CONTENT_MAX_WIDTH_CLASS } from "../appShell";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -128,7 +129,9 @@ export function SettingsPageContainer({
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-6 sm:p-8">
-      <div className={cn("mx-auto flex w-full max-w-3xl flex-col gap-8", className)}>
+      <div
+        className={cn("mx-auto flex w-full flex-col gap-8", APP_CONTENT_MAX_WIDTH_CLASS, className)}
+      >
         {children}
       </div>
     </div>

@@ -67,6 +67,7 @@ import {
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import { APP_CONTENT_MAX_WIDTH_CLASS } from "../appShell";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -247,7 +248,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   // from TimelineRowCtx, which propagates through LegendList's memo.
   const renderItem = useCallback(
     ({ item }: { item: MessagesTimelineRow }) => (
-      <div className="mx-auto w-full min-w-0 max-w-3xl overflow-x-clip" data-timeline-root="true">
+      <div
+        className={cn(
+          "mx-auto w-full min-w-0 overflow-x-clip px-3 sm:px-3.5",
+          APP_CONTENT_MAX_WIDTH_CLASS,
+        )}
+        data-timeline-root="true"
+      >
         <TimelineRowContent row={item} />
       </div>
     ),

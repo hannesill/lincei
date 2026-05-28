@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { Alert, AlertAction, AlertDescription } from "../ui/alert";
 import { CircleAlertIcon, XIcon } from "lucide-react";
+import { cn } from "~/lib/utils";
+import { APP_CONTENT_MAX_WIDTH_CLASS } from "../appShell";
 
 export const SessionErrorBanner = memo(function SessionErrorBanner({
   error,
@@ -11,7 +13,7 @@ export const SessionErrorBanner = memo(function SessionErrorBanner({
 }) {
   if (!error) return null;
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
+    <div className={cn("mx-auto pt-3", APP_CONTENT_MAX_WIDTH_CLASS)}>
       <Alert variant="error">
         <CircleAlertIcon />
         <AlertDescription className="line-clamp-3" title={error}>

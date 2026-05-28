@@ -22,7 +22,8 @@ import { selectEnvironmentState, selectSessionExistsByRef, useStore } from "../s
 import { createSessionSelectorByRef } from "../storeSelectors";
 import { resolveSessionRouteRef, buildSessionRouteParams } from "../sessionRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
-import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { AppMainSurface } from "../components/appShell";
+import { Sidebar, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
@@ -245,7 +246,7 @@ function ChatSessionRouteView() {
   if (!shouldUseDiffSheet) {
     return (
       <>
-        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
+        <AppMainSurface>
           <ChatView
             environmentId={sessionRef.environmentId}
             sessionId={sessionRef.sessionId}
@@ -253,7 +254,7 @@ function ChatSessionRouteView() {
             reserveTitleBarControlInset={!diffOpen}
             routeKind="server"
           />
-        </SidebarInset>
+        </AppMainSurface>
         <DiffPanelInlineSidebar
           diffOpen={diffOpen}
           onCloseDiff={closeDiff}
@@ -266,14 +267,14 @@ function ChatSessionRouteView() {
 
   return (
     <>
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
+      <AppMainSurface>
         <ChatView
           environmentId={sessionRef.environmentId}
           sessionId={sessionRef.sessionId}
           onDiffPanelOpen={markDiffOpened}
           routeKind="server"
         />
-      </SidebarInset>
+      </AppMainSurface>
       <RightPanelSheet open={diffOpen} onClose={closeDiff}>
         {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
       </RightPanelSheet>

@@ -3,7 +3,7 @@ import { useEffect, useMemo } from "react";
 import ChatView from "../components/ChatView";
 import { sessionHasStarted } from "../components/ChatView.logic";
 import { useComposerDraftStore, DraftId } from "../composerDraftStore";
-import { SidebarInset } from "../components/ui/sidebar";
+import { AppMainSurface } from "../components/appShell";
 import { createSessionSelectorAcrossEnvironments } from "../storeSelectors";
 import { useStore } from "../store";
 import { buildSessionRouteParams } from "../sessionRoutes";
@@ -55,13 +55,13 @@ function DraftChatSessionRouteView() {
 
   if (canonicalSessionRef) {
     return (
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
+      <AppMainSurface>
         <ChatView
           environmentId={canonicalSessionRef.environmentId}
           sessionId={canonicalSessionRef.sessionId}
           routeKind="server"
         />
-      </SidebarInset>
+      </AppMainSurface>
     );
   }
 
@@ -70,14 +70,14 @@ function DraftChatSessionRouteView() {
   }
 
   return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground md:h-dvh dark:bg-background">
+    <AppMainSurface>
       <ChatView
         draftId={draftId}
         environmentId={draftSession.environmentId}
         sessionId={draftSession.sessionId}
         routeKind="draft"
       />
-    </SidebarInset>
+    </AppMainSurface>
   );
 }
 

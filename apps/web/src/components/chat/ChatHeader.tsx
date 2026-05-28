@@ -10,18 +10,12 @@ import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
 import { DiffIcon, TerminalSquareIcon } from "lucide-react";
-import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { Toggle } from "../ui/toggle";
-import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
-import { cn } from "~/lib/utils";
-import {
-  COLLAPSED_TITLEBAR_SIDEBAR_TRIGGER_CLASS,
-  useCollapsedTitlebarSidebarTriggerLayout,
-} from "../sidebar/titlebarSidebarLayout";
+import { AppTopBar } from "../appShell";
 
 interface ChatHeaderProps {
   activeSessionEnvironmentId: EnvironmentId;
@@ -47,6 +41,7 @@ interface ChatHeaderProps {
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
+  reserveTitleBarControlInset?: boolean;
 }
 
 export function shouldShowOpenInPicker(input: {
@@ -85,9 +80,9 @@ export const ChatHeader = memo(function ChatHeader({
   onDeleteProjectScript,
   onToggleTerminal,
   onToggleDiff,
+  reserveTitleBarControlInset,
 }: ChatHeaderProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const collapsedTitlebarTriggerLayout = useCollapsedTitlebarSidebarTriggerLayout();
   const showOpenInPicker = shouldShowOpenInPicker({
     activeProjectName,
     activeSessionEnvironmentId,
@@ -95,121 +90,93 @@ export const ChatHeader = memo(function ChatHeader({
   });
 
   return (
-    <div className="@container/header-actions relative flex min-w-0 flex-1 items-center gap-2">
-      {collapsedTitlebarTriggerLayout.shouldShowCollapsedTitlebarTrigger && (
-        <SidebarTrigger
-          className={cn(
-            COLLAPSED_TITLEBAR_SIDEBAR_TRIGGER_CLASS,
-            collapsedTitlebarTriggerLayout.triggerOffsetClassName,
+    <AppTopBar
+      reserveTitleBarControlInset={reserveTitleBarControlInset}
+      rightActions={
+        <>
+          {activeProjectScripts && (
+            <ProjectScriptsControl
+              scripts={activeProjectScripts}
+              keybindings={keybindings}
+              preferredScriptId={preferredScriptId}
+              onRunScript={onRunProjectScript}
+              onAddScript={onAddProjectScript}
+              onUpdateScript={onUpdateProjectScript}
+              onDeleteScript={onDeleteProjectScript}
+            />
           )}
-        />
-      )}
-      <div
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3",
-          collapsedTitlebarTriggerLayout.contentOffsetClassName,
-        )}
+          {showOpenInPicker && (
+            <OpenInPicker
+              keybindings={keybindings}
+              availableEditors={availableEditors}
+              openInCwd={openInCwd}
+            />
+          )}
+          {activeProjectName && (
+            <GitActionsControl
+              gitCwd={gitCwd}
+              activeSessionRef={scopeSessionRef(activeSessionEnvironmentId, activeSessionId)}
+              {...(draftId ? { draftId } : {})}
+            />
+          )}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  className="shrink-0"
+                  pressed={terminalOpen}
+                  onPressedChange={onToggleTerminal}
+                  aria-label="Toggle terminal drawer"
+                  variant="outline"
+                  size="xs"
+                  disabled={!terminalAvailable}
+                >
+                  <TerminalSquareIcon className="size-3" />
+                </Toggle>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {!terminalAvailable
+                ? "Terminal is unavailable until this session has an active study."
+                : terminalToggleShortcutLabel
+                  ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
+                  : "Toggle terminal drawer"}
+            </TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  className="shrink-0"
+                  pressed={diffOpen}
+                  onPressedChange={onToggleDiff}
+                  aria-label="Toggle diff panel"
+                  variant="outline"
+                  size="xs"
+                  disabled={!isGitRepo && !diffOpen}
+                >
+                  <DiffIcon className="size-3" />
+                </Toggle>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {!isGitRepo && !diffOpen
+                ? "Diff panel is unavailable because this study is not a git repository."
+                : diffToggleShortcutLabel
+                  ? `Toggle diff panel (${diffToggleShortcutLabel})`
+                  : "Toggle diff panel"}
+            </TooltipPopup>
+          </Tooltip>
+        </>
+      }
+      actionsClassName="gap-2 @3xl/header-actions:gap-3"
+    >
+      <h2
+        className="min-w-0 shrink truncate text-sm font-medium text-foreground"
+        title={activeSessionTitle}
       >
-        <SidebarTrigger
-          className={cn(
-            "shrink-0",
-            collapsedTitlebarTriggerLayout.shouldShowCollapsedTitlebarTrigger
-              ? "hidden"
-              : "size-7 md:hidden",
-          )}
-        />
-        <h2
-          className="min-w-0 shrink truncate text-sm font-medium text-foreground"
-          title={activeSessionTitle}
-        >
-          {activeSessionTitle}
-        </h2>
-        {activeProjectName && (
-          <Badge variant="outline" className="min-w-0 shrink overflow-hidden">
-            <span className="min-w-0 truncate">{activeProjectName}</span>
-          </Badge>
-        )}
-        {activeProjectName && !isGitRepo && (
-          <Badge variant="outline" className="shrink-0 text-[10px] text-amber-700">
-            No Git
-          </Badge>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3">
-        {activeProjectScripts && (
-          <ProjectScriptsControl
-            scripts={activeProjectScripts}
-            keybindings={keybindings}
-            preferredScriptId={preferredScriptId}
-            onRunScript={onRunProjectScript}
-            onAddScript={onAddProjectScript}
-            onUpdateScript={onUpdateProjectScript}
-            onDeleteScript={onDeleteProjectScript}
-          />
-        )}
-        {showOpenInPicker && (
-          <OpenInPicker
-            keybindings={keybindings}
-            availableEditors={availableEditors}
-            openInCwd={openInCwd}
-          />
-        )}
-        {activeProjectName && (
-          <GitActionsControl
-            gitCwd={gitCwd}
-            activeSessionRef={scopeSessionRef(activeSessionEnvironmentId, activeSessionId)}
-            {...(draftId ? { draftId } : {})}
-          />
-        )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={terminalOpen}
-                onPressedChange={onToggleTerminal}
-                aria-label="Toggle terminal drawer"
-                variant="outline"
-                size="xs"
-                disabled={!terminalAvailable}
-              >
-                <TerminalSquareIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!terminalAvailable
-              ? "Terminal is unavailable until this session has an active study."
-              : terminalToggleShortcutLabel
-                ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
-                : "Toggle terminal drawer"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={diffOpen}
-                onPressedChange={onToggleDiff}
-                aria-label="Toggle diff panel"
-                variant="outline"
-                size="xs"
-                disabled={!isGitRepo && !diffOpen}
-              >
-                <DiffIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!isGitRepo && !diffOpen
-              ? "Diff panel is unavailable because this study is not a git repository."
-              : diffToggleShortcutLabel
-                ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                : "Toggle diff panel"}
-          </TooltipPopup>
-        </Tooltip>
-      </div>
-    </div>
+        {activeSessionTitle}
+      </h2>
+    </AppTopBar>
   );
 });

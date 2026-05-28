@@ -89,7 +89,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <Sidebar
         side="left"
         collapsible="offcanvas"
-        className="border-r border-border bg-card text-foreground shadow-depth-sidebar"
+        className="border-r border-border bg-card text-foreground"
       >
         <SessionSidebar />
         <SidebarRail />

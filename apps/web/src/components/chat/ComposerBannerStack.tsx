@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { XIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
+import { APP_CONTENT_MAX_WIDTH_CLASS } from "../appShell";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 
@@ -84,7 +85,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
   };
 
   return (
-    <div className={cn("group/banner-stack mx-auto mb-2 max-w-208", className)}>
+    <div className={cn("group/banner-stack mx-auto mb-2", APP_CONTENT_MAX_WIDTH_CLASS, className)}>
       <div
         className={cn(
           "relative",

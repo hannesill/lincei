@@ -37,6 +37,7 @@ import {
   MenuTrigger,
 } from "./ui/menu";
 import { Separator } from "./ui/separator";
+import { APP_CONTENT_MAX_WIDTH_CLASS } from "./appShell";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -241,7 +242,9 @@ export const BranchToolbar = memo(function BranchToolbar({
   if (!hasActiveSession || !activeProject) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-208 items-center gap-2 px-2.5 pb-3 pt-1 sm:px-3">
+    <div
+      className={`mx-auto flex w-full items-center gap-2 px-2.5 pb-3 pt-1 sm:px-3 ${APP_CONTENT_MAX_WIDTH_CLASS}`}
+    >
       {isMobile ? (
         <MobileRunContextSelector
           envLocked={envLocked}
