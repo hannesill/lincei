@@ -41,6 +41,7 @@ import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
+import { appendLinceiAgentInstructions } from "../LinceiAgentInstructions.ts";
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
@@ -102,6 +103,7 @@ export interface CodexSessionRuntimeOptions {
   readonly runtimeMode: RuntimeMode;
   readonly model?: string;
   readonly serviceTier?: CodexServiceTier | undefined;
+  readonly developerInstructions?: string | undefined;
   readonly resumeCursor?: CodexResumeCursor;
 }
 
@@ -287,6 +289,7 @@ function buildSessionStartParams(input: {
   readonly runtimeMode: RuntimeMode;
   readonly model: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
+  readonly developerInstructions: string | undefined;
 }): EffectCodexSchema.V2ThreadStartParams {
   const config = runtimeModeToSessionConfig(input.runtimeMode);
   return {
@@ -295,6 +298,7 @@ function buildSessionStartParams(input: {
     sandbox: config.sandbox,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
+    ...(input.developerInstructions ? { developerInstructions: input.developerInstructions } : {}),
   };
 }
 
@@ -334,8 +338,8 @@ function buildCodexCollaborationMode(input: {
       reasoning_effort: input.effort ?? "medium",
       developer_instructions:
         input.interactionMode === "plan"
-          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+          ? appendLinceiAgentInstructions(CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS)
+          : appendLinceiAgentInstructions(CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS),
     },
   };
 }
@@ -436,6 +440,7 @@ export const openCodexSession = (input: {
   readonly cwd: string;
   readonly requestedModel: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
+  readonly developerInstructions: string | undefined;
   readonly resumeSessionId: string | undefined;
 }): Effect.Effect<CodexSessionOpenResponse, CodexErrors.CodexAppServerError> => {
   const resumeSessionId = input.resumeSessionId;
@@ -444,6 +449,7 @@ export const openCodexSession = (input: {
     runtimeMode: input.runtimeMode,
     model: input.requestedModel,
     serviceTier: input.serviceTier,
+    developerInstructions: input.developerInstructions,
   });
 
   if (resumeSessionId === undefined) {
@@ -1194,6 +1200,7 @@ export const makeCodexSessionRuntime = (
         cwd: options.cwd,
         requestedModel,
         serviceTier: options.serviceTier,
+        developerInstructions: options.developerInstructions,
         resumeSessionId: readResumeCursorSessionId(options.resumeCursor),
       });
 

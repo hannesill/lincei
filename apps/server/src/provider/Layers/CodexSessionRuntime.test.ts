@@ -12,6 +12,10 @@ import {
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
 import {
+  appendLinceiAgentInstructions,
+  LINCEI_AGENT_INSTRUCTIONS,
+} from "../LinceiAgentInstructions.ts";
+import {
   buildTurnStartParams,
   isRecoverableSessionResumeError,
   openCodexSession,
@@ -73,7 +77,9 @@ describe("buildTurnStartParams", () => {
         settings: {
           model: "gpt-5.3-codex",
           reasoning_effort: "medium",
-          developer_instructions: CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+          developer_instructions: appendLinceiAgentInstructions(
+            CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+          ),
         },
       },
     });
@@ -118,7 +124,9 @@ describe("buildTurnStartParams", () => {
         settings: {
           model: "gpt-5.3-codex",
           reasoning_effort: "medium",
-          developer_instructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+          developer_instructions: appendLinceiAgentInstructions(
+            CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+          ),
         },
       },
     });
@@ -226,6 +234,7 @@ describe("openCodexSession", () => {
         cwd: "/tmp/project",
         requestedModel: "gpt-5.3-codex",
         serviceTier: undefined,
+        developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
         resumeSessionId: "stale-session",
       }),
     );
@@ -235,6 +244,21 @@ describe("openCodexSession", () => {
       calls.map((call) => call.method),
       ["thread/resume", "thread/start"],
     );
+    assert.deepStrictEqual(calls[0]?.payload, {
+      threadId: "stale-session",
+      cwd: "/tmp/project",
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+      model: "gpt-5.3-codex",
+      developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+    });
+    assert.deepStrictEqual(calls[1]?.payload, {
+      cwd: "/tmp/project",
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+      model: "gpt-5.3-codex",
+      developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+    });
   });
 
   it("propagates non-recoverable resume failures", async () => {
@@ -266,6 +290,7 @@ describe("openCodexSession", () => {
           cwd: "/tmp/project",
           requestedModel: "gpt-5.3-codex",
           serviceTier: undefined,
+          developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
           resumeSessionId: "stale-session",
         }),
       ),

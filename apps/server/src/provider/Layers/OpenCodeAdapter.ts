@@ -49,6 +49,7 @@ import {
   type OpenCodeServerConnection,
 } from "../opencodeRuntime.ts";
 import * as Option from "effect/Option";
+import { buildLinceiSessionInstructionFallback } from "../LinceiAgentInstructions.ts";
 
 const PROVIDER = ProviderDriverKind.make("opencode");
 
@@ -80,6 +81,7 @@ interface OpenCodeSessionContext {
   activeTurnId: TurnId | undefined;
   activeAgent: string | undefined;
   activeVariant: string | undefined;
+  linceiInstructionInjected: boolean;
   /**
    * One-shot guard flipped by `stopOpenCodeContext` / `emitUnexpectedExit`.
    * The session lifecycle is owned by `sessionScope`; this Ref exists only
@@ -1115,6 +1117,7 @@ export function makeOpenCodeAdapter(
           activeTurnId: undefined,
           activeAgent: undefined,
           activeVariant: undefined,
+          linceiInstructionInjected: false,
           stopped: yield* Ref.make(false),
           sessionScope: started.sessionScope,
         };
@@ -1206,13 +1209,27 @@ export function makeOpenCodeAdapter(
         },
       });
 
+      const instructionPart = context.linceiInstructionInjected
+        ? []
+        : [
+            {
+              type: "text" as const,
+              text: buildLinceiSessionInstructionFallback(),
+            },
+          ];
+      const promptParts = [
+        ...instructionPart,
+        ...(text ? [{ type: "text" as const, text }] : []),
+        ...fileParts,
+      ];
+
       yield* runOpenCodeSdk("session.promptAsync", () =>
         context.client.session.promptAsync({
           sessionID: context.openCodeSessionId,
           model: parsedModel,
           ...(context.activeAgent ? { agent: context.activeAgent } : {}),
           ...(context.activeVariant ? { variant: context.activeVariant } : {}),
-          parts: [...(text ? [{ type: "text" as const, text }] : []), ...fileParts],
+          parts: promptParts,
         }),
       ).pipe(
         Effect.mapError(toRequestError),
@@ -1247,6 +1264,7 @@ export function makeOpenCodeAdapter(
           }),
         ),
       );
+      context.linceiInstructionInjected = true;
 
       return {
         sessionId: input.sessionId,

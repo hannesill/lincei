@@ -27,6 +27,7 @@ import {
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
+import { buildLinceiSessionInstructionFallback } from "../LinceiAgentInstructions.ts";
 import { makeCursorAdapter } from "./CursorAdapter.ts";
 const decodeCursorSettings = Schema.decodeSync(CursorSettings);
 
@@ -382,6 +383,11 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
             (modeRequest?.params as Record<string, unknown> | undefined)?.value,
         ),
       );
+      const promptRequest = requests.find((entry) => entry.method === "session/prompt");
+      const prompt = (promptRequest?.params as { prompt?: Array<{ text?: string }> } | undefined)
+        ?.prompt;
+      assert.equal(prompt?.[0]?.text, buildLinceiSessionInstructionFallback());
+      assert.equal(prompt?.[1]?.text, "plan this change");
     }),
   );
 

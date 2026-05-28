@@ -23,6 +23,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
+import { buildLinceiSessionInstructionFallback } from "../LinceiAgentInstructions.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import {
   OpenCodeRuntime,
@@ -41,6 +42,13 @@ class OpenCodeAdapter extends Context.Service<OpenCodeAdapter, OpenCodeAdapterSh
 ) {}
 
 const asSessionId = (value: string): SessionId => SessionId.make(value);
+
+const openCodePromptParts = (
+  text: string,
+): Array<{ readonly type: "text"; readonly text: string }> => [
+  { type: "text", text: buildLinceiSessionInstructionFallback() },
+  { type: "text", text },
+];
 
 type MessageEntry = {
   info: {
@@ -437,7 +445,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         },
         agent: "github-copilot",
         variant: "high",
-        parts: [{ type: "text", text: "Fix it" }],
+        parts: openCodePromptParts("Fix it"),
       });
     }).pipe(Effect.provide(adapterLayer));
   });
@@ -479,7 +487,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
           providerID: "anthropic",
           modelID: "claude-sonnet-4-5",
         },
-        parts: [{ type: "text", text: "Fix it" }],
+        parts: openCodePromptParts("Fix it"),
       });
     }).pipe(Effect.provide(adapterLayer));
   });

@@ -74,6 +74,7 @@ import {
   resolveClaudeApiModelId,
   resolveClaudeEffort,
 } from "./ClaudeProvider.ts";
+import { LINCEI_AGENT_INSTRUCTIONS } from "../LinceiAgentInstructions.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -2904,7 +2905,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(apiModelId ? { model: apiModelId } : {}),
         pathToClaudeCodeExecutable: claudeBinaryPath,
-        systemPrompt: { type: "preset", preset: "claude_code" },
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append: LINCEI_AGENT_INSTRUCTIONS,
+        },
         settingSources: [...CLAUDE_SETTING_SOURCES],
         // The SDK type lags the CLI here: Opus 4.7 accepts `xhigh` even though
         // the published `Options["effort"]` union currently stops at `max`.

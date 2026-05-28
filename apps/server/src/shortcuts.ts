@@ -530,6 +530,7 @@ const makeShortcuts = Effect.gen(function* () {
 
   const syncDefaultShortcutsOnStartup = upsertSemaphore.withPermits(1)(
     Effect.gen(function* () {
+      yield* migrateLegacyShortcutsConfig;
       const configExists = yield* readConfigExists;
       if (!configExists) {
         yield* writeConfigAtomically(DEFAULT_SHORTCUTS);

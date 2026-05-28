@@ -73,6 +73,7 @@ import {
   extractTodosAsPlan,
 } from "../acp/CursorAcpExtension.ts";
 import { type CursorAdapterShape } from "../Services/CursorAdapter.ts";
+import { buildLinceiSessionInstructionFallback } from "../LinceiAgentInstructions.ts";
 import { resolveCursorAcpBaseModelId } from "./CursorProvider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.UnknownFromJsonString);
@@ -131,6 +132,7 @@ interface CursorSessionContext {
   readonly turns: Array<{ id: TurnId; items: Array<unknown> }>;
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
+  linceiInstructionInjected: boolean;
   stopped: boolean;
 }
 
@@ -722,6 +724,7 @@ export function makeCursorAdapter(
             turns: [],
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
+            linceiInstructionInjected: false,
             stopped: false,
           };
 
@@ -881,7 +884,13 @@ export function makeCursorAdapter(
           payload: { model: resolvedModel },
         });
 
+        const hasUserContent =
+          Boolean(input.input?.trim()) ||
+          Boolean(input.attachments && input.attachments.length > 0);
         const promptParts: Array<EffectAcpSchema.ContentBlock> = [];
+        if (!ctx.linceiInstructionInjected) {
+          promptParts.push({ type: "text", text: buildLinceiSessionInstructionFallback() });
+        }
         if (input.input?.trim()) {
           promptParts.push({ type: "text", text: input.input.trim() });
         }
@@ -917,7 +926,7 @@ export function makeCursorAdapter(
           }
         }
 
-        if (promptParts.length === 0) {
+        if (!hasUserContent) {
           return yield* new ProviderAdapterValidationError({
             provider: PROVIDER,
             operation: "sendTurn",
@@ -935,6 +944,7 @@ export function makeCursorAdapter(
             ),
           );
 
+        ctx.linceiInstructionInjected = true;
         ctx.turns.push({ id: turnId, items: [{ prompt: promptParts, result }] });
         ctx.session = {
           ...ctx.session,
