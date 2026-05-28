@@ -29,7 +29,7 @@ function HostedStaticOnboardingState() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-white text-foreground dark:bg-background">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-white dark:bg-background">
-        <header className="border-b border-border px-3 py-2 sm:px-5 sm:py-3">
+        <header className="border-b border-border bg-background/96 px-3 py-2 shadow-depth-header sm:px-5 sm:py-3">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="size-7 shrink-0 md:hidden" />
             <span className="text-sm font-medium text-foreground md:text-muted-foreground/60">
@@ -39,7 +39,7 @@ function HostedStaticOnboardingState() {
         </header>
 
         <Empty className="flex-1">
-          <div className="w-full max-w-xl rounded-3xl border border-border/55 bg-card/20 px-8 py-12 shadow-sm/5">
+          <div className="w-full max-w-xl rounded-3xl border border-border/55 bg-card/40 px-8 py-12 shadow-depth-card">
             <EmptyHeader className="max-w-none">
               <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-xl border border-border/70 bg-background/70 text-muted-foreground">
                 <LinkIcon className="size-5" />

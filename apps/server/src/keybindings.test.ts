@@ -204,6 +204,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       assert.equal(defaultsByCommand.get("session.next"), "mod+shift+]");
       assert.equal(defaultsByCommand.get("session.jump.1"), "mod+1");
       assert.equal(defaultsByCommand.get("session.jump.9"), "mod+9");
+      assert.equal(defaultsByCommand.get("sidebar.toggle"), "mod+b");
       assert.equal(defaultsByCommand.get("modelPicker.toggle"), "mod+shift+m");
       assert.equal(defaultsByCommand.get("modelPicker.jump.1"), "mod+1");
       assert.equal(defaultsByCommand.get("modelPicker.jump.9"), "mod+9");

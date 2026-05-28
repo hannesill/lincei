@@ -3,6 +3,7 @@ import {
   DesktopAppBrandingSchema,
   DesktopEnvironmentBootstrapSchema,
   DesktopThemeSchema,
+  DesktopWindowChromeStateSchema,
   PickFolderOptionsSchema,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -61,6 +62,22 @@ export const getLocalEnvironmentBootstrap = makeSyncIpcMethod({
           : {}),
       }),
     });
+  }),
+});
+
+export const getWindowChromeState = makeIpcMethod({
+  channel: IpcChannels.GET_WINDOW_CHROME_STATE_CHANNEL,
+  payload: Schema.Undefined,
+  result: DesktopWindowChromeStateSchema,
+  handler: Effect.fn("desktop.ipc.window.getWindowChromeState")(function* () {
+    const electronWindow = yield* ElectronWindow.ElectronWindow;
+    const window = yield* electronWindow.focusedMainOrFirst;
+    return {
+      isFullScreen: Option.match(window, {
+        onNone: () => false,
+        onSome: (value) => value.isFullScreen(),
+      }),
+    };
   }),
 });
 

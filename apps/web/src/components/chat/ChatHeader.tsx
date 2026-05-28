@@ -17,6 +17,11 @@ import { Toggle } from "../ui/toggle";
 import { SidebarTrigger } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
+import { cn } from "~/lib/utils";
+import {
+  COLLAPSED_TITLEBAR_SIDEBAR_TRIGGER_CLASS,
+  useCollapsedTitlebarSidebarTriggerLayout,
+} from "../sidebar/titlebarSidebarLayout";
 
 interface ChatHeaderProps {
   activeSessionEnvironmentId: EnvironmentId;
@@ -82,6 +87,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleDiff,
 }: ChatHeaderProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const collapsedTitlebarTriggerLayout = useCollapsedTitlebarSidebarTriggerLayout();
   const showOpenInPicker = shouldShowOpenInPicker({
     activeProjectName,
     activeSessionEnvironmentId,
@@ -89,9 +95,29 @@ export const ChatHeader = memo(function ChatHeader({
   });
 
   return (
-    <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-        <SidebarTrigger className="size-7 shrink-0 md:hidden" />
+    <div className="@container/header-actions relative flex min-w-0 flex-1 items-center gap-2">
+      {collapsedTitlebarTriggerLayout.shouldShowCollapsedTitlebarTrigger && (
+        <SidebarTrigger
+          className={cn(
+            COLLAPSED_TITLEBAR_SIDEBAR_TRIGGER_CLASS,
+            collapsedTitlebarTriggerLayout.triggerOffsetClassName,
+          )}
+        />
+      )}
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3",
+          collapsedTitlebarTriggerLayout.contentOffsetClassName,
+        )}
+      >
+        <SidebarTrigger
+          className={cn(
+            "shrink-0",
+            collapsedTitlebarTriggerLayout.shouldShowCollapsedTitlebarTrigger
+              ? "hidden"
+              : "size-7 md:hidden",
+          )}
+        />
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
           title={activeSessionTitle}

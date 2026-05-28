@@ -22,6 +22,8 @@ const TITLEBAR_HEIGHT = 40;
 const TITLEBAR_COLOR = "#01000000"; // #00000000 does not work correctly on Linux
 const TITLEBAR_LIGHT_SYMBOL_COLOR = "#1f2937";
 const TITLEBAR_DARK_SYMBOL_COLOR = "#f8fafc";
+const MAIN_WINDOW_MIN_WIDTH = 960;
+const MAIN_WINDOW_MIN_HEIGHT = 620;
 
 type WindowTitleBarOptions = Pick<
   Electron.BrowserWindowConstructorOptions,
@@ -165,8 +167,8 @@ const make = Effect.gen(function* () {
     const window = yield* electronWindow.create({
       width: 1100,
       height: 780,
-      minWidth: 840,
-      minHeight: 620,
+      minWidth: MAIN_WINDOW_MIN_WIDTH,
+      minHeight: MAIN_WINDOW_MIN_HEIGHT,
       show: false,
       autoHideMenuBar: true,
       backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
@@ -240,8 +242,18 @@ const make = Effect.gen(function* () {
       event.preventDefault();
       window.setTitle(environment.displayName);
     });
+    const notifyWindowChromeState = () => {
+      void runPromise(
+        electronWindow.sendAll(IpcChannels.WINDOW_CHROME_STATE_CHANNEL, {
+          isFullScreen: window.isFullScreen(),
+        }),
+      );
+    };
+    window.on("enter-full-screen", notifyWindowChromeState);
+    window.on("leave-full-screen", notifyWindowChromeState);
     window.webContents.on("did-finish-load", () => {
       window.setTitle(environment.displayName);
+      notifyWindowChromeState();
     });
     window.webContents.on(
       "did-fail-load",

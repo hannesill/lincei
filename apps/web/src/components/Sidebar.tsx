@@ -197,6 +197,7 @@ import {
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
 import { SidebarProviderUpdatePill } from "./sidebar/SidebarProviderUpdatePill";
+import { useDesktopTitlebarLayout } from "./sidebar/titlebarSidebarLayout";
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -216,6 +217,8 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
+const SIDEBAR_CHROME_TRIGGER_CLASS =
+  "size-6 rounded-md p-0 before:rounded-[calc(var(--radius-md)-1px)] hover:bg-sidebar-accent/70 data-[pressed]:bg-sidebar-accent/70 [&_svg]:size-4";
 
 function clampSidebarSessionPreviewCount(value: number): SidebarSessionPreviewCount {
   return Math.min(
@@ -2462,15 +2465,20 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
 }: {
   isElectron: boolean;
 }) {
+  const { hasMacTitlebarControls } = useDesktopTitlebarLayout();
   const wordmark = (
-    <div className="flex items-center gap-2">
-      <SidebarTrigger className="shrink-0 md:hidden" />
+    <div className="relative flex h-full w-full min-w-0 items-center justify-center">
+      <SidebarTrigger className="absolute left-0 size-7 shrink-0 md:hidden" />
       <Tooltip>
         <TooltipTrigger
           render={
             <Link
               aria-label="Go to sessions"
-              className="ml-1 flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-md outline-hidden ring-ring transition-colors hover:text-foreground focus-visible:ring-2"
+              className={`absolute top-1/2 flex min-w-0 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-md outline-hidden ring-ring transition-colors hover:text-foreground focus-visible:ring-2 ${
+                hasMacTitlebarControls
+                  ? "left-[calc(50%+1rem)] max-w-[min(11rem,calc(100%-6rem))]"
+                  : "left-[calc(50%+0.25rem)] max-w-[min(11rem,calc(100%-4rem))]"
+              }`}
               to="/"
             >
               <LinceiLabsWordmark />
@@ -2484,11 +2492,23 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
           Version {APP_VERSION}
         </TooltipPopup>
       </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="absolute -right-1 hidden md:inline-flex">
+              <SidebarTrigger className={`shrink-0 ${SIDEBAR_CHROME_TRIGGER_CLASS}`} />
+            </span>
+          }
+        />
+        <TooltipPopup side="bottom" sideOffset={2}>
+          Hide sidebar
+        </TooltipPopup>
+      </Tooltip>
     </div>
   );
 
   return isElectron ? (
-    <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[90px] wco:h-[env(titlebar-area-height)] wco:pl-[calc(env(titlebar-area-x)+1em)]">
+    <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-3 py-0 wco:h-[env(titlebar-area-height)]">
       {wordmark}
     </SidebarHeader>
   ) : (

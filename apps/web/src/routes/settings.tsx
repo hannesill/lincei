@@ -12,7 +12,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { Button } from "../components/ui/button";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
+import {
+  COLLAPSED_TITLEBAR_SIDEBAR_TRIGGER_CLASS,
+  useCollapsedTitlebarSidebarTriggerLayout,
+} from "../components/sidebar/titlebarSidebarLayout";
 import { isElectron } from "../env";
+import { cn } from "../lib/utils";
 
 function RestoreDefaultsButton({ onRestored }: { onRestored: () => void }) {
   const { changedSettingLabels, restoreDefaults } = useSettingsRestore(onRestored);
@@ -35,6 +40,7 @@ function SettingsContentLayout() {
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
   const [restoreSignal, setRestoreSignal] = useState(0);
+  const collapsedTitlebarTriggerLayout = useCollapsedTitlebarSidebarTriggerLayout();
   const showRestoreDefaults = location.pathname === "/settings/general";
   const handleRestored = () => setRestoreSignal((value) => value + 1);
   const navigateBackWithinApp = useCallback(() => {
@@ -78,10 +84,35 @@ function SettingsContentLayout() {
         )}
 
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5 wco:h-[env(titlebar-area-height)] wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
-            <span className="text-xs font-medium tracking-wide text-muted-foreground/70">
-              Settings
-            </span>
+          <div className="drag-region relative flex h-[52px] shrink-0 items-center border-b border-border bg-background/96 px-5 shadow-depth-header wco:h-[env(titlebar-area-height)] wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
+            <div className="relative flex min-w-0 flex-1 items-center gap-2">
+              {collapsedTitlebarTriggerLayout.shouldShowCollapsedTitlebarTrigger && (
+                <SidebarTrigger
+                  className={cn(
+                    COLLAPSED_TITLEBAR_SIDEBAR_TRIGGER_CLASS,
+                    collapsedTitlebarTriggerLayout.triggerOffsetClassName,
+                  )}
+                />
+              )}
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-2 overflow-hidden",
+                  collapsedTitlebarTriggerLayout.contentOffsetClassName,
+                )}
+              >
+                <SidebarTrigger
+                  className={cn(
+                    "shrink-0",
+                    collapsedTitlebarTriggerLayout.shouldShowCollapsedTitlebarTrigger
+                      ? "hidden"
+                      : "size-7 md:hidden",
+                  )}
+                />
+                <span className="truncate text-xs font-medium tracking-wide text-muted-foreground/70">
+                  Settings
+                </span>
+              </div>
+            </div>
             {showRestoreDefaults ? (
               <div className="ms-auto flex items-center gap-2">
                 <RestoreDefaultsButton onRestored={handleRestored} />

@@ -369,6 +369,11 @@ export const PickFolderOptionsSchema = Schema.Struct({
   initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
+export const DesktopWindowChromeStateSchema = Schema.Struct({
+  isFullScreen: Schema.Boolean,
+});
+export type DesktopWindowChromeState = typeof DesktopWindowChromeStateSchema.Type;
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -415,6 +420,8 @@ export interface DesktopBridge {
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
   onMenuAction: (listener: (action: string) => void) => () => void;
+  getWindowChromeState?: () => Promise<DesktopWindowChromeState>;
+  onWindowChromeState?: (listener: (state: DesktopWindowChromeState) => void) => () => void;
   getUpdateState: () => Promise<DesktopUpdateState>;
   setUpdateChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
