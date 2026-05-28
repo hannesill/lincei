@@ -83,7 +83,7 @@ describe("dataset status contracts", () => {
     const status = decodeStatus({
       runtime: {
         available: true,
-        command: "uvx m4-infra",
+        command: "uvx --from m4-infra m4",
         checkedAt: "2026-05-27T10:00:00.000Z",
       },
       credentials: {

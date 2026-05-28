@@ -106,7 +106,7 @@ describe("ServerSettingsPatch.datasets", () => {
         workspacePath: "  ~/.lincei/m4  ",
         preferredBackendId: "bigquery",
         activeDatasetId: "mimic-iv-demo",
-        m4Command: "  uvx m4-infra  ",
+        m4Command: "  uvx --from m4-infra m4  ",
       },
     });
 
@@ -114,7 +114,7 @@ describe("ServerSettingsPatch.datasets", () => {
       workspacePath: "~/.lincei/m4",
       preferredBackendId: "bigquery",
       activeDatasetId: "mimic-iv-demo",
-      m4Command: "uvx m4-infra",
+      m4Command: "uvx --from m4-infra m4",
     });
   });
 });

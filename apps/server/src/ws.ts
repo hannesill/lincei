@@ -39,8 +39,12 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
 import { ServerConfig } from "./config.ts";
+import * as M4Cli from "./datasets/M4Cli.ts";
+import { M4DatasetService } from "./datasets/M4DatasetService.ts";
+import * as M4DatasetServiceLayer from "./datasets/M4DatasetService.ts";
 import { Keybindings } from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
+import * as ProcessRunner from "./processRunner.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -88,6 +92,7 @@ import {
   type SessionCredentialChange,
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
+import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
@@ -191,6 +196,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         ),
       );
       const sourceControlRepositories = yield* SourceControlRepositoryService;
+      const datasets = yield* M4DatasetService;
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -923,6 +929,38 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(WS_METHODS.serverSignalProcess, processDiagnostics.signal(input), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.datasetsGetStatus]: (_input) =>
+          observeRpcEffect(WS_METHODS.datasetsGetStatus, datasets.getStatus(), {
+            "rpc.aggregate": "datasets",
+          }),
+        [WS_METHODS.datasetsSavePhysioNetCredentials]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.datasetsSavePhysioNetCredentials,
+            datasets.savePhysioNetCredentials(input),
+            {
+              "rpc.aggregate": "datasets",
+            },
+          ),
+        [WS_METHODS.datasetsSaveBigQueryCredentials]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.datasetsSaveBigQueryCredentials,
+            datasets.saveBigQueryCredentials(input),
+            {
+              "rpc.aggregate": "datasets",
+            },
+          ),
+        [WS_METHODS.datasetsInitialize]: (input) =>
+          observeRpcEffect(WS_METHODS.datasetsInitialize, datasets.initialize(input), {
+            "rpc.aggregate": "datasets",
+          }),
+        [WS_METHODS.datasetsSetActiveDataset]: (input) =>
+          observeRpcEffect(WS_METHODS.datasetsSetActiveDataset, datasets.setActiveDataset(input), {
+            "rpc.aggregate": "datasets",
+          }),
+        [WS_METHODS.datasetsClearCredentials]: (input) =>
+          observeRpcEffect(WS_METHODS.datasetsClearCredentials, datasets.clearCredentials(input), {
+            "rpc.aggregate": "datasets",
+          }),
         [WS_METHODS.sourceControlLookupRepository]: (input) =>
           observeRpcEffect(
             WS_METHODS.sourceControlLookupRepository,
@@ -1256,6 +1294,12 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             makeWsRpcLayer(session.sessionId).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(ProviderMaintenanceRunner.layer),
+              Layer.provide(
+                M4DatasetServiceLayer.layer.pipe(
+                  Layer.provide(M4Cli.layer.pipe(Layer.provide(ProcessRunner.layer))),
+                  Layer.provide(ServerSecretStoreLive),
+                ),
+              ),
               Layer.provide(
                 SourceControlDiscoveryLayer.layer.pipe(
                   Layer.provide(

@@ -2229,6 +2229,112 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("routes dataset credential RPCs without returning secret material", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const result = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            const physioNet = yield* client[WS_METHODS.datasetsSavePhysioNetCredentials]({
+              username: "researcher",
+              password: "secret-password",
+            });
+            const bigQuery = yield* client[WS_METHODS.datasetsSaveBigQueryCredentials]({
+              projectId: "clinical-project",
+              serviceAccountJson: '{"private_key":"secret"}',
+              useApplicationDefaultCredentials: false,
+            });
+            const cleared = yield* client[WS_METHODS.datasetsClearCredentials]({
+              credentialKind: "all",
+            });
+            return { physioNet, bigQuery, cleared };
+          }),
+        ),
+      );
+
+      assert.equal(result.physioNet.credentials.physioNet.stored, true);
+      assert.equal(result.physioNet.credentials.physioNet.username, "researcher");
+      assert.equal(result.bigQuery.credentials.bigQuery.stored, true);
+      assert.equal(result.bigQuery.credentials.bigQuery.projectId, "clinical-project");
+      assert.equal(result.bigQuery.credentials.bigQuery.serviceAccountJsonStored, true);
+      assert.deepEqual(result.cleared.credentials, {
+        physioNet: { stored: false },
+        bigQuery: {
+          stored: false,
+          serviceAccountJsonStored: false,
+          applicationDefaultCredentials: false,
+        },
+      });
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      assert.equal(JSON.stringify(result).includes("secret-password"), false);
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      assert.equal(JSON.stringify(result).includes("private_key"), false);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  const itEffectLiveM4 = process.env.LINCEI_M4_LIVE === "1" ? it.effect : it.effect.skip;
+
+  itEffectLiveM4(
+    "routes live M4 dataset RPCs through websocket",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const workspacePath = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-live-m4-rpc-",
+        });
+        const settings = {
+          ...DEFAULT_SERVER_SETTINGS,
+          datasets: {
+            ...DEFAULT_SERVER_SETTINGS.datasets,
+            workspacePath,
+          },
+        };
+        yield* buildAppUnderTest({
+          layers: {
+            serverSettings: {
+              getSettings: Effect.succeed(settings),
+              updateSettings: () => Effect.succeed(settings),
+            },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const result = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            Effect.gen(function* () {
+              const initial = yield* client[WS_METHODS.datasetsGetStatus]({});
+              const initialized = yield* client[WS_METHODS.datasetsInitialize]({
+                datasetId: "mimic-iv-demo",
+                backendId: "duckdb",
+              });
+              const active = yield* client[WS_METHODS.datasetsSetActiveDataset]({
+                datasetId: "mimic-iv-demo",
+                backendId: "duckdb",
+              });
+              return { initial, initialized, active };
+            }),
+          ),
+        );
+
+        assert.equal(result.initial.runtime.available, true);
+        assert.equal(result.initial.runtime.command, "uvx --from m4-infra m4");
+        assert.equal(result.initial.runtime.workspacePath, workspacePath);
+        assert.equal(result.initial.appReadiness.activeBackendId, "duckdb");
+        assert.equal(result.initial.appReadiness.clinicalDataReady, false);
+        assert.equal(
+          result.initial.datasets.some((dataset) => dataset.datasetId === "mimic-iv-demo"),
+          true,
+        );
+        assert.equal(result.initialized.appReadiness.activeDatasetId, "mimic-iv-demo");
+        assert.equal(result.initialized.appReadiness.clinicalDataReady, true);
+        assert.equal(result.active.appReadiness.activeDatasetId, "mimic-iv-demo");
+        assert.equal(result.active.appReadiness.clinicalDataReady, true);
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    180_000,
+  );
+
   it.effect("routes websocket rpc subscribeServerConfig emits provider status updates", () =>
     Effect.gen(function* () {
       const nextProviders = [
