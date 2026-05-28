@@ -1,38 +1,35 @@
 import {
-  type KeybindingCommand,
-  type KeybindingShortcut,
-  type KeybindingWhenNode,
-  type ResolvedKeybindingRule,
-  type ResolvedKeybindingsConfig,
+  type ShortcutCommand,
+  type KeyboardShortcut,
+  type ShortcutWhenNode,
+  type ResolvedShortcutRule,
+  type ResolvedShortcutsConfig,
 } from "@t3tools/contracts";
-import {
-  DEFAULT_RESOLVED_KEYBINDINGS,
-  parseKeybindingWhenExpression,
-} from "@t3tools/shared/keybindings";
+import { DEFAULT_RESOLVED_SHORTCUTS, parseShortcutWhenExpression } from "@t3tools/shared/shortcuts";
 
 import { isMacPlatform } from "../../lib/utils";
 
-export type KeybindingSource = "Default" | "Custom" | "Study";
+export type ShortcutSource = "Default" | "Custom" | "Study";
 
-export interface KeybindingRow {
+export interface ShortcutRow {
   readonly id: string;
-  readonly command: KeybindingCommand;
+  readonly command: ShortcutCommand;
   readonly key: string;
   readonly when: string;
-  readonly source: KeybindingSource;
+  readonly source: ShortcutSource;
   readonly defaultKey: string | null;
   readonly defaultWhen: string;
-  readonly binding: ResolvedKeybindingRule;
+  readonly binding: ResolvedShortcutRule;
   readonly conflicts: ReadonlyArray<string>;
 }
 
 export type WhenVariableOption = string;
-export type KeybindingCommandOption = KeybindingCommand;
+export type ShortcutCommandOption = ShortcutCommand;
 
 const CORE_WHEN_VARIABLES = ["terminalFocus", "terminalOpen", "true", "false"] as const;
 
 const DEFAULT_WHEN_VARIABLES = new Set<string>(CORE_WHEN_VARIABLES);
-for (const binding of DEFAULT_RESOLVED_KEYBINDINGS) {
+for (const binding of DEFAULT_RESOLVED_SHORTCUTS) {
   collectWhenIdentifiersFromNode(binding.whenAst, DEFAULT_WHEN_VARIABLES);
 }
 
@@ -42,7 +39,7 @@ export const DEFAULT_WHEN_VARIABLE =
   ) ?? "terminalFocus";
 const KNOWN_WHEN_VARIABLES = new Set(DEFAULT_WHEN_VARIABLES);
 
-export function shortcutToKeybindingInput(shortcut: KeybindingShortcut): string {
+export function shortcutToInputValue(shortcut: KeyboardShortcut): string {
   const parts: string[] = [];
   if (shortcut.modKey) parts.push("mod");
   if (shortcut.metaKey) parts.push("meta");
@@ -53,7 +50,7 @@ export function shortcutToKeybindingInput(shortcut: KeybindingShortcut): string 
   return parts.join("+");
 }
 
-export function whenAstToExpression(node: KeybindingWhenNode | undefined): string {
+export function whenAstToExpression(node: ShortcutWhenNode | undefined): string {
   if (!node) return "";
   switch (node.type) {
     case "identifier":
@@ -67,18 +64,18 @@ export function whenAstToExpression(node: KeybindingWhenNode | undefined): strin
   }
 }
 
-function wrapWhenExpression(node: KeybindingWhenNode): string {
+function wrapWhenExpression(node: ShortcutWhenNode): string {
   if (node.type === "identifier" || node.type === "not") return whenAstToExpression(node);
   return `(${whenAstToExpression(node)})`;
 }
 
 export function parseWhenExpressionDraft(
   expression: string,
-): { ok: true; value: KeybindingWhenNode | undefined } | { ok: false; message: string } {
+): { ok: true; value: ShortcutWhenNode | undefined } | { ok: false; message: string } {
   const trimmed = expression.trim();
   if (trimmed.length === 0) return { ok: true, value: undefined };
 
-  const ast = parseKeybindingWhenExpression(trimmed);
+  const ast = parseShortcutWhenExpression(trimmed);
   if (!ast) {
     return {
       ok: false,
@@ -89,45 +86,43 @@ export function parseWhenExpressionDraft(
   return { ok: true, value: ast };
 }
 
-function sourceForBinding(binding: ResolvedKeybindingRule): KeybindingSource {
+function sourceForBinding(binding: ResolvedShortcutRule): ShortcutSource {
   if (String(binding.command).startsWith("script.")) {
     return "Study";
   }
 
-  const bindingKey = shortcutToKeybindingInput(binding.shortcut);
+  const bindingKey = shortcutToInputValue(binding.shortcut);
   const bindingWhen = whenAstToExpression(binding.whenAst);
-  const isDefault = DEFAULT_RESOLVED_KEYBINDINGS.some(
+  const isDefault = DEFAULT_RESOLVED_SHORTCUTS.some(
     (entry) =>
       entry.command === binding.command &&
-      shortcutToKeybindingInput(entry.shortcut) === bindingKey &&
+      shortcutToInputValue(entry.shortcut) === bindingKey &&
       whenAstToExpression(entry.whenAst) === bindingWhen,
   );
 
   return isDefault ? "Default" : "Custom";
 }
 
-function defaultBindingForBinding(
-  binding: ResolvedKeybindingRule,
-): ResolvedKeybindingRule | undefined {
-  const bindingKey = shortcutToKeybindingInput(binding.shortcut);
+function defaultBindingForBinding(binding: ResolvedShortcutRule): ResolvedShortcutRule | undefined {
+  const bindingKey = shortcutToInputValue(binding.shortcut);
   const bindingWhen = whenAstToExpression(binding.whenAst);
 
   return (
-    DEFAULT_RESOLVED_KEYBINDINGS.find(
+    DEFAULT_RESOLVED_SHORTCUTS.find(
       (entry) =>
         entry.command === binding.command &&
-        shortcutToKeybindingInput(entry.shortcut) === bindingKey &&
+        shortcutToInputValue(entry.shortcut) === bindingKey &&
         whenAstToExpression(entry.whenAst) === bindingWhen,
     ) ??
-    DEFAULT_RESOLVED_KEYBINDINGS.find(
+    DEFAULT_RESOLVED_SHORTCUTS.find(
       (entry) =>
         entry.command === binding.command && whenAstToExpression(entry.whenAst) === bindingWhen,
     ) ??
-    DEFAULT_RESOLVED_KEYBINDINGS.find((entry) => entry.command === binding.command)
+    DEFAULT_RESOLVED_SHORTCUTS.find((entry) => entry.command === binding.command)
   );
 }
 
-function keybindingRowId(command: KeybindingCommand, key: string, when: string): string {
+function shortcutRowId(command: ShortcutCommand, key: string, when: string): string {
   return `${command}\u0000${key}\u0000${when}`;
 }
 
@@ -135,8 +130,8 @@ function conflictsWithWhen(leftWhen: string, rightWhen: string): boolean {
   return leftWhen.length === 0 || rightWhen.length === 0 || leftWhen === rightWhen;
 }
 
-export function keybindingConflictLabels(
-  rows: ReadonlyArray<KeybindingRow>,
+export function shortcutConflictLabels(
+  rows: ReadonlyArray<ShortcutRow>,
   input: { readonly rowId: string; readonly key: string; readonly when: string },
 ): ReadonlyArray<string> {
   if (input.key.trim().length === 0) return [];
@@ -151,30 +146,30 @@ export function keybindingConflictLabels(
   return [...new Set(conflicts)].toSorted();
 }
 
-export function buildKeybindingRows(
-  keybindings: ResolvedKeybindingsConfig,
+export function buildShortcutRows(
+  shortcuts: ResolvedShortcutsConfig,
   query: string,
-): ReadonlyArray<KeybindingRow> {
+): ReadonlyArray<ShortcutRow> {
   const normalizedQuery = query.trim().toLowerCase();
-  const rows = keybindings.map((binding, index) => {
+  const rows = shortcuts.map((binding, index) => {
     const defaultBinding = defaultBindingForBinding(binding);
-    const key = shortcutToKeybindingInput(binding.shortcut);
+    const key = shortcutToInputValue(binding.shortcut);
     const when = whenAstToExpression(binding.whenAst);
     return {
-      id: `${keybindingRowId(binding.command, key, when)}\u0000${index}`,
+      id: `${shortcutRowId(binding.command, key, when)}\u0000${index}`,
       command: binding.command,
       key,
       when,
       source: sourceForBinding(binding),
-      defaultKey: defaultBinding ? shortcutToKeybindingInput(defaultBinding.shortcut) : null,
+      defaultKey: defaultBinding ? shortcutToInputValue(defaultBinding.shortcut) : null,
       defaultWhen: whenAstToExpression(defaultBinding?.whenAst),
       binding,
       conflicts: [],
-    } satisfies KeybindingRow;
+    } satisfies ShortcutRow;
   });
 
   const rowsWithConflicts = rows.map((row) => {
-    const conflicts = keybindingConflictLabels(rows, {
+    const conflicts = shortcutConflictLabels(rows, {
       rowId: row.id,
       key: row.key,
       when: row.when,
@@ -205,7 +200,7 @@ export function buildKeybindingRows(
 }
 
 function collectWhenIdentifiersFromNode(
-  node: KeybindingWhenNode | undefined,
+  node: ShortcutWhenNode | undefined,
   identifiers: Set<string>,
 ): void {
   if (!node) return;
@@ -228,7 +223,7 @@ export function isKnownWhenVariable(identifier: string): boolean {
   return KNOWN_WHEN_VARIABLES.has(identifier);
 }
 
-export function unknownWhenVariables(node: KeybindingWhenNode | undefined): ReadonlyArray<string> {
+export function unknownWhenVariables(node: ShortcutWhenNode | undefined): ReadonlyArray<string> {
   const identifiers = new Set<string>();
   collectWhenIdentifiersFromNode(node, identifiers);
   return [...identifiers].filter((identifier) => !isKnownWhenVariable(identifier)).toSorted();
@@ -250,14 +245,14 @@ export function buildWhenVariableOptions(): ReadonlyArray<WhenVariableOption> {
   });
 }
 
-export function buildKeybindingCommandOptions(
-  keybindings: ResolvedKeybindingsConfig,
-): ReadonlyArray<KeybindingCommandOption> {
-  const commands = new Set<KeybindingCommand>();
-  for (const binding of DEFAULT_RESOLVED_KEYBINDINGS) {
+export function buildShortcutCommandOptions(
+  shortcuts: ResolvedShortcutsConfig,
+): ReadonlyArray<ShortcutCommandOption> {
+  const commands = new Set<ShortcutCommand>();
+  for (const binding of DEFAULT_RESOLVED_SHORTCUTS) {
     commands.add(binding.command);
   }
-  for (const binding of keybindings) {
+  for (const binding of shortcuts) {
     commands.add(binding.command);
   }
   return [...commands].toSorted((left, right) =>
@@ -265,7 +260,7 @@ export function buildKeybindingCommandOptions(
   );
 }
 
-export function commandLabel(command: KeybindingCommand): string {
+export function commandLabel(command: ShortcutCommand): string {
   const raw = String(command);
   if (raw.startsWith("script.") && raw.endsWith(".run")) {
     return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;
@@ -312,7 +307,7 @@ export function normalizeShortcutKeyToken(key: string): string | null {
   return null;
 }
 
-export function keybindingFromKeyboardEvent(
+export function shortcutFromKeyboardEvent(
   event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
   platform: string,
 ): string | null {

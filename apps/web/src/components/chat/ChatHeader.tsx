@@ -2,7 +2,7 @@ import {
   type EnvironmentId,
   type EditorId,
   type ProjectScript,
-  type ResolvedKeybindingsConfig,
+  type ResolvedShortcutsConfig,
   type SessionId,
 } from "@t3tools/contracts";
 import { scopeSessionRef } from "@t3tools/client-runtime";
@@ -27,7 +27,7 @@ interface ChatHeaderProps {
   openInCwd: string | null;
   activeProjectScripts: ProjectScript[] | undefined;
   preferredScriptId: string | null;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   terminalAvailable: boolean;
   terminalOpen: boolean;
@@ -66,7 +66,7 @@ export const ChatHeader = memo(function ChatHeader({
   openInCwd,
   activeProjectScripts,
   preferredScriptId,
-  keybindings,
+  shortcuts,
   availableEditors,
   terminalAvailable,
   terminalOpen,
@@ -97,7 +97,7 @@ export const ChatHeader = memo(function ChatHeader({
           {activeProjectScripts && (
             <ProjectScriptsControl
               scripts={activeProjectScripts}
-              keybindings={keybindings}
+              shortcuts={shortcuts}
               preferredScriptId={preferredScriptId}
               onRunScript={onRunProjectScript}
               onAddScript={onAddProjectScript}
@@ -107,7 +107,7 @@ export const ChatHeader = memo(function ChatHeader({
           )}
           {showOpenInPicker && (
             <OpenInPicker
-              keybindings={keybindings}
+              shortcuts={shortcuts}
               availableEditors={availableEditors}
               openInCwd={openInCwd}
             />

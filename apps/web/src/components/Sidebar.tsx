@@ -82,7 +82,7 @@ import {
   sessionJumpCommandForIndex,
   sessionJumpIndexFromCommand,
   sessionTraversalDirectionFromCommand,
-} from "../keybindings";
+} from "../shortcuts";
 import { useModelPickerOpen } from "../modelPickerOpenState";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { useGitStatus } from "../lib/gitStatusState";
@@ -178,7 +178,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { CommandDialogTrigger } from "./ui/command";
 import { readEnvironmentApi } from "../environmentApi";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
-import { useServerKeybindings } from "../rpc/serverState";
+import { useServerShortcuts } from "../rpc/serverState";
 import {
   derivePhysicalProjectKey,
   deriveProjectGroupingOverrideKey,
@@ -250,7 +250,7 @@ function projectGroupingModeDescription(mode: SidebarProjectGroupingMode): strin
 }
 
 function buildSessionJumpLabelMap(input: {
-  keybindings: ReturnType<typeof useServerKeybindings>;
+  shortcuts: ReturnType<typeof useServerShortcuts>;
   platform: string;
   terminalOpen: boolean;
   sessionJumpCommandByKey: ReadonlyMap<
@@ -271,7 +271,7 @@ function buildSessionJumpLabelMap(input: {
   } as const;
   const mapping = new Map<string, string>();
   for (const [sessionKey, command] of input.sessionJumpCommandByKey) {
-    const label = shortcutLabelForCommand(input.keybindings, command, shortcutLabelOptions);
+    const label = shortcutLabelForCommand(input.shortcuts, command, shortcutLabelOptions);
     if (label) {
       mapping.set(sessionKey, label);
     }
@@ -2841,7 +2841,7 @@ export default function Sidebar() {
     select: (params) => resolveSessionRouteRef(params),
   });
   const routeSessionKey = routeSessionRef ? scopedSessionKey(routeSessionRef) : null;
-  const keybindings = useServerKeybindings();
+  const shortcuts = useServerShortcuts();
   const openAddProjectCommandPalette = useCommandPaletteStore((store) => store.openAddProject);
   const [expandedSessionListsByProject, setExpandedSessionListsByProject] = useState<
     ReadonlySet<string>
@@ -2981,8 +2981,8 @@ export default function Sidebar() {
     [platform],
   );
   const newSessionShortcutLabel =
-    shortcutLabelForCommand(keybindings, "chat.newLocal", newSessionShortcutLabelOptions) ??
-    shortcutLabelForCommand(keybindings, "chat.new", newSessionShortcutLabelOptions);
+    shortcutLabelForCommand(shortcuts, "chat.newLocal", newSessionShortcutLabelOptions) ??
+    shortcutLabelForCommand(shortcuts, "chat.new", newSessionShortcutLabelOptions);
 
   const navigateToSession = useCallback(
     (sessionRef: ScopedSessionRef) => {
@@ -3183,16 +3183,16 @@ export default function Sidebar() {
   const sessionJumpLabelByKey = useMemo(
     () =>
       buildSessionJumpLabelMap({
-        keybindings,
+        shortcuts,
         platform,
         terminalOpen: sidebarShortcutContext.terminalOpen,
         sessionJumpCommandByKey,
       }),
-    [keybindings, platform, sidebarShortcutContext.terminalOpen, sessionJumpCommandByKey],
+    [shortcuts, platform, sidebarShortcutContext.terminalOpen, sessionJumpCommandByKey],
   );
   const shouldShowSessionJumpHintsNow = shouldShowSessionJumpHintsForModifiers(
     shortcutModifiers,
-    keybindings,
+    shortcuts,
     {
       platform,
       context: sidebarShortcutContext,
@@ -3239,7 +3239,7 @@ export default function Sidebar() {
         return;
       }
 
-      const command = resolveShortcutCommand(event, keybindings, {
+      const command = resolveShortcutCommand(event, shortcuts, {
         platform,
         context: shortcutContext,
       });
@@ -3290,7 +3290,7 @@ export default function Sidebar() {
     };
   }, [
     getCurrentSidebarShortcutContext,
-    keybindings,
+    shortcuts,
     navigateToSession,
     orderedSidebarSessionKeys,
     platform,
@@ -3357,7 +3357,7 @@ export default function Sidebar() {
       ? getArm64IntelBuildWarningDescription(desktopUpdateState)
       : null;
   const commandPaletteShortcutLabel = shortcutLabelForCommand(
-    keybindings,
+    shortcuts,
     "commandPalette.toggle",
     newSessionShortcutLabelOptions,
   );

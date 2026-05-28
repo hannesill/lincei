@@ -23,7 +23,7 @@
 ## Phase 2: Replace `wsNativeApi`-Owned Push State
 1. Migrate welcome/config/provider/settings state first, because it is already atom-shaped and is the lowest-risk way to delete `wsNativeApi` responsibilities.
 2. Replace [wsNativeApiState.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApiState.ts) with `rpc/serverState.ts`, updated directly from `subscribeServerLifecycle` and `subscribeServerConfig`.
-3. Keep the current hook names for one PR: `useServerConfig`, `useServerSettings`, `useServerProviders`, `useServerKeybindings`, `useServerWelcomeSubscription`, `useServerConfigUpdatedSubscription`.
+3. Keep the current hook names for one PR: `useServerConfig`, `useServerSettings`, `useServerProviders`, `useServerShortcuts`, `useServerWelcomeSubscription`, `useServerConfigUpdatedSubscription`.
 4. Move bootstrap side effects out of [wsNativeApiAtoms.tsx](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApiAtoms.tsx) into a new root bootstrap component mounted from [__root.tsx](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/routes/__root.tsx).
 5. Delete the `server.getConfig()` fallback logic from [wsNativeApi.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApi.ts); snapshot fetch now lives beside the stream atoms.
 
@@ -74,7 +74,7 @@
 - Replace [wsNativeApi.test.ts](/Users/julius/.t3/worktrees/codething-mvp/effect-http-router/apps/web/src/wsNativeApi.test.ts), `gitReactQuery.test.ts`, `providerReactQuery.test.ts`, and `desktopUpdateReactQuery.test.ts` with equivalent atom-backed coverage.
 - Acceptance scenarios:
 - welcome still bootstraps snapshot and navigation
-- keybindings toast still responds to config stream updates
+- shortcuts toast still responds to config stream updates
 - git status/branches refresh after checkout/pull/worktree actions
 - PR resolve dialog keeps cached result while typing
 - `@` path search refreshes after file mutations and orchestration events

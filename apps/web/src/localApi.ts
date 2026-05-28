@@ -129,13 +129,13 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.server.updateProvider(input)
           : Promise.reject(unavailableLocalBackendError()),
-      upsertKeybinding: (input) =>
+      upsertShortcut: (input) =>
         rpcClient
-          ? rpcClient.server.upsertKeybinding(input)
+          ? rpcClient.server.upsertShortcut(input)
           : Promise.reject(unavailableLocalBackendError()),
-      removeKeybinding: (input) =>
+      removeShortcut: (input) =>
         rpcClient
-          ? rpcClient.server.removeKeybinding(input)
+          ? rpcClient.server.removeShortcut(input)
           : Promise.reject(unavailableLocalBackendError()),
       getSettings: () =>
         rpcClient ? rpcClient.server.getSettings() : Promise.reject(unavailableLocalBackendError()),

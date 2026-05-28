@@ -1,8 +1,8 @@
-# Keybindings
+# Shortcuts
 
-Lincei reads keybindings from:
+Lincei reads shortcuts from:
 
-- `~/.lincei/keybindings.json`
+- `~/.lincei/shortcuts.json`
 
 The file must be a JSON array of rules:
 
@@ -13,7 +13,7 @@ The file must be a JSON array of rules:
 ]
 ```
 
-See the full schema for more details: [`packages/contracts/src/keybindings.ts`](packages/contracts/src/keybindings.ts)
+See the full schema for more details: [`packages/contracts/src/shortcuts.ts`](packages/contracts/src/shortcuts.ts)
 
 ## Defaults
 
@@ -31,7 +31,7 @@ See the full schema for more details: [`packages/contracts/src/keybindings.ts`](
 ]
 ```
 
-For most up to date defaults, see [`DEFAULT_KEYBINDINGS` in `apps/server/src/keybindings.ts`](apps/server/src/keybindings.ts)
+For most up to date defaults, see [`DEFAULT_SHORTCUTS` in `apps/server/src/shortcuts.ts`](apps/server/src/shortcuts.ts)
 
 ## Configuration
 

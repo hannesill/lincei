@@ -122,8 +122,8 @@ export interface WsRpcClient {
       input?: RpcInput<typeof WS_METHODS.serverRefreshProviders>,
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverRefreshProviders>>;
     readonly updateProvider: RpcUnaryMethod<typeof WS_METHODS.serverUpdateProvider>;
-    readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;
-    readonly removeKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverRemoveKeybinding>;
+    readonly upsertShortcut: RpcUnaryMethod<typeof WS_METHODS.serverUpsertShortcut>;
+    readonly removeShortcut: RpcUnaryMethod<typeof WS_METHODS.serverRemoveShortcut>;
     readonly getSettings: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetSettings>;
     readonly updateSettings: (
       patch: ServerSettingsPatch,
@@ -254,10 +254,10 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverRefreshProviders](input ?? {})),
       updateProvider: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpdateProvider](input)),
-      upsertKeybinding: (input) =>
-        transport.request((client) => client[WS_METHODS.serverUpsertKeybinding](input)),
-      removeKeybinding: (input) =>
-        transport.request((client) => client[WS_METHODS.serverRemoveKeybinding](input)),
+      upsertShortcut: (input) =>
+        transport.request((client) => client[WS_METHODS.serverUpsertShortcut](input)),
+      removeShortcut: (input) =>
+        transport.request((client) => client[WS_METHODS.serverRemoveShortcut](input)),
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
       updateSettings: (patch) =>
         transport.request((client) => client[WS_METHODS.serverUpdateSettings]({ patch })),

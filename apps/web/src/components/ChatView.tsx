@@ -10,11 +10,11 @@ import {
   type ProviderApprovalDecision,
   ProviderInstanceId,
   type ServerProvider,
-  type ResolvedKeybindingsConfig,
+  type ResolvedShortcutsConfig,
   type ScopedSessionRef,
   type SessionId,
   type TurnId,
-  type KeybindingCommand,
+  type ShortcutCommand,
   OrchestrationSessionActivity,
   ProviderInteractionMode,
   ProviderDriverKind,
@@ -101,13 +101,13 @@ import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
-import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import { resolveShortcutCommand, shortcutLabelForCommand } from "../shortcuts";
 import PlanSidebar from "./PlanSidebar";
 import SessionTerminalDrawer from "./SessionTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
 import { cn, randomUUID } from "~/lib/utils";
 import { stackedSessionToast, toastManager } from "./ui/toast";
-import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
+import { decodeProjectScriptShortcutRule } from "~/lib/projectScriptShortcuts";
 import { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
   commandForProjectScript,
@@ -180,7 +180,7 @@ import { useComposerHandleContext } from "../composerHandleContext";
 import {
   useServerAvailableEditors,
   useServerConfig,
-  useServerKeybindings,
+  useServerShortcuts,
 } from "~/rpc/serverState";
 import { sanitizeSessionErrorMessage } from "~/rpc/transportError";
 import { retainSessionDetailSubscription } from "../environments/runtime/service";
@@ -447,7 +447,7 @@ interface PersistentSessionTerminalDrawerProps {
   splitShortcutLabel: string | undefined;
   newShortcutLabel: string | undefined;
   closeShortcutLabel: string | undefined;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
 }
 
@@ -460,7 +460,7 @@ const PersistentSessionTerminalDrawer = memo(function PersistentSessionTerminalD
   splitShortcutLabel,
   newShortcutLabel,
   closeShortcutLabel,
-  keybindings,
+  shortcuts,
   onAddTerminalContext,
 }: PersistentSessionTerminalDrawerProps) {
   const serverSession = useStore(
@@ -612,7 +612,7 @@ const PersistentSessionTerminalDrawer = memo(function PersistentSessionTerminalD
         splitShortcutLabel={visible ? splitShortcutLabel : undefined}
         newShortcutLabel={visible ? newShortcutLabel : undefined}
         closeShortcutLabel={visible ? closeShortcutLabel : undefined}
-        keybindings={keybindings}
+        shortcuts={shortcuts}
         onActiveTerminalChange={activateTerminal}
         onCloseTerminal={closeTerminal}
         onHeightChange={setTerminalHeight}
@@ -1658,7 +1658,7 @@ export default function ChatView(props: ChatViewProps) {
       })
     : null;
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
-  const keybindings = useServerKeybindings();
+  const shortcuts = useServerShortcuts();
   const availableEditors = useServerAvailableEditors();
   // Prefer an instance-id match so a custom Codex instance (e.g.
   // `codex_personal`) surfaces its own status/message in the banner rather
@@ -1706,24 +1706,24 @@ export default function ChatView(props: ChatViewProps) {
     [terminalState.terminalOpen],
   );
   const terminalToggleShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.toggle"),
-    [keybindings],
+    () => shortcutLabelForCommand(shortcuts, "terminal.toggle"),
+    [shortcuts],
   );
   const splitTerminalShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.split", terminalShortcutLabelOptions),
-    [keybindings, terminalShortcutLabelOptions],
+    () => shortcutLabelForCommand(shortcuts, "terminal.split", terminalShortcutLabelOptions),
+    [shortcuts, terminalShortcutLabelOptions],
   );
   const newTerminalShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.new", terminalShortcutLabelOptions),
-    [keybindings, terminalShortcutLabelOptions],
+    () => shortcutLabelForCommand(shortcuts, "terminal.new", terminalShortcutLabelOptions),
+    [shortcuts, terminalShortcutLabelOptions],
   );
   const closeTerminalShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.close", terminalShortcutLabelOptions),
-    [keybindings, terminalShortcutLabelOptions],
+    () => shortcutLabelForCommand(shortcuts, "terminal.close", terminalShortcutLabelOptions),
+    [shortcuts, terminalShortcutLabelOptions],
   );
   const diffPanelShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "diff.toggle", nonTerminalShortcutLabelOptions),
-    [keybindings, nonTerminalShortcutLabelOptions],
+    () => shortcutLabelForCommand(shortcuts, "diff.toggle", nonTerminalShortcutLabelOptions),
+    [shortcuts, nonTerminalShortcutLabelOptions],
   );
   const onToggleDiff = useCallback(() => {
     if (!isServerSession) {
@@ -1989,8 +1989,8 @@ export default function ChatView(props: ChatViewProps) {
       projectCwd: string;
       previousScripts: ProjectScript[];
       nextScripts: ProjectScript[];
-      keybinding?: string | null;
-      keybindingCommand: KeybindingCommand;
+      shortcut?: string | null;
+      shortcutCommand: ShortcutCommand;
     }) => {
       const api = readEnvironmentApi(environmentId);
       if (!api) return;
@@ -2002,17 +2002,17 @@ export default function ChatView(props: ChatViewProps) {
         scripts: input.nextScripts,
       });
 
-      const keybindingRule = decodeProjectScriptKeybindingRule({
-        keybinding: input.keybinding,
-        command: input.keybindingCommand,
+      const shortcutRule = decodeProjectScriptShortcutRule({
+        shortcut: input.shortcut,
+        command: input.shortcutCommand,
       });
 
-      if (isElectron && keybindingRule) {
+      if (isElectron && shortcutRule) {
         const localApi = readLocalApi();
         if (!localApi) {
           throw new Error("Local API unavailable.");
         }
-        await localApi.server.upsertKeybinding(keybindingRule);
+        await localApi.server.upsertShortcut(shortcutRule);
       }
     },
     [environmentId],
@@ -2045,8 +2045,8 @@ export default function ChatView(props: ChatViewProps) {
         projectCwd: activeProject.cwd,
         previousScripts: activeProject.scripts,
         nextScripts,
-        keybinding: input.keybinding,
-        keybindingCommand: commandForProjectScript(nextId),
+        shortcut: input.shortcut,
+        shortcutCommand: commandForProjectScript(nextId),
       });
     },
     [activeProject, persistProjectScripts],
@@ -2079,8 +2079,8 @@ export default function ChatView(props: ChatViewProps) {
         projectCwd: activeProject.cwd,
         previousScripts: activeProject.scripts,
         nextScripts,
-        keybinding: input.keybinding,
-        keybindingCommand: commandForProjectScript(scriptId),
+        shortcut: input.shortcut,
+        shortcutCommand: commandForProjectScript(scriptId),
       });
     },
     [activeProject, persistProjectScripts],
@@ -2098,8 +2098,8 @@ export default function ChatView(props: ChatViewProps) {
           projectCwd: activeProject.cwd,
           previousScripts: activeProject.scripts,
           nextScripts,
-          keybinding: null,
-          keybindingCommand: commandForProjectScript(scriptId),
+          shortcut: null,
+          shortcutCommand: commandForProjectScript(scriptId),
         });
         toastManager.add({
           type: "success",
@@ -2504,7 +2504,7 @@ export default function ChatView(props: ChatViewProps) {
         modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
       };
 
-      const command = resolveShortcutCommand(event, keybindings, {
+      const command = resolveShortcutCommand(event, shortcuts, {
         context: shortcutContext,
       });
       if (!command) return;
@@ -2578,7 +2578,7 @@ export default function ChatView(props: ChatViewProps) {
     setTerminalOpen,
     runProjectScript,
     splitTerminal,
-    keybindings,
+    shortcuts,
     onToggleDiff,
     toggleTerminalVisibility,
   ]);
@@ -3553,7 +3553,7 @@ export default function ChatView(props: ChatViewProps) {
         preferredScriptId={
           activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
         }
-        keybindings={keybindings}
+        shortcuts={shortcuts}
         availableEditors={availableEditors}
         terminalAvailable={activeProject !== undefined}
         terminalOpen={terminalState.terminalOpen}
@@ -3677,7 +3677,7 @@ export default function ChatView(props: ChatViewProps) {
                   activeSessionActivities={activeSession?.activities}
                   resolvedTheme={resolvedTheme}
                   settings={settings}
-                  keybindings={keybindings}
+                  shortcuts={shortcuts}
                   terminalOpen={Boolean(terminalState.terminalOpen)}
                   gitCwd={gitCwd}
                   promptRef={promptRef}
@@ -3794,7 +3794,7 @@ export default function ChatView(props: ChatViewProps) {
             splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
             newShortcutLabel={newTerminalShortcutLabel ?? undefined}
             closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
-            keybindings={keybindings}
+            shortcuts={shortcuts}
             onAddTerminalContext={addTerminalContextToDraft}
           />
         ),

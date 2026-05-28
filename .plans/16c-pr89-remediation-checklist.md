@@ -260,14 +260,14 @@ Counts: active `51` (`valid=33`, `partially-valid=18`), closed-invalid `6`
   - Sessions: PRRT_kwDORLtfbc5w1CxT
   - Audit note: Braced rename parsing still breaks paths like src/{old => new}/file.ts.
 
-- [ ] `C010` `loadCustomKeybindingsConfig` fails when the config file doesn't exist, which is expected for new users. Consider catching `ENOENT` and returning an empty array instead. <details> <summary>🚀 Reply "<strong>fix it for me</strong>" or copy this <strong>AI Prompt</strong> for your agent:</summary>
+- [ ] `C010` `loadCustomShortcutsConfig` fails when the config file doesn't exist, which is expected for new users. Consider catching `ENOENT` and returning an empty array instead. <details> <summary>🚀 Reply "<strong>fix it for me</strong>" or copy this <strong>AI Prompt</strong> for your agent:</summary>
   - Status: `TODO`
   - Verdict: `valid`
   - Severity: `Medium`
   - Area: `Edge-case parsing/platform behavior`
-  - File: `apps/server/src/keybindings.ts:418`
+  - File: `apps/server/src/shortcuts.ts:418`
   - Sessions: PRRT_kwDORLtfbc5wxvIJ
-  - Audit note: ENOENT for missing keybindings config still not handled as empty/default.
+  - Audit note: ENOENT for missing shortcuts config still not handled as empty/default.
 
 - [ ] `C022` Fish shell outputs `$PATH` as space-separated, not colon-separated. Consider checking if the shell is fish and using `string join : $PATH` instead, or validating the result contains colons before assigning.
   - Status: `TODO`
@@ -319,18 +319,18 @@ Counts: active `51` (`valid=33`, `partially-valid=18`), closed-invalid `6`
   - Verdict: `partially-valid`
   - Severity: `Low`
   - Area: `Edge-case parsing/platform behavior`
-  - File: `apps/server/src/keybindings.ts:352`
+  - File: `apps/server/src/shortcuts.ts:352`
   - Sessions: PRRT_kwDORLtfbc5wxvIB
   - Audit note: Parser/encoder mismatch remains, but encoder path currently low-use.
 
-- [x] `C040` `upsertKeybindingRule` has a race condition: concurrent calls read the same file state, then the last write overwrites earlier changes. Consider wrapping the read-modify-write sequence with `Effect.Semaphore` to serialize access. <details> <summary>🚀 Reply "<strong>fix it for me</strong>" or copy this <strong>AI Prompt</strong> for your agent:</summary>
+- [x] `C040` `upsertShortcutRule` has a race condition: concurrent calls read the same file state, then the last write overwrites earlier changes. Consider wrapping the read-modify-write sequence with `Effect.Semaphore` to serialize access. <details> <summary>🚀 Reply "<strong>fix it for me</strong>" or copy this <strong>AI Prompt</strong> for your agent:</summary>
   - Status: `DONE`
   - Verdict: `valid`
   - Severity: `Low`
   - Area: `Edge-case parsing/platform behavior`
-  - File: `apps/server/src/keybindings.ts:488`
+  - File: `apps/server/src/shortcuts.ts:488`
   - Sessions: PRRT_kwDORLtfbc5wxvIA
-  - Audit note: upsertKeybindingRule read-modify-write remains race-prone.
+  - Audit note: upsertShortcutRule read-modify-write remains race-prone.
 
 ### Phase 6
 

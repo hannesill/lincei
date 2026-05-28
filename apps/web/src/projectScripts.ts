@@ -1,7 +1,7 @@
 import {
   MAX_SCRIPT_ID_LENGTH,
   SCRIPT_RUN_COMMAND_PATTERN,
-  type KeybindingCommand,
+  type ShortcutCommand,
   type ProjectScript,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
@@ -22,7 +22,7 @@ function normalizeScriptId(value: string): string {
   return cleaned.slice(0, MAX_SCRIPT_ID_LENGTH).replace(/-+$/g, "") || "script";
 }
 
-export const commandForProjectScript = (scriptId: string): KeybindingCommand =>
+export const commandForProjectScript = (scriptId: string): ShortcutCommand =>
   SCRIPT_RUN_COMMAND_PATTERN.make(`script.${scriptId}.run`);
 
 export function projectScriptIdFromCommand(command: string): string | null {

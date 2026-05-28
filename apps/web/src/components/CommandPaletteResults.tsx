@@ -1,6 +1,6 @@
-import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { type ResolvedShortcutsConfig } from "@t3tools/contracts";
 import { ChevronRightIcon } from "lucide-react";
-import { shortcutLabelForCommand } from "../keybindings";
+import { shortcutLabelForCommand } from "../shortcuts";
 import {
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
@@ -21,7 +21,7 @@ interface CommandPaletteResultsProps {
   groups: ReadonlyArray<CommandPaletteGroup>;
   highlightedItemValue?: string | null;
   isActionsOnly: boolean;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   onExecuteItem: (item: CommandPaletteActionItem | CommandPaletteSubmenuItem) => void;
 }
 
@@ -50,7 +50,7 @@ export function CommandPaletteResults(props: CommandPaletteResultsProps) {
                 <CommandPaletteResultRow
                   item={item}
                   key={item.value}
-                  keybindings={props.keybindings}
+                  shortcuts={props.shortcuts}
                   isActive={props.highlightedItemValue === item.value}
                   onExecuteItem={props.onExecuteItem}
                 />
@@ -93,11 +93,11 @@ function DisabledCommandPaletteResultRow(props: {
 function CommandPaletteResultRow(props: {
   item: CommandPaletteActionItem | CommandPaletteSubmenuItem;
   isActive: boolean;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   onExecuteItem: (item: CommandPaletteActionItem | CommandPaletteSubmenuItem) => void;
 }) {
   const shortcutLabel = props.item.shortcutCommand
-    ? shortcutLabelForCommand(props.keybindings, props.item.shortcutCommand)
+    ? shortcutLabelForCommand(props.shortcuts, props.item.shortcutCommand)
     : null;
 
   return (

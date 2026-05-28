@@ -10,12 +10,12 @@ import {
   type ServerLifecycleStreamEvent,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { DEFAULT_RESOLVED_SHORTCUTS } from "@t3tools/shared/shortcuts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getServerConfig,
-  getServerKeybindings,
+  getServerShortcuts,
   onProvidersUpdated,
   onServerConfigUpdated,
   onWelcome,
@@ -80,8 +80,8 @@ const baseServerConfig: ServerConfig = {
     sessionCookieName: "t3_session",
   },
   cwd: "/tmp/workspace",
-  keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
-  keybindings: [],
+  shortcutsConfigPath: "/tmp/workspace/.config/shortcuts.json",
+  shortcuts: [],
   issues: [],
   providers: defaultProviders,
   availableEditors: ["cursor"],
@@ -143,9 +143,9 @@ afterEach(() => {
 });
 
 describe("serverState", () => {
-  it("uses default keybindings before a server config snapshot is available", () => {
+  it("uses default shortcuts before a server config snapshot is available", () => {
     expect(getServerConfig()).toBeNull();
-    expect(getServerKeybindings()).toEqual(DEFAULT_RESOLVED_KEYBINDINGS);
+    expect(getServerShortcuts()).toEqual(DEFAULT_RESOLVED_SHORTCUTS);
   });
 
   it("bootstraps the server config snapshot and replays it to late subscribers", async () => {
@@ -257,7 +257,7 @@ describe("serverState", () => {
     stop();
   });
 
-  it("merges provider, settings, and keybinding updates into the cached config", async () => {
+  it("merges provider, settings, and shortcut updates into the cached config", async () => {
     serverApi.getConfig.mockResolvedValueOnce(baseServerConfig);
     const configListener = vi.fn();
     const providersListener = vi.fn();
@@ -278,7 +278,7 @@ describe("serverState", () => {
       },
     ];
 
-    const nextKeybindings = [
+    const nextShortcuts = [
       {
         command: "commandPalette.toggle",
         shortcut: {
@@ -294,10 +294,10 @@ describe("serverState", () => {
 
     emitServerConfigEvent({
       version: 1,
-      type: "keybindingsUpdated",
+      type: "shortcutsUpdated",
       payload: {
-        keybindings: nextKeybindings,
-        issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+        shortcuts: nextShortcuts,
+        issues: [{ kind: "shortcuts.malformed-config", message: "bad json" }],
       },
     });
     emitServerConfigEvent({
@@ -321,8 +321,8 @@ describe("serverState", () => {
     await waitFor(() => {
       expect(getServerConfig()).toEqual({
         ...baseServerConfig,
-        keybindings: nextKeybindings,
-        issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+        shortcuts: nextShortcuts,
+        issues: [{ kind: "shortcuts.malformed-config", message: "bad json" }],
         providers: nextProviders,
         settings: {
           ...DEFAULT_SERVER_SETTINGS,
@@ -335,16 +335,16 @@ describe("serverState", () => {
     expect(configListener).toHaveBeenNthCalledWith(
       2,
       {
-        issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+        issues: [{ kind: "shortcuts.malformed-config", message: "bad json" }],
         providers: defaultProviders,
         settings: DEFAULT_SERVER_SETTINGS,
       },
-      "keybindingsUpdated",
+      "shortcutsUpdated",
     );
     expect(configListener).toHaveBeenNthCalledWith(
       3,
       {
-        issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+        issues: [{ kind: "shortcuts.malformed-config", message: "bad json" }],
         providers: nextProviders,
         settings: DEFAULT_SERVER_SETTINGS,
       },
@@ -352,7 +352,7 @@ describe("serverState", () => {
     );
     expect(configListener).toHaveBeenLastCalledWith(
       {
-        issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
+        issues: [{ kind: "shortcuts.malformed-config", message: "bad json" }],
         providers: nextProviders,
         settings: {
           ...DEFAULT_SERVER_SETTINGS,

@@ -33,11 +33,11 @@ import type {
   ServerProcessResourceHistoryResult,
   ServerProviderUpdateInput,
   ServerProviderUpdatedPayload,
-  ServerRemoveKeybindingResult,
+  ServerRemoveShortcutResult,
   ServerSignalProcessInput,
   ServerSignalProcessResult,
   ServerTraceDiagnosticsResult,
-  ServerUpsertKeybindingResult,
+  ServerUpsertShortcutResult,
 } from "./server.ts";
 import type {
   TerminalClearInput,
@@ -49,7 +49,7 @@ import type {
   TerminalSessionSnapshot,
   TerminalWriteInput,
 } from "./terminal.ts";
-import type { ServerRemoveKeybindingInput, ServerUpsertKeybindingInput } from "./server.ts";
+import type { ServerRemoveShortcutInput, ServerUpsertShortcutInput } from "./server.ts";
 import * as Schema from "effect/Schema";
 import type {
   ClientOrchestrationCommand,
@@ -477,8 +477,8 @@ export interface LocalApi {
       readonly instanceId?: ProviderInstanceId;
     }) => Promise<ServerProviderUpdatedPayload>;
     updateProvider: (input: ServerProviderUpdateInput) => Promise<ServerProviderUpdatedPayload>;
-    upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
-    removeKeybinding: (input: ServerRemoveKeybindingInput) => Promise<ServerRemoveKeybindingResult>;
+    upsertShortcut: (input: ServerUpsertShortcutInput) => Promise<ServerUpsertShortcutResult>;
+    removeShortcut: (input: ServerRemoveShortcutInput) => Promise<ServerRemoveShortcutResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
     discoverSourceControl: () => Promise<SourceControlDiscoveryResult>;

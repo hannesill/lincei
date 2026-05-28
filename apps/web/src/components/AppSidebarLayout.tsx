@@ -3,8 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 
 import SessionSidebar from "./Sidebar";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { resolveShortcutCommand } from "../keybindings";
-import { useServerKeybindings } from "../rpc/serverState";
+import { resolveShortcutCommand } from "../shortcuts";
+import { useServerShortcuts } from "../rpc/serverState";
 import { Sidebar, SidebarProvider, SidebarRail, useSidebar } from "./ui/sidebar";
 import {
   clearShortcutModifierState,
@@ -13,13 +13,13 @@ import {
 
 function SidebarGlobalShortcuts() {
   const { toggleSidebar } = useSidebar();
-  const keybindings = useServerKeybindings();
+  const shortcuts = useServerShortcuts();
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
 
-      const command = resolveShortcutCommand(event, keybindings, {
+      const command = resolveShortcutCommand(event, shortcuts, {
         context: {
           terminalFocus: isTerminalFocused(),
           terminalOpen: false,
@@ -36,7 +36,7 @@ function SidebarGlobalShortcuts() {
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown);
     };
-  }, [keybindings, toggleSidebar]);
+  }, [shortcuts, toggleSidebar]);
 
   return null;
 }

@@ -371,7 +371,7 @@ describe("WsTransport", () => {
     });
 
     const requestPromise = transport.request((client) =>
-      client[WS_METHODS.serverUpsertKeybinding]({
+      client[WS_METHODS.serverUpsertShortcut]({
         command: "terminal.toggle",
         key: "ctrl+k",
       }),
@@ -391,7 +391,7 @@ describe("WsTransport", () => {
         exit: {
           _tag: "Success",
           value: {
-            keybindings: [],
+            shortcuts: [],
             issues: [],
           },
         },
@@ -399,7 +399,7 @@ describe("WsTransport", () => {
     );
 
     await expect(requestPromise).resolves.toEqual({
-      keybindings: [],
+      shortcuts: [],
       issues: [],
     });
 
@@ -498,7 +498,7 @@ describe("WsTransport", () => {
     const transport = createTransport("ws://localhost:3020");
 
     const requestPromise = transport.request((client) =>
-      client[WS_METHODS.serverUpsertKeybinding]({
+      client[WS_METHODS.serverUpsertShortcut]({
         command: "terminal.toggle",
         key: "ctrl+k",
       }),
@@ -520,7 +520,7 @@ describe("WsTransport", () => {
       expect(getSlowRpcAckRequests()).toMatchObject([
         {
           requestId: requestMessage.id,
-          tag: WS_METHODS.serverUpsertKeybinding,
+          tag: WS_METHODS.serverUpsertShortcut,
         },
       ]);
     }, 1_000);
@@ -532,7 +532,7 @@ describe("WsTransport", () => {
         exit: {
           _tag: "Success",
           value: {
-            keybindings: [],
+            shortcuts: [],
             issues: [],
           },
         },
@@ -540,7 +540,7 @@ describe("WsTransport", () => {
     );
 
     await expect(requestPromise).resolves.toEqual({
-      keybindings: [],
+      shortcuts: [],
       issues: [],
     });
     expect(getSlowRpcAckRequests()).toEqual([]);
@@ -554,7 +554,7 @@ describe("WsTransport", () => {
     const transport = createTransport("ws://localhost:3020");
 
     const requestPromise = transport.request((client) =>
-      client[WS_METHODS.serverUpsertKeybinding]({
+      client[WS_METHODS.serverUpsertShortcut]({
         command: "terminal.toggle",
         key: "ctrl+k",
       }),
@@ -577,7 +577,7 @@ describe("WsTransport", () => {
       expect(getSlowRpcAckRequests()).toMatchObject([
         {
           requestId: firstRequest.id,
-          tag: WS_METHODS.serverUpsertKeybinding,
+          tag: WS_METHODS.serverUpsertShortcut,
         },
       ]);
     }, 1_000);
@@ -602,7 +602,7 @@ describe("WsTransport", () => {
     const transport = createTransport("ws://localhost:3020");
 
     const requestPromise = transport.request((client) =>
-      client[WS_METHODS.serverUpsertKeybinding]({
+      client[WS_METHODS.serverUpsertShortcut]({
         command: "terminal.toggle",
         key: "ctrl+k",
       }),
@@ -627,7 +627,7 @@ describe("WsTransport", () => {
     };
     expect(requestMessage).toMatchObject({
       _tag: "Request",
-      tag: WS_METHODS.serverUpsertKeybinding,
+      tag: WS_METHODS.serverUpsertShortcut,
       payload: {
         command: "terminal.toggle",
         key: "ctrl+k",
@@ -641,7 +641,7 @@ describe("WsTransport", () => {
         exit: {
           _tag: "Success",
           value: {
-            keybindings: [],
+            shortcuts: [],
             issues: [],
           },
         },
@@ -649,7 +649,7 @@ describe("WsTransport", () => {
     );
 
     await expect(requestPromise).resolves.toEqual({
-      keybindings: [],
+      shortcuts: [],
       issues: [],
     });
 

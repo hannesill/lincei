@@ -1,6 +1,6 @@
-import { EditorId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { EditorId, type ResolvedShortcutsConfig } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useMemo } from "react";
-import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
+import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../shortcuts";
 import { usePreferredEditor } from "../../editorPreferences";
 import { ChevronDownIcon, FolderClosedIcon } from "lucide-react";
 import { Button } from "../ui/button";
@@ -150,11 +150,11 @@ const resolveOptions = (platform: string, availableEditors: ReadonlyArray<Editor
 };
 
 export const OpenInPicker = memo(function OpenInPicker({
-  keybindings,
+  shortcuts,
   availableEditors,
   openInCwd,
 }: {
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
 }) {
@@ -178,14 +178,14 @@ export const OpenInPicker = memo(function OpenInPicker({
   );
 
   const openFavoriteEditorShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "editor.openFavorite"),
-    [keybindings],
+    () => shortcutLabelForCommand(shortcuts, "editor.openFavorite"),
+    [shortcuts],
   );
 
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
       const api = readLocalApi();
-      if (!isOpenFavoriteEditorShortcut(e, keybindings)) return;
+      if (!isOpenFavoriteEditorShortcut(e, shortcuts)) return;
       if (!api || !openInCwd) return;
       if (!preferredEditor) return;
 
@@ -194,7 +194,7 @@ export const OpenInPicker = memo(function OpenInPicker({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [preferredEditor, keybindings, openInCwd]);
+  }, [preferredEditor, shortcuts, openInCwd]);
 
   return (
     <Group aria-label="Subscription actions">

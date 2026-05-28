@@ -284,7 +284,7 @@ Use fragment tokens by default. Continue accepting `?token=` for compatibility.
    - command palette
    - settings pages
    - server config atom defaults
-   - keybindings
+   - shortcuts
    - provider/model lists
    - update/desktop-only affordances
 5. Add route tests for:

@@ -11,30 +11,30 @@ import {
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import {
-  KeybindingCommand,
-  KeybindingValue,
-  KeybindingWhen,
-  ResolvedKeybindingsConfig,
-} from "./keybindings.ts";
+  ShortcutCommand,
+  ShortcutValue,
+  ShortcutWhen,
+  ResolvedShortcutsConfig,
+} from "./shortcuts.ts";
 import { EditorId } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { ServerSettings } from "./settings.ts";
 
-const KeybindingsMalformedConfigIssue = Schema.Struct({
-  kind: Schema.Literal("keybindings.malformed-config"),
+const ShortcutsMalformedConfigIssue = Schema.Struct({
+  kind: Schema.Literal("shortcuts.malformed-config"),
   message: TrimmedNonEmptyString,
 });
 
-const KeybindingsInvalidEntryIssue = Schema.Struct({
-  kind: Schema.Literal("keybindings.invalid-entry"),
+const ShortcutsInvalidEntryIssue = Schema.Struct({
+  kind: Schema.Literal("shortcuts.invalid-entry"),
   message: TrimmedNonEmptyString,
   index: Schema.Number,
 });
 
 export const ServerConfigIssue = Schema.Union([
-  KeybindingsMalformedConfigIssue,
-  KeybindingsInvalidEntryIssue,
+  ShortcutsMalformedConfigIssue,
+  ShortcutsInvalidEntryIssue,
 ]);
 export type ServerConfigIssue = typeof ServerConfigIssue.Type;
 
@@ -398,8 +398,8 @@ export const ServerConfig = Schema.Struct({
   environment: ExecutionEnvironmentDescriptor,
   auth: ServerAuthDescriptor,
   cwd: TrimmedNonEmptyString,
-  keybindingsConfigPath: TrimmedNonEmptyString,
-  keybindings: ResolvedKeybindingsConfig,
+  shortcutsConfigPath: TrimmedNonEmptyString,
+  shortcuts: ResolvedShortcutsConfig,
   issues: ServerConfigIssues,
   providers: ServerProviders,
   availableEditors: Schema.Array(EditorId),
@@ -408,31 +408,31 @@ export const ServerConfig = Schema.Struct({
 });
 export type ServerConfig = typeof ServerConfig.Type;
 
-const ServerUpsertKeybindingReplaceTarget = Schema.Struct({
-  key: KeybindingValue,
-  command: KeybindingCommand,
-  when: Schema.optional(KeybindingWhen),
+const ServerUpsertShortcutReplaceTarget = Schema.Struct({
+  key: ShortcutValue,
+  command: ShortcutCommand,
+  when: Schema.optional(ShortcutWhen),
 });
 
-export const ServerUpsertKeybindingInput = Schema.Struct({
-  key: KeybindingValue,
-  command: KeybindingCommand,
-  when: Schema.optional(KeybindingWhen),
-  replace: Schema.optional(ServerUpsertKeybindingReplaceTarget),
+export const ServerUpsertShortcutInput = Schema.Struct({
+  key: ShortcutValue,
+  command: ShortcutCommand,
+  when: Schema.optional(ShortcutWhen),
+  replace: Schema.optional(ServerUpsertShortcutReplaceTarget),
 });
-export type ServerUpsertKeybindingInput = typeof ServerUpsertKeybindingInput.Type;
+export type ServerUpsertShortcutInput = typeof ServerUpsertShortcutInput.Type;
 
-export const ServerRemoveKeybindingInput = ServerUpsertKeybindingReplaceTarget;
-export type ServerRemoveKeybindingInput = typeof ServerRemoveKeybindingInput.Type;
+export const ServerRemoveShortcutInput = ServerUpsertShortcutReplaceTarget;
+export type ServerRemoveShortcutInput = typeof ServerRemoveShortcutInput.Type;
 
-export const ServerUpsertKeybindingResult = Schema.Struct({
-  keybindings: ResolvedKeybindingsConfig,
+export const ServerUpsertShortcutResult = Schema.Struct({
+  shortcuts: ResolvedShortcutsConfig,
   issues: ServerConfigIssues,
 });
-export type ServerUpsertKeybindingResult = typeof ServerUpsertKeybindingResult.Type;
+export type ServerUpsertShortcutResult = typeof ServerUpsertShortcutResult.Type;
 
-export const ServerRemoveKeybindingResult = ServerUpsertKeybindingResult;
-export type ServerRemoveKeybindingResult = typeof ServerRemoveKeybindingResult.Type;
+export const ServerRemoveShortcutResult = ServerUpsertShortcutResult;
+export type ServerRemoveShortcutResult = typeof ServerRemoveShortcutResult.Type;
 
 export const ServerConfigUpdatedPayload = Schema.Struct({
   issues: ServerConfigIssues,
@@ -441,12 +441,11 @@ export const ServerConfigUpdatedPayload = Schema.Struct({
 });
 export type ServerConfigUpdatedPayload = typeof ServerConfigUpdatedPayload.Type;
 
-export const ServerConfigKeybindingsUpdatedPayload = Schema.Struct({
-  keybindings: ResolvedKeybindingsConfig,
+export const ServerConfigShortcutsUpdatedPayload = Schema.Struct({
+  shortcuts: ResolvedShortcutsConfig,
   issues: ServerConfigIssues,
 });
-export type ServerConfigKeybindingsUpdatedPayload =
-  typeof ServerConfigKeybindingsUpdatedPayload.Type;
+export type ServerConfigShortcutsUpdatedPayload = typeof ServerConfigShortcutsUpdatedPayload.Type;
 
 export const ServerConfigProviderStatusesPayload = Schema.Struct({
   providers: ServerProviders,
@@ -465,13 +464,13 @@ export const ServerConfigStreamSnapshotEvent = Schema.Struct({
 });
 export type ServerConfigStreamSnapshotEvent = typeof ServerConfigStreamSnapshotEvent.Type;
 
-export const ServerConfigStreamKeybindingsUpdatedEvent = Schema.Struct({
+export const ServerConfigStreamShortcutsUpdatedEvent = Schema.Struct({
   version: Schema.Literal(1),
-  type: Schema.Literal("keybindingsUpdated"),
-  payload: ServerConfigKeybindingsUpdatedPayload,
+  type: Schema.Literal("shortcutsUpdated"),
+  payload: ServerConfigShortcutsUpdatedPayload,
 });
-export type ServerConfigStreamKeybindingsUpdatedEvent =
-  typeof ServerConfigStreamKeybindingsUpdatedEvent.Type;
+export type ServerConfigStreamShortcutsUpdatedEvent =
+  typeof ServerConfigStreamShortcutsUpdatedEvent.Type;
 
 export const ServerConfigStreamProviderStatusesEvent = Schema.Struct({
   version: Schema.Literal(1),
@@ -491,7 +490,7 @@ export type ServerConfigStreamSettingsUpdatedEvent =
 
 export const ServerConfigStreamEvent = Schema.Union([
   ServerConfigStreamSnapshotEvent,
-  ServerConfigStreamKeybindingsUpdatedEvent,
+  ServerConfigStreamShortcutsUpdatedEvent,
   ServerConfigStreamProviderStatusesEvent,
   ServerConfigStreamSettingsUpdatedEvent,
 ]);

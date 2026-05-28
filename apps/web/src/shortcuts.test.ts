@@ -1,10 +1,10 @@
 import { assert, describe, it } from "vitest";
 
 import {
-  type KeybindingCommand,
-  type KeybindingShortcut,
-  type KeybindingWhenNode,
-  type ResolvedKeybindingsConfig,
+  type ShortcutCommand,
+  type KeyboardShortcut,
+  type ShortcutWhenNode,
+  type ResolvedShortcutsConfig,
 } from "@t3tools/contracts";
 import {
   formatShortcutLabel,
@@ -29,7 +29,7 @@ import {
   sessionJumpIndexFromCommand,
   sessionTraversalDirectionFromCommand,
   type ShortcutEventLike,
-} from "./keybindings";
+} from "./shortcuts";
 
 function event(overrides: Partial<ShortcutEventLike> = {}): ShortcutEventLike {
   return {
@@ -44,8 +44,8 @@ function event(overrides: Partial<ShortcutEventLike> = {}): ShortcutEventLike {
 
 function modShortcut(
   key: string,
-  overrides: Partial<Omit<KeybindingShortcut, "key">> = {},
-): KeybindingShortcut {
+  overrides: Partial<Omit<KeyboardShortcut, "key">> = {},
+): KeyboardShortcut {
   return {
     key,
     metaKey: false,
@@ -57,25 +57,25 @@ function modShortcut(
   };
 }
 
-function whenIdentifier(name: string): KeybindingWhenNode {
+function whenIdentifier(name: string): ShortcutWhenNode {
   return { type: "identifier", name };
 }
 
-function whenNot(node: KeybindingWhenNode): KeybindingWhenNode {
+function whenNot(node: ShortcutWhenNode): ShortcutWhenNode {
   return { type: "not", node };
 }
 
-function whenAnd(left: KeybindingWhenNode, right: KeybindingWhenNode): KeybindingWhenNode {
+function whenAnd(left: ShortcutWhenNode, right: ShortcutWhenNode): ShortcutWhenNode {
   return { type: "and", left, right };
 }
 
 interface TestBinding {
-  shortcut: KeybindingShortcut;
-  command: KeybindingCommand;
-  whenAst?: KeybindingWhenNode;
+  shortcut: KeyboardShortcut;
+  command: ShortcutCommand;
+  whenAst?: ShortcutWhenNode;
 }
 
-function compile(bindings: TestBinding[]): ResolvedKeybindingsConfig {
+function compile(bindings: TestBinding[]): ResolvedShortcutsConfig {
   return bindings.map((binding) => ({
     command: binding.command,
     shortcut: binding.shortcut,
@@ -214,7 +214,7 @@ describe("split/new/close terminal shortcuts", () => {
   });
 
   it("supports when expressions", () => {
-    const keybindings = compile([
+    const shortcuts = compile([
       {
         shortcut: modShortcut("\\"),
         command: "terminal.split",
@@ -228,19 +228,19 @@ describe("split/new/close terminal shortcuts", () => {
       { shortcut: modShortcut("j"), command: "terminal.toggle" },
     ]);
     assert.isTrue(
-      isTerminalSplitShortcut(event({ key: "\\", ctrlKey: true }), keybindings, {
+      isTerminalSplitShortcut(event({ key: "\\", ctrlKey: true }), shortcuts, {
         platform: "Win32",
         context: { terminalOpen: true, terminalFocus: false },
       }),
     );
     assert.isFalse(
-      isTerminalSplitShortcut(event({ key: "\\", ctrlKey: true }), keybindings, {
+      isTerminalSplitShortcut(event({ key: "\\", ctrlKey: true }), shortcuts, {
         platform: "Win32",
         context: { terminalOpen: false, terminalFocus: false },
       }),
     );
     assert.isTrue(
-      isTerminalNewShortcut(event({ key: "n", ctrlKey: true, shiftKey: true }), keybindings, {
+      isTerminalNewShortcut(event({ key: "n", ctrlKey: true, shiftKey: true }), shortcuts, {
         platform: "Win32",
         context: { terminalOpen: true, terminalFocus: false },
       }),
@@ -248,18 +248,18 @@ describe("split/new/close terminal shortcuts", () => {
   });
 
   it("supports when boolean literals", () => {
-    const keybindings = compile([
+    const shortcuts = compile([
       { shortcut: modShortcut("n"), command: "terminal.new", whenAst: whenIdentifier("true") },
       { shortcut: modShortcut("m"), command: "terminal.new", whenAst: whenIdentifier("false") },
     ]);
 
     assert.isTrue(
-      isTerminalNewShortcut(event({ key: "n", ctrlKey: true }), keybindings, {
+      isTerminalNewShortcut(event({ key: "n", ctrlKey: true }), shortcuts, {
         platform: "Linux",
       }),
     );
     assert.isFalse(
-      isTerminalNewShortcut(event({ key: "m", ctrlKey: true }), keybindings, {
+      isTerminalNewShortcut(event({ key: "m", ctrlKey: true }), shortcuts, {
         platform: "Linux",
       }),
     );
@@ -522,7 +522,7 @@ describe("chat/editor shortcuts", () => {
 
 describe("cross-command precedence", () => {
   it("uses when + order so a later focused rule overrides a global rule", () => {
-    const keybindings = compile([
+    const shortcuts = compile([
       { shortcut: modShortcut("n"), command: "chat.new" },
       {
         shortcut: modShortcut("n"),
@@ -532,25 +532,25 @@ describe("cross-command precedence", () => {
     ]);
 
     assert.isTrue(
-      isTerminalNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
+      isTerminalNewShortcut(event({ key: "n", metaKey: true }), shortcuts, {
         platform: "MacIntel",
         context: { terminalFocus: true },
       }),
     );
     assert.isFalse(
-      isChatNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
+      isChatNewShortcut(event({ key: "n", metaKey: true }), shortcuts, {
         platform: "MacIntel",
         context: { terminalFocus: true },
       }),
     );
     assert.isFalse(
-      isTerminalNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
+      isTerminalNewShortcut(event({ key: "n", metaKey: true }), shortcuts, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),
     );
     assert.isTrue(
-      isChatNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
+      isChatNewShortcut(event({ key: "n", metaKey: true }), shortcuts, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),
@@ -558,7 +558,7 @@ describe("cross-command precedence", () => {
   });
 
   it("still lets a later global rule win when both rules match", () => {
-    const keybindings = compile([
+    const shortcuts = compile([
       {
         shortcut: modShortcut("n"),
         command: "terminal.new",
@@ -568,13 +568,13 @@ describe("cross-command precedence", () => {
     ]);
 
     assert.isFalse(
-      isTerminalNewShortcut(event({ key: "n", ctrlKey: true }), keybindings, {
+      isTerminalNewShortcut(event({ key: "n", ctrlKey: true }), shortcuts, {
         platform: "Linux",
         context: { terminalFocus: true },
       }),
     );
     assert.isTrue(
-      isChatNewShortcut(event({ key: "n", ctrlKey: true }), keybindings, {
+      isChatNewShortcut(event({ key: "n", ctrlKey: true }), shortcuts, {
         platform: "Linux",
         context: { terminalFocus: true },
       }),
@@ -584,10 +584,10 @@ describe("cross-command precedence", () => {
 
 describe("resolveShortcutCommand", () => {
   it("returns dynamic script commands", () => {
-    const keybindings = compile([{ shortcut: modShortcut("r"), command: "script.setup.run" }]);
+    const shortcuts = compile([{ shortcut: modShortcut("r"), command: "script.setup.run" }]);
 
     assert.strictEqual(
-      resolveShortcutCommand(event({ key: "r", ctrlKey: true }), keybindings, {
+      resolveShortcutCommand(event({ key: "r", ctrlKey: true }), shortcuts, {
         platform: "Linux",
       }),
       "script.setup.run",

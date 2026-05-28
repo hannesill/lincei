@@ -28,7 +28,7 @@ All 7 sections are implemented. CI passes (format, lint, typecheck, test, browse
 |------|--------|
 | `packages/contracts/src/ws.ts` | Channel-indexed `WsPushPayloadByChannel` map, `WsPush` union schema, `WsPushSequence` |
 | `apps/server/src/wsServer.ts` | Integrated `ServerPushBus` and `ServerReadiness`; welcome gated on readiness |
-| `apps/server/src/keybindings.ts` | Explicit runtime with `start`/`ready`/`snapshot`; dual `fs.watch` + stat-polling watcher |
+| `apps/server/src/shortcuts.ts` | Explicit runtime with `start`/`ready`/`snapshot`; dual `fs.watch` + stat-polling watcher |
 | `apps/web/src/wsTransport.ts` | Connection state machine (`connecting`→`open`→`reconnecting`→`closed`→`disposed`); two-phase decode at boundary; cached latest push by channel |
 | `apps/web/src/wsNativeApi.ts` | Removed decode logic; delegates to pre-validated transport messages |
 | `apps/server/src/orchestration/Layers/CheckpointReactor.ts` | Uses `DrainableWorker`; publishes completion receipts |
@@ -50,12 +50,12 @@ All 7 sections are implemented. CI passes (format, lint, typecheck, test, browse
 
 ### 3. Introduce explicit server readiness and a single push pipeline — DONE
 - `apps/server/src/wsServer/pushBus.ts`: `ServerPushBus` with `publishAll` (broadcast) and `publishClient` (targeted) methods, backed by one ordered path. All pushes flow through it.
-- `apps/server/src/wsServer/readiness.ts`: `ServerReadiness` with Deferred-based barriers for HTTP listening, push bus, keybindings, terminal subscriptions, and orchestration subscriptions.
+- `apps/server/src/wsServer/readiness.ts`: `ServerReadiness` with Deferred-based barriers for HTTP listening, push bus, shortcuts, terminal subscriptions, and orchestration subscriptions.
 - `server.welcome` is emitted only after connection-scoped and server-scoped readiness is complete.
 - `wsServer.ts` no longer publishes directly from ad hoc background streams.
 
 ### 4. Turn background watchers into explicit runtimes — DONE
-- `apps/server/src/keybindings.ts` refactored as explicit `KeybindingsShape` service with `start`, `ready`, `snapshot` semantics.
+- `apps/server/src/shortcuts.ts` refactored as explicit `ShortcutsShape` service with `start`, `ready`, `snapshot` semantics.
 - Initial config load, cache warmup, and dual watcher attachment (`fs.watch` + `watchFileWithStatPolling`) complete before `ready` resolves.
 - `watchFileWithStatPolling.ts` is the thin adapter for environments where `fs.watch` is unreliable.
 
@@ -90,7 +90,7 @@ All 7 sections are implemented. CI passes (format, lint, typecheck, test, browse
 - Server:
   - readiness tests proving `server.welcome` cannot precede runtime readiness
   - push bus tests proving terminal/config/orchestration pushes are serialized and typed
-  - keybindings runtime tests with fake watch source plus one real watcher integration test
+  - shortcuts runtime tests with fake watch source plus one real watcher integration test
 - Orchestration:
   - receipt tests proving checkpoint refs and projections are complete before completion signals resolve
   - replacement of polling-based checkpoint/integration waits with receipt-based waits

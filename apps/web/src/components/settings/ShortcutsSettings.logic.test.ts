@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import type { ResolvedShortcutsConfig } from "@t3tools/contracts";
 
 import {
-  buildKeybindingRows,
-  buildKeybindingCommandOptions,
+  buildShortcutRows,
+  buildShortcutCommandOptions,
   buildWhenVariableOptions,
   commandLabel,
-  keybindingConflictLabels,
-  keybindingFromKeyboardEvent,
+  shortcutConflictLabels,
+  shortcutFromKeyboardEvent,
   parseWhenExpressionDraft,
-  shortcutToKeybindingInput,
+  shortcutToInputValue,
   unknownWhenVariables,
   whenAstToExpression,
-} from "./KeybindingsSettings.logic";
+} from "./ShortcutsSettings.logic";
 
-describe("KeybindingsSettings.logic", () => {
+describe("ShortcutsSettings.logic", () => {
   it("builds searchable rows with readable key and when values", () => {
-    const rows = buildKeybindingRows(
+    const rows = buildShortcutRows(
       [
         {
           command: "terminal.toggle",
@@ -33,7 +33,7 @@ describe("KeybindingsSettings.logic", () => {
             node: { type: "identifier", name: "terminalFocus" },
           },
         },
-      ] satisfies ResolvedKeybindingsConfig,
+      ] satisfies ResolvedShortcutsConfig,
       "terminal",
     );
 
@@ -51,13 +51,13 @@ describe("KeybindingsSettings.logic", () => {
 
   it("captures platform-specific mod shortcuts", () => {
     expect(
-      keybindingFromKeyboardEvent(
+      shortcutFromKeyboardEvent(
         { key: "K", metaKey: true, ctrlKey: false, altKey: false, shiftKey: true },
         "MacIntel",
       ),
     ).toBe("mod+shift+k");
     expect(
-      keybindingFromKeyboardEvent(
+      shortcutFromKeyboardEvent(
         { key: "K", metaKey: false, ctrlKey: true, altKey: false, shiftKey: true },
         "Win32",
       ),
@@ -66,7 +66,7 @@ describe("KeybindingsSettings.logic", () => {
 
   it("serializes shortcuts and when expressions for upserts", () => {
     expect(
-      shortcutToKeybindingInput({
+      shortcutToInputValue({
         key: " ",
         modKey: true,
         metaKey: false,
@@ -135,7 +135,7 @@ describe("KeybindingsSettings.logic", () => {
   });
 
   it("builds command options from defaults and resolved study bindings", () => {
-    const options = buildKeybindingCommandOptions([
+    const options = buildShortcutCommandOptions([
       {
         command: "script.setup-db.run",
         shortcut: {
@@ -147,7 +147,7 @@ describe("KeybindingsSettings.logic", () => {
           shiftKey: false,
         },
       },
-    ] satisfies ResolvedKeybindingsConfig);
+    ] satisfies ResolvedShortcutsConfig);
 
     expect(options).toEqual(expect.arrayContaining(["chat.new", "script.setup-db.run"]));
   });
@@ -160,7 +160,7 @@ describe("KeybindingsSettings.logic", () => {
   });
 
   it("marks each default shortcut for multi-binding commands as default", () => {
-    const rows = buildKeybindingRows(
+    const rows = buildShortcutRows(
       [
         {
           command: "chat.new",
@@ -192,7 +192,7 @@ describe("KeybindingsSettings.logic", () => {
             node: { type: "identifier", name: "terminalFocus" },
           },
         },
-      ] satisfies ResolvedKeybindingsConfig,
+      ] satisfies ResolvedShortcutsConfig,
       "",
     );
 
@@ -200,7 +200,7 @@ describe("KeybindingsSettings.logic", () => {
   });
 
   it("reports conflicting shortcuts that share an active when context", () => {
-    const rows = buildKeybindingRows(
+    const rows = buildShortcutRows(
       [
         {
           command: "chat.new",
@@ -232,13 +232,13 @@ describe("KeybindingsSettings.logic", () => {
             node: { type: "identifier", name: "terminalFocus" },
           },
         },
-      ] satisfies ResolvedKeybindingsConfig,
+      ] satisfies ResolvedShortcutsConfig,
       "",
     );
 
     expect(rows[0]?.conflicts).toEqual(["Chat: New Local"]);
     expect(
-      keybindingConflictLabels(rows, {
+      shortcutConflictLabels(rows, {
         rowId: rows[0]?.id ?? "",
         key: "mod+n",
         when: "",

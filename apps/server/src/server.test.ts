@@ -8,7 +8,7 @@ import {
   EnvironmentId,
   EventId,
   GitCommandError,
-  KeybindingRule,
+  ShortcutRule,
   MessageId,
   ExternalLauncherError,
   type OrchestrationSessionShell,
@@ -19,7 +19,7 @@ import {
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
-  ResolvedKeybindingRule,
+  ResolvedShortcutRule,
   SessionId,
   WS_METHODS,
   WsRpcGroup,
@@ -62,7 +62,7 @@ import {
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
 import { GitManager, type GitManagerShape } from "./git/GitManager.ts";
-import { Keybindings, type KeybindingsShape } from "./keybindings.ts";
+import { Shortcuts, type ShortcutsShape } from "./shortcuts.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import {
   OrchestrationEngineService,
@@ -317,7 +317,7 @@ const makeBrowserOtlpPayload = (spanName: string) =>
 const buildAppUnderTest = (options?: {
   config?: Partial<ServerConfigShape>;
   layers?: {
-    keybindings?: Partial<KeybindingsShape>;
+    shortcuts?: Partial<ShortcutsShape>;
     providerRegistry?: Partial<ProviderRegistryShape>;
     serverSettings?: Partial<ServerSettingsShape>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncherShape>;
@@ -507,13 +507,13 @@ const buildAppUnderTest = (options?: {
       disableLogger: true,
     }).pipe(
       Layer.provide(
-        Layer.mock(Keybindings)({
+        Layer.mock(Shortcuts)({
           loadConfigState: Effect.succeed({
-            keybindings: [],
+            shortcuts: [],
             issues: [],
           }),
           streamChanges: Stream.empty,
-          ...options?.layers?.keybindings,
+          ...options?.layers?.shortcuts,
         }),
       ),
       Layer.provide(
@@ -2051,13 +2051,13 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("routes websocket rpc server.upsertKeybinding", () =>
+  it.effect("routes websocket rpc server.upsertShortcut", () =>
     Effect.gen(function* () {
-      const rule: KeybindingRule = {
+      const rule: ShortcutRule = {
         command: "terminal.toggle",
         key: "ctrl+k",
       };
-      const resolved: ResolvedKeybindingRule = {
+      const resolved: ResolvedShortcutRule = {
         command: "terminal.toggle",
         shortcut: {
           key: "k",
@@ -2071,29 +2071,29 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       yield* buildAppUnderTest({
         layers: {
-          keybindings: {
-            upsertKeybindingRule: () => Effect.succeed([resolved]),
+          shortcuts: {
+            upsertShortcutRule: () => Effect.succeed([resolved]),
           },
         },
       });
 
       const wsUrl = yield* getWsServerUrl("/ws");
       const response = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverUpsertKeybinding](rule)),
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverUpsertShortcut](rule)),
       );
 
       assert.deepEqual(response.issues, []);
-      assert.deepEqual(response.keybindings, [resolved]);
+      assert.deepEqual(response.shortcuts, [resolved]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("routes websocket rpc server.removeKeybinding", () =>
+  it.effect("routes websocket rpc server.removeShortcut", () =>
     Effect.gen(function* () {
-      const rule: KeybindingRule = {
+      const rule: ShortcutRule = {
         command: "terminal.toggle",
         key: "ctrl+k",
       };
-      const resolved: ResolvedKeybindingRule = {
+      const resolved: ResolvedShortcutRule = {
         command: "terminal.toggle",
         shortcut: {
           key: "j",
@@ -2107,19 +2107,19 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       yield* buildAppUnderTest({
         layers: {
-          keybindings: {
-            removeKeybindingRule: () => Effect.succeed([resolved]),
+          shortcuts: {
+            removeShortcutRule: () => Effect.succeed([resolved]),
           },
         },
       });
 
       const wsUrl = yield* getWsServerUrl("/ws");
       const response = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverRemoveKeybinding](rule)),
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverRemoveShortcut](rule)),
       );
 
       assert.deepEqual(response.issues, []);
-      assert.deepEqual(response.keybindings, [resolved]);
+      assert.deepEqual(response.shortcuts, [resolved]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -2176,7 +2176,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         },
       ] as const;
       const changeEvent = {
-        keybindings: [],
+        shortcuts: [],
         issues: [],
       } as const;
 
@@ -2186,9 +2186,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           otlpMetricsUrl: "http://localhost:4318/v1/metrics",
         },
         layers: {
-          keybindings: {
+          shortcuts: {
             loadConfigState: Effect.succeed({
-              keybindings: [],
+              shortcuts: [],
               issues: [],
             }),
             streamChanges: Stream.succeed(changeEvent),
@@ -2210,7 +2210,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(first?.type, "snapshot");
       if (first?.type === "snapshot") {
         assert.equal(first.version, 1);
-        assert.deepEqual(first.config.keybindings, []);
+        assert.deepEqual(first.config.shortcuts, []);
         assert.deepEqual(first.config.issues, []);
         assert.deepEqual(first.config.providers, providers);
         assert.equal(first.config.observability.logsDirectoryPath.endsWith("/logs"), true);
@@ -2223,8 +2223,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       }
       assert.deepEqual(second, {
         version: 1,
-        type: "keybindingsUpdated",
-        payload: { keybindings: [], issues: [] },
+        type: "shortcutsUpdated",
+        payload: { shortcuts: [], issues: [] },
       });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
@@ -2355,9 +2355,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       yield* buildAppUnderTest({
         layers: {
-          keybindings: {
+          shortcuts: {
             loadConfigState: Effect.succeed({
-              keybindings: [],
+              shortcuts: [],
               issues: [],
             }),
             streamChanges: Stream.empty,

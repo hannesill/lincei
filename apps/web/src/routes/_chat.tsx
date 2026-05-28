@@ -8,12 +8,12 @@ import {
   startNewSessionFromContext,
 } from "../lib/chatSessionActions";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { resolveShortcutCommand } from "../keybindings";
+import { resolveShortcutCommand } from "../shortcuts";
 import { selectSessionTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useSessionSelectionStore } from "../sessionSelectionStore";
 import { resolveSidebarNewSessionEnvMode } from "~/components/Sidebar.logic";
 import { useSettings } from "~/hooks/useSettings";
-import { useServerKeybindings } from "~/rpc/serverState";
+import { useServerShortcuts } from "~/rpc/serverState";
 
 function ChatRouteGlobalShortcuts() {
   const clearSelection = useSessionSelectionStore((state) => state.clearSelection);
@@ -27,7 +27,7 @@ function ChatRouteGlobalShortcuts() {
     handleNewSession,
     routeSessionRef,
   } = useHandleNewSession();
-  const keybindings = useServerKeybindings();
+  const shortcuts = useServerShortcuts();
   const terminalOpen = useTerminalStateStore((state) =>
     routeSessionRef
       ? selectSessionTerminalState(state.terminalStateBySessionKey, routeSessionRef).terminalOpen
@@ -38,7 +38,7 @@ function ChatRouteGlobalShortcuts() {
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      const command = resolveShortcutCommand(event, keybindings, {
+      const command = resolveShortcutCommand(event, shortcuts, {
         context: {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
@@ -94,7 +94,7 @@ function ChatRouteGlobalShortcuts() {
     activeSession,
     clearSelection,
     handleNewSession,
-    keybindings,
+    shortcuts,
     defaultProjectRef,
     selectedSessionKeysSize,
     terminalOpen,

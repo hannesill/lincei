@@ -1,4 +1,4 @@
-import { type KeybindingCommand, type FilesystemBrowseEntry } from "@t3tools/contracts";
+import { type ShortcutCommand, type FilesystemBrowseEntry } from "@t3tools/contracts";
 import type { SidebarSessionSortOrder } from "@t3tools/contracts/settings";
 import { type ReactNode } from "react";
 import { sortSessions } from "../lib/sessionSort";
@@ -22,7 +22,7 @@ export interface CommandPaletteItem {
   readonly titleLeadingContent?: ReactNode;
   /** Optional content rendered inline after the title text (before the timestamp). */
   readonly titleTrailingContent?: ReactNode;
-  readonly shortcutCommand?: KeybindingCommand;
+  readonly shortcutCommand?: ShortcutCommand;
 }
 
 export interface CommandPaletteActionItem extends CommandPaletteItem {

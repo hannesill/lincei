@@ -3,11 +3,11 @@ import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 
 import {
-  KeybindingsConfig,
-  KeybindingRule,
-  ResolvedKeybindingRule,
-  ResolvedKeybindingsConfig,
-} from "./keybindings.ts";
+  ShortcutsConfig,
+  ShortcutRule,
+  ResolvedShortcutRule,
+  ResolvedShortcutsConfig,
+} from "./shortcuts.ts";
 
 const decode = <S extends Schema.Top>(
   schema: S,
@@ -19,59 +19,59 @@ const decode = <S extends Schema.Top>(
     never
   >;
 
-const decodeResolvedRule = Schema.decodeUnknownEffect(ResolvedKeybindingRule as never);
+const decodeResolvedRule = Schema.decodeUnknownEffect(ResolvedShortcutRule as never);
 
-it.effect("parses keybinding rules", () =>
+it.effect("parses shortcut rules", () =>
   Effect.gen(function* () {
-    const parsed = yield* decode(KeybindingRule, {
+    const parsed = yield* decode(ShortcutRule, {
       key: "mod+j",
       command: "terminal.toggle",
     });
     assert.strictEqual(parsed.command, "terminal.toggle");
 
-    const parsedClose = yield* decode(KeybindingRule, {
+    const parsedClose = yield* decode(ShortcutRule, {
       key: "mod+w",
       command: "terminal.close",
     });
     assert.strictEqual(parsedClose.command, "terminal.close");
 
-    const parsedDiffToggle = yield* decode(KeybindingRule, {
+    const parsedDiffToggle = yield* decode(ShortcutRule, {
       key: "mod+d",
       command: "diff.toggle",
     });
     assert.strictEqual(parsedDiffToggle.command, "diff.toggle");
 
-    const parsedSidebarToggle = yield* decode(KeybindingRule, {
+    const parsedSidebarToggle = yield* decode(ShortcutRule, {
       key: "mod+b",
       command: "sidebar.toggle",
     });
     assert.strictEqual(parsedSidebarToggle.command, "sidebar.toggle");
 
-    const parsedCommandPalette = yield* decode(KeybindingRule, {
+    const parsedCommandPalette = yield* decode(ShortcutRule, {
       key: "mod+k",
       command: "commandPalette.toggle",
     });
     assert.strictEqual(parsedCommandPalette.command, "commandPalette.toggle");
 
-    const parsedLocal = yield* decode(KeybindingRule, {
+    const parsedLocal = yield* decode(ShortcutRule, {
       key: "mod+shift+n",
       command: "chat.newLocal",
     });
     assert.strictEqual(parsedLocal.command, "chat.newLocal");
 
-    const parsedModelPickerToggle = yield* decode(KeybindingRule, {
+    const parsedModelPickerToggle = yield* decode(ShortcutRule, {
       key: "mod+shift+m",
       command: "modelPicker.toggle",
     });
     assert.strictEqual(parsedModelPickerToggle.command, "modelPicker.toggle");
 
-    const parsedModelPickerJump = yield* decode(KeybindingRule, {
+    const parsedModelPickerJump = yield* decode(ShortcutRule, {
       key: "mod+1",
       command: "modelPicker.jump.1",
     });
     assert.strictEqual(parsedModelPickerJump.command, "modelPicker.jump.1");
 
-    const parsedSessionPrevious = yield* decode(KeybindingRule, {
+    const parsedSessionPrevious = yield* decode(ShortcutRule, {
       key: "mod+shift+[",
       command: "session.previous",
     });
@@ -82,7 +82,7 @@ it.effect("parses keybinding rules", () =>
 it.effect("rejects invalid command values", () =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(
-      decode(KeybindingRule, {
+      decode(ShortcutRule, {
         key: "mod+j",
         command: "script.Test.run",
       }),
@@ -93,7 +93,7 @@ it.effect("rejects invalid command values", () =>
 
 it.effect("accepts dynamic script run commands", () =>
   Effect.gen(function* () {
-    const parsed = yield* decode(KeybindingRule, {
+    const parsed = yield* decode(ShortcutRule, {
       key: "mod+r",
       command: "script.setup.run",
     });
@@ -101,9 +101,9 @@ it.effect("accepts dynamic script run commands", () =>
   }),
 );
 
-it.effect("parses keybindings array payload", () =>
+it.effect("parses shortcuts array payload", () =>
   Effect.gen(function* () {
-    const parsed = yield* decode(KeybindingsConfig, [
+    const parsed = yield* decode(ShortcutsConfig, [
       { key: "mod+j", command: "terminal.toggle" },
       { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
     ]);
@@ -111,9 +111,9 @@ it.effect("parses keybindings array payload", () =>
   }),
 );
 
-it.effect("parses resolved keybinding rules", () =>
+it.effect("parses resolved shortcut rules", () =>
   Effect.gen(function* () {
-    const parsed = yield* decode(ResolvedKeybindingRule, {
+    const parsed = yield* decode(ResolvedShortcutRule, {
       command: "terminal.split",
       shortcut: {
         key: "d",
@@ -136,9 +136,9 @@ it.effect("parses resolved keybinding rules", () =>
   }),
 );
 
-it.effect("parses resolved keybindings arrays", () =>
+it.effect("parses resolved shortcuts arrays", () =>
   Effect.gen(function* () {
-    const parsed = yield* decode(ResolvedKeybindingsConfig, [
+    const parsed = yield* decode(ResolvedShortcutsConfig, [
       {
         command: "terminal.toggle",
         shortcut: {
@@ -166,7 +166,7 @@ it.effect("parses resolved keybindings arrays", () =>
   }),
 );
 
-it.effect("drops unknown fields in resolved keybinding rules", () =>
+it.effect("drops unknown fields in resolved shortcut rules", () =>
   decodeResolvedRule({
     command: "terminal.toggle",
     shortcut: {

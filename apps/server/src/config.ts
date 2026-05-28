@@ -28,7 +28,8 @@ export type StartupPresentation = typeof StartupPresentation.Type;
 export interface ServerDerivedPaths {
   readonly stateDir: string;
   readonly dbPath: string;
-  readonly keybindingsConfigPath: string;
+  readonly shortcutsConfigPath: string;
+  readonly legacyShortcutsConfigPath: string;
   readonly settingsPath: string;
   readonly providerStatusCacheDir: string;
   readonly worktreesDir: string;
@@ -89,7 +90,8 @@ export const deriveServerPaths = Effect.fn(function* (
   return {
     stateDir,
     dbPath,
-    keybindingsConfigPath: join(stateDir, "keybindings.json"),
+    shortcutsConfigPath: join(stateDir, "shortcuts.json"),
+    legacyShortcutsConfigPath: join(stateDir, "keybindings.json"),
     settingsPath: join(stateDir, "settings.json"),
     providerStatusCacheDir,
     worktreesDir: join(baseDir, "worktrees"),
@@ -119,7 +121,7 @@ export const ensureServerDirectories = Effect.fn(function* (derivedPaths: Server
       fs.makeDirectory(derivedPaths.terminalLogsDir, { recursive: true }),
       fs.makeDirectory(derivedPaths.attachmentsDir, { recursive: true }),
       fs.makeDirectory(derivedPaths.worktreesDir, { recursive: true }),
-      fs.makeDirectory(path.dirname(derivedPaths.keybindingsConfigPath), { recursive: true }),
+      fs.makeDirectory(path.dirname(derivedPaths.shortcutsConfigPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.settingsPath), { recursive: true }),
       fs.makeDirectory(derivedPaths.providerStatusCacheDir, { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.anonymousIdPath), { recursive: true }),

@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
 import {
-  type ResolvedKeybindingsConfig,
+  type ResolvedShortcutsConfig,
   type ScopedSessionRef,
   type TerminalEvent,
   type TerminalSessionSnapshot,
@@ -38,7 +38,7 @@ import {
   isTerminalToggleShortcut,
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
-} from "../keybindings";
+} from "../shortcuts";
 import {
   DEFAULT_THREAD_TERMINAL_HEIGHT,
   DEFAULT_THREAD_TERMINAL_ID,
@@ -261,7 +261,7 @@ interface TerminalViewportProps {
   autoFocus: boolean;
   resizeEpoch: number;
   drawerHeight: number;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
 }
 
 export function TerminalViewport({
@@ -278,7 +278,7 @@ export function TerminalViewport({
   autoFocus,
   resizeEpoch,
   drawerHeight,
-  keybindings,
+  shortcuts,
 }: TerminalViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -290,7 +290,7 @@ export function TerminalViewport({
   const selectionActionRequestIdRef = useRef(0);
   const selectionActionOpenRef = useRef(false);
   const selectionActionTimerRef = useRef<number | null>(null);
-  const keybindingsRef = useRef(keybindings);
+  const shortcutsRef = useRef(shortcuts);
   const lastAppliedTerminalEventIdRef = useRef(0);
   const terminalHydratedRef = useRef(false);
   const handleSessionExited = useEffectEvent(() => {
@@ -302,8 +302,8 @@ export function TerminalViewport({
   const readTerminalLabel = useEffectEvent(() => terminalLabel);
 
   useEffect(() => {
-    keybindingsRef.current = keybindings;
-  }, [keybindings]);
+    shortcutsRef.current = shortcuts;
+  }, [shortcuts]);
 
   useEffect(() => {
     const mount = containerRef.current;
@@ -416,14 +416,14 @@ export function TerminalViewport({
     };
 
     terminal.attachCustomKeyEventHandler((event) => {
-      const currentKeybindings = keybindingsRef.current;
+      const currentShortcuts = shortcutsRef.current;
       const options = { context: { terminalFocus: true, terminalOpen: true } };
       if (
-        isTerminalToggleShortcut(event, currentKeybindings, options) ||
-        isTerminalSplitShortcut(event, currentKeybindings, options) ||
-        isTerminalNewShortcut(event, currentKeybindings, options) ||
-        isTerminalCloseShortcut(event, currentKeybindings, options) ||
-        isDiffToggleShortcut(event, currentKeybindings, options)
+        isTerminalToggleShortcut(event, currentShortcuts, options) ||
+        isTerminalSplitShortcut(event, currentShortcuts, options) ||
+        isTerminalNewShortcut(event, currentShortcuts, options) ||
+        isTerminalCloseShortcut(event, currentShortcuts, options) ||
+        isDiffToggleShortcut(event, currentShortcuts, options)
       ) {
         return false;
       }
@@ -820,7 +820,7 @@ interface SessionTerminalDrawerProps {
   onCloseTerminal: (terminalId: string) => void;
   onHeightChange: (height: number) => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
 }
 
 interface TerminalActionButtonProps {
@@ -874,7 +874,7 @@ export default function SessionTerminalDrawer({
   onCloseTerminal,
   onHeightChange,
   onAddTerminalContext,
-  keybindings,
+  shortcuts,
 }: SessionTerminalDrawerProps) {
   const [drawerHeight, setDrawerHeight] = useState(() => clampDrawerHeight(height));
   const [resizeEpoch, setResizeEpoch] = useState(0);
@@ -1205,7 +1205,7 @@ export default function SessionTerminalDrawer({
                         autoFocus={terminalId === resolvedActiveTerminalId}
                         resizeEpoch={resizeEpoch}
                         drawerHeight={drawerHeight}
-                        keybindings={keybindings}
+                        shortcuts={shortcuts}
                       />
                     </div>
                   </div>
@@ -1228,7 +1228,7 @@ export default function SessionTerminalDrawer({
                   autoFocus
                   resizeEpoch={resizeEpoch}
                   drawerHeight={drawerHeight}
-                  keybindings={keybindings}
+                  shortcuts={shortcuts}
                 />
               </div>
             )}

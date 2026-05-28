@@ -74,8 +74,8 @@ function createBaseServerConfig(): ServerConfig {
       sessionCookieName: "t3_session",
     },
     cwd: "/repo/project",
-    keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
-    keybindings: [],
+    shortcutsConfigPath: "/repo/project/.t3code-shortcuts.json",
+    shortcuts: [],
     issues: [],
     providers: [
       {
@@ -293,8 +293,8 @@ const worker = setupWorker(
 function sendServerConfigUpdatedPush(issues: ServerConfig["issues"]) {
   rpcHarness.emitStreamValue(WS_METHODS.subscribeServerConfig, {
     version: 1,
-    type: "keybindingsUpdated",
-    payload: { keybindings: fixture.serverConfig.keybindings, issues },
+    type: "shortcutsUpdated",
+    payload: { shortcuts: fixture.serverConfig.shortcuts, issues },
   });
 }
 
@@ -456,7 +456,7 @@ async function mountApp(): Promise<{ cleanup: () => Promise<void> }> {
   };
 }
 
-describe("Keybindings update toast", () => {
+describe("Shortcuts update toast", () => {
   beforeAll(async () => {
     fixture = buildFixture();
     await worker.start({
@@ -537,12 +537,12 @@ describe("Keybindings update toast", () => {
     document.body.innerHTML = "";
   });
 
-  it("coalesces rapid consecutive keybinding update toasts with no issues", async () => {
+  it("coalesces rapid consecutive shortcut update toasts with no issues", async () => {
     const mounted = await mountApp();
 
     try {
       sendServerConfigUpdatedPush([]);
-      await waitForToast("Keybindings updated", 1);
+      await waitForToast("Shortcuts updated", 1);
 
       // A single edit can produce several reload notifications as the direct update and
       // filesystem watcher settle, so avoid stacking identical success toasts.
@@ -550,20 +550,20 @@ describe("Keybindings update toast", () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
 
       const titles = queryToastTitles();
-      expect(titles.filter((title) => title === "Keybindings updated")).toHaveLength(1);
+      expect(titles.filter((title) => title === "Shortcuts updated")).toHaveLength(1);
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("shows a warning toast when keybinding config has issues", async () => {
+  it("shows a warning toast when shortcut config has issues", async () => {
     const mounted = await mountApp();
 
     try {
       sendServerConfigUpdatedPush([
-        { kind: "keybindings.malformed-config", message: "Expected JSON array" },
+        { kind: "shortcuts.malformed-config", message: "Expected JSON array" },
       ]);
-      await waitForToast("Invalid keybindings configuration");
+      await waitForToast("Invalid shortcuts configuration");
     } finally {
       await mounted.cleanup();
     }
@@ -574,8 +574,8 @@ describe("Keybindings update toast", () => {
 
     try {
       sendServerConfigUpdatedPush([]);
-      await waitForToast("Keybindings updated");
-      await waitForNoToast("Keybindings updated");
+      await waitForToast("Shortcuts updated");
+      await waitForNoToast("Shortcuts updated");
 
       // Remount the app — onServerConfigUpdated replays the cached value
       // synchronously on subscribe. This should NOT produce a toast.
@@ -587,7 +587,7 @@ describe("Keybindings update toast", () => {
 
       const titles = queryToastTitles();
       expect(
-        titles.filter((t) => t === "Keybindings updated").length,
+        titles.filter((t) => t === "Shortcuts updated").length,
         "Replayed cached value should not produce a toast",
       ).toBe(0);
 

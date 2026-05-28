@@ -1,8 +1,4 @@
-import type {
-  ProjectScript,
-  ProjectScriptIcon,
-  ResolvedKeybindingsConfig,
-} from "@t3tools/contracts";
+import type { ProjectScript, ProjectScriptIcon, ResolvedShortcutsConfig } from "@t3tools/contracts";
 import {
   BugIcon,
   ChevronDownIcon,
@@ -17,16 +13,16 @@ import {
 import React, { type FormEvent, type KeyboardEvent, useCallback, useMemo, useState } from "react";
 
 import {
-  keybindingValueForCommand,
-  decodeProjectScriptKeybindingRule,
-} from "~/lib/projectScriptKeybindings";
-import { keybindingFromKeyboardEvent } from "~/components/settings/KeybindingsSettings.logic";
+  shortcutValueForCommand,
+  decodeProjectScriptShortcutRule,
+} from "~/lib/projectScriptShortcuts";
+import { shortcutFromKeyboardEvent } from "~/components/settings/ShortcutsSettings.logic";
 import {
   commandForProjectScript,
   nextProjectScriptId,
   primaryProjectScript,
 } from "~/projectScripts";
-import { shortcutLabelForCommand } from "~/keybindings";
+import { shortcutLabelForCommand } from "~/shortcuts";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -83,12 +79,12 @@ export interface NewProjectScriptInput {
   command: string;
   icon: ProjectScriptIcon;
   runOnWorktreeCreate: boolean;
-  keybinding: string | null;
+  shortcut: string | null;
 }
 
 interface ProjectScriptsControlProps {
   scripts: ProjectScript[];
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   preferredScriptId?: string | null;
   onRunScript: (script: ProjectScript) => void;
   onAddScript: (input: NewProjectScriptInput) => Promise<void> | void;
@@ -98,7 +94,7 @@ interface ProjectScriptsControlProps {
 
 export default function ProjectScriptsControl({
   scripts,
-  keybindings,
+  shortcuts,
   preferredScriptId = null,
   onRunScript,
   onAddScript,
@@ -113,7 +109,7 @@ export default function ProjectScriptsControl({
   const [icon, setIcon] = useState<ProjectScriptIcon>("play");
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [runOnWorktreeCreate, setRunOnWorktreeCreate] = useState(false);
-  const [keybinding, setKeybinding] = useState("");
+  const [shortcut, setShortcut] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -128,16 +124,16 @@ export default function ProjectScriptsControl({
   const dropdownItemClassName =
     "data-highlighted:bg-transparent data-highlighted:text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground data-highlighted:hover:bg-accent data-highlighted:hover:text-accent-foreground data-highlighted:focus-visible:bg-accent data-highlighted:focus-visible:text-accent-foreground";
 
-  const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
+  const captureShortcut = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Tab") return;
     event.preventDefault();
     if (event.key === "Backspace" || event.key === "Delete") {
-      setKeybinding("");
+      setShortcut("");
       return;
     }
-    const next = keybindingFromKeyboardEvent(event, navigator.platform);
+    const next = shortcutFromKeyboardEvent(event, navigator.platform);
     if (!next) return;
-    setKeybinding(next);
+    setShortcut(next);
   };
 
   const submitAddScript = async (event: FormEvent) => {
@@ -161,8 +157,8 @@ export default function ProjectScriptsControl({
           trimmedName,
           scripts.map((script) => script.id),
         );
-      const keybindingRule = decodeProjectScriptKeybindingRule({
-        keybinding,
+      const shortcutRule = decodeProjectScriptShortcutRule({
+        shortcut,
         command: commandForProjectScript(scriptIdForValidation),
       });
       const payload = {
@@ -170,7 +166,7 @@ export default function ProjectScriptsControl({
         command: trimmedCommand,
         icon,
         runOnWorktreeCreate,
-        keybinding: keybindingRule?.key ?? null,
+        shortcut: shortcutRule?.key ?? null,
       } satisfies NewProjectScriptInput;
       if (editingScriptId) {
         await onUpdateScript(editingScriptId, payload);
@@ -191,7 +187,7 @@ export default function ProjectScriptsControl({
     setIcon("play");
     setIconPickerOpen(false);
     setRunOnWorktreeCreate(false);
-    setKeybinding("");
+    setShortcut("");
     setValidationError(null);
     setDialogOpen(true);
   };
@@ -203,7 +199,7 @@ export default function ProjectScriptsControl({
     setIcon(script.icon);
     setIconPickerOpen(false);
     setRunOnWorktreeCreate(script.runOnWorktreeCreate);
-    setKeybinding(keybindingValueForCommand(keybindings, commandForProjectScript(script.id)) ?? "");
+    setShortcut(shortcutValueForCommand(shortcuts, commandForProjectScript(script.id)) ?? "");
     setValidationError(null);
     setDialogOpen(true);
   };
@@ -240,7 +236,7 @@ export default function ProjectScriptsControl({
             <MenuPopup align="end">
               {scripts.map((script) => {
                 const shortcutLabel = shortcutLabelForCommand(
-                  keybindings,
+                  shortcuts,
                   commandForProjectScript(script.id),
                 );
                 return (
@@ -311,7 +307,7 @@ export default function ProjectScriptsControl({
           setCommand("");
           setIcon("play");
           setRunOnWorktreeCreate(false);
-          setKeybinding("");
+          setShortcut("");
           setValidationError(null);
         }}
         open={dialogOpen}
@@ -320,7 +316,7 @@ export default function ProjectScriptsControl({
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Action" : "Add Action"}</DialogTitle>
             <DialogDescription>
-              Actions are study-scoped commands you can run from the top bar or keybindings.
+              Actions are study-scoped commands you can run from the top bar or shortcuts.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -377,13 +373,13 @@ export default function ProjectScriptsControl({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="script-keybinding">Keybinding</Label>
+                <Label htmlFor="script-shortcut">Shortcut</Label>
                 <Input
-                  id="script-keybinding"
+                  id="script-shortcut"
                   placeholder="Press shortcut"
-                  value={keybinding}
+                  value={shortcut}
                   readOnly
-                  onKeyDown={captureKeybinding}
+                  onKeyDown={captureShortcut}
                 />
                 <p className="text-xs text-muted-foreground">
                   Press a shortcut. Use <code>Backspace</code> to clear.

@@ -102,8 +102,8 @@ import { CommandPaletteResults } from "./CommandPaletteResults";
 import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { SessionRowLeadingStatus, SessionRowTrailingStatus } from "./SessionStatusIndicators";
-import { useServerKeybindings } from "../rpc/serverState";
-import { resolveShortcutCommand } from "../keybindings";
+import { useServerShortcuts } from "../rpc/serverState";
+import { resolveShortcutCommand } from "../shortcuts";
 import {
   Command,
   CommandDialog,
@@ -330,7 +330,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   const open = useCommandPaletteStore((store) => store.open);
   const setOpen = useCommandPaletteStore((store) => store.setOpen);
   const toggleOpen = useCommandPaletteStore((store) => store.toggleOpen);
-  const keybindings = useServerKeybindings();
+  const shortcuts = useServerShortcuts();
   const composerHandleRef = useRef<ChatComposerHandle | null>(null);
   const routeTarget = useParams({
     strict: false,
@@ -346,7 +346,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      const command = resolveShortcutCommand(event, keybindings, {
+      const command = resolveShortcutCommand(event, shortcuts, {
         context: {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
@@ -361,7 +361,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keybindings, terminalOpen, toggleOpen]);
+  }, [shortcuts, terminalOpen, toggleOpen]);
 
   return (
     <ComposerHandleContext value={composerHandleRef}>
@@ -406,7 +406,7 @@ function OpenCommandPaletteDialog() {
     useHandleNewSession();
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const sessions = useStore(useShallow(selectSidebarSessionsAcrossEnvironments));
-  const keybindings = useServerKeybindings();
+  const shortcuts = useServerShortcuts();
   const [viewStack, setViewStack] = useState<CommandPaletteView[]>([]);
   const currentView = viewStack.at(-1) ?? null;
   const [browseGeneration, setBrowseGeneration] = useState(0);
@@ -1053,7 +1053,7 @@ function OpenCommandPaletteDialog() {
   actionItems.push({
     kind: "action",
     value: "action:settings",
-    searchTerms: ["settings", "preferences", "configuration", "keybindings"],
+    searchTerms: ["settings", "preferences", "configuration", "shortcuts"],
     title: "Open settings",
     icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
     run: async () => {
@@ -1664,7 +1664,7 @@ function OpenCommandPaletteDialog() {
             groups={displayedGroups}
             highlightedItemValue={highlightedItemValue}
             isActionsOnly={isActionsOnly}
-            keybindings={keybindings}
+            shortcuts={shortcuts}
             onExecuteItem={executeItem}
             {...(addProjectCloneFlow?.step === "repository"
               ? {

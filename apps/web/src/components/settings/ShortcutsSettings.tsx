@@ -22,18 +22,18 @@ import {
   useState,
 } from "react";
 import {
-  type KeybindingCommand,
-  type KeybindingWhenNode,
-  type ServerRemoveKeybindingInput,
-  type ServerUpsertKeybindingInput,
+  type ShortcutCommand,
+  type ShortcutWhenNode,
+  type ServerRemoveShortcutInput,
+  type ServerUpsertShortcutInput,
 } from "@t3tools/contracts";
 
 import { isElectron } from "../../env";
 import { openInPreferredEditor } from "../../editorPreferences";
-import { formatShortcutLabel } from "../../keybindings";
+import { formatShortcutLabel } from "../../shortcuts";
 import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
-import { useServerKeybindings, useServerKeybindingsConfigPath } from "../../rpc/serverState";
+import { useServerShortcuts, useServerShortcutsConfigPath } from "../../rpc/serverState";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Kbd, KbdGroup } from "../ui/kbd";
@@ -44,25 +44,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Toggle } from "../ui/toggle";
 import { toastManager } from "../ui/toast";
 import {
-  buildKeybindingRows,
-  buildKeybindingCommandOptions,
+  buildShortcutRows,
+  buildShortcutCommandOptions,
   buildWhenVariableOptions,
   commandLabel,
   DEFAULT_WHEN_VARIABLE,
   isKnownWhenVariable,
-  keybindingConflictLabels,
-  keybindingFromKeyboardEvent,
+  shortcutConflictLabels,
+  shortcutFromKeyboardEvent,
   parseWhenExpressionDraft,
-  type KeybindingCommandOption,
-  type KeybindingRow,
+  type ShortcutCommandOption,
+  type ShortcutRow,
   type WhenVariableOption,
   unknownWhenVariables,
   whenAstToExpression,
-} from "./KeybindingsSettings.logic";
+} from "./ShortcutsSettings.logic";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-function KeybindingPill({ value }: { value: string }) {
+function ShortcutPill({ value }: { value: string }) {
   const parts = value.split("+");
   return (
     <KbdGroup className="bg-transparent p-0 shadow-none">
@@ -117,13 +117,13 @@ function ExpandableHeaderSearch({
                 variant="ghost"
                 className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
                 onClick={() => onOpenChange(true)}
-                aria-label="Search keybindings"
+                aria-label="Search shortcuts"
               >
                 <SearchIcon className="size-3" />
               </Button>
             }
           />
-          <TooltipPopup side="top">Search keybindings</TooltipPopup>
+          <TooltipPopup side="top">Search shortcuts</TooltipPopup>
         </Tooltip>
       </>
     );
@@ -148,8 +148,8 @@ function ExpandableHeaderSearch({
             onOpenChange(false);
           }
         }}
-        placeholder="Search keybindings"
-        aria-label="Search keybindings"
+        placeholder="Search shortcuts"
+        aria-label="Search shortcuts"
         className="h-6 w-44 rounded-md border border-input bg-background pl-7 pr-2 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/24"
       />
     </div>
@@ -159,9 +159,9 @@ function ExpandableHeaderSearch({
 type BooleanOperator = "and" | "or";
 
 function flattenWhenChildren(
-  node: KeybindingWhenNode,
+  node: ShortcutWhenNode,
   operator: BooleanOperator,
-): KeybindingWhenNode[] {
+): ShortcutWhenNode[] {
   if (node.type !== operator) return [node];
   return [
     ...flattenWhenChildren(node.left, operator),
@@ -170,12 +170,12 @@ function flattenWhenChildren(
 }
 
 function buildWhenExpressionGroup(
-  children: readonly KeybindingWhenNode[],
+  children: readonly ShortcutWhenNode[],
   operator: BooleanOperator,
-): KeybindingWhenNode | undefined {
+): ShortcutWhenNode | undefined {
   const first = children[0];
   if (!first) return undefined;
-  return children.slice(1).reduce<KeybindingWhenNode>(
+  return children.slice(1).reduce<ShortcutWhenNode>(
     (left, right) => ({
       type: operator,
       left,
@@ -185,7 +185,7 @@ function buildWhenExpressionGroup(
   );
 }
 
-function conditionParts(node: KeybindingWhenNode): { identifier: string; negated: boolean } | null {
+function conditionParts(node: ShortcutWhenNode): { identifier: string; negated: boolean } | null {
   if (node.type === "identifier") return { identifier: node.name, negated: false };
   if (node.type === "not" && node.node.type === "identifier") {
     return { identifier: node.node.name, negated: true };
@@ -193,25 +193,25 @@ function conditionParts(node: KeybindingWhenNode): { identifier: string; negated
   return null;
 }
 
-function setConditionIdentifier(node: KeybindingWhenNode, identifier: string): KeybindingWhenNode {
+function setConditionIdentifier(node: ShortcutWhenNode, identifier: string): ShortcutWhenNode {
   const parts = conditionParts(node);
   if (!parts) return node;
-  const next: KeybindingWhenNode = { type: "identifier", name: identifier };
+  const next: ShortcutWhenNode = { type: "identifier", name: identifier };
   return parts.negated ? { type: "not", node: next } : next;
 }
 
-function setConditionNegated(node: KeybindingWhenNode, negated: boolean): KeybindingWhenNode {
+function setConditionNegated(node: ShortcutWhenNode, negated: boolean): ShortcutWhenNode {
   const parts = conditionParts(node);
   if (!parts) return negated ? { type: "not", node } : node;
-  const identifier: KeybindingWhenNode = { type: "identifier", name: parts.identifier };
+  const identifier: ShortcutWhenNode = { type: "identifier", name: parts.identifier };
   return negated ? { type: "not", node: identifier } : identifier;
 }
 
-function defaultWhenCondition(): KeybindingWhenNode {
+function defaultWhenCondition(): ShortcutWhenNode {
   return { type: "identifier", name: DEFAULT_WHEN_VARIABLE };
 }
 
-function defaultWhenGroup(operator: BooleanOperator = "and"): KeybindingWhenNode {
+function defaultWhenGroup(operator: BooleanOperator = "and"): ShortcutWhenNode {
   return {
     type: operator,
     left: defaultWhenCondition(),
@@ -253,7 +253,7 @@ function UnknownWhenVariableWarning({
   );
 }
 
-function KeybindingConflictWarning({ labels }: { labels: ReadonlyArray<string> }) {
+function ShortcutConflictWarning({ labels }: { labels: ReadonlyArray<string> }) {
   if (labels.length === 0) return null;
   const description =
     labels.length === 1
@@ -333,10 +333,10 @@ function WhenExpressionNodeEditor({
   onChange,
   onRemove,
 }: {
-  node: KeybindingWhenNode;
+  node: ShortcutWhenNode;
   variables: ReadonlyArray<WhenVariableOption>;
   depth?: number;
-  onChange: (node: KeybindingWhenNode) => void;
+  onChange: (node: ShortcutWhenNode) => void;
   onRemove?: () => void;
 }) {
   const condition = conditionParts(node);
@@ -436,7 +436,7 @@ function WhenExpressionNodeEditor({
     return { child, key: count === 0 ? baseKey : `${baseKey}-${count}` };
   });
 
-  const updateChild = (target: KeybindingWhenNode, next: KeybindingWhenNode) => {
+  const updateChild = (target: ShortcutWhenNode, next: ShortcutWhenNode) => {
     let didUpdate = false;
     const nextChildren = children.map((child) => {
       if (!didUpdate && child === target) {
@@ -449,7 +449,7 @@ function WhenExpressionNodeEditor({
     if (nextNode) onChange(nextNode);
   };
 
-  const removeChild = (target: KeybindingWhenNode) => {
+  const removeChild = (target: ShortcutWhenNode) => {
     let didRemove = false;
     const nextChildren = children.filter((child) => {
       if (!didRemove && child === target) {
@@ -479,7 +479,7 @@ function WhenExpressionNodeEditor({
 
   const addGroup = () => {
     const nestedOperator: BooleanOperator = operator === "and" ? "or" : "and";
-    const group: KeybindingWhenNode = {
+    const group: ShortcutWhenNode = {
       type: nestedOperator,
       left: defaultWhenCondition(),
       right: { type: "not", node: defaultWhenCondition() },
@@ -578,9 +578,9 @@ function WhenExpressionBuilder({
   onChange,
   onValidityChange,
 }: {
-  value: KeybindingWhenNode | undefined;
+  value: ShortcutWhenNode | undefined;
   variables: ReadonlyArray<WhenVariableOption>;
-  onChange: (value: KeybindingWhenNode | undefined) => void;
+  onChange: (value: ShortcutWhenNode | undefined) => void;
   onValidityChange?: (valid: boolean) => void;
 }) {
   const expression = whenAstToExpression(value);
@@ -598,7 +598,7 @@ function WhenExpressionBuilder({
     }
   };
 
-  const updateExpressionValue = (nextValue: KeybindingWhenNode | undefined) => {
+  const updateExpressionValue = (nextValue: ShortcutWhenNode | undefined) => {
     setExpressionDraft(whenAstToExpression(nextValue));
     onValidityChange?.(true);
     onChange(nextValue);
@@ -717,14 +717,14 @@ function WhenExpressionBuilder({
   );
 }
 
-type KeybindingRowDraftState = {
+type ShortcutRowDraftState = {
   keyDraft: string;
-  whenDraft: KeybindingWhenNode | undefined;
+  whenDraft: ShortcutWhenNode | undefined;
   isRecording: boolean;
   isWhenDraftValid: boolean;
 };
 
-function createKeybindingRowDraft(row: KeybindingRow): KeybindingRowDraftState {
+function createShortcutRowDraft(row: ShortcutRow): ShortcutRowDraftState {
   return {
     keyDraft: row.key,
     whenDraft: row.binding.whenAst,
@@ -733,14 +733,14 @@ function createKeybindingRowDraft(row: KeybindingRow): KeybindingRowDraftState {
   };
 }
 
-function keybindingRowDraftReducer(
-  state: KeybindingRowDraftState,
-  patch: Partial<KeybindingRowDraftState>,
-): KeybindingRowDraftState {
+function shortcutRowDraftReducer(
+  state: ShortcutRowDraftState,
+  patch: Partial<ShortcutRowDraftState>,
+): ShortcutRowDraftState {
   return { ...state, ...patch };
 }
 
-function rowKeybindingTarget(row: KeybindingRow): ServerRemoveKeybindingInput {
+function rowShortcutTarget(row: ShortcutRow): ServerRemoveShortcutInput {
   return {
     command: row.command,
     key: row.key,
@@ -748,7 +748,7 @@ function rowKeybindingTarget(row: KeybindingRow): ServerRemoveKeybindingInput {
   };
 }
 
-function KeybindingTableRow({
+function ShortcutTableRow({
   row,
   allRows,
   variables,
@@ -757,15 +757,15 @@ function KeybindingTableRow({
   onReset,
   onRemove,
 }: {
-  row: KeybindingRow;
-  allRows: ReadonlyArray<KeybindingRow>;
+  row: ShortcutRow;
+  allRows: ReadonlyArray<ShortcutRow>;
   variables: ReadonlyArray<WhenVariableOption>;
   isSaving: boolean;
-  onSave: (input: ServerUpsertKeybindingInput) => void;
-  onReset: (row: KeybindingRow) => void;
-  onRemove: (row: KeybindingRow) => void;
+  onSave: (input: ServerUpsertShortcutInput) => void;
+  onReset: (row: ShortcutRow) => void;
+  onRemove: (row: ShortcutRow) => void;
 }) {
-  const [draft, setDraft] = useReducer(keybindingRowDraftReducer, row, createKeybindingRowDraft);
+  const [draft, setDraft] = useReducer(shortcutRowDraftReducer, row, createShortcutRowDraft);
   const { keyDraft, whenDraft, isRecording, isWhenDraftValid } = draft;
   const whenDraftExpression = whenAstToExpression(whenDraft);
   const isDirty = keyDraft !== row.key || whenDraftExpression !== row.when;
@@ -774,7 +774,7 @@ function KeybindingTableRow({
   const canRemove = row.source !== "Default";
   const hasRowActions = canReset || canRemove;
   const showPill = !isRecording && keyDraft === row.key && row.key.length > 0 && !isDirty;
-  const conflictLabels = keybindingConflictLabels(allRows, {
+  const conflictLabels = shortcutConflictLabels(allRows, {
     rowId: row.id,
     key: keyDraft,
     when: whenDraftExpression,
@@ -785,18 +785,18 @@ function KeybindingTableRow({
       command: row.command,
       key: keyDraft,
       when: whenDraftExpression.trim().length > 0 ? whenDraftExpression : undefined,
-      replace: rowKeybindingTarget(row),
+      replace: rowShortcutTarget(row),
     });
   };
 
-  const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
+  const captureShortcut = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Tab") return;
     event.preventDefault();
     if (event.key === "Escape") {
       setDraft({ keyDraft: row.key, isRecording: false });
       return;
     }
-    const next = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform);
+    const next = shortcutFromKeyboardEvent(event.nativeEvent, navigator.platform);
     if (!next) return;
     setDraft({ keyDraft: next, isRecording: false });
   };
@@ -818,7 +818,7 @@ function KeybindingTableRow({
             aria-label={`Edit shortcut for ${commandLabel(row.command)}`}
             className="group inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent px-1.5 outline-none transition-colors hover:border-border/70 hover:bg-background focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/24"
           >
-            <KeybindingPill value={row.key} />
+            <ShortcutPill value={row.key} />
             <span className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground/0 transition-opacity group-hover:text-muted-foreground/70 group-focus-visible:text-muted-foreground/70">
               Edit
             </span>
@@ -826,7 +826,7 @@ function KeybindingTableRow({
         ) : (
           <Input
             autoFocus={isRecording}
-            aria-label={`Keybinding for ${commandLabel(row.command)}`}
+            aria-label={`Shortcut for ${commandLabel(row.command)}`}
             value={isRecording ? "" : keyDraft}
             placeholder={isRecording ? "Press shortcut" : "Unassigned"}
             className={cn(
@@ -836,7 +836,7 @@ function KeybindingTableRow({
             onFocus={() => setDraft({ isRecording: true })}
             onBlur={() => setDraft({ isRecording: false })}
             onChange={(event) => setDraft({ keyDraft: event.currentTarget.value })}
-            onKeyDown={captureKeybinding}
+            onKeyDown={captureShortcut}
           />
         )}
         {isDirty ? (
@@ -873,7 +873,7 @@ function KeybindingTableRow({
         </Popover>
       </div>
       <div className="flex items-center justify-end gap-1">
-        <KeybindingConflictWarning labels={conflictLabels} />
+        <ShortcutConflictWarning labels={conflictLabels} />
         {hasRowActions ? (
           <Menu>
             <MenuTrigger
@@ -910,7 +910,7 @@ function KeybindingTableRow({
   );
 }
 
-function NewKeybindingTableRow({
+function NewShortcutTableRow({
   commandOptions,
   allRows,
   variables,
@@ -918,15 +918,15 @@ function NewKeybindingTableRow({
   onSave,
   onCancel,
 }: {
-  commandOptions: ReadonlyArray<KeybindingCommandOption>;
-  allRows: ReadonlyArray<KeybindingRow>;
+  commandOptions: ReadonlyArray<ShortcutCommandOption>;
+  allRows: ReadonlyArray<ShortcutRow>;
   variables: ReadonlyArray<WhenVariableOption>;
   isSaving: boolean;
-  onSave: (input: ServerUpsertKeybindingInput) => void;
+  onSave: (input: ServerUpsertShortcutInput) => void;
   onCancel: () => void;
 }) {
-  const [commandDraft, setCommandDraft] = useState<KeybindingCommand | "">("");
-  const [draft, setDraft] = useReducer(keybindingRowDraftReducer, {
+  const [commandDraft, setCommandDraft] = useState<ShortcutCommand | "">("");
+  const [draft, setDraft] = useReducer(shortcutRowDraftReducer, {
     keyDraft: "",
     whenDraft: undefined,
     isRecording: false,
@@ -934,12 +934,12 @@ function NewKeybindingTableRow({
   });
   const { keyDraft, whenDraft, isRecording, isWhenDraftValid } = draft;
   const whenDraftExpression = whenAstToExpression(whenDraft);
-  const conflictLabels = keybindingConflictLabels(allRows, {
+  const conflictLabels = shortcutConflictLabels(allRows, {
     rowId: "new",
     key: keyDraft,
     when: whenDraftExpression,
   });
-  const commandLabelText = commandDraft ? commandLabel(commandDraft) : "new keybinding";
+  const commandLabelText = commandDraft ? commandLabel(commandDraft) : "new shortcut";
 
   const save = () => {
     if (!commandDraft) return;
@@ -950,14 +950,14 @@ function NewKeybindingTableRow({
     });
   };
 
-  const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
+  const captureShortcut = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Tab") return;
     event.preventDefault();
     if (event.key === "Escape") {
       setDraft({ keyDraft: "", isRecording: false });
       return;
     }
-    const next = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform);
+    const next = shortcutFromKeyboardEvent(event.nativeEvent, navigator.platform);
     if (!next) return;
     setDraft({ keyDraft: next, isRecording: false });
   };
@@ -967,7 +967,7 @@ function NewKeybindingTableRow({
       <div className="min-w-0 pr-4">
         <Select
           value={commandDraft}
-          onValueChange={(value) => setCommandDraft(value as KeybindingCommand)}
+          onValueChange={(value) => setCommandDraft(value as ShortcutCommand)}
         >
           <SelectTrigger
             size="xs"
@@ -990,7 +990,7 @@ function NewKeybindingTableRow({
       </div>
       <div className="flex min-w-0 items-center gap-2 pr-4">
         <Input
-          aria-label={`Keybinding for ${commandLabelText}`}
+          aria-label={`Shortcut for ${commandLabelText}`}
           value={isRecording ? "" : keyDraft}
           placeholder={isRecording ? "Press shortcut" : "Unassigned"}
           className={cn(
@@ -1000,7 +1000,7 @@ function NewKeybindingTableRow({
           onFocus={() => setDraft({ isRecording: true })}
           onBlur={() => setDraft({ isRecording: false })}
           onChange={(event) => setDraft({ keyDraft: event.currentTarget.value })}
-          onKeyDown={captureKeybinding}
+          onKeyDown={captureShortcut}
         />
         <Button
           size="xs"
@@ -1034,7 +1034,7 @@ function NewKeybindingTableRow({
         </Popover>
       </div>
       <div className="flex items-center justify-end gap-1">
-        <KeybindingConflictWarning labels={conflictLabels} />
+        <ShortcutConflictWarning labels={conflictLabels} />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -1044,7 +1044,7 @@ function NewKeybindingTableRow({
                 size="icon-sm"
                 className="size-7 text-muted-foreground hover:text-foreground sm:size-7"
                 disabled={isSaving}
-                aria-label="Cancel new keybinding"
+                aria-label="Cancel new shortcut"
                 onClick={onCancel}
               />
             }
@@ -1058,16 +1058,16 @@ function NewKeybindingTableRow({
   );
 }
 
-export function KeybindingsSettingsPanel() {
-  const keybindings = useServerKeybindings();
-  const keybindingsConfigPath = useServerKeybindingsConfigPath();
+export function ShortcutsSettingsPanel() {
+  const shortcuts = useServerShortcuts();
+  const shortcutsConfigPath = useServerShortcutsConfigPath();
   const [query, setQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [savingCommand, setSavingCommand] = useState<KeybindingCommand | null>(null);
+  const [savingCommand, setSavingCommand] = useState<ShortcutCommand | null>(null);
   const [isAddingBinding, setIsAddingBinding] = useState(false);
-  const rows = useMemo(() => buildKeybindingRows(keybindings, query), [keybindings, query]);
-  const commandOptions = useMemo(() => buildKeybindingCommandOptions(keybindings), [keybindings]);
+  const rows = useMemo(() => buildShortcutRows(shortcuts, query), [shortcuts, query]);
+  const commandOptions = useMemo(() => buildShortcutCommandOptions(shortcuts), [shortcuts]);
   const whenVariables = useMemo(() => buildWhenVariableOptions(), []);
 
   useEffect(() => {
@@ -1095,35 +1095,34 @@ export function KeybindingsSettingsPanel() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const openKeybindingsFile = useCallback(() => {
-    if (!keybindingsConfigPath) return;
-    void openInPreferredEditor(ensureLocalApi(), keybindingsConfigPath).catch((error: unknown) => {
+  const openShortcutsFile = useCallback(() => {
+    if (!shortcutsConfigPath) return;
+    void openInPreferredEditor(ensureLocalApi(), shortcutsConfigPath).catch((error: unknown) => {
       toastManager.add({
-        title: "Unable to open keybindings file",
-        description:
-          error instanceof Error ? error.message : "The keybindings file was not opened.",
+        title: "Unable to open shortcuts file",
+        description: error instanceof Error ? error.message : "The shortcuts file was not opened.",
         type: "error",
       });
     });
-  }, [keybindingsConfigPath]);
+  }, [shortcutsConfigPath]);
 
-  const saveKeybinding = useCallback((input: ServerUpsertKeybindingInput) => {
+  const saveShortcut = useCallback((input: ServerUpsertShortcutInput) => {
     setSavingCommand(input.command);
-    const payload: ServerUpsertKeybindingInput = {
+    const payload: ServerUpsertShortcutInput = {
       command: input.command,
       key: input.key.trim(),
       ...(input.when?.trim() ? { when: input.when.trim() } : {}),
       ...(input.replace ? { replace: input.replace } : {}),
     };
     void ensureLocalApi()
-      .server.upsertKeybinding(payload)
+      .server.upsertShortcut(payload)
       .then(() => {
         setIsAddingBinding(false);
       })
       .catch((error: unknown) => {
         toastManager.add({
-          title: "Unable to save keybinding",
-          description: error instanceof Error ? error.message : "The keybinding was not saved.",
+          title: "Unable to save shortcut",
+          description: error instanceof Error ? error.message : "The shortcut was not saved.",
           type: "error",
         });
       })
@@ -1132,14 +1131,14 @@ export function KeybindingsSettingsPanel() {
       });
   }, []);
 
-  const removeKeybinding = useCallback((row: KeybindingRow) => {
+  const removeShortcut = useCallback((row: ShortcutRow) => {
     setSavingCommand(row.command);
     void ensureLocalApi()
-      .server.removeKeybinding(rowKeybindingTarget(row))
+      .server.removeShortcut(rowShortcutTarget(row))
       .catch((error: unknown) => {
         toastManager.add({
-          title: "Unable to remove keybinding",
-          description: error instanceof Error ? error.message : "The keybinding was not removed.",
+          title: "Unable to remove shortcut",
+          description: error instanceof Error ? error.message : "The shortcut was not removed.",
           type: "error",
         });
       })
@@ -1148,10 +1147,10 @@ export function KeybindingsSettingsPanel() {
       });
   }, []);
 
-  const resetKeybinding = useCallback(
-    (row: KeybindingRow) => {
+  const resetShortcut = useCallback(
+    (row: ShortcutRow) => {
       if (!row.defaultKey) return;
-      saveKeybinding({
+      saveShortcut({
         command: row.command,
         key: row.defaultKey,
         when: row.defaultWhen.trim().length > 0 ? row.defaultWhen : undefined,
@@ -1162,7 +1161,7 @@ export function KeybindingsSettingsPanel() {
         },
       });
     },
-    [saveKeybinding],
+    [saveShortcut],
   );
 
   const bindingsCount = (
@@ -1175,7 +1174,7 @@ export function KeybindingsSettingsPanel() {
   return (
     <SettingsPageContainer className="max-w-5xl">
       <SettingsSection
-        title="Keybindings"
+        title="Shortcuts"
         headerAction={
           <div className="flex items-center gap-1.5">
             <ExpandableHeaderSearch
@@ -1195,13 +1194,13 @@ export function KeybindingsSettingsPanel() {
                     variant="ghost"
                     className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
                     onClick={() => setIsAddingBinding(true)}
-                    aria-label="Add keybinding"
+                    aria-label="Add shortcut"
                   >
                     <PlusIcon className="size-3" />
                   </Button>
                 }
               />
-              <TooltipPopup side="top">Add keybinding</TooltipPopup>
+              <TooltipPopup side="top">Add shortcut</TooltipPopup>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -1211,15 +1210,15 @@ export function KeybindingsSettingsPanel() {
                     size="icon-xs"
                     variant="ghost"
                     className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
-                    disabled={!keybindingsConfigPath}
-                    onClick={openKeybindingsFile}
-                    aria-label="Open keybindings.json"
+                    disabled={!shortcutsConfigPath}
+                    onClick={openShortcutsFile}
+                    aria-label="Open shortcuts.json"
                   >
                     <FileJsonIcon className="size-3" />
                   </Button>
                 }
               />
-              <TooltipPopup side="top">Open keybindings.json</TooltipPopup>
+              <TooltipPopup side="top">Open shortcuts.json</TooltipPopup>
             </Tooltip>
           </div>
         }
@@ -1229,7 +1228,7 @@ export function KeybindingsSettingsPanel() {
             <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <p>
               Some shortcuts may be claimed by the browser before Lincei sees them. Use the desktop
-              app for better keybinding support.
+              app for better shortcut support.
             </p>
           </div>
         ) : null}
@@ -1242,36 +1241,36 @@ export function KeybindingsSettingsPanel() {
         >
           <div className="grid min-w-[680px] grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(210px,1fr)_60px] border-b border-border/70 bg-muted/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
             <div>Command</div>
-            <div>Keybinding</div>
+            <div>Shortcut</div>
             <div>When</div>
             <div>Status</div>
           </div>
           <div className="min-w-[680px] divide-y divide-border/60">
             {isAddingBinding ? (
-              <NewKeybindingTableRow
+              <NewShortcutTableRow
                 commandOptions={commandOptions}
                 allRows={rows}
                 variables={whenVariables}
                 isSaving={savingCommand !== null}
-                onSave={saveKeybinding}
+                onSave={saveShortcut}
                 onCancel={() => setIsAddingBinding(false)}
               />
             ) : null}
             {rows.map((row) => (
-              <KeybindingTableRow
+              <ShortcutTableRow
                 key={row.id}
                 row={row}
                 allRows={rows}
                 variables={whenVariables}
                 isSaving={savingCommand === row.command}
-                onSave={saveKeybinding}
-                onReset={resetKeybinding}
-                onRemove={removeKeybinding}
+                onSave={saveShortcut}
+                onReset={resetShortcut}
+                onRemove={removeShortcut}
               />
             ))}
             {rows.length === 0 && !isAddingBinding ? (
               <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                No keybindings match your search.
+                No shortcuts match your search.
               </div>
             ) : null}
           </div>

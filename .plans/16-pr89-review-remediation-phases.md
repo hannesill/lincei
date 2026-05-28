@@ -116,7 +116,7 @@ Related bug groups solved together:
 - UTF-8 chunk boundary decode correctness.
 - Markdown/file-link parsing edge cases.
 - Shell/OS-specific PATH parsing behavior.
-- Git rename parsing and small keybinding edge cases.
+- Git rename parsing and small shortcut edge cases.
 
 Primary files:
 
@@ -125,7 +125,7 @@ Primary files:
 - `apps/web/src/markdown-links.ts`
 - `apps/server/src/os-jank.ts`
 - `apps/server/src/git/Layers/GitCore.ts`
-- `apps/server/src/keybindings.ts`
+- `apps/server/src/shortcuts.ts`
 
 Exit criteria:
 

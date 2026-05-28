@@ -5,7 +5,7 @@
  * server-side behavior (binary paths, streaming mode, env mode, custom models,
  * text generation model selection).
  *
- * Follows the same pattern as `keybindings.ts`: JSON file + Cache + PubSub +
+ * Follows the same pattern as `shortcuts.ts`: JSON file + Cache + PubSub +
  * Semaphore + FileSystem.watch for concurrency and external edit detection.
  *
  * @module ServerSettings

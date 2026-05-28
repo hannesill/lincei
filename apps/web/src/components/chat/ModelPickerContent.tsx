@@ -1,7 +1,7 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
-  type ResolvedKeybindingsConfig,
+  type ResolvedShortcutsConfig,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
 import { memo, useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
@@ -17,7 +17,7 @@ import {
   modelPickerJumpIndexFromCommand,
   resolveShortcutCommand,
   shortcutLabelForCommand,
-} from "../../keybindings";
+} from "../../shortcuts";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { TooltipProvider } from "../ui/tooltip";
@@ -71,7 +71,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * for the locked-mode header.
    */
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
-  keybindings?: ResolvedKeybindingsConfig;
+  shortcuts?: ResolvedShortcutsConfig;
   /**
    * Model options per instance. Keyed by `ProviderInstanceId` so the
    * default Codex instance and any custom Codex instances each have their
@@ -84,7 +84,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const {
-    keybindings: providedKeybindings,
+    shortcuts: providedShortcuts,
     modelOptionsByInstance,
     instanceEntries,
     onInstanceModelChange,
@@ -104,9 +104,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       return favorites.length > 0 ? "favorites" : props.activeInstanceId;
     },
   );
-  const keybindings = useMemo<ResolvedKeybindingsConfig>(
-    () => providedKeybindings ?? [],
-    [providedKeybindings],
+  const shortcuts = useMemo<ResolvedShortcutsConfig>(
+    () => providedShortcuts ?? [],
+    [providedShortcuts],
   );
   const { updateSettings } = useUpdateSettings();
 
@@ -432,13 +432,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     };
     const mapping = new Map<string, string>();
     for (const [modelKey, command] of modelJumpCommandByKey) {
-      const label = shortcutLabelForCommand(keybindings, command, shortcutLabelOptions);
+      const label = shortcutLabelForCommand(shortcuts, command, shortcutLabelOptions);
       if (label) {
         mapping.set(modelKey, label);
       }
     }
     return mapping.size > 0 ? mapping : EMPTY_MODEL_JUMP_LABELS;
-  }, [keybindings, modelJumpCommandByKey, modelJumpShortcutContext]);
+  }, [shortcuts, modelJumpCommandByKey, modelJumpShortcutContext]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -446,7 +446,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         return;
       }
 
-      const command = resolveShortcutCommand(event, keybindings, {
+      const command = resolveShortcutCommand(event, shortcuts, {
         platform: navigator.platform,
         context: modelJumpShortcutContext,
       });
@@ -470,7 +470,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown, true);
     };
-  }, [handleModelSelect, keybindings, modelJumpModelKeys, modelJumpShortcutContext]);
+  }, [handleModelSelect, shortcuts, modelJumpModelKeys, modelJumpShortcutContext]);
 
   useLayoutEffect(() => {
     const listRegion = listRegionRef.current;

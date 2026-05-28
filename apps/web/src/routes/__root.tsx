@@ -286,7 +286,7 @@ function EventRouter() {
   const readPathname = useEffectEvent(() => pathname);
   const handledBootstrapSessionIdRef = useRef<string | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
-  const lastKeybindingsSuccessToastAtRef = useRef(0);
+  const lastShortcutsSuccessToastAtRef = useRef(0);
   const disposedRef = useRef(false);
   const serverConfig = useServerConfig();
 
@@ -347,21 +347,21 @@ function EventRouter() {
         return;
       }
       seenServerConfigUpdateIdRef.current = id;
-      if (source !== "keybindingsUpdated") {
+      if (source !== "shortcutsUpdated") {
         return;
       }
 
-      const issue = payload.issues.find((entry) => entry.kind.startsWith("keybindings."));
+      const issue = payload.issues.find((entry) => entry.kind.startsWith("shortcuts."));
       if (!issue) {
         const now = Date.now();
-        if (now - lastKeybindingsSuccessToastAtRef.current < 2_000) {
+        if (now - lastShortcutsSuccessToastAtRef.current < 2_000) {
           return;
         }
-        lastKeybindingsSuccessToastAtRef.current = now;
+        lastShortcutsSuccessToastAtRef.current = now;
         toastManager.add({
           type: "success",
-          title: "Keybindings updated",
-          description: "Keybindings configuration reloaded successfully.",
+          title: "Shortcuts updated",
+          description: "Shortcuts configuration reloaded successfully.",
         });
         return;
       }
@@ -369,11 +369,11 @@ function EventRouter() {
       toastManager.add(
         stackedSessionToast({
           type: "warning",
-          title: "Invalid keybindings configuration",
+          title: "Invalid shortcuts configuration",
           description: issue.message,
           actionVariant: "outline",
           actionProps: {
-            children: "Open keybindings.json",
+            children: "Open shortcuts.json",
             onClick: () => {
               const api = readLocalApi();
               if (!api) {
@@ -386,13 +386,13 @@ function EventRouter() {
                   if (!editor) {
                     throw new Error("No available editors found.");
                   }
-                  return api.shell.openInEditor(config.keybindingsConfigPath, editor);
+                  return api.shell.openInEditor(config.shortcutsConfigPath, editor);
                 })
                 .catch((error) => {
                   toastManager.add(
                     stackedSessionToast({
                       type: "error",
-                      title: "Unable to open keybindings file",
+                      title: "Unable to open shortcuts file",
                       description:
                         error instanceof Error ? error.message : "Unknown error opening file.",
                     }),

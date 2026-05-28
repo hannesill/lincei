@@ -1,17 +1,17 @@
-import { MAX_KEYBINDING_VALUE_LENGTH, type KeybindingCommand } from "@t3tools/contracts";
+import { MAX_SHORTCUT_VALUE_LENGTH, type ShortcutCommand } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import { commandForProjectScript } from "../projectScripts";
 import {
-  decodeProjectScriptKeybindingRule,
-  keybindingValueForCommand,
-  PROJECT_SCRIPT_KEYBINDING_INVALID_MESSAGE,
-} from "./projectScriptKeybindings";
+  decodeProjectScriptShortcutRule,
+  shortcutValueForCommand,
+  PROJECT_SCRIPT_SHORTCUT_INVALID_MESSAGE,
+} from "./projectScriptShortcuts";
 
-describe("projectScriptKeybindings", () => {
-  it("decodes and trims valid keybinding rules", () => {
-    const rule = decodeProjectScriptKeybindingRule({
-      keybinding: "  mod+k  ",
+describe("projectScriptShortcuts", () => {
+  it("decodes and trims valid shortcut rules", () => {
+    const rule = decodeProjectScriptShortcutRule({
+      shortcut: "  mod+k  ",
       command: commandForProjectScript("lint"),
     });
 
@@ -21,36 +21,36 @@ describe("projectScriptKeybindings", () => {
     });
   });
 
-  it("returns null when keybinding is empty", () => {
+  it("returns null when shortcut is empty", () => {
     expect(
-      decodeProjectScriptKeybindingRule({
-        keybinding: "   ",
+      decodeProjectScriptShortcutRule({
+        shortcut: "   ",
         command: commandForProjectScript("lint"),
       }),
     ).toBeNull();
   });
 
-  it("rejects invalid keybinding values", () => {
+  it("rejects invalid shortcut values", () => {
     expect(() =>
-      decodeProjectScriptKeybindingRule({
-        keybinding: "k".repeat(MAX_KEYBINDING_VALUE_LENGTH + 1),
+      decodeProjectScriptShortcutRule({
+        shortcut: "k".repeat(MAX_SHORTCUT_VALUE_LENGTH + 1),
         command: commandForProjectScript("lint"),
       }),
-    ).toThrowError(PROJECT_SCRIPT_KEYBINDING_INVALID_MESSAGE);
+    ).toThrowError(PROJECT_SCRIPT_SHORTCUT_INVALID_MESSAGE);
   });
 
   it("rejects invalid commands", () => {
     expect(() =>
-      decodeProjectScriptKeybindingRule({
-        keybinding: "mod+k",
-        command: "script.BAD.run" as KeybindingCommand,
+      decodeProjectScriptShortcutRule({
+        shortcut: "mod+k",
+        command: "script.BAD.run" as ShortcutCommand,
       }),
-    ).toThrowError(PROJECT_SCRIPT_KEYBINDING_INVALID_MESSAGE);
+    ).toThrowError(PROJECT_SCRIPT_SHORTCUT_INVALID_MESSAGE);
   });
 
-  it("reads latest matching keybinding value for a command", () => {
+  it("reads latest matching shortcut value for a command", () => {
     const command = commandForProjectScript("test");
-    const value = keybindingValueForCommand(
+    const value = shortcutValueForCommand(
       [
         {
           command,

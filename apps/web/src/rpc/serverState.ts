@@ -10,7 +10,7 @@ import {
   type ServerProviderUpdatedPayload,
   type ServerSettings,
 } from "@t3tools/contracts";
-import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { DEFAULT_RESOLVED_SHORTCUTS } from "@t3tools/shared/shortcuts";
 import { Atom } from "effect/unstable/reactivity";
 import { useCallback, useRef } from "react";
 
@@ -47,10 +47,10 @@ const EMPTY_SERVER_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
 const selectAvailableEditors = (config: ServerConfig | null): ReadonlyArray<EditorId> =>
   config?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
-const selectKeybindings = (config: ServerConfig | null) =>
-  config?.keybindings ?? DEFAULT_RESOLVED_KEYBINDINGS;
-const selectKeybindingsConfigPath = (config: ServerConfig | null) =>
-  config?.keybindingsConfigPath ?? null;
+const selectShortcuts = (config: ServerConfig | null) =>
+  config?.shortcuts ?? DEFAULT_RESOLVED_SHORTCUTS;
+const selectShortcutsConfigPath = (config: ServerConfig | null) =>
+  config?.shortcutsConfigPath ?? null;
 const selectObservability = (config: ServerConfig | null) => config?.observability ?? null;
 const selectProviders = (config: ServerConfig | null) =>
   config?.providers ?? EMPTY_SERVER_PROVIDERS;
@@ -75,8 +75,8 @@ export function getServerConfig(): ServerConfig | null {
   return appAtomRegistry.get(serverConfigAtom);
 }
 
-export function getServerKeybindings(): ServerConfig["keybindings"] {
-  return selectKeybindings(getServerConfig());
+export function getServerShortcuts(): ServerConfig["shortcuts"] {
+  return selectShortcuts(getServerConfig());
 }
 
 export function getServerConfigUpdatedNotification(): ServerConfigUpdatedNotification | null {
@@ -95,14 +95,14 @@ export function applyServerConfigEvent(event: ServerConfigStreamEvent): void {
       setServerConfigSnapshot(event.config);
       return;
     }
-    case "keybindingsUpdated": {
+    case "shortcutsUpdated": {
       const latestServerConfig = getServerConfig();
       if (!latestServerConfig) {
         return;
       }
       const nextConfig = {
         ...latestServerConfig,
-        keybindings: event.payload.keybindings,
+        shortcuts: event.payload.shortcuts,
         issues: event.payload.issues,
       } satisfies ServerConfig;
       resolveServerConfig(nextConfig);
@@ -276,16 +276,16 @@ export function useServerProviders(): ReadonlyArray<ServerProvider> {
   return useAtomValue(serverConfigAtom, selectProviders);
 }
 
-export function useServerKeybindings(): ServerConfig["keybindings"] {
-  return useAtomValue(serverConfigAtom, selectKeybindings);
+export function useServerShortcuts(): ServerConfig["shortcuts"] {
+  return useAtomValue(serverConfigAtom, selectShortcuts);
 }
 
 export function useServerAvailableEditors(): ReadonlyArray<EditorId> {
   return useAtomValue(serverConfigAtom, selectAvailableEditors);
 }
 
-export function useServerKeybindingsConfigPath(): string | null {
-  return useAtomValue(serverConfigAtom, selectKeybindingsConfigPath);
+export function useServerShortcutsConfigPath(): string | null {
+  return useAtomValue(serverConfigAtom, selectShortcutsConfigPath);
 }
 
 export function useServerObservability(): ServerConfig["observability"] | null {

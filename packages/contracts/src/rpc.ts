@@ -44,7 +44,7 @@ import {
   VcsStatusResult,
   VcsStatusStreamEvent,
 } from "./git.ts";
-import { KeybindingsConfigError } from "./keybindings.ts";
+import { ShortcutsConfigError } from "./shortcuts.ts";
 import {
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
@@ -84,8 +84,8 @@ import {
   ServerProviderUpdateError,
   ServerProviderUpdateInput,
   ServerLifecycleStreamEvent,
-  ServerRemoveKeybindingInput,
-  ServerRemoveKeybindingResult,
+  ServerRemoveShortcutInput,
+  ServerRemoveShortcutResult,
   ServerProviderUpdatedPayload,
   ServerTraceDiagnosticsResult,
   ServerProcessDiagnosticsResult,
@@ -93,8 +93,8 @@ import {
   ServerProcessResourceHistoryResult,
   ServerSignalProcessInput,
   ServerSignalProcessResult,
-  ServerUpsertKeybindingInput,
-  ServerUpsertKeybindingResult,
+  ServerUpsertShortcutInput,
+  ServerUpsertShortcutResult,
 } from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
@@ -150,8 +150,8 @@ export const WS_METHODS = {
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
-  serverUpsertKeybinding: "server.upsertKeybinding",
-  serverRemoveKeybinding: "server.removeKeybinding",
+  serverUpsertShortcut: "server.upsertShortcut",
+  serverRemoveShortcut: "server.removeShortcut",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverDiscoverSourceControl: "server.discoverSourceControl",
@@ -181,22 +181,22 @@ export const WS_METHODS = {
   subscribeAuthAccess: "subscribeAuthAccess",
 } as const;
 
-export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
-  payload: ServerUpsertKeybindingInput,
-  success: ServerUpsertKeybindingResult,
-  error: KeybindingsConfigError,
+export const WsServerUpsertShortcutRpc = Rpc.make(WS_METHODS.serverUpsertShortcut, {
+  payload: ServerUpsertShortcutInput,
+  success: ServerUpsertShortcutResult,
+  error: ShortcutsConfigError,
 });
 
-export const WsServerRemoveKeybindingRpc = Rpc.make(WS_METHODS.serverRemoveKeybinding, {
-  payload: ServerRemoveKeybindingInput,
-  success: ServerRemoveKeybindingResult,
-  error: KeybindingsConfigError,
+export const WsServerRemoveShortcutRpc = Rpc.make(WS_METHODS.serverRemoveShortcut, {
+  payload: ServerRemoveShortcutInput,
+  success: ServerRemoveShortcutResult,
+  error: ShortcutsConfigError,
 });
 
 export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
   payload: Schema.Struct({}),
   success: ServerConfig,
-  error: Schema.Union([KeybindingsConfigError, ServerSettingsError]),
+  error: Schema.Union([ShortcutsConfigError, ServerSettingsError]),
 });
 
 export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, {
@@ -516,7 +516,7 @@ export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTermina
 export const WsSubscribeServerConfigRpc = Rpc.make(WS_METHODS.subscribeServerConfig, {
   payload: Schema.Struct({}),
   success: ServerConfigStreamEvent,
-  error: Schema.Union([KeybindingsConfigError, ServerSettingsError]),
+  error: Schema.Union([ShortcutsConfigError, ServerSettingsError]),
   stream: true,
 });
 
@@ -536,8 +536,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
-  WsServerUpsertKeybindingRpc,
-  WsServerRemoveKeybindingRpc,
+  WsServerUpsertShortcutRpc,
+  WsServerRemoveShortcutRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerDiscoverSourceControlRpc,

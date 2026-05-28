@@ -42,7 +42,7 @@ import { ServerConfig } from "./config.ts";
 import * as M4Cli from "./datasets/M4Cli.ts";
 import { M4DatasetService } from "./datasets/M4DatasetService.ts";
 import * as M4DatasetServiceLayer from "./datasets/M4DatasetService.ts";
-import { Keybindings } from "./keybindings.ts";
+import { Shortcuts } from "./shortcuts.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
@@ -168,7 +168,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
       const orchestrationEngine = yield* OrchestrationEngineService;
       const checkpointDiffQuery = yield* CheckpointDiffQuery;
-      const keybindings = yield* Keybindings;
+      const shortcuts = yield* Shortcuts;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const gitWorkflow = yield* GitWorkflowService;
       const vcsProvisioning = yield* VcsProvisioningService;
@@ -577,7 +577,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       };
 
       const loadServerConfig = Effect.gen(function* () {
-        const keybindingsConfig = yield* keybindings.loadConfigState;
+        const shortcutsConfig = yield* shortcuts.loadConfigState;
         const providers = yield* providerRegistry.getProviders;
         const settings = redactServerSettingsForClient(yield* serverSettings.getSettings);
         const environment = yield* serverEnvironment.getDescriptor;
@@ -587,9 +587,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           environment,
           auth,
           cwd: config.cwd,
-          keybindingsConfigPath: config.keybindingsConfigPath,
-          keybindings: keybindingsConfig.keybindings,
-          issues: keybindingsConfig.issues,
+          shortcutsConfigPath: config.shortcutsConfigPath,
+          shortcuts: shortcutsConfig.shortcuts,
+          issues: shortcutsConfig.issues,
           providers,
           availableEditors: ExternalLauncher.resolveAvailableEditors(),
           observability: {
@@ -860,21 +860,21 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               "rpc.aggregate": "server",
             },
           ),
-        [WS_METHODS.serverUpsertKeybinding]: (rule) =>
+        [WS_METHODS.serverUpsertShortcut]: (rule) =>
           observeRpcEffect(
-            WS_METHODS.serverUpsertKeybinding,
+            WS_METHODS.serverUpsertShortcut,
             Effect.gen(function* () {
-              const keybindingsConfig = yield* keybindings.upsertKeybindingRule(rule);
-              return { keybindings: keybindingsConfig, issues: [] };
+              const shortcutsConfig = yield* shortcuts.upsertShortcutRule(rule);
+              return { shortcuts: shortcutsConfig, issues: [] };
             }),
             { "rpc.aggregate": "server" },
           ),
-        [WS_METHODS.serverRemoveKeybinding]: (rule) =>
+        [WS_METHODS.serverRemoveShortcut]: (rule) =>
           observeRpcEffect(
-            WS_METHODS.serverRemoveKeybinding,
+            WS_METHODS.serverRemoveShortcut,
             Effect.gen(function* () {
-              const keybindingsConfig = yield* keybindings.removeKeybindingRule(rule);
-              return { keybindings: keybindingsConfig, issues: [] };
+              const shortcutsConfig = yield* shortcuts.removeShortcutRule(rule);
+              return { shortcuts: shortcutsConfig, issues: [] };
             }),
             { "rpc.aggregate": "server" },
           ),
@@ -1179,12 +1179,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcStreamEffect(
             WS_METHODS.subscribeServerConfig,
             Effect.gen(function* () {
-              const keybindingsUpdates = keybindings.streamChanges.pipe(
+              const shortcutsUpdates = shortcuts.streamChanges.pipe(
                 Stream.map((event) => ({
                   version: 1 as const,
-                  type: "keybindingsUpdated" as const,
+                  type: "shortcutsUpdated" as const,
                   payload: {
-                    keybindings: event.keybindings,
+                    shortcuts: event.shortcuts,
                     issues: event.issues,
                   },
                 })),
@@ -1211,7 +1211,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 .pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
 
               const liveUpdates = Stream.merge(
-                keybindingsUpdates,
+                shortcutsUpdates,
                 Stream.merge(providerStatuses, settingsUpdates),
               );
 

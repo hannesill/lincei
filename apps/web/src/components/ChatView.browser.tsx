@@ -168,8 +168,8 @@ function createBaseServerConfig(): ServerConfig {
       sessionCookieName: "t3_session",
     },
     cwd: "/repo/project",
-    keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
-    keybindings: [],
+    shortcutsConfigPath: "/repo/project/.t3code-shortcuts.json",
+    shortcuts: [],
     issues: [],
     providers: [
       {
@@ -4269,7 +4269,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "chat.new",
               shortcut: {
@@ -4336,7 +4336,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "chat.new",
               shortcut: {
@@ -4381,7 +4381,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -4433,7 +4433,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -4480,7 +4480,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -4591,7 +4591,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -5219,7 +5219,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -5344,7 +5344,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -5393,7 +5393,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             ...nextFixture.serverConfig.settings,
             defaultSessionEnvMode: "worktree",
           },
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -5455,7 +5455,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             ...nextFixture.serverConfig.settings,
             defaultSessionEnvMode: "worktree",
           },
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -5511,7 +5511,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "commandPalette.toggle",
               shortcut: {
@@ -5558,7 +5558,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "chat.new",
               shortcut: {
@@ -6024,7 +6024,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
           ...nextFixture.serverConfig,
-          keybindings: [
+          shortcuts: [
             {
               command: "modelPicker.toggle",
               shortcut: {

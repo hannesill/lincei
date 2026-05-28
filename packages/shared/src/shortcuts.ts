@@ -1,13 +1,13 @@
 import {
-  type KeybindingRule,
-  type KeybindingShortcut,
-  type KeybindingWhenNode,
-  MAX_KEYBINDINGS_COUNT,
+  type ShortcutRule,
+  type KeyboardShortcut,
+  type ShortcutWhenNode,
+  MAX_SHORTCUTS_COUNT,
   MAX_WHEN_EXPRESSION_DEPTH,
-  MODEL_PICKER_JUMP_KEYBINDING_COMMANDS,
-  type ResolvedKeybindingRule,
-  type ResolvedKeybindingsConfig,
-  THREAD_JUMP_KEYBINDING_COMMANDS,
+  MODEL_PICKER_JUMP_SHORTCUT_COMMANDS,
+  type ResolvedShortcutRule,
+  type ResolvedShortcutsConfig,
+  THREAD_JUMP_SHORTCUT_COMMANDS,
 } from "@t3tools/contracts";
 
 type WhenToken =
@@ -18,7 +18,7 @@ type WhenToken =
   | { type: "lparen" }
   | { type: "rparen" };
 
-export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
+export const DEFAULT_SHORTCUTS: ReadonlyArray<ShortcutRule> = [
   { key: "mod+j", command: "terminal.toggle" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+n", command: "terminal.new", when: "terminalFocus" },
@@ -33,11 +33,11 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+o", command: "editor.openFavorite" },
   { key: "mod+shift+[", command: "session.previous" },
   { key: "mod+shift+]", command: "session.next" },
-  ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
+  ...THREAD_JUMP_SHORTCUT_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
     command,
   })),
-  ...MODEL_PICKER_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
+  ...MODEL_PICKER_JUMP_SHORTCUT_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
     command,
     when: "modelPickerOpen",
@@ -50,7 +50,7 @@ function normalizeKeyToken(token: string): string {
   return token;
 }
 
-export function parseKeybindingShortcut(value: string): KeybindingShortcut | null {
+export function parseKeyboardShortcut(value: string): KeyboardShortcut | null {
   const rawTokens = value
     .toLowerCase()
     .split("+")
@@ -163,12 +163,12 @@ function tokenizeWhenExpression(expression: string): WhenToken[] | null {
   return tokens;
 }
 
-export function parseKeybindingWhenExpression(expression: string): KeybindingWhenNode | null {
+export function parseShortcutWhenExpression(expression: string): ShortcutWhenNode | null {
   const tokens = tokenizeWhenExpression(expression);
   if (!tokens || tokens.length === 0) return null;
   let index = 0;
 
-  const parsePrimary = (depth: number): KeybindingWhenNode | null => {
+  const parsePrimary = (depth: number): ShortcutWhenNode | null => {
     if (depth > MAX_WHEN_EXPRESSION_DEPTH) {
       return null;
     }
@@ -194,7 +194,7 @@ export function parseKeybindingWhenExpression(expression: string): KeybindingWhe
     return null;
   };
 
-  const parseUnary = (depth: number): KeybindingWhenNode | null => {
+  const parseUnary = (depth: number): ShortcutWhenNode | null => {
     let notCount = 0;
     while (tokens[index]?.type === "not") {
       index += 1;
@@ -215,7 +215,7 @@ export function parseKeybindingWhenExpression(expression: string): KeybindingWhe
     return node;
   };
 
-  const parseAnd = (depth: number): KeybindingWhenNode | null => {
+  const parseAnd = (depth: number): ShortcutWhenNode | null => {
     let left = parseUnary(depth);
     if (!left) return null;
 
@@ -229,7 +229,7 @@ export function parseKeybindingWhenExpression(expression: string): KeybindingWhe
     return left;
   };
 
-  const parseOr = (depth: number): KeybindingWhenNode | null => {
+  const parseOr = (depth: number): ShortcutWhenNode | null => {
     let left = parseAnd(depth);
     if (!left) return null;
 
@@ -248,12 +248,12 @@ export function parseKeybindingWhenExpression(expression: string): KeybindingWhe
   return ast;
 }
 
-export function compileResolvedKeybindingRule(rule: KeybindingRule): ResolvedKeybindingRule | null {
-  const shortcut = parseKeybindingShortcut(rule.key);
+export function compileResolvedShortcutRule(rule: ShortcutRule): ResolvedShortcutRule | null {
+  const shortcut = parseKeyboardShortcut(rule.key);
   if (!shortcut) return null;
 
   if (rule.when !== undefined) {
-    const whenAst = parseKeybindingWhenExpression(rule.when);
+    const whenAst = parseShortcutWhenExpression(rule.when);
     if (!whenAst) return null;
     return {
       command: rule.command,
@@ -268,17 +268,17 @@ export function compileResolvedKeybindingRule(rule: KeybindingRule): ResolvedKey
   };
 }
 
-export function compileResolvedKeybindingsConfig(
-  config: ReadonlyArray<KeybindingRule>,
-): ResolvedKeybindingsConfig {
-  const compiled: ResolvedKeybindingRule[] = [];
+export function compileResolvedShortcutsConfig(
+  config: ReadonlyArray<ShortcutRule>,
+): ResolvedShortcutsConfig {
+  const compiled: ResolvedShortcutRule[] = [];
   for (const rule of config) {
-    const result = compileResolvedKeybindingRule(rule);
+    const result = compileResolvedShortcutRule(rule);
     if (result) {
       compiled.push(result);
     }
   }
-  return compiled.slice(-MAX_KEYBINDINGS_COUNT);
+  return compiled.slice(-MAX_SHORTCUTS_COUNT);
 }
 
-export const DEFAULT_RESOLVED_KEYBINDINGS = compileResolvedKeybindingsConfig(DEFAULT_KEYBINDINGS);
+export const DEFAULT_RESOLVED_SHORTCUTS = compileResolvedShortcutsConfig(DEFAULT_SHORTCUTS);

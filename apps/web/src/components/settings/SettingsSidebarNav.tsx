@@ -23,7 +23,7 @@ import {
 
 export type SettingsSectionPath =
   | "/settings/general"
-  | "/settings/keybindings"
+  | "/settings/shortcuts"
   | "/settings/providers"
   | "/settings/source-control"
   | "/settings/connections"
@@ -38,7 +38,7 @@ type SettingsNavItem = {
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<SettingsNavItem> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   // Future prototype tabs should slot here: Datasets first, then Skills.
-  { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
+  { label: "Shortcuts", to: "/settings/shortcuts", icon: KeyboardIcon },
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },

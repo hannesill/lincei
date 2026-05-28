@@ -22,7 +22,7 @@ import * as Console from "effect/Console";
 import * as DateTime from "effect/DateTime";
 
 import { ServerConfig } from "./config.ts";
-import { Keybindings } from "./keybindings.ts";
+import { Shortcuts } from "./shortcuts.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -280,7 +280,7 @@ const runStartupPhase = <A, E, R>(phase: string, effect: Effect.Effect<A, E, R>)
 
 export const makeServerRuntimeStartup = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
-  const keybindings = yield* Keybindings;
+  const shortcuts = yield* Shortcuts;
   const orchestrationReactor = yield* OrchestrationReactor;
   const providerSessionReaper = yield* ProviderSessionReaper;
   const lifecycleEvents = yield* ServerLifecycleEvents;
@@ -294,12 +294,12 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
   yield* Effect.addFinalizer(() => Scope.close(reactorScope, Exit.void));
 
   const startup = Effect.gen(function* () {
-    yield* Effect.logDebug("startup phase: starting keybindings runtime");
+    yield* Effect.logDebug("startup phase: starting shortcuts runtime");
     yield* runStartupPhase(
-      "keybindings.start",
-      keybindings.start.pipe(
+      "shortcuts.start",
+      shortcuts.start.pipe(
         Effect.catch((error) =>
-          Effect.logWarning("failed to start keybindings runtime", {
+          Effect.logWarning("failed to start shortcuts runtime", {
             path: error.configPath,
             detail: error.detail,
             cause: error.cause,

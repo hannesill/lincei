@@ -1,7 +1,7 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
-  type ResolvedKeybindingsConfig,
+  type ResolvedShortcutsConfig,
 } from "@t3tools/contracts";
 import { memo, useEffect, useMemo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
@@ -31,7 +31,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   lockedContinuationGroupKey?: string | null;
   /** Instance entries rendered in the sidebar + used to resolve display name. */
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
-  keybindings?: ResolvedKeybindingsConfig;
+  shortcuts?: ResolvedShortcutsConfig;
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
   activeProviderIconClassName?: string;
   compact?: boolean;
@@ -175,7 +175,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           lockedProvider={props.lockedProvider}
           lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
           instanceEntries={props.instanceEntries}
-          {...(props.keybindings ? { keybindings: props.keybindings } : {})}
+          {...(props.shortcuts ? { shortcuts: props.shortcuts } : {})}
           modelOptionsByInstance={props.modelOptionsByInstance}
           terminalOpen={props.terminalOpen ?? false}
           onRequestClose={() => setIsMenuOpen(false)}

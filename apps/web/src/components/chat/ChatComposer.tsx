@@ -5,7 +5,7 @@ import type {
   ProjectEntry,
   ProviderApprovalDecision,
   ProviderInteractionMode,
-  ResolvedKeybindingsConfig,
+  ResolvedShortcutsConfig,
   RuntimeMode,
   ScopedSessionRef,
   ServerProvider,
@@ -441,7 +441,7 @@ export interface ChatComposerProps {
   // Misc
   resolvedTheme: "light" | "dark";
   settings: UnifiedSettings;
-  keybindings: ResolvedKeybindingsConfig;
+  shortcuts: ResolvedShortcutsConfig;
   terminalOpen: boolean;
   gitCwd: string | null;
 
@@ -531,7 +531,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeSessionActivities,
     resolvedTheme,
     settings,
-    keybindings,
+    shortcuts,
     terminalOpen,
     gitCwd,
     promptRef,
@@ -2345,7 +2345,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   lockedProvider={lockedProvider}
                   lockedContinuationGroupKey={lockedContinuationGroupKey}
                   instanceEntries={providerInstanceEntries}
-                  keybindings={keybindings}
+                  shortcuts={shortcuts}
                   modelOptionsByInstance={modelOptionsByInstance}
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
