@@ -185,6 +185,7 @@ import {
 import { sanitizeSessionErrorMessage } from "~/rpc/transportError";
 import { retainSessionDetailSubscription } from "../environments/runtime/service";
 import { RightPanelSheet } from "./RightPanelSheet";
+import { APP_CONTENT_MAX_WIDTH_CLASS } from "./appShell";
 import { Button } from "./ui/button";
 import {
   buildVersionMismatchDismissalKey,
@@ -200,6 +201,7 @@ const EMPTY_PROPOSED_PLANS: Session["proposedPlans"] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+const AI_REVIEW_NOTICE = "AI can make mistakes. Review its outputs.";
 type EnvironmentUnavailableState = {
   readonly environmentId: EnvironmentId;
   readonly label: string;
@@ -207,6 +209,14 @@ type EnvironmentUnavailableState = {
 };
 
 type SessionPlanCatalogEntry = Pick<Session, "id" | "proposedPlans">;
+
+function AiReviewNotice() {
+  return (
+    <p className="px-2 text-center text-[11px] leading-4 text-muted-foreground/55">
+      {AI_REVIEW_NOTICE}
+    </p>
+  );
+}
 
 function useSessionPlanCatalog(sessionIds: readonly SessionId[]): SessionPlanCatalogEntry[] {
   return useStore(
@@ -3617,7 +3627,7 @@ export default function ChatView(props: ChatViewProps) {
           {/* Input bar */}
           <div
             className={cn(
-              "pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-1.5 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-2",
+              "pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-2 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-2.5",
               isGitRepo
                 ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
                 : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
@@ -3714,12 +3724,23 @@ export default function ChatView(props: ChatViewProps) {
                   : {})}
                 envLocked={envLocked}
                 onComposerFocusRequest={scheduleComposerFocus}
+                centerContent={<AiReviewNotice />}
                 {...(canCheckoutPullRequestIntoSession
                   ? { onCheckoutPullRequestRequest: openPullRequestDialog }
                   : {})}
                 {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
                 availableEnvironments={logicalProjectEnvironments}
               />
+            )}
+            {!isGitRepo && (
+              <div
+                className={cn(
+                  "mx-auto flex w-full justify-center px-2.5 pb-1 pt-1.5 sm:px-3",
+                  APP_CONTENT_MAX_WIDTH_CLASS,
+                )}
+              >
+                <AiReviewNotice />
+              </div>
             )}
           </div>
 

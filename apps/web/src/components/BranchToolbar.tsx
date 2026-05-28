@@ -8,7 +8,7 @@ import {
   FolderIcon,
   MonitorIcon,
 } from "lucide-react";
-import { memo, useMemo } from "react";
+import { type ReactNode, memo, useMemo } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { useIsMobile } from "../hooks/useMediaQuery";
@@ -52,6 +52,7 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
+  centerContent?: ReactNode;
 }
 
 interface MobileRunContextSelectorProps {
@@ -115,7 +116,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
 
   if (isLocked) {
     return (
-      <span className="inline-flex min-w-0 max-w-[48%] flex-1 items-center justify-start gap-1 rounded-md border border-transparent px-[calc(--spacing(2)-1px)] text-sm font-medium text-muted-foreground/70 md:hidden">
+      <span className="inline-flex min-w-0 max-w-full items-center justify-start gap-1 rounded-md border border-transparent px-[calc(--spacing(2)-1px)] text-sm font-medium text-muted-foreground/70 md:hidden">
         {triggerContent}
       </span>
     );
@@ -125,7 +126,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
     <Menu>
       <MenuTrigger
         render={<Button variant="ghost" size="xs" />}
-        className="min-w-0 max-w-[48%] flex-1 justify-start text-muted-foreground/70 hover:text-foreground/80 md:hidden"
+        className="min-w-0 max-w-full justify-start text-muted-foreground/70 hover:text-foreground/80 md:hidden"
       >
         {triggerContent}
         <ChevronDownIcon className="size-3 shrink-0 opacity-50" />
@@ -203,6 +204,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
+  centerContent,
 }: BranchToolbarProps) {
   const sessionRef = useMemo(
     () => scopeSessionRef(environmentId, sessionId),
@@ -243,7 +245,7 @@ export const BranchToolbar = memo(function BranchToolbar({
 
   return (
     <div
-      className={`mx-auto flex w-full items-center gap-2 px-2.5 pb-3 pt-1 sm:px-3 ${APP_CONTENT_MAX_WIDTH_CLASS}`}
+      className={`mx-auto grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-2.5 pb-3 pt-1 sm:px-3 ${APP_CONTENT_MAX_WIDTH_CLASS}`}
     >
       {isMobile ? (
         <MobileRunContextSelector
@@ -258,7 +260,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           onEnvModeChange={onEnvModeChange}
         />
       ) : (
-        <div className="flex min-w-0 shrink-0 items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1 justify-self-start">
           {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
             <>
               <BranchToolbarEnvironmentSelector
@@ -279,8 +281,14 @@ export const BranchToolbar = memo(function BranchToolbar({
         </div>
       )}
 
+      {centerContent ? (
+        <div className="col-span-3 row-start-2 justify-self-center md:col-span-1 md:col-start-2 md:row-start-1">
+          {centerContent}
+        </div>
+      ) : null}
+
       <BranchToolbarBranchSelector
-        className="min-w-0 flex-1 justify-end md:ml-auto md:flex-none"
+        className="col-start-3 row-start-1 min-w-0 justify-end justify-self-end"
         environmentId={environmentId}
         sessionId={sessionId}
         {...(draftId ? { draftId } : {})}
