@@ -1970,7 +1970,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     >
       <div
         className={cn(
-          "group rounded-lg p-px transition-colors duration-200",
+          "group rounded-lg p-px shadow-depth-composer transition-colors duration-200",
           composerProviderState.composerFrameClassName,
         )}
         onDragEnter={onComposerDragEnter}

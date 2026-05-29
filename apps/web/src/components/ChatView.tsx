@@ -177,11 +177,7 @@ import {
 } from "./ChatView.logic";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useComposerHandleContext } from "../composerHandleContext";
-import {
-  useServerAvailableEditors,
-  useServerConfig,
-  useServerShortcuts,
-} from "~/rpc/serverState";
+import { useServerAvailableEditors, useServerConfig, useServerShortcuts } from "~/rpc/serverState";
 import { sanitizeSessionErrorMessage } from "~/rpc/transportError";
 import { retainSessionDetailSubscription } from "../environments/runtime/service";
 import { RightPanelSheet } from "./RightPanelSheet";
@@ -2229,26 +2225,29 @@ export default function ChatView(props: ChatViewProps) {
     [environmentId, serverSession],
   );
 
-  // Scroll helpers — LegendList handles auto-scroll via maintainScrollAtEnd.
-  const scrollToEnd = useCallback((animated = false) => {
-    legendListRef.current?.scrollToEnd?.({ animated });
-  }, []);
-
   // Debounce *showing* the scroll-to-bottom pill so it doesn't flash during
   // session switches.  LegendList fires scroll events with isAtEnd=false while
   // initialScrollAtEnd is settling; hiding is always immediate.
   const showScrollDebouncer = useRef(
     new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
   );
+
+  // Scroll helpers — LegendList handles auto-scroll via maintainScrollAtEnd.
+  const scrollToEnd = useCallback((animated = false) => {
+    isAtEndRef.current = true;
+    showScrollDebouncer.current.cancel();
+    setShowScrollToBottom(false);
+    legendListRef.current?.scrollToEnd?.({ animated });
+  }, []);
+
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
-    if (isAtEndRef.current === isAtEnd) return;
     isAtEndRef.current = isAtEnd;
     if (isAtEnd) {
       showScrollDebouncer.current.cancel();
       setShowScrollToBottom(false);
-    } else {
-      showScrollDebouncer.current.maybeExecute();
+      return;
     }
+    showScrollDebouncer.current.maybeExecute();
   }, []);
 
   useEffect(() => {
@@ -3579,7 +3578,7 @@ export default function ChatView(props: ChatViewProps) {
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">
         {/* Chat column */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background/98">
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Messages — LegendList handles virtualization and scrolling internally */}
@@ -3615,10 +3614,11 @@ export default function ChatView(props: ChatViewProps) {
                 <button
                   type="button"
                   onClick={() => scrollToEnd(true)}
-                  className="pointer-events-auto flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
+                  aria-label="Scroll to bottom"
+                  title="Scroll to bottom"
+                  className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-sm transition-colors hover:cursor-pointer hover:border-border hover:text-foreground"
                 >
                   <ChevronDownIcon className="size-3.5" />
-                  Scroll to bottom
                 </button>
               </div>
             )}

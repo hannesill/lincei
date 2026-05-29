@@ -96,8 +96,8 @@ interface TimelineRowActivityState {
 
 const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
 const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
-const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
-const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
+const TIMELINE_LIST_HEADER = <div className="h-2 sm:h-3" />;
+const TIMELINE_LIST_FOOTER = <div className="h-0" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
 const MESSAGE_META_CLASS = "font-sans text-[10px] leading-4 text-muted-foreground/35 tabular-nums";
 
@@ -311,7 +311,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
   return (
     <div
       className={cn(
-        "pb-4",
+        "pb-2.5",
         row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
       )}
       data-timeline-row-id={row.id}
@@ -340,7 +340,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="group/user-message flex flex-col items-end">
-      <div className="group relative max-w-[80%] rounded-md rounded-br-sm border border-primary bg-primary/90 px-3 py-2 text-primary-foreground">
+      <div className="group relative max-w-[80%] rounded-md rounded-br-sm border border-primary bg-primary/90 px-3 py-2 text-primary-foreground shadow-depth-message">
         {userImages.length > 0 && (
           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
             {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
@@ -380,7 +380,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           skills={ctx.skills}
         />
       </div>
-      <div className="mt-1 flex items-center justify-end gap-1.5 px-1">
+      <div className="mt-0.5 flex items-center justify-end gap-1.5 px-1">
         {showUserMessageActions ? (
           <div className="flex items-center gap-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/user-message:opacity-100">
             {displayedUserMessage.copyText && (
@@ -442,7 +442,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           resolvedTheme={ctx.resolvedTheme}
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-1 flex items-center gap-2">
           <p className={MESSAGE_META_CLASS}>
             {row.message.streaming ? (
               <LiveMessageMeta

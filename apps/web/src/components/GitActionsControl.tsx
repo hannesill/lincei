@@ -1625,7 +1625,16 @@ export default function GitActionsControl({
           disabled={initMutation.isPending}
           onClick={() => initMutation.mutate()}
         >
-          {initMutation.isPending ? "Initializing..." : "Initialize Git"}
+          {initMutation.isPending ? (
+            "Initializing..."
+          ) : (
+            <>
+              <span aria-hidden="true" className="-ml-0.5 font-semibold text-warning-foreground">
+                !
+              </span>
+              Initialize Git
+            </>
+          )}
         </Button>
       ) : (
         <Group aria-label="Git actions" className="shrink-0">
