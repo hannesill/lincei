@@ -32,7 +32,7 @@ function HostedStaticOnboardingState() {
         <AppTopBar title={APP_DISPLAY_NAME} />
 
         <Empty className="flex-1">
-          <div className="w-full max-w-xl rounded-3xl border border-border/55 bg-card/40 px-8 py-12 shadow-depth-card">
+          <div className="w-full max-w-xl rounded-3xl border border-border/55 bg-card/40 px-8 py-12 shadow-sm/5">
             <EmptyHeader className="max-w-none">
               <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-xl border border-border/70 bg-background/70 text-muted-foreground">
                 <LinkIcon className="size-5" />

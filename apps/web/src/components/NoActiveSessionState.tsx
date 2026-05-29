@@ -8,7 +8,7 @@ export function NoActiveSessionState() {
         <AppTopBar title="No active session" />
 
         <Empty className="flex-1">
-          <div className="w-full max-w-lg rounded-3xl border border-border/55 bg-card/40 px-8 py-12 shadow-depth-card">
+          <div className="w-full max-w-lg rounded-3xl border border-border/55 bg-card/40 px-8 py-12 shadow-sm/5">
             <EmptyHeader className="max-w-none">
               <EmptyTitle className="text-foreground text-xl">
                 Pick a session to continue
