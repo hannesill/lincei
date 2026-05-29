@@ -53,7 +53,7 @@ export function AppTopBar({
   return (
     <header
       className={cn(
-        "relative z-20 shrink-0 bg-background/96 shadow-none after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-5 after:bg-gradient-to-b after:from-background after:to-transparent after:content-['']",
+        "relative z-20 shrink-0 bg-background/96 shadow-none",
         isElectron
           ? cn(
               "drag-region flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
