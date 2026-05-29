@@ -2,6 +2,6 @@
 
 ## Scope
 
-This package is the original T3 Code marketing website. Keep its branding, tweet quotes, release copy, and public assets unchanged unless the user explicitly asks to modify the marketing website itself.
+This package is the Lincei marketing website. Keep the active Astro app focused on Lincei, Lincei Labs, and the clinical research product direction.
 
-Do not include `apps/marketing` in product rebranding sweeps for Lincei Studio. It can be used later as a reference/template for a separate Lincei Studio website, but it should remain the T3 Code site for now.
+The previous T3 Code marketing implementation is preserved as a reference in `apps/marketing/t3code`. Do not modify that archived template unless explicitly asked.
