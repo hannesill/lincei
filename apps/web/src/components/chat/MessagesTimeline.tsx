@@ -340,7 +340,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="group/user-message flex flex-col items-end">
-      <div className="group relative max-w-[80%] rounded-md rounded-br-sm border border-primary bg-primary/90 px-3 py-2 text-primary-foreground shadow-depth-message">
+      <div className="group relative max-w-[80%] rounded-md rounded-br-sm border border-transparent bg-primary/90 px-3 py-2 text-primary-foreground">
         {userImages.length > 0 && (
           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
             {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
