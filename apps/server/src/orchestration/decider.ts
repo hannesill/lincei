@@ -1,10 +1,13 @@
-import type {
+import {
+  EventId,
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
 } from "@t3tools/contracts";
+import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import type * as PlatformError from "effect/PlatformError";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
@@ -27,17 +30,27 @@ function withEventBase(
     readonly occurredAt: string;
     readonly metadata?: OrchestrationEvent["metadata"];
   },
-): Omit<OrchestrationEvent, "sequence" | "type" | "payload"> {
-  return {
-    eventId: crypto.randomUUID() as OrchestrationEvent["eventId"],
-    aggregateKind: input.aggregateKind,
-    aggregateId: input.aggregateId,
-    occurredAt: input.occurredAt,
-    commandId: input.commandId,
-    causationEventId: null,
-    correlationId: input.commandId,
-    metadata: input.metadata ?? {},
-  };
+): Effect.Effect<
+  Omit<OrchestrationEvent, "sequence" | "type" | "payload">,
+  PlatformError.PlatformError,
+  Crypto.Crypto
+> {
+  return Crypto.Crypto.pipe(
+    Effect.flatMap((crypto) =>
+      crypto.randomUUIDv4.pipe(
+        Effect.map((eventId) => ({
+          eventId: EventId.make(eventId),
+          aggregateKind: input.aggregateKind,
+          aggregateId: input.aggregateId,
+          occurredAt: input.occurredAt,
+          commandId: input.commandId,
+          causationEventId: null,
+          correlationId: input.commandId,
+          metadata: input.metadata ?? {},
+        })),
+      ),
+    ),
+  );
 }
 
 type PlannedOrchestrationEvent = Omit<OrchestrationEvent, "sequence">;
@@ -52,7 +65,11 @@ const decideCommandSequence = Effect.fn("decideCommandSequence")(function* ({
 }: {
   readonly commands: ReadonlyArray<OrchestrationCommand>;
   readonly readModel: OrchestrationReadModel;
-}): Effect.fn.Return<ReadonlyArray<PlannedOrchestrationEvent>, OrchestrationCommandInvariantError> {
+}): Effect.fn.Return<
+  ReadonlyArray<PlannedOrchestrationEvent>,
+  OrchestrationCommandInvariantError | PlatformError.PlatformError,
+  Crypto.Crypto
+> {
   let nextReadModel = readModel;
   let nextSequence = readModel.snapshotSequence;
   const plannedEvents: PlannedOrchestrationEvent[] = [];
@@ -82,7 +99,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
 }: {
   readonly command: OrchestrationCommand;
   readonly readModel: OrchestrationReadModel;
-}): Effect.fn.Return<DecideOrchestrationCommandResult, OrchestrationCommandInvariantError> {
+}): Effect.fn.Return<
+  DecideOrchestrationCommandResult,
+  OrchestrationCommandInvariantError | PlatformError.PlatformError,
+  Crypto.Crypto
+> {
   switch (command.type) {
     case "project.create": {
       yield* requireProjectAbsent({
@@ -92,12 +113,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
 
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "project",
           aggregateId: command.projectId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "project.created",
         payload: {
           projectId: command.projectId,
@@ -119,12 +140,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "project",
           aggregateId: command.projectId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "project.meta-updated",
         payload: {
           projectId: command.projectId,
@@ -176,12 +197,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
 
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "project",
           aggregateId: command.projectId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "project.deleted" as const,
         payload: {
           projectId: command.projectId,
@@ -202,12 +223,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.created",
         payload: {
           sessionId: command.sessionId,
@@ -232,12 +253,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.deleted",
         payload: {
           sessionId: command.sessionId,
@@ -254,12 +275,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.archived",
         payload: {
           sessionId: command.sessionId,
@@ -277,12 +298,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.unarchived",
         payload: {
           sessionId: command.sessionId,
@@ -299,12 +320,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.meta-updated",
         payload: {
           sessionId: command.sessionId,
@@ -327,12 +348,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.runtime-mode-set",
         payload: {
           sessionId: command.sessionId,
@@ -350,12 +371,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       });
       const occurredAt = yield* nowIso;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.interaction-mode-set",
         payload: {
           sessionId: command.sessionId,
@@ -396,12 +417,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
       const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.message-sent",
         payload: {
           sessionId: command.sessionId,
@@ -416,12 +437,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         },
       };
       const turnStartRequestedEvent: Omit<OrchestrationEvent, "sequence"> = {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         causationEventId: userMessageEvent.eventId,
         type: "session.turn-start-requested",
         payload: {
@@ -447,12 +468,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.turn-interrupt-requested",
         payload: {
           sessionId: command.sessionId,
@@ -469,7 +490,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
@@ -477,7 +498,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           metadata: {
             requestId: command.requestId,
           },
-        }),
+        })),
         type: "session.approval-response-requested",
         payload: {
           sessionId: command.sessionId,
@@ -495,7 +516,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
@@ -503,7 +524,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           metadata: {
             requestId: command.requestId,
           },
-        }),
+        })),
         type: "session.user-input-response-requested",
         payload: {
           sessionId: command.sessionId,
@@ -521,12 +542,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.checkpoint-revert-requested",
         payload: {
           sessionId: command.sessionId,
@@ -543,12 +564,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.session-stop-requested",
         payload: {
           sessionId: command.sessionId,
@@ -564,13 +585,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           metadata: {},
-        }),
+        })),
         type: "session.session-set",
         payload: {
           sessionId: command.sessionId,
@@ -586,12 +607,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.message-sent",
         payload: {
           sessionId: command.sessionId,
@@ -613,12 +634,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.message-sent",
         payload: {
           sessionId: command.sessionId,
@@ -640,12 +661,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.proposed-plan-upserted",
         payload: {
           sessionId: command.sessionId,
@@ -661,12 +682,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.turn-diff-completed",
         payload: {
           sessionId: command.sessionId,
@@ -688,12 +709,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.reverted",
         payload: {
           sessionId: command.sessionId,
@@ -717,13 +738,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
               .requestId as OrchestrationEvent["metadata"]["requestId"])
           : undefined;
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
           ...(requestId !== undefined ? { metadata: { requestId } } : {}),
-        }),
+        })),
         type: "session.activity-appended",
         payload: {
           sessionId: command.sessionId,

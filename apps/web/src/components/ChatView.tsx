@@ -105,7 +105,7 @@ import { resolveShortcutCommand, shortcutLabelForCommand } from "../shortcuts";
 import PlanSidebar from "./PlanSidebar";
 import SessionTerminalDrawer from "./SessionTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
-import { cn, randomUUID } from "~/lib/utils";
+import { cn, randomHex, randomUUID } from "~/lib/utils";
 import { stackedSessionToast, toastManager } from "./ui/toast";
 import { decodeProjectScriptShortcutRule } from "~/lib/projectScriptShortcuts";
 import { type NewProjectScriptInput } from "./ProjectScriptsControl";
@@ -2885,7 +2885,7 @@ export default function ChatView(props: ChatViewProps) {
                     prepareWorktree: {
                       projectCwd: activeProject.cwd,
                       baseBranch: baseBranchForWorktree,
-                      branch: buildTemporaryWorktreeBranchName(),
+                      branch: buildTemporaryWorktreeBranchName(randomHex),
                     },
                     runSetupScript: true,
                   }

@@ -19,6 +19,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
+import * as Crypto from "effect/Crypto";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -39,8 +40,6 @@ import {
 import { ServerSettingsService } from "../../serverSettings.ts";
 
 const providerTurnKey = (sessionId: SessionId, turnId: TurnId) => `${sessionId}:${turnId}`;
-const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
-  CommandId.make(`provider:${event.eventId}:${tag}:${crypto.randomUUID()}`);
 
 interface AssistantSegmentState {
   baseKey: string;
@@ -639,11 +638,16 @@ function runtimeEventToActivities(
 }
 
 const make = Effect.gen(function* () {
+  const crypto = yield* Crypto.Crypto;
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
+  const providerCommandId = (event: ProviderRuntimeEvent, tag: string) =>
+    crypto.randomUUIDv4.pipe(
+      Effect.map((uuid) => CommandId.make(`provider:${event.eventId}:${tag}:${uuid}`)),
+    );
 
   const turnMessageIdsByTurnKey = yield* Cache.make<string, Set<MessageId>>({
     capacity: TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
@@ -880,7 +884,7 @@ const make = Effect.gen(function* () {
 
       yield* orchestrationEngine.dispatch({
         type: "session.message.assistant.delta",
-        commandId: providerCommandId(input.event, input.commandTag),
+        commandId: yield* providerCommandId(input.event, input.commandTag),
         sessionId: input.sessionId,
         messageId: input.messageId,
         delta: bufferedText,
@@ -947,7 +951,7 @@ const make = Effect.gen(function* () {
       if (hasRenderableText) {
         yield* orchestrationEngine.dispatch({
           type: "session.message.assistant.delta",
-          commandId: providerCommandId(input.event, input.finalDeltaCommandTag),
+          commandId: yield* providerCommandId(input.event, input.finalDeltaCommandTag),
           sessionId: input.sessionId,
           messageId: input.messageId,
           delta: text,
@@ -959,7 +963,7 @@ const make = Effect.gen(function* () {
       if (input.hasProjectedMessage || hasRenderableText) {
         yield* orchestrationEngine.dispatch({
           type: "session.message.assistant.complete",
-          commandId: providerCommandId(input.event, input.commandTag),
+          commandId: yield* providerCommandId(input.event, input.commandTag),
           sessionId: input.sessionId,
           messageId: input.messageId,
           ...(input.turnId ? { turnId: input.turnId } : {}),
@@ -1035,7 +1039,7 @@ const make = Effect.gen(function* () {
       const existingPlan = findProposedPlanById(input.sessionProposedPlans, input.planId);
       yield* orchestrationEngine.dispatch({
         type: "session.proposed-plan.upsert",
-        commandId: providerCommandId(input.event, "proposed-plan-upsert"),
+        commandId: yield* providerCommandId(input.event, "proposed-plan-upsert"),
         sessionId: input.sessionId,
         proposedPlan: {
           id: input.planId,
@@ -1191,10 +1195,11 @@ const make = Effect.gen(function* () {
         return;
       }
 
+      const commandUuid = yield* crypto.randomUUIDv4;
       yield* orchestrationEngine.dispatch({
         type: "session.proposed-plan.upsert",
         commandId: CommandId.make(
-          `provider:source-proposed-plan-implemented:${implementationSessionId}:${crypto.randomUUID()}`,
+          `provider:source-proposed-plan-implemented:${implementationSessionId}:${commandUuid}`,
         ),
         sessionId: sourceSession.id,
         proposedPlan: {
@@ -1325,7 +1330,7 @@ const make = Effect.gen(function* () {
 
           yield* orchestrationEngine.dispatch({
             type: "session.session.set",
-            commandId: providerCommandId(event, "session-session-set"),
+            commandId: yield* providerCommandId(event, "session-session-set"),
             sessionId: session.id,
             session: {
               sessionId: session.id,
@@ -1371,7 +1376,7 @@ const make = Effect.gen(function* () {
           if (spillChunk.length > 0) {
             yield* orchestrationEngine.dispatch({
               type: "session.message.assistant.delta",
-              commandId: providerCommandId(event, "assistant-delta-buffer-spill"),
+              commandId: yield* providerCommandId(event, "assistant-delta-buffer-spill"),
               sessionId: session.id,
               messageId: assistantMessageId,
               delta: spillChunk,
@@ -1382,7 +1387,7 @@ const make = Effect.gen(function* () {
         } else {
           yield* orchestrationEngine.dispatch({
             type: "session.message.assistant.delta",
-            commandId: providerCommandId(event, "assistant-delta"),
+            commandId: yield* providerCommandId(event, "assistant-delta"),
             sessionId: session.id,
             messageId: assistantMessageId,
             delta: assistantDelta,
@@ -1573,7 +1578,7 @@ const make = Effect.gen(function* () {
         if (shouldApplyRuntimeError) {
           yield* orchestrationEngine.dispatch({
             type: "session.session.set",
-            commandId: providerCommandId(event, "runtime-error-session-set"),
+            commandId: yield* providerCommandId(event, "runtime-error-session-set"),
             sessionId: session.id,
             session: {
               sessionId: session.id,
@@ -1595,7 +1600,7 @@ const make = Effect.gen(function* () {
       if (event.type === "session.metadata.updated" && event.payload.name) {
         yield* orchestrationEngine.dispatch({
           type: "session.meta.update",
-          commandId: providerCommandId(event, "session-meta-update"),
+          commandId: yield* providerCommandId(event, "session-meta-update"),
           sessionId: session.id,
           title: event.payload.name,
         });
@@ -1624,7 +1629,7 @@ const make = Effect.gen(function* () {
             );
             yield* orchestrationEngine.dispatch({
               type: "session.turn.diff.complete",
-              commandId: providerCommandId(event, "session-turn-diff-complete"),
+              commandId: yield* providerCommandId(event, "session-turn-diff-complete"),
               sessionId: session.id,
               turnId,
               completedAt: now,
@@ -1641,13 +1646,17 @@ const make = Effect.gen(function* () {
 
       const activities = runtimeEventToActivities(event);
       yield* Effect.forEach(activities, (activity) =>
-        orchestrationEngine.dispatch({
-          type: "session.activity.append",
-          commandId: providerCommandId(event, "session-activity-append"),
-          sessionId: session.id,
-          activity,
-          createdAt: activity.createdAt,
-        }),
+        providerCommandId(event, "session-activity-append").pipe(
+          Effect.flatMap((commandId) =>
+            orchestrationEngine.dispatch({
+              type: "session.activity.append",
+              commandId,
+              sessionId: session.id,
+              activity,
+              createdAt: activity.createdAt,
+            }),
+          ),
+        ),
       ).pipe(Effect.asVoid);
     });
 
