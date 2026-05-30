@@ -190,6 +190,14 @@ describe("DatasetSettingsPanel", () => {
     await expect
       .element(page.getByRole("heading", { name: "Clinical Data Setup", exact: true }))
       .toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
+    await expect.element(page.getByText("Last checked")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Active dataset")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Active")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Set active" })).not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("Clinical data is ready for this workspace."))
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByRole("heading", { name: "MIMIC-IV Demo", exact: true }))
       .toBeInTheDocument();
@@ -304,7 +312,9 @@ describe("DatasetSettingsPanel", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await page.getByLabelText("PhysioNet username").fill("researcher");
+    const usernameInput = page.getByLabelText("PhysioNet username");
+    await usernameInput.fill("");
+    await usernameInput.fill("researcher");
     const passwordInput = page.getByLabelText("PhysioNet password");
     await passwordInput.fill("secret-password");
     await page.getByRole("button", { name: "Save PhysioNet credentials" }).click();
@@ -316,7 +326,9 @@ describe("DatasetSettingsPanel", () => {
     });
     await expect.element(passwordInput).toHaveValue("");
 
-    await page.getByLabelText("BigQuery project ID").fill("clinical-project");
+    const projectIdInput = page.getByLabelText("BigQuery project ID");
+    await projectIdInput.fill("");
+    await projectIdInput.fill("clinical-project");
     const jsonInput = page.getByLabelText("BigQuery service account JSON");
     await jsonInput.fill('{"private_key":"secret"}');
     await page.getByRole("button", { name: "Save BigQuery credentials" }).click();
@@ -346,7 +358,7 @@ describe("DatasetSettingsPanel", () => {
     );
 
     await expect.element(page.getByText("MIMIC-IV Note")).toBeInTheDocument();
-    await page.getByRole("button", { name: "Initialize" }).nth(2).click();
+    await page.getByRole("button", { name: "Initialize" }).nth(1).click();
 
     await vi.waitFor(() => {
       expect(initialize).toHaveBeenCalledWith({
@@ -354,31 +366,6 @@ describe("DatasetSettingsPanel", () => {
         backendId: "duckdb",
       });
       expect(getStatus).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it("sets the active dataset through the dataset RPC", async () => {
-    const setActiveDataset = vi
-      .fn<LocalApi["datasets"]["setActiveDataset"]>()
-      .mockResolvedValue(createDatasetStatus());
-    installDatasetApi({ setActiveDataset });
-
-    mounted = await render(
-      <AppAtomRegistryProvider>
-        <DatasetSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
-
-    await expect
-      .element(page.getByRole("heading", { name: "eICU", exact: true }))
-      .toBeInTheDocument();
-    await page.getByRole("button", { name: "Set active" }).nth(3).click();
-
-    await vi.waitFor(() => {
-      expect(setActiveDataset).toHaveBeenCalledWith({
-        datasetId: "eicu",
-        backendId: "duckdb",
-      });
     });
   });
 
