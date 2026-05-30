@@ -8,6 +8,7 @@ import {
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "vitest";
 import * as Effect from "effect/Effect";
 
@@ -34,7 +35,7 @@ describe("decider project scripts", () => {
           createdAt: now,
         },
         readModel,
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     const event = Array.isArray(result) ? result[0] : result;
@@ -88,7 +89,7 @@ describe("decider project scripts", () => {
           scripts: Array.from(scripts),
         },
         readModel,
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     const event = Array.isArray(result) ? result[0] : result;
@@ -173,7 +174,7 @@ describe("decider project scripts", () => {
           createdAt: now,
         },
         readModel,
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     expect(Array.isArray(result)).toBe(true);
@@ -263,7 +264,7 @@ describe("decider project scripts", () => {
           createdAt: now,
         },
         readModel,
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     const singleResult = Array.isArray(result) ? null : result;
@@ -345,7 +346,7 @@ describe("decider project scripts", () => {
           createdAt: now,
         },
         readModel,
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     const singleResult = Array.isArray(result) ? null : result;

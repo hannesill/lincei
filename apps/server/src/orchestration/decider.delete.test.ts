@@ -9,6 +9,7 @@ import {
   type OrchestrationReadModel,
   ProviderInstanceId,
 } from "@t3tools/contracts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
 
@@ -155,7 +156,7 @@ describe("decider deletion flows", () => {
             projectId: asProjectId("project-delete"),
           },
           readModel,
-        }),
+        }).pipe(Effect.provide(NodeServices.layer)),
       ),
     ).rejects.toThrow("cannot be deleted without force=true");
   });
@@ -173,7 +174,7 @@ describe("decider deletion flows", () => {
       decideOrchestrationCommand({
         command: projectDeleteCommand,
         readModel,
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
     const forcedEvents = Array.isArray(forcedResult) ? forcedResult : [forcedResult];
 
@@ -207,7 +208,7 @@ describe("decider deletion flows", () => {
         decideOrchestrationCommand({
           command: nextCommand,
           readModel: sequentialReadModel,
-        }),
+        }).pipe(Effect.provide(NodeServices.layer)),
       );
       const nextEvents = Array.isArray(decided) ? decided : [decided];
       sequentialEvents.push(...nextEvents);

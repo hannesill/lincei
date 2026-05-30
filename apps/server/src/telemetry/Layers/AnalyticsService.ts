@@ -73,7 +73,7 @@ const isTelemetryActive = (config: { readonly enabled: boolean; readonly posthog
   config.enabled && config.posthogKey.trim().length > 0;
 
 const makeAnalyticsService = Effect.gen(function* () {
-  const telemetryConfig = yield* TelemetryEnvConfig.asEffect();
+  const telemetryConfig = yield* TelemetryEnvConfig;
   const telemetryActive = isTelemetryActive(telemetryConfig);
   const httpClient = yield* HttpClient.HttpClient;
   const serverConfig = yield* ServerConfig;
