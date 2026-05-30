@@ -21,6 +21,7 @@ import {
   ServerConfig as ServerConfigSchema,
 } from "@t3tools/contracts";
 import { scopedSessionKey, scopeSessionRef } from "@t3tools/client-runtime";
+import { WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
 import { createModelCapabilities, createModelSelection } from "@t3tools/shared/model";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import * as Option from "effect/Option";
@@ -79,6 +80,7 @@ const REMOTE_ENVIRONMENT_ID = EnvironmentId.make("environment-remote");
 const THREAD_REF = scopeSessionRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
 const THREAD_KEY = scopedSessionKey(THREAD_REF);
 const UUID_ROUTE_RE = /^\/draft\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const GENERATED_WORKTREE_BRANCH_RE = new RegExp(`^${WORKTREE_BRANCH_PREFIX}/[0-9a-f]{8}$`);
 const PROJECT_DRAFT_KEY = `${LOCAL_ENVIRONMENT_ID}:${PROJECT_ID}`;
 const PROJECT_LOGICAL_KEY = deriveLogicalProjectKeyFromSettings(
   {
@@ -1375,6 +1377,18 @@ async function waitForButtonByText(text: string): Promise<HTMLButtonElement> {
   return waitForElement(() => findButtonByText(text), `Unable to find "${text}" button.`);
 }
 
+async function waitForPreviousQuestionButton(): Promise<HTMLButtonElement> {
+  return waitForElement(
+    () =>
+      (Array.from(document.querySelectorAll("button")).find(
+        (button) =>
+          button.textContent?.trim() === "Previous" ||
+          button.getAttribute("aria-label") === "Previous question",
+      ) ?? null) as HTMLButtonElement | null,
+    'Unable to find "Previous" question button.',
+  );
+}
+
 function findButtonContainingText(text: string): HTMLButtonElement | null {
   return (Array.from(document.querySelectorAll("button")).find((button) =>
     button.textContent?.includes(text),
@@ -1496,9 +1510,11 @@ async function triggerChatNewShortcutUntilPath(
 }
 
 async function openCommandPaletteFromTrigger(): Promise<void> {
-  const trigger = page.getByTestId("command-palette-trigger");
-  await expect.element(trigger).toBeInTheDocument();
-  await trigger.click();
+  const trigger = await waitForElement(
+    () => document.querySelector<HTMLElement>('[data-testid="command-palette-trigger"]'),
+    "Command palette sidebar trigger did not render.",
+  );
+  trigger.click();
   await waitForElement(
     () => document.querySelector('[data-testid="command-palette"]'),
     "Command palette should have opened from the sidebar trigger.",
@@ -2561,7 +2577,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               prepareWorktree: {
                 projectCwd: "/repo/project",
                 baseBranch: "main",
-                branch: expect.stringMatching(/^t3code\/[0-9a-f]{8}$/),
+                branch: expect.stringMatching(GENERATED_WORKTREE_BRANCH_RE),
               },
               runSetupScript: true,
             },
@@ -2785,7 +2801,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
               prepareWorktree: {
                 projectCwd: "/repo/project",
                 baseBranch: "main",
-                branch: expect.stringMatching(/^t3code\/[0-9a-f]{8}$/),
+                branch: expect.stringMatching(GENERATED_WORKTREE_BRANCH_RE),
               },
               runSetupScript: true,
             },
@@ -4404,14 +4420,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
     try {
       await Promise.all([waitForServerConfigToApply(), waitForCommandPaletteShortcutLabel()]);
-      const palette = page.getByTestId("command-palette");
       await openCommandPaletteFromTrigger();
 
-      await expect.element(palette).toBeInTheDocument();
-      await expect
-        .element(palette.getByText("New session in Study", { exact: true }))
-        .toBeInTheDocument();
-      await palette.getByText("New session in Study", { exact: true }).click();
+      const newSessionItem = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll<HTMLElement>('[data-slot="command-item"]')).find(
+            (item) => item.textContent?.includes("New session in Project"),
+          ) ?? null,
+        'Unable to find "New session in Project" command palette item.',
+      );
+      newSessionItem.click();
 
       await waitForURL(
         mounted.router,
@@ -4463,7 +4481,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await page.getByPlaceholder("Search commands, studies, and sessions...").fill("settings");
       await expect.element(palette.getByText("Open settings", { exact: true })).toBeInTheDocument();
       await expect
-        .element(palette.getByText("New session in Study", { exact: true }))
+        .element(palette.getByText("New session in Project", { exact: true }))
         .not.toBeInTheDocument();
     } finally {
       await mounted.cleanup();
@@ -5716,7 +5734,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       const firstOption = await waitForButtonContainingText("Tight");
       firstOption.click();
 
-      await waitForButtonByText("Previous");
+      await waitForPreviousQuestionButton();
       await waitForButtonByText("Submit answers");
 
       await mounted.setContainerSize(COMPACT_FOOTER_VIEWPORT);
