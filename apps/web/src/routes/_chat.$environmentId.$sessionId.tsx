@@ -1,5 +1,5 @@
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import ChatView from "../components/ChatView";
 import { sessionHasStarted } from "../components/ChatView.logic";
@@ -26,6 +26,7 @@ import { AppMainSurface } from "../components/appShell";
 import { Sidebar, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
+const ResearchCardsPanel = lazy(() => import("../components/ResearchCardsPanel"));
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(24rem,34vw,36rem)";
 const DIFF_INLINE_SIDEBAR_MIN_WIDTH = 22 * 16;
@@ -50,22 +51,30 @@ const LazyDiffPanel = (props: { mode: DiffPanelMode }) => {
   );
 };
 
-const DiffPanelInlineSidebar = (props: {
-  diffOpen: boolean;
-  onCloseDiff: () => void;
-  onOpenDiff: () => void;
-  renderDiffContent: boolean;
+const LazyResearchCardsPanel = (props: { mode: DiffPanelMode }) => {
+  return (
+    <Suspense fallback={<DiffLoadingFallback mode={props.mode} />}>
+      <ResearchCardsPanel mode={props.mode} />
+    </Suspense>
+  );
+};
+
+const RightPanelInlineSidebar = (props: {
+  open: boolean;
+  onClose: () => void;
+  onOpen: () => void;
+  children: ReactNode;
 }) => {
-  const { diffOpen, onCloseDiff, onOpenDiff, renderDiffContent } = props;
+  const { open, onClose, onOpen, children } = props;
   const onOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
-        onOpenDiff();
+        onOpen();
         return;
       }
-      onCloseDiff();
+      onClose();
     },
-    [onCloseDiff, onOpenDiff],
+    [onClose, onOpen],
   );
   const shouldAcceptInlineSidebarWidth = useCallback(
     ({ nextWidth, wrapper }: { nextWidth: number; wrapper: HTMLElement }) => {
@@ -116,7 +125,7 @@ const DiffPanelInlineSidebar = (props: {
   return (
     <SidebarProvider
       defaultOpen={false}
-      open={diffOpen}
+      open={open}
       onOpenChange={onOpenChange}
       className="w-auto min-h-0 flex-none bg-transparent"
       style={{ "--sidebar-width": DIFF_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
@@ -132,7 +141,7 @@ const DiffPanelInlineSidebar = (props: {
           storageKey: DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        {renderDiffContent ? <LazyDiffPanel mode="sidebar" /> : null}
+        {children}
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
@@ -172,29 +181,51 @@ function ChatSessionRouteView() {
   const serverSessionStarted = sessionHasStarted(serverSession);
   const environmentHasAnySessions = environmentHasServerSessions || environmentHasDraftSessions;
   const diffOpen = search.diff === "1";
-  const shouldUseDiffSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const cardsOpen = search.cards === "1";
+  const rightPanelOpen = diffOpen || cardsOpen;
+  const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const currentSessionKey = sessionRef
     ? `${sessionRef.environmentId}:${sessionRef.sessionId}`
     : null;
-  const [diffPanelMountState, setDiffPanelMountState] = useState(() => ({
+  const [rightPanelMountState, setRightPanelMountState] = useState(() => ({
     sessionKey: currentSessionKey,
     hasOpenedDiff: diffOpen,
+    hasOpenedCards: cardsOpen,
   }));
   const hasOpenedDiff =
-    diffPanelMountState.sessionKey === currentSessionKey
-      ? diffPanelMountState.hasOpenedDiff
+    rightPanelMountState.sessionKey === currentSessionKey
+      ? rightPanelMountState.hasOpenedDiff
       : diffOpen;
+  const hasOpenedCards =
+    rightPanelMountState.sessionKey === currentSessionKey
+      ? rightPanelMountState.hasOpenedCards
+      : cardsOpen;
   const markDiffOpened = useCallback(() => {
-    setDiffPanelMountState((previous) => {
+    setRightPanelMountState((previous) => {
       if (previous.sessionKey === currentSessionKey && previous.hasOpenedDiff) {
         return previous;
       }
       return {
         sessionKey: currentSessionKey,
         hasOpenedDiff: true,
+        hasOpenedCards:
+          previous.sessionKey === currentSessionKey ? previous.hasOpenedCards : cardsOpen,
       };
     });
-  }, [currentSessionKey]);
+  }, [cardsOpen, currentSessionKey]);
+  const markCardsOpened = useCallback(() => {
+    setRightPanelMountState((previous) => {
+      if (previous.sessionKey === currentSessionKey && previous.hasOpenedCards) {
+        return previous;
+      }
+      return {
+        sessionKey: currentSessionKey,
+        hasOpenedDiff:
+          previous.sessionKey === currentSessionKey ? previous.hasOpenedDiff : diffOpen,
+        hasOpenedCards: true,
+      };
+    });
+  }, [currentSessionKey, diffOpen]);
   const closeDiff = useCallback(() => {
     if (!sessionRef) {
       return;
@@ -215,10 +246,42 @@ function ChatSessionRouteView() {
       params: buildSessionRouteParams(sessionRef),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1" };
+        return { ...rest, cards: undefined, diff: "1" };
       },
     });
   }, [markDiffOpened, navigate, sessionRef]);
+  const closeCards = useCallback(() => {
+    if (!sessionRef) {
+      return;
+    }
+    void navigate({
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(sessionRef),
+      search: { cards: undefined },
+    });
+  }, [navigate, sessionRef]);
+  const openCards = useCallback(() => {
+    if (!sessionRef) {
+      return;
+    }
+    markCardsOpened();
+    void navigate({
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(sessionRef),
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return {
+          ...rest,
+          diff: undefined,
+          diffTurnId: undefined,
+          diffFilePath: undefined,
+          cards: "1",
+        };
+      },
+    });
+  }, [markCardsOpened, navigate, sessionRef]);
+  const closeRightPanel = diffOpen ? closeDiff : closeCards;
+  const openRightPanel = diffOpen ? openDiff : openCards;
 
   useEffect(() => {
     if (!sessionRef || !bootstrapComplete) {
@@ -242,8 +305,16 @@ function ChatSessionRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const shouldRenderCardsContent = cardsOpen || hasOpenedCards;
+  const rightPanelContent = diffOpen ? (
+    shouldRenderDiffContent ? (
+      <LazyDiffPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
+    ) : null
+  ) : shouldRenderCardsContent ? (
+    <LazyResearchCardsPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
+  ) : null;
 
-  if (!shouldUseDiffSheet) {
+  if (!shouldUseRightPanelSheet) {
     return (
       <>
         <AppMainSurface>
@@ -251,16 +322,18 @@ function ChatSessionRouteView() {
             environmentId={sessionRef.environmentId}
             sessionId={sessionRef.sessionId}
             onDiffPanelOpen={markDiffOpened}
-            reserveTitleBarControlInset={!diffOpen}
+            onResearchCardsPanelOpen={markCardsOpened}
+            reserveTitleBarControlInset={!rightPanelOpen}
             routeKind="server"
           />
         </AppMainSurface>
-        <DiffPanelInlineSidebar
-          diffOpen={diffOpen}
-          onCloseDiff={closeDiff}
-          onOpenDiff={openDiff}
-          renderDiffContent={shouldRenderDiffContent}
-        />
+        <RightPanelInlineSidebar
+          open={rightPanelOpen}
+          onClose={closeRightPanel}
+          onOpen={openRightPanel}
+        >
+          {rightPanelContent}
+        </RightPanelInlineSidebar>
       </>
     );
   }
@@ -272,11 +345,12 @@ function ChatSessionRouteView() {
           environmentId={sessionRef.environmentId}
           sessionId={sessionRef.sessionId}
           onDiffPanelOpen={markDiffOpened}
+          onResearchCardsPanelOpen={markCardsOpened}
           routeKind="server"
         />
       </AppMainSurface>
-      <RightPanelSheet open={diffOpen} onClose={closeDiff}>
-        {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
+      <RightPanelSheet open={rightPanelOpen} onClose={closeRightPanel}>
+        {rightPanelContent}
       </RightPanelSheet>
     </>
   );
@@ -285,7 +359,7 @@ function ChatSessionRouteView() {
 export const Route = createFileRoute("/_chat/$environmentId/$sessionId")({
   validateSearch: (search) => parseDiffRouteSearch(search),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
+    middlewares: [retainSearchParams<DiffRouteSearch>(["diff", "cards"])],
   },
   component: ChatSessionRouteView,
 });

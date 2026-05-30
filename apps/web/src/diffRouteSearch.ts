@@ -4,9 +4,10 @@ export interface DiffRouteSearch {
   diff?: "1" | undefined;
   diffTurnId?: TurnId | undefined;
   diffFilePath?: string | undefined;
+  cards?: "1" | undefined;
 }
 
-function isDiffOpenValue(value: unknown): boolean {
+function isOpenValue(value: unknown): boolean {
   return value === "1" || value === 1 || value === true;
 }
 
@@ -20,13 +21,22 @@ function normalizeSearchString(value: unknown): string | undefined {
 
 export function stripDiffSearchParams<T extends Record<string, unknown>>(
   params: T,
-): Omit<T, "diff" | "diffTurnId" | "diffFilePath"> {
+): Omit<T, "diff" | "diffTurnId" | "diffFilePath" | "cards"> {
   const { diff: _diff, diffTurnId: _diffTurnId, diffFilePath: _diffFilePath, ...rest } = params;
-  return rest as Omit<T, "diff" | "diffTurnId" | "diffFilePath">;
+  const { cards: _cards, ...withoutCards } = rest;
+  return withoutCards as Omit<T, "diff" | "diffTurnId" | "diffFilePath" | "cards">;
+}
+
+export function stripCardSearchParams<T extends Record<string, unknown>>(
+  params: T,
+): Omit<T, "cards"> {
+  const { cards: _cards, ...rest } = params;
+  return rest as Omit<T, "cards">;
 }
 
 export function parseDiffRouteSearch(search: Record<string, unknown>): DiffRouteSearch {
-  const diff = isDiffOpenValue(search.diff) ? "1" : undefined;
+  const cards = isOpenValue(search.cards) ? "1" : undefined;
+  const diff = !cards && isOpenValue(search.diff) ? "1" : undefined;
   const diffTurnIdRaw = diff ? normalizeSearchString(search.diffTurnId) : undefined;
   const diffTurnId = diffTurnIdRaw ? TurnId.make(diffTurnIdRaw) : undefined;
   const diffFilePath = diff && diffTurnId ? normalizeSearchString(search.diffFilePath) : undefined;
@@ -35,5 +45,6 @@ export function parseDiffRouteSearch(search: Record<string, unknown>): DiffRoute
     ...(diff ? { diff } : {}),
     ...(diffTurnId ? { diffTurnId } : {}),
     ...(diffFilePath ? { diffFilePath } : {}),
+    ...(cards ? { cards } : {}),
   };
 }

@@ -92,6 +92,8 @@ function makeEmptyEnvironmentState(): EnvironmentState {
     activityBySessionId: {},
     proposedPlanIdsBySessionId: {},
     proposedPlanBySessionId: {},
+    researchCardIdsBySessionId: {},
+    researchCardBySessionId: {},
     turnDiffIdsBySessionId: {},
     turnDiffSummaryBySessionId: {},
     sidebarSessionSummaryById: {},

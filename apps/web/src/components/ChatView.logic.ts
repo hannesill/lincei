@@ -50,6 +50,7 @@ export function buildLocalDraftSession(
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],
+    researchCards: [],
   };
 }
 

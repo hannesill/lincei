@@ -6,11 +6,12 @@ import {
   ORCHESTRATION_WS_METHODS,
   EnvironmentId,
   type EnvironmentApi,
-  type MessageId,
+  MessageId,
   type OrchestrationReadModel,
   type ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ResearchCardId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
   type SessionId,
@@ -381,6 +382,77 @@ function createSnapshotForTargetUser(options: {
       },
     ],
     updatedAt: NOW_ISO,
+  };
+}
+
+function createSnapshotWithResearchCards(): OrchestrationReadModel {
+  const snapshot = createSnapshotForTargetUser({
+    targetMessageId: MessageId.make("msg-research-card-target"),
+    targetText: "Summarize the cohort.",
+  });
+  const session = snapshot.sessions[0];
+  if (!session) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    sessions: [
+      {
+        ...session,
+        researchCards: [
+          {
+            id: ResearchCardId.make("card-cohort"),
+            type: "markdown",
+            status: "changes-requested",
+            title: "Cohort definition",
+            preview: "Patients with **heart failure** and a baseline echo.",
+            artifacts: [
+              {
+                id: "artifact-sql",
+                kind: "sql",
+                path: "analysis/cohort.sql",
+                label: "Cohort SQL",
+              },
+              {
+                id: "artifact-table",
+                kind: "table",
+                path: "outputs/cohort.csv",
+                label: "Cohort counts",
+              },
+            ],
+            provenance: [],
+            review: {
+              prompt: "Confirm this definition before extraction.",
+              actions: [{ id: "accept", label: "Accept" }],
+              response: {
+                action: "changes-requested",
+                summary: "Narrow the age range.",
+                timestamp: isoAt(30),
+              },
+            },
+            turnId: null,
+            createdAt: isoAt(20),
+            updatedAt: isoAt(31),
+          },
+          {
+            id: ResearchCardId.make("card-balance"),
+            type: "table",
+            status: "accepted",
+            title: "Baseline balance",
+            preview: [
+              { variable: "age", exposed: 67.4, control: 66.9 },
+              { variable: "bnp", exposed: 420, control: 395 },
+            ],
+            artifacts: [],
+            provenance: [],
+            turnId: null,
+            createdAt: isoAt(10),
+            updatedAt: isoAt(10),
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -1757,6 +1829,101 @@ describe("ChatView timeline estimator parity (full app)", () => {
   afterEach(() => {
     customWsRpcResolver = null;
     document.body.innerHTML = "";
+  });
+
+  it("opens and closes the research card drawer from the header toggle", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: MessageId.make("msg-card-empty"),
+        targetText: "empty cards",
+      }),
+    });
+
+    try {
+      const toggle = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
+        "Unable to find research cards toggle.",
+      );
+
+      toggle.click();
+      await vi.waitFor(() => {
+        expect((mounted.router.state.location.search as Record<string, unknown>).cards).toBe("1");
+      });
+      await expect.element(page.getByText("No research cards yet.")).toBeInTheDocument();
+
+      toggle.click();
+      await vi.waitFor(() => {
+        expect(
+          (mounted.router.state.location.search as Record<string, unknown>).cards,
+        ).toBeUndefined();
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("renders seeded research cards with previews, artifacts, and review metadata", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotWithResearchCards(),
+    });
+
+    try {
+      const toggle = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
+        "Unable to find research cards toggle.",
+      );
+      toggle.click();
+
+      await expect.element(page.getByText("Cohort definition")).toBeInTheDocument();
+      await expect.element(page.getByText("Changes Requested")).toBeInTheDocument();
+      await waitForElement(
+        () =>
+          document.body.textContent?.includes("Patients with heart failure") ? document.body : null,
+        "Unable to find markdown card preview.",
+      );
+      await expect.element(page.getByText("2 artifacts")).toBeInTheDocument();
+      await expect.element(page.getByText("Cohort SQL")).toBeInTheDocument();
+      await expect
+        .element(page.getByText("Confirm this definition before extraction."))
+        .toBeInTheDocument();
+      await expect.element(page.getByText("Narrow the age range.")).toBeInTheDocument();
+      await expect.element(page.getByText("Baseline balance")).toBeInTheDocument();
+      await expect.element(page.getByText(/"variable": "age"/)).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("clears diff route search when the research cards drawer opens", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotWithResearchCards(),
+      initialPath: `/${LOCAL_ENVIRONMENT_ID}/${THREAD_ID}?diff=1`,
+    });
+
+    try {
+      await vi.waitFor(() => {
+        expect((mounted.router.state.location.search as Record<string, unknown>).diff).toBe("1");
+      });
+
+      const cardsToggle = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
+        "Unable to find research cards toggle.",
+      );
+      cardsToggle.click();
+      await vi.waitFor(() => {
+        const search = mounted.router.state.location.search as Record<string, unknown>;
+        expect(search.cards).toBe("1");
+        expect(search.diff).toBeUndefined();
+      });
+    } finally {
+      await mounted.cleanup();
+    }
   });
 
   it("renders locked single-environment mobile run context as a static workspace label", async () => {

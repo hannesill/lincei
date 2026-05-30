@@ -401,7 +401,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       ),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1", diffTurnId: turnId };
+        return { ...rest, cards: undefined, diff: "1", diffTurnId: turnId };
       },
     });
   };
@@ -414,7 +414,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       ),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1" };
+        return { ...rest, cards: undefined, diff: "1" };
       },
     });
   };
