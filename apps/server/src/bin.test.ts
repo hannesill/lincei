@@ -2,9 +2,9 @@
 import * as NodeHttp from "node:http";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - CLI help tests spawn the local entrypoints.
 import { spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -124,7 +124,7 @@ const readPersistedSnapshot = (baseDir: string) =>
 
 const runHelpCommand = (entrypoint: "bin.ts" | "lincei.ts") =>
   Effect.promise(async () => {
-    const child = spawn("bun", [`src/${entrypoint}`, "--help"], {
+    const child = spawn(process.execPath, [`src/${entrypoint}`, "--help"], {
       cwd: join(import.meta.dirname, ".."),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -263,6 +263,76 @@ const assertAgentCliError = (error: unknown, expectedMessage: string) => {
   assert.isTrue((tagged.message ?? "").includes(expectedMessage));
 };
 
+const assertCliShowHelpWithUnrecognizedCommand = (
+  error: unknown,
+  expectedCommandPath: ReadonlyArray<string>,
+  expectedCommand: string,
+) => {
+  if (!CliError.isCliError(error)) {
+    assert.fail(`Expected CliError, got ${String(error)}`);
+  }
+  if (error._tag !== "ShowHelp") {
+    assert.fail(`Expected ShowHelp, got ${error._tag}`);
+  }
+  assert.deepEqual(error.commandPath, expectedCommandPath);
+  const commandError = error.errors[0] as CliError.CliError | undefined;
+  if (!commandError || commandError._tag !== "UnknownSubcommand") {
+    assert.fail(`Expected UnknownSubcommand, got ${String(commandError?._tag)}`);
+  }
+  assert.equal(commandError.subcommand, expectedCommand);
+};
+
+const writeM4StatusStub = (baseDir: string) => {
+  const stubPath = join(baseDir, "m4-status-stub.mjs");
+  writeFileSync(
+    stubPath,
+    [
+      "const status = {",
+      "  version: 0.6,",
+      "  selected_dataset: null,",
+      "  active_dataset: null,",
+      '  backend: "duckdb",',
+      "  bigquery_project_id: null,",
+      "  datasets: [",
+      "    {",
+      '      name: "mimic-iv-demo",',
+      "      selected: false,",
+      "      parquet_present: false,",
+      "      db_present: false,",
+      "      bigquery_available: false,",
+      "      row_count: null,",
+      "      parquet_size_gb: null,",
+      "      derived: { supported: true, total: null, materialized: null, bigquery: false },",
+      "      warnings: [],",
+      "    },",
+      "  ],",
+      "};",
+      "console.log(JSON.stringify(status));",
+      "",
+    ].join("\n"),
+  );
+  return stubPath;
+};
+
+const writeDatasetCliSettings = (baseDir: string, m4Command: string) =>
+  Effect.gen(function* () {
+    const config = yield* makeCliTestServerConfig(baseDir);
+    mkdirSync(dirname(config.settingsPath), { recursive: true });
+    writeFileSync(
+      config.settingsPath,
+      // @effect-diagnostics-next-line preferSchemaOverJson:off - Test fixture writes a minimal JSON settings file for the CLI process.
+      JSON.stringify(
+        {
+          datasets: {
+            m4Command,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  });
+
 it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("exposes separate admin and agent command trees", () =>
     Effect.gen(function* () {
@@ -274,15 +344,43 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.isTrue(adminHelp.includes("serve"));
       assert.isTrue(adminHelp.includes("auth"));
       assert.isTrue(adminHelp.includes("project"));
+      assert.isFalse(adminHelp.includes("dataset"));
+      assert.isFalse(adminHelp.includes("m4"));
+      assert.isFalse(adminHelp.includes("card"));
       assert.isFalse(adminHelp.includes("context"));
 
       assert.isTrue(agentHelp.includes("USAGE\n  lincei"));
       assert.isTrue(agentHelp.includes("card"));
       assert.isTrue(agentHelp.includes("context"));
+      assert.isTrue(agentHelp.includes("dataset"));
+      assert.isTrue(agentHelp.includes("m4"));
       assert.isFalse(agentHelp.includes("serve"));
       assert.isFalse(agentHelp.includes("start"));
       assert.isFalse(agentHelp.includes("auth"));
       assert.isFalse(agentHelp.includes("project"));
+    }),
+  );
+
+  it.effect("routes dataset status through the lincei command tree only", () =>
+    Effect.gen(function* () {
+      const baseDir = mkdtempSync(join(tmpdir(), "lincei-cli-dataset-owner-"));
+      const stubPath = writeM4StatusStub(baseDir);
+      yield* writeDatasetCliSettings(baseDir, `${process.execPath} ${stubPath}`);
+
+      yield* runAgentCliWithRuntime(["dataset", "status", "--base-dir", baseDir]);
+
+      const error = yield* runCliWithRuntime(["dataset", "status", "--base-dir", baseDir]).pipe(
+        Effect.flip,
+      );
+      assertCliShowHelpWithUnrecognizedCommand(error, ["t3"], "dataset");
+    }),
+  );
+
+  it.effect("does not expose advanced m4 passthrough under t3", () =>
+    Effect.gen(function* () {
+      const error = yield* runCliWithRuntime(["m4"]).pipe(Effect.flip);
+
+      assertCliShowHelpWithUnrecognizedCommand(error, ["t3"], "m4");
     }),
   );
 
