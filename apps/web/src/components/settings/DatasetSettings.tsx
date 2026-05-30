@@ -576,28 +576,16 @@ export function DatasetSettingsPanel() {
             <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
           <SettingsRow
-            title="M4 command"
-            description="Command used by the server when invoking M4."
-            control={
-              <Input
-                aria-label="M4 command"
-                className="w-full sm:w-80"
-                placeholder="uvx --from m4-infra m4"
-                value={m4Command}
-                onBlur={() => commitDatasetSettings({ m4Command })}
-                onChange={(event) => setM4Command(event.currentTarget.value)}
-              />
-            }
-          />
-          <SettingsRow
             title="Workspace path"
             description="Directory where local dataset artifacts are managed."
-            status={status?.runtime.workspacePath ?? "Defaults to the server working directory."}
+            status={
+              status?.runtime.workspacePath ?? "Defaults to Lincei's managed dataset directory."
+            }
             control={
               <Input
                 aria-label="Dataset workspace path"
                 className="w-full sm:w-80"
-                placeholder="Server working directory"
+                placeholder="Managed Lincei dataset directory"
                 value={workspacePath}
                 onBlur={() => commitDatasetSettings({ workspacePath })}
                 onChange={(event) => setWorkspacePath(event.currentTarget.value)}
@@ -626,6 +614,29 @@ export function DatasetSettingsPanel() {
               </Select>
             }
           />
+          <details
+            className="group border-t border-border/60"
+            open={status?.runtime.available === false}
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[13px] font-semibold text-foreground sm:px-5 [&::-webkit-details-marker]:hidden">
+              M4 command troubleshooting
+              <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <SettingsRow
+              title="M4 command"
+              description="Override the server command only when the default M4 launcher cannot run here."
+              control={
+                <Input
+                  aria-label="M4 command"
+                  className="w-full sm:w-80"
+                  placeholder="uvx --from m4-infra m4"
+                  value={m4Command}
+                  onBlur={() => commitDatasetSettings({ m4Command })}
+                  onChange={(event) => setM4Command(event.currentTarget.value)}
+                />
+              }
+            />
+          </details>
         </details>
       </SettingsSection>
     </SettingsPageContainer>

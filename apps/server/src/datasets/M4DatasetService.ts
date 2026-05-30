@@ -1,8 +1,11 @@
+import * as NodeOS from "node:os";
+
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 
@@ -93,6 +96,15 @@ function settingsError(error: ServerSettingsError): DatasetRpcError {
     code: "settings_error",
     detail: error.message,
     actionableMessage: "Lincei could not persist dataset settings.",
+  });
+}
+
+function workspacePathError(error: unknown): DatasetRpcError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new DatasetRpcError({
+    code: "settings_error",
+    detail,
+    actionableMessage: "Lincei could not prepare the dataset workspace directory.",
   });
 }
 
@@ -202,6 +214,7 @@ export const makeM4DatasetService = Effect.gen(function* () {
   const secretStore = yield* ServerSecretStore;
   const m4Cli = yield* M4Cli;
   const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const activeOperations = yield* Ref.make<ReadonlyMap<string, DatasetInitOperationState>>(
     new Map(),
   );
@@ -246,9 +259,27 @@ export const makeM4DatasetService = Effect.gen(function* () {
   const readCredentialPresence: Effect.Effect<DatasetCredentialPresence, DatasetRpcError> =
     readCredentialSecrets.pipe(Effect.map(credentialPresenceFromSecrets));
 
+  const resolveWorkspacePath = (rawWorkspacePath: string) =>
+    Effect.gen(function* () {
+      const rawPath = rawWorkspacePath.trim();
+      const expandedPath =
+        rawPath.length === 0
+          ? config.datasetsDir
+          : rawPath === "~"
+            ? NodeOS.homedir()
+            : rawPath.startsWith("~/") || rawPath.startsWith("~\\")
+              ? path.join(NodeOS.homedir(), rawPath.slice(2))
+              : rawPath;
+      const resolvedPath = path.resolve(expandedPath);
+      yield* fileSystem
+        .makeDirectory(resolvedPath, { recursive: true })
+        .pipe(Effect.mapError(workspacePathError));
+      return resolvedPath;
+    });
+
   const workspacePath = serverSettings.getSettings.pipe(
-    Effect.map((settings) => settings.datasets.workspacePath || config.cwd),
     Effect.mapError(settingsError),
+    Effect.flatMap((settings) => resolveWorkspacePath(settings.datasets.workspacePath)),
   );
 
   const mergeActiveOperations = (
@@ -467,7 +498,7 @@ export const makeM4DatasetService = Effect.gen(function* () {
     Effect.gen(function* () {
       const settings = yield* serverSettings.getSettings.pipe(Effect.mapError(settingsError));
       const backendId = input.backendId ?? settings.datasets.preferredBackendId;
-      const cwd = settings.datasets.workspacePath || config.cwd;
+      const cwd = yield* resolveWorkspacePath(settings.datasets.workspacePath);
 
       return yield* withInitializationKey(
         input.datasetId,
