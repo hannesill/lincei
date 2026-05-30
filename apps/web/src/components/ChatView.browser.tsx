@@ -367,6 +367,7 @@ function createSnapshotForTargetUser(options: {
         messages,
         activities: [],
         proposedPlans: [],
+        researchCards: [],
         checkpoints: [],
         session: {
           sessionId: THREAD_ID,
@@ -432,6 +433,7 @@ function addSessionToSnapshot(
         messages: [],
         activities: [],
         proposedPlans: [],
+        researchCards: [],
         checkpoints: [],
         session: {
           sessionId,
@@ -766,6 +768,7 @@ function createSnapshotWithSecondaryProject(options?: {
           messages: [],
           activities: [],
           proposedPlans: [],
+          researchCards: [],
           checkpoints: [],
           session: {
             sessionId: "session-secondary-project" as SessionId,
@@ -799,6 +802,7 @@ function createSnapshotWithSecondaryProject(options?: {
             messages: [],
             activities: [],
             proposedPlans: [],
+            researchCards: [],
             checkpoints: [],
             session: {
               sessionId: ARCHIVED_SECONDARY_THREAD_ID,

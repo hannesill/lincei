@@ -16,6 +16,7 @@ import {
   NonNegativeInt,
   ProjectId,
   ProviderItemId,
+  ResearchCardId,
   SessionId,
   TrimmedNonEmptyString,
   TurnId,
@@ -246,6 +247,99 @@ const SourceProposedPlanReference = Schema.Struct({
   planId: OrchestrationProposedPlanId,
 });
 
+export const ResearchCardType = Schema.Literals([
+  "markdown",
+  "table",
+  "keyValue",
+  "chart",
+  "image",
+  "decision",
+]);
+export type ResearchCardType = typeof ResearchCardType.Type;
+
+export const ResearchCardLifecycleStatus = Schema.Literals([
+  "proposed",
+  "accepted",
+  "changes-requested",
+  "rejected",
+]);
+export type ResearchCardLifecycleStatus = typeof ResearchCardLifecycleStatus.Type;
+
+export const ResearchCardArtifactKind = Schema.Literals([
+  "code",
+  "visual",
+  "table",
+  "sql",
+  "parquet",
+  "csv",
+  "markdown",
+  "other",
+]);
+export type ResearchCardArtifactKind = typeof ResearchCardArtifactKind.Type;
+
+export const ResearchCardArtifactReference = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  kind: ResearchCardArtifactKind,
+  path: Schema.optional(TrimmedNonEmptyString),
+  uri: Schema.optional(TrimmedNonEmptyString),
+  label: Schema.optional(TrimmedNonEmptyString),
+  mimeType: Schema.optional(TrimmedNonEmptyString),
+  createdAt: Schema.optional(IsoDateTime),
+});
+export type ResearchCardArtifactReference = typeof ResearchCardArtifactReference.Type;
+
+export const ResearchCardProvenance = Schema.Struct({
+  source: Schema.optional(TrimmedNonEmptyString),
+  query: Schema.optional(TrimmedNonEmptyString),
+  codeHash: Schema.optional(TrimmedNonEmptyString),
+  dataset: Schema.optional(TrimmedNonEmptyString),
+  timestamp: Schema.optional(IsoDateTime),
+});
+export type ResearchCardProvenance = typeof ResearchCardProvenance.Type;
+
+export const ResearchCardReviewAction = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  label: TrimmedNonEmptyString,
+  value: Schema.optional(Schema.Unknown),
+});
+export type ResearchCardReviewAction = typeof ResearchCardReviewAction.Type;
+
+export const ResearchCardReviewResponse = Schema.Struct({
+  action: TrimmedNonEmptyString,
+  message: Schema.optional(TrimmedNonEmptyString),
+  values: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  summary: Schema.optional(TrimmedNonEmptyString),
+  artifactId: Schema.optional(TrimmedNonEmptyString),
+  timestamp: IsoDateTime,
+});
+export type ResearchCardReviewResponse = typeof ResearchCardReviewResponse.Type;
+
+export const ResearchCardReview = Schema.Struct({
+  prompt: TrimmedNonEmptyString,
+  actions: Schema.Array(ResearchCardReviewAction),
+  response: Schema.optional(ResearchCardReviewResponse),
+});
+export type ResearchCardReview = typeof ResearchCardReview.Type;
+
+export const OrchestrationResearchCard = Schema.Struct({
+  id: ResearchCardId,
+  type: ResearchCardType,
+  status: ResearchCardLifecycleStatus,
+  title: TrimmedNonEmptyString,
+  preview: Schema.optional(Schema.Unknown),
+  artifacts: Schema.Array(ResearchCardArtifactReference).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  provenance: Schema.Array(ResearchCardProvenance).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  review: Schema.optional(ResearchCardReview),
+  turnId: Schema.NullOr(TurnId),
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type OrchestrationResearchCard = typeof OrchestrationResearchCard.Type;
+
 export const OrchestrationProviderRuntimeStatus = Schema.Literals([
   "idle",
   "starting",
@@ -348,6 +442,9 @@ export const OrchestrationSession = Schema.Struct({
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  researchCards: Schema.Array(OrchestrationResearchCard).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   activities: Schema.Array(OrchestrationSessionActivity),
@@ -721,6 +818,32 @@ const SessionProposedPlanUpsertCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const SessionResearchCardProposeCommand = Schema.Struct({
+  type: Schema.Literal("session.research-card.propose"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  researchCard: OrchestrationResearchCard,
+  createdAt: IsoDateTime,
+});
+
+const SessionResearchCardUpdateCommand = Schema.Struct({
+  type: Schema.Literal("session.research-card.update"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+  researchCard: OrchestrationResearchCard,
+  createdAt: IsoDateTime,
+});
+
+const SessionResearchCardReviewCommand = Schema.Struct({
+  type: Schema.Literal("session.research-card.review"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+  response: ResearchCardReviewResponse,
+  createdAt: IsoDateTime,
+});
+
 const SessionTurnDiffCompleteCommand = Schema.Struct({
   type: Schema.Literal("session.turn.diff.complete"),
   commandId: CommandId,
@@ -756,6 +879,9 @@ const InternalOrchestrationCommand = Schema.Union([
   SessionMessageAssistantDeltaCommand,
   SessionMessageAssistantCompleteCommand,
   SessionProposedPlanUpsertCommand,
+  SessionResearchCardProposeCommand,
+  SessionResearchCardUpdateCommand,
+  SessionResearchCardReviewCommand,
   SessionTurnDiffCompleteCommand,
   SessionActivityAppendCommand,
   SessionRevertCompleteCommand,
@@ -789,6 +915,9 @@ export const OrchestrationEventType = Schema.Literals([
   "session.session-stop-requested",
   "session.session-set",
   "session.proposed-plan-upserted",
+  "session.research-card-proposed",
+  "session.research-card-updated",
+  "session.research-card-reviewed",
   "session.turn-diff-completed",
   "session.activity-appended",
 ]);
@@ -949,6 +1078,23 @@ export const SessionProposedPlanUpsertedPayload = Schema.Struct({
   proposedPlan: OrchestrationProposedPlan,
 });
 
+export const SessionResearchCardProposedPayload = Schema.Struct({
+  sessionId: SessionId,
+  researchCard: OrchestrationResearchCard,
+});
+
+export const SessionResearchCardUpdatedPayload = Schema.Struct({
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+  researchCard: OrchestrationResearchCard,
+});
+
+export const SessionResearchCardReviewedPayload = Schema.Struct({
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+  response: ResearchCardReviewResponse,
+});
+
 export const SessionTurnDiffCompletedPayload = Schema.Struct({
   sessionId: SessionId,
   turnId: TurnId,
@@ -1086,6 +1232,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("session.proposed-plan-upserted"),
     payload: SessionProposedPlanUpsertedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.research-card-proposed"),
+    payload: SessionResearchCardProposedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.research-card-updated"),
+    payload: SessionResearchCardUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.research-card-reviewed"),
+    payload: SessionResearchCardReviewedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
