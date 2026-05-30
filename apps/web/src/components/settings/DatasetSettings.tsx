@@ -1,6 +1,7 @@
 import {
   AlertCircleIcon,
   ChevronDownIcon,
+  CircleHelpIcon,
   DatabaseIcon,
   KeyRoundIcon,
   Loader2Icon,
@@ -27,6 +28,7 @@ import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const DATASET_LABELS: Record<DatasetId, string> = {
@@ -127,10 +129,18 @@ function formatDerivedTables(snapshot: DatasetStatusSnapshot | null): string | n
   return "Derived tables not ready";
 }
 
-function ErrorDetail({ error }: { error: DatasetErrorDetail | null | undefined }) {
+function ErrorDetail({
+  error,
+  className = "mt-3",
+}: {
+  error: DatasetErrorDetail | null | undefined;
+  className?: string;
+}) {
   if (!error) return null;
   return (
-    <div className="mt-3 rounded-lg border border-destructive/25 bg-destructive/4 p-3 text-xs">
+    <div
+      className={`${className} rounded-lg border border-destructive/25 bg-destructive/4 p-3 text-xs`}
+    >
       <div className="flex items-center gap-2 font-medium text-destructive-foreground">
         <AlertCircleIcon className="size-3.5" />
         {error.actionableMessage ?? error.detail}
@@ -335,70 +345,14 @@ export function DatasetSettingsPanel() {
   const appError = status?.appReadiness.error ?? null;
   const visibleError = loadError ?? runtimeError ?? appError;
   const busy = loading || actionKey !== null;
-  const demoDatasetInitialized = datasetSnapshots.get("mimic-iv-demo")?.initialized ?? false;
 
   return (
     <SettingsPageContainer className="max-w-5xl">
-      <SettingsSection title="Clinical Data Setup">
-        <div className="space-y-4 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-            <span className="min-w-0 text-muted-foreground">
-              Data location{" "}
-              <span className="font-medium text-foreground">
-                {DATA_LOCATION_LABELS[selectedBackend]}
-              </span>
-            </span>
-          </div>
-          {!status?.appReadiness.clinicalDataReady && !demoDatasetInitialized ? (
-            <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Start with MIMIC-IV Demo
-                  </h3>
-                  <p className="text-xs text-muted-foreground/80">
-                    The demo dataset is the fastest way to verify local clinical data access before
-                    connecting credentialed datasets.
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  disabled={busy || status?.runtime.available === false}
-                  onClick={() =>
-                    void runAction("initialize-mimic-iv-demo", async () => {
-                      const result = await ensureLocalApi().datasets.initialize({
-                        datasetId: "mimic-iv-demo",
-                        backendId: "duckdb",
-                      });
-                      setStatus(result);
-                      await refreshStatus();
-                    })
-                  }
-                >
-                  {actionKey === "initialize-mimic-iv-demo" ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
-                  ) : (
-                    <PlayIcon className="size-3.5" />
-                  )}
-                  Set up demo dataset
-                </Button>
-              </div>
-              {status?.runtime.available === false ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Dataset setup needs the local M4 command to be available. See advanced setup
-                  below.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          <ErrorDetail error={visibleError} />
-        </div>
-      </SettingsSection>
-
       <SettingsSection title="Credentials" icon={<KeyRoundIcon className="size-3.5" />}>
+        <ErrorDetail error={visibleError} className="m-4" />
         <SettingsRow
           title="PhysioNet"
-          description="Required for restricted MIMIC datasets. Saved secrets are never echoed back."
+          description="Required for downloading restricted MIMIC datasets. Saved secrets are never echoed back."
           status={
             status?.credentials.physioNet.stored
               ? `Stored for ${status.credentials.physioNet.username ?? "saved user"}`
@@ -478,6 +432,28 @@ export function DatasetSettingsPanel() {
                     onCheckedChange={setUseBigQueryAdc}
                   />
                   Use ADC
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 hover:text-foreground"
+                          aria-label="Application Default Credentials details"
+                        >
+                          <CircleHelpIcon className="size-3.5" />
+                        </button>
+                      }
+                    />
+                    <TooltipPopup
+                      side="top"
+                      align="end"
+                      className="max-w-[min(320px,calc(100vw-2rem))] whitespace-normal text-left leading-relaxed text-wrap"
+                    >
+                      Use credentials already configured in your Google Cloud environment, such as
+                      gcloud application-default login or a runtime service account. When enabled,
+                      no service account JSON is stored.
+                    </TooltipPopup>
+                  </Tooltip>
                 </label>
               </div>
               <Textarea
@@ -554,21 +530,17 @@ export function DatasetSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection title="Advanced Setup" icon={<Settings2Icon className="size-3.5" />}>
-        <SettingsRow
-          title="Dataset engine"
-          description={
-            status?.runtime.available
-              ? "Local dataset tooling is available."
-              : "Local dataset tooling is not available from the configured command."
-          }
-          control={
-            <Badge variant={status?.runtime.available ? "success" : "error"}>
-              {status?.runtime.available ? "Available" : "Unavailable"}
-            </Badge>
-          }
-        />
+        {status?.runtime.available === false ? (
+          <SettingsRow
+            title="Dataset engine unavailable"
+            description="Local dataset tooling is not available from the configured command."
+            control={<Badge variant="error">Unavailable</Badge>}
+          />
+        ) : null}
         <details
-          className="group border-t border-border/60"
+          className={
+            status?.runtime.available === false ? "group border-t border-border/60" : "group"
+          }
           open={status?.runtime.available === false}
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[13px] font-semibold text-foreground sm:px-5 [&::-webkit-details-marker]:hidden">
