@@ -1,3 +1,5 @@
+import * as NodeOS from "node:os";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
@@ -5,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 
 import type {
@@ -72,7 +75,14 @@ const mockInitializeDerived = vi.fn<M4CliShape["initializeDerived"]>();
 const mockUse = vi.fn<M4CliShape["use"]>();
 const mockBackend = vi.fn<M4CliShape["backend"]>();
 
-const makeLayer = (settingsOverrides: Parameters<typeof ServerSettingsService.layerTest>[0] = {}) =>
+const makeLayer = (
+  settingsOverrides: Parameters<typeof ServerSettingsService.layerTest>[0] = {
+    datasets: { workspacePath: process.cwd() },
+  },
+  baseDirOrPrefix: Parameters<typeof ServerConfig.layerTest>[1] = {
+    prefix: "t3-m4-dataset-service-test-",
+  },
+) =>
   M4DatasetServiceLayer.layer.pipe(
     Layer.provide(
       Layer.succeed(
@@ -93,7 +103,7 @@ const makeLayer = (settingsOverrides: Parameters<typeof ServerSettingsService.la
     ),
     Layer.provide(ServerSecretStoreLive),
     Layer.provide(ServerSettingsService.layerTest(settingsOverrides)),
-    Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-m4-dataset-service-test-" })),
+    Layer.provide(ServerConfig.layerTest(process.cwd(), baseDirOrPrefix)),
   );
 
 const failingPhysioNetCredentialFileLayer = Layer.effect(
@@ -179,6 +189,23 @@ describe("M4DatasetService", () => {
         expect(mockBackend).not.toHaveBeenCalled();
       }).pipe(Effect.provide(makeLayer())),
     );
+
+    it.effect("defaults empty workspace settings to the managed datasets directory", () => {
+      const baseDir = `${NodeOS.tmpdir().replace(/[\\/]$/, "")}/t3-m4-managed-datasets-${crypto.randomUUID()}`;
+      return Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const service = yield* M4DatasetService;
+
+        yield* service.getStatus();
+
+        const expectedWorkspacePath = path.join(baseDir, "datasets");
+        expect(mockStatus).toHaveBeenCalledWith(
+          expect.objectContaining({ cwd: expectedWorkspacePath }),
+        );
+        expect(yield* fileSystem.exists(expectedWorkspacePath).pipe(Effect.orDie)).toBe(true);
+      }).pipe(Effect.provide(makeLayer({}, baseDir)));
+    });
 
     it.effect(
       "materializes saved PhysioNet credentials and derived tables for local MIMIC-IV",
