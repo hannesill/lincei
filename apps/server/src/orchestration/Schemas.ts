@@ -11,6 +11,9 @@ import {
   SessionUnarchivedPayload as ContractsSessionUnarchivedPayloadSchema,
   SessionMessageSentPayload as ContractsSessionMessageSentPayloadSchema,
   SessionProposedPlanUpsertedPayload as ContractsSessionProposedPlanUpsertedPayloadSchema,
+  SessionResearchCardProposedPayload as ContractsSessionResearchCardProposedPayloadSchema,
+  SessionResearchCardUpdatedPayload as ContractsSessionResearchCardUpdatedPayloadSchema,
+  SessionResearchCardReviewedPayload as ContractsSessionResearchCardReviewedPayloadSchema,
   ProviderRuntimeSetPayload as ContractsProviderRuntimeSetPayloadSchema,
   SessionTurnDiffCompletedPayload as ContractsSessionTurnDiffCompletedPayloadSchema,
   SessionRevertedPayload as ContractsSessionRevertedPayloadSchema,
@@ -37,6 +40,9 @@ export const SessionUnarchivedPayload = ContractsSessionUnarchivedPayloadSchema;
 
 export const MessageSentPayloadSchema = ContractsSessionMessageSentPayloadSchema;
 export const SessionProposedPlanUpsertedPayload = ContractsSessionProposedPlanUpsertedPayloadSchema;
+export const SessionResearchCardProposedPayload = ContractsSessionResearchCardProposedPayloadSchema;
+export const SessionResearchCardUpdatedPayload = ContractsSessionResearchCardUpdatedPayloadSchema;
+export const SessionResearchCardReviewedPayload = ContractsSessionResearchCardReviewedPayloadSchema;
 export const ProviderRuntimeSetPayload = ContractsProviderRuntimeSetPayloadSchema;
 export const SessionTurnDiffCompletedPayload = ContractsSessionTurnDiffCompletedPayloadSchema;
 export const SessionRevertedPayload = ContractsSessionRevertedPayloadSchema;

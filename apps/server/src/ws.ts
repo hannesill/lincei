@@ -105,6 +105,9 @@ function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
     type:
       | "session.message-sent"
       | "session.proposed-plan-upserted"
+      | "session.research-card-proposed"
+      | "session.research-card-updated"
+      | "session.research-card-reviewed"
       | "session.activity-appended"
       | "session.turn-diff-completed"
       | "session.reverted"
@@ -114,6 +117,9 @@ function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
   return (
     event.type === "session.message-sent" ||
     event.type === "session.proposed-plan-upserted" ||
+    event.type === "session.research-card-proposed" ||
+    event.type === "session.research-card-updated" ||
+    event.type === "session.research-card-reviewed" ||
     event.type === "session.activity-appended" ||
     event.type === "session.turn-diff-completed" ||
     event.type === "session.reverted" ||

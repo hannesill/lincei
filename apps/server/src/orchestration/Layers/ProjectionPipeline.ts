@@ -27,6 +27,10 @@ import {
   type ProjectionSessionProposedPlan,
   ProjectionSessionProposedPlanRepository,
 } from "../../persistence/Services/ProjectionSessionProposedPlans.ts";
+import {
+  type ProjectionSessionResearchCard,
+  ProjectionSessionResearchCardRepository,
+} from "../../persistence/Services/ProjectionSessionResearchCards.ts";
 import { ProjectionProviderRuntimeRepository } from "../../persistence/Services/ProjectionProviderRuntimes.ts";
 import {
   type ProjectionTurn,
@@ -39,6 +43,7 @@ import { ProjectionStateRepositoryLive } from "../../persistence/Layers/Projecti
 import { ProjectionSessionActivityRepositoryLive } from "../../persistence/Layers/ProjectionSessionActivities.ts";
 import { ProjectionSessionMessageRepositoryLive } from "../../persistence/Layers/ProjectionSessionMessages.ts";
 import { ProjectionSessionProposedPlanRepositoryLive } from "../../persistence/Layers/ProjectionSessionProposedPlans.ts";
+import { ProjectionSessionResearchCardRepositoryLive } from "../../persistence/Layers/ProjectionSessionResearchCards.ts";
 import { ProjectionProviderRuntimeRepositoryLive } from "../../persistence/Layers/ProjectionProviderRuntimes.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionSessionRepositoryLive } from "../../persistence/Layers/ProjectionSessions.ts";
@@ -59,6 +64,7 @@ export const ORCHESTRATION_PROJECTOR_NAMES = {
   sessions: "projection.sessions",
   sessionMessages: "projection.session-messages",
   sessionProposedPlans: "projection.session-proposed-plans",
+  sessionResearchCards: "projection.session-research-cards",
   sessionActivities: "projection.session-activities",
   providerRuntimes: "projection.session-sessions",
   sessionTurns: "projection.session-turns",
@@ -301,6 +307,26 @@ function retainProjectionProposedPlansAfterRevert(
   );
 }
 
+function retainProjectionResearchCardsAfterRevert(
+  researchCards: ReadonlyArray<ProjectionSessionResearchCard>,
+  turns: ReadonlyArray<ProjectionTurn>,
+  turnCount: number,
+): ReadonlyArray<ProjectionSessionResearchCard> {
+  const retainedTurnIds = new Set<string>(
+    turns
+      .filter(
+        (turn) =>
+          turn.turnId !== null &&
+          turn.checkpointTurnCount !== null &&
+          turn.checkpointTurnCount <= turnCount,
+      )
+      .flatMap((turn) => (turn.turnId === null ? [] : [turn.turnId])),
+  );
+  return researchCards.filter(
+    (researchCard) => researchCard.turnId === null || retainedTurnIds.has(researchCard.turnId),
+  );
+}
+
 function collectSessionAttachmentRelativePaths(
   sessionId: string,
   messages: ReadonlyArray<ProjectionSessionMessage>,
@@ -452,6 +478,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionSessionRepository = yield* ProjectionSessionRepository;
     const projectionSessionMessageRepository = yield* ProjectionSessionMessageRepository;
     const projectionSessionProposedPlanRepository = yield* ProjectionSessionProposedPlanRepository;
+    const projectionSessionResearchCardRepository = yield* ProjectionSessionResearchCardRepository;
     const projectionSessionActivityRepository = yield* ProjectionSessionActivityRepository;
     const projectionProviderRuntimeRepository = yield* ProjectionProviderRuntimeRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
@@ -691,6 +718,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
 
         case "session.message-sent":
         case "session.proposed-plan-upserted":
+        case "session.research-card-proposed":
+        case "session.research-card-updated":
+        case "session.research-card-reviewed":
         case "session.activity-appended":
         case "session.approval-response-requested":
         case "session.user-input-response-requested": {
@@ -903,6 +933,84 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             sessionId: event.payload.sessionId,
           });
           yield* Effect.forEach(keptRows, projectionSessionProposedPlanRepository.upsert, {
+            concurrency: 1,
+          }).pipe(Effect.asVoid);
+          return;
+        }
+
+        default:
+          return;
+      }
+    });
+
+    const applySessionResearchCardsProjection: ProjectorDefinition["apply"] = Effect.fn(
+      "applySessionResearchCardsProjection",
+    )(function* (event, _attachmentSideEffects) {
+      switch (event.type) {
+        case "session.research-card-proposed":
+        case "session.research-card-updated": {
+          const card = event.payload.researchCard;
+          yield* projectionSessionResearchCardRepository.upsert({
+            cardId: card.id,
+            sessionId: event.payload.sessionId,
+            turnId: card.turnId,
+            type: card.type,
+            status: card.status,
+            title: card.title,
+            ...(card.preview !== undefined ? { preview: card.preview } : {}),
+            artifacts: [...card.artifacts],
+            provenance: [...card.provenance],
+            ...(card.review !== undefined ? { review: card.review } : {}),
+            createdAt: card.createdAt,
+            updatedAt: card.updatedAt,
+          });
+          return;
+        }
+
+        case "session.research-card-reviewed": {
+          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
+            sessionId: event.payload.sessionId,
+          });
+          const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
+          if (existingRow?.review === undefined) {
+            return;
+          }
+
+          yield* projectionSessionResearchCardRepository.upsert({
+            ...existingRow,
+            review: {
+              ...existingRow.review,
+              response: event.payload.response,
+            },
+            updatedAt: event.payload.response.timestamp,
+          });
+          return;
+        }
+
+        case "session.reverted": {
+          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
+            sessionId: event.payload.sessionId,
+          });
+          if (existingRows.length === 0) {
+            return;
+          }
+
+          const existingTurns = yield* projectionTurnRepository.listBySessionId({
+            sessionId: event.payload.sessionId,
+          });
+          const keptRows = retainProjectionResearchCardsAfterRevert(
+            existingRows,
+            existingTurns,
+            event.payload.turnCount,
+          );
+          if (keptRows.length === existingRows.length) {
+            return;
+          }
+
+          yield* projectionSessionResearchCardRepository.deleteBySessionId({
+            sessionId: event.payload.sessionId,
+          });
+          yield* Effect.forEach(keptRows, projectionSessionResearchCardRepository.upsert, {
             concurrency: 1,
           }).pipe(Effect.asVoid);
           return;
@@ -1379,6 +1487,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         apply: applySessionProposedPlansProjection,
       },
       {
+        name: ORCHESTRATION_PROJECTOR_NAMES.sessionResearchCards,
+        apply: applySessionResearchCardsProjection,
+      },
+      {
         name: ORCHESTRATION_PROJECTOR_NAMES.sessionActivities,
         apply: applySessionActivitiesProjection,
       },
@@ -1500,6 +1612,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionSessionRepositoryLive),
   Layer.provideMerge(ProjectionSessionMessageRepositoryLive),
   Layer.provideMerge(ProjectionSessionProposedPlanRepositoryLive),
+  Layer.provideMerge(ProjectionSessionResearchCardRepositoryLive),
   Layer.provideMerge(ProjectionSessionActivityRepositoryLive),
   Layer.provideMerge(ProjectionProviderRuntimeRepositoryLive),
   Layer.provideMerge(ProjectionTurnRepositoryLive),
