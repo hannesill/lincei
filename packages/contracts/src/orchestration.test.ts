@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
+import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -379,7 +378,9 @@ it.effect("decodes session archived and unarchived events", () =>
       },
     });
 
-    assert.strictEqual(archived.type, "session.archived");
+    if (archived.type !== "session.archived") {
+      assert.fail(`Expected session.archived event, received ${archived.type}.`);
+    }
     assert.strictEqual(archived.payload.archivedAt, "2026-01-01T00:00:00.000Z");
     assert.strictEqual(unarchived.type, "session.unarchived");
   }),
