@@ -74,6 +74,8 @@ const mockInitialize = vi.fn<M4CliShape["initialize"]>();
 const mockInitializeDerived = vi.fn<M4CliShape["initializeDerived"]>();
 const mockUse = vi.fn<M4CliShape["use"]>();
 const mockBackend = vi.fn<M4CliShape["backend"]>();
+const mockExec = vi.fn<M4CliShape["exec"]>();
+const mockJson = vi.fn<M4CliShape["json"]>();
 
 const makeLayer = (
   settingsOverrides: Parameters<typeof ServerSettingsService.layerTest>[0] = {
@@ -93,6 +95,8 @@ const makeLayer = (
             command: configuredCommand || "uvx",
             prefixArgs: configuredCommand ? [] : ["--from", "m4-infra", "m4"],
           }),
+          exec: mockExec,
+          json: mockJson,
           status: mockStatus,
           initialize: mockInitialize,
           initializeDerived: mockInitializeDerived,
@@ -130,6 +134,8 @@ beforeEach(() => {
   mockInitializeDerived.mockReset();
   mockUse.mockReset();
   mockBackend.mockReset();
+  mockExec.mockReset();
+  mockJson.mockReset();
   mockStatus.mockImplementation(({ credentials }) => Effect.succeed(statusResult(credentials)));
   mockInitialize.mockReturnValue(Effect.succeed(commandResult));
   mockInitializeDerived.mockReturnValue(Effect.succeed(commandResult));

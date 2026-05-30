@@ -43,6 +43,7 @@ export const DatasetErrorCode = Schema.Literals([
   "bigquery_auth_failed",
   "dataset_initialization_failed",
   "dataset_operation_in_progress",
+  "policy_denied",
   "settings_error",
   "secret_store_error",
   "unknown",

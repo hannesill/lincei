@@ -107,6 +107,7 @@ type M4StatusDataset = typeof M4StatusDataset.Type;
 const decodeM4CommandEnvelope = decodeJsonResult(M4CommandEnvelope);
 const decodeM4StatusSnapshot = decodeJsonResult(M4StatusSnapshot);
 const decodeM4NdjsonEvent = decodeJsonResult(M4NdjsonEvent);
+const decodeJsonUnknown = decodeJsonResult(Schema.Unknown);
 
 export interface M4CliStatusInput {
   readonly cwd: string;
@@ -139,12 +140,36 @@ export interface M4CliSetBackendInput extends M4CliCommandInput {
   readonly projectId?: string | undefined;
 }
 
+export interface M4CliExecInput extends M4CliCommandInput {
+  readonly args: ReadonlyArray<string>;
+  readonly timeout?: Duration.Input | undefined;
+  readonly outputMode?: ProcessRunInput["outputMode"] | undefined;
+}
+
+export interface M4CliExecOutput {
+  readonly command: string;
+  readonly output: ProcessRunOutput;
+}
+
+export interface M4CliJsonInput extends M4CliCommandInput {
+  readonly args: ReadonlyArray<string>;
+  readonly timeout?: Duration.Input | undefined;
+}
+
+export interface M4CliJsonOutput {
+  readonly command: string;
+  readonly json: unknown;
+  readonly stdout: string;
+}
+
 export interface M4CliShape {
   readonly defaultCommand: string;
   readonly resolveCommand: (configuredCommand: string) => {
     readonly command: string;
     readonly prefixArgs: ReadonlyArray<string>;
   };
+  readonly exec: (input: M4CliExecInput) => Effect.Effect<M4CliExecOutput, DatasetRpcError>;
+  readonly json: (input: M4CliJsonInput) => Effect.Effect<M4CliJsonOutput, DatasetRpcError>;
   readonly status: (input: M4CliStatusInput) => Effect.Effect<DatasetStatusResult, DatasetRpcError>;
   readonly initialize: (
     input: M4CliInitializeInput,
@@ -731,6 +756,90 @@ export const makeM4Cli = Effect.gen(function* () {
       return decoded.success;
     });
 
+  const decodeJson = (
+    output: ProcessRunOutput,
+    displayCommand: string,
+  ): Effect.Effect<M4CliJsonOutput, DatasetRpcError> =>
+    Effect.gen(function* () {
+      yield* assertProcessAvailable(output, displayCommand);
+      const stderr = safeOutput(output.stderr);
+      const stdout = output.stdout.trim();
+      if (!looksLikeJson(stdout)) {
+        return yield* m4Unavailable({
+          detail: "M4 returned human-readable output instead of JSON.",
+          command: displayCommand,
+          exitCode: typeof output.code === "number" ? output.code : undefined,
+          stderr,
+        });
+      }
+
+      const envelope = decodeM4CommandEnvelope(stdout);
+      if (Result.isSuccess(envelope) && (envelope.success.ok === false || output.code !== 0)) {
+        return yield* commandErrorFromEnvelope(
+          envelope.success,
+          displayCommand,
+          typeof output.code === "number" ? output.code : undefined,
+          stderr,
+        );
+      }
+
+      if (output.code !== 0) {
+        return yield* commandFailed({
+          detail: "M4 command failed without a JSON error envelope.",
+          command: displayCommand,
+          exitCode: typeof output.code === "number" ? output.code : undefined,
+          stderr,
+        });
+      }
+
+      const decoded = decodeJsonUnknown(stdout);
+      if (Result.isFailure(decoded)) {
+        return yield* invalidStatus({
+          detail: formatSchemaError(decoded.failure),
+          command: displayCommand,
+          stderr,
+        });
+      }
+
+      return {
+        command: displayCommand,
+        json: decoded.success,
+        stdout,
+      };
+    });
+
+  const exec: M4CliShape["exec"] = (input) =>
+    Effect.gen(function* () {
+      const { output, displayCommand } = yield* run({
+        cwd: input.cwd,
+        env: input.env,
+        lifecycleArgs: input.args,
+        timeout: input.timeout ?? STATUS_TIMEOUT,
+        outputMode: input.outputMode,
+      });
+      yield* assertProcessAvailable(output, displayCommand);
+      if (output.code !== 0) {
+        return yield* commandFailed({
+          detail: "M4 command failed.",
+          command: displayCommand,
+          exitCode: typeof output.code === "number" ? output.code : undefined,
+          stderr: safeOutput(output.stderr),
+        });
+      }
+      return { command: displayCommand, output };
+    });
+
+  const json: M4CliShape["json"] = (input) =>
+    Effect.gen(function* () {
+      const { output, displayCommand } = yield* run({
+        cwd: input.cwd,
+        env: input.env,
+        lifecycleArgs: input.args,
+        timeout: input.timeout ?? STATUS_TIMEOUT,
+      });
+      return yield* decodeJson(output, displayCommand);
+    });
+
   const status: M4CliShape["status"] = (input) =>
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
@@ -871,6 +980,8 @@ export const makeM4Cli = Effect.gen(function* () {
   return M4Cli.of({
     defaultCommand: DEFAULT_M4_COMMAND,
     resolveCommand,
+    exec,
+    json,
     status,
     initialize,
     initializeDerived,
