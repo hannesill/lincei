@@ -286,6 +286,63 @@ describe("M4Cli", () => {
     }).pipe(Effect.provide(makeLayer())),
   );
 
+  it.effect("passes request-scoped backend to all-dataset status", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
+
+      const m4 = yield* M4Cli;
+      yield* m4.status({
+        cwd: "/repo",
+        credentials: emptyCredentials,
+        backendId: "bigquery",
+      });
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--all",
+            "--backend",
+            "bigquery",
+            "--json",
+            "--no-interactive",
+          ],
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("passes M4 0.5.3 paths flag when status paths are requested", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
+
+      const m4 = yield* M4Cli;
+      yield* m4.status({
+        cwd: "/repo",
+        credentials: emptyCredentials,
+        includePaths: true,
+      });
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--all",
+            "--paths",
+            "--json",
+            "--no-interactive",
+          ],
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
   it.effect("decodes older M4 active status fields as selected compatibility fields", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(

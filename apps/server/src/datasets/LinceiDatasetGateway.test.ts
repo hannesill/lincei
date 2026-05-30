@@ -174,6 +174,37 @@ describe("LinceiDatasetGateway", () => {
     }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
   });
 
+  it.effect("passes explicit status backend selection through to M4", () => {
+    const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-status-backend-caller-"));
+    const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-status-backend-base-"));
+    const workspacePath = mkdtempSync(join(tmpdir(), "lincei-gateway-status-backend-workspace-"));
+
+    return Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
+
+      const gateway = yield* LinceiDatasetGateway;
+      yield* gateway.status({ backendId: "bigquery" });
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "uvx",
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--all",
+            "--backend",
+            "bigquery",
+            "--json",
+            "--no-interactive",
+          ],
+          cwd: workspacePath,
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
+  });
+
   it.effect("ignores study-local M4 project files when resolving the launcher", () => {
     const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-local-caller-"));
     const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-local-base-"));

@@ -856,14 +856,15 @@ export const makeM4Cli = Effect.gen(function* () {
               "--dataset",
               input.datasetId,
               ...(input.backendId ? ["--backend", input.backendId] : []),
-              ...(input.includePaths ? ["--include-paths"] : []),
+              ...(input.includePaths ? ["--paths"] : []),
               "--json",
               "--no-interactive",
             ]
           : [
               "status",
               "--all",
-              ...(input.includePaths ? ["--include-paths"] : []),
+              ...(input.backendId ? ["--backend", input.backendId] : []),
+              ...(input.includePaths ? ["--paths"] : []),
               "--json",
               "--no-interactive",
             ];
