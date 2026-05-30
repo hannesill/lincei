@@ -3,7 +3,7 @@ import { defineConfig } from "tsdown";
 const internalPackagePrefixes = ["@t3tools/", "effect-acp", "effect-codex-app-server"];
 
 export default defineConfig({
-  entry: ["src/bin.ts"],
+  entry: ["src/bin.ts", "src/lincei.ts"],
   outDir: "dist",
   sourcemap: true,
   clean: true,

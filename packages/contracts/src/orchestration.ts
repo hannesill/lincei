@@ -742,6 +742,40 @@ const ProviderRuntimeStopCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const SessionProposedPlanUpsertCommand = Schema.Struct({
+  type: Schema.Literal("session.proposed-plan.upsert"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  proposedPlan: OrchestrationProposedPlan,
+  createdAt: IsoDateTime,
+});
+
+const SessionResearchCardProposeCommand = Schema.Struct({
+  type: Schema.Literal("session.research-card.propose"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  researchCard: OrchestrationResearchCard,
+  createdAt: IsoDateTime,
+});
+
+const SessionResearchCardUpdateCommand = Schema.Struct({
+  type: Schema.Literal("session.research-card.update"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+  researchCard: OrchestrationResearchCard,
+  createdAt: IsoDateTime,
+});
+
+const SessionResearchCardReviewCommand = Schema.Struct({
+  type: Schema.Literal("session.research-card.review"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+  response: ResearchCardReviewResponse,
+  createdAt: IsoDateTime,
+});
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -780,6 +814,9 @@ export const ClientOrchestrationCommand = Schema.Union([
   SessionUserInputRespondCommand,
   SessionCheckpointRevertCommand,
   ProviderRuntimeStopCommand,
+  SessionResearchCardProposeCommand,
+  SessionResearchCardUpdateCommand,
+  SessionResearchCardReviewCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -807,40 +844,6 @@ const SessionMessageAssistantCompleteCommand = Schema.Struct({
   sessionId: SessionId,
   messageId: MessageId,
   turnId: Schema.optional(TurnId),
-  createdAt: IsoDateTime,
-});
-
-const SessionProposedPlanUpsertCommand = Schema.Struct({
-  type: Schema.Literal("session.proposed-plan.upsert"),
-  commandId: CommandId,
-  sessionId: SessionId,
-  proposedPlan: OrchestrationProposedPlan,
-  createdAt: IsoDateTime,
-});
-
-const SessionResearchCardProposeCommand = Schema.Struct({
-  type: Schema.Literal("session.research-card.propose"),
-  commandId: CommandId,
-  sessionId: SessionId,
-  researchCard: OrchestrationResearchCard,
-  createdAt: IsoDateTime,
-});
-
-const SessionResearchCardUpdateCommand = Schema.Struct({
-  type: Schema.Literal("session.research-card.update"),
-  commandId: CommandId,
-  sessionId: SessionId,
-  cardId: ResearchCardId,
-  researchCard: OrchestrationResearchCard,
-  createdAt: IsoDateTime,
-});
-
-const SessionResearchCardReviewCommand = Schema.Struct({
-  type: Schema.Literal("session.research-card.review"),
-  commandId: CommandId,
-  sessionId: SessionId,
-  cardId: ResearchCardId,
-  response: ResearchCardReviewResponse,
   createdAt: IsoDateTime,
 });
 
