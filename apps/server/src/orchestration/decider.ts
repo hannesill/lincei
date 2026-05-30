@@ -654,6 +654,71 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "session.research-card.propose": {
+      yield* requireSession({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "session.research-card-proposed",
+        payload: {
+          sessionId: command.sessionId,
+          researchCard: command.researchCard,
+        },
+      };
+    }
+
+    case "session.research-card.update": {
+      yield* requireSession({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "session.research-card-updated",
+        payload: {
+          sessionId: command.sessionId,
+          cardId: command.cardId,
+          researchCard: command.researchCard,
+        },
+      };
+    }
+
+    case "session.research-card.review": {
+      yield* requireSession({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "session.research-card-reviewed",
+        payload: {
+          sessionId: command.sessionId,
+          cardId: command.cardId,
+          response: command.response,
+        },
+      };
+    }
+
     case "session.turn.diff.complete": {
       yield* requireSession({
         readModel,

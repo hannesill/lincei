@@ -16,6 +16,8 @@ import {
   ProjectMetaUpdatedPayload,
   OrchestrationProposedPlan,
   OrchestrationProviderRuntime,
+  OrchestrationResearchCard,
+  OrchestrationSession,
   ProjectCreateCommand,
   SessionMetaUpdatedPayload,
   SessionTurnStartCommand,
@@ -38,6 +40,8 @@ const decodeSessionTurnStartRequestedPayload = Schema.decodeUnknownEffect(
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationProviderRuntime = Schema.decodeUnknownEffect(OrchestrationProviderRuntime);
+const decodeOrchestrationResearchCard = Schema.decodeUnknownEffect(OrchestrationResearchCard);
+const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
 const encodeSessionCreatedPayload = Schema.encodeEffect(SessionCreatedPayload);
 
 function getOptionValue(
@@ -643,6 +647,275 @@ it.effect("preserves proposed plan implementation metadata when present", () =>
     });
     assert.strictEqual(parsed.implementedAt, "2026-01-02T00:00:00.000Z");
     assert.strictEqual(parsed.implementationSessionId, "session-2");
+  }),
+);
+
+it.effect("decodes a minimal proposed markdown research card", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationResearchCard({
+      id: "card-1",
+      type: "markdown",
+      status: "proposed",
+      title: "Eligibility summary",
+      preview: {
+        markdown: "Patients with baseline HbA1c available.",
+      },
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    assert.strictEqual(parsed.id, "card-1");
+    assert.strictEqual(parsed.type, "markdown");
+    assert.strictEqual(parsed.status, "proposed");
+    assert.deepStrictEqual(parsed.artifacts, []);
+    assert.deepStrictEqual(parsed.provenance, []);
+  }),
+);
+
+it.effect("decodes a table research card with artifact references and provenance", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationResearchCard({
+      id: "card-table-1",
+      type: "table",
+      status: "proposed",
+      title: "Cohort counts by site",
+      preview: {
+        columns: ["site", "n"],
+        rows: [["A", 42]],
+      },
+      artifacts: [
+        {
+          id: "artifact-csv-1",
+          kind: "csv",
+          path: "outputs/cohort-counts.csv",
+          label: "Cohort counts CSV",
+          mimeType: "text/csv",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "artifact-sql-1",
+          kind: "sql",
+          path: "queries/cohort-counts.sql",
+        },
+      ],
+      provenance: [
+        {
+          source: "ehr-extract",
+          query: "select site, count(*) from cohort group by site",
+          codeHash: "sha256:abc123",
+          dataset: "diabetes-cohort-v1",
+          timestamp: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      turnId: "turn-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    assert.strictEqual(parsed.artifacts.length, 2);
+    assert.strictEqual(parsed.artifacts[0]?.kind, "csv");
+    assert.strictEqual(parsed.provenance[0]?.dataset, "diabetes-cohort-v1");
+  }),
+);
+
+it.effect("defaults research cards for historical orchestration sessions", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationSession({
+      id: "session-1",
+      projectId: "project-1",
+      title: "Historical session",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      activities: [],
+      checkpoints: [],
+      session: null,
+    });
+
+    assert.deepStrictEqual(parsed.researchCards, []);
+  }),
+);
+
+it.effect("decodes research card command shapes", () =>
+  Effect.gen(function* () {
+    const researchCard = {
+      id: "card-1",
+      type: "decision",
+      status: "proposed",
+      title: "Proceed to sensitivity analysis",
+      review: {
+        prompt: "Should this analysis be added?",
+        actions: [
+          { id: "accept", label: "Accept" },
+          { id: "requestChanges", label: "Request changes", value: { requiresComment: true } },
+        ],
+      },
+      turnId: "turn-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const proposed = yield* decodeOrchestrationCommand({
+      type: "session.research-card.propose",
+      commandId: "cmd-card-propose",
+      sessionId: "session-1",
+      researchCard,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const updated = yield* decodeOrchestrationCommand({
+      type: "session.research-card.update",
+      commandId: "cmd-card-update",
+      sessionId: "session-1",
+      cardId: "card-1",
+      researchCard: {
+        ...researchCard,
+        status: "accepted",
+        updatedAt: "2026-01-01T00:01:00.000Z",
+      },
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+    const reviewed = yield* decodeOrchestrationCommand({
+      type: "session.research-card.review",
+      commandId: "cmd-card-review",
+      sessionId: "session-1",
+      cardId: "card-1",
+      response: {
+        action: "accept",
+        message: "Use this as the primary sensitivity analysis.",
+        values: { includeInManuscript: true },
+        summary: "Accepted for manuscript inclusion",
+        artifactId: "artifact-summary-1",
+        timestamp: "2026-01-01T00:02:00.000Z",
+      },
+      createdAt: "2026-01-01T00:02:00.000Z",
+    });
+
+    assert.strictEqual(proposed.type, "session.research-card.propose");
+    assert.strictEqual(updated.type, "session.research-card.update");
+    assert.strictEqual(reviewed.type, "session.research-card.review");
+  }),
+);
+
+it.effect("decodes research card event shapes", () =>
+  Effect.gen(function* () {
+    const researchCard = {
+      id: "card-1",
+      type: "markdown",
+      status: "proposed",
+      title: "Interim finding",
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const eventBase = {
+      aggregateKind: "session",
+      aggregateId: "session-1",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      commandId: "cmd-card",
+      causationEventId: null,
+      correlationId: "cmd-card",
+      metadata: {},
+    };
+
+    const proposed = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 1,
+      eventId: "event-card-proposed",
+      type: "session.research-card-proposed",
+      payload: {
+        sessionId: "session-1",
+        researchCard,
+      },
+    });
+    const updated = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 2,
+      eventId: "event-card-updated",
+      type: "session.research-card-updated",
+      payload: {
+        sessionId: "session-1",
+        cardId: "card-1",
+        researchCard: {
+          ...researchCard,
+          status: "changes-requested",
+          updatedAt: "2026-01-01T00:01:00.000Z",
+        },
+      },
+    });
+    const reviewed = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 3,
+      eventId: "event-card-reviewed",
+      type: "session.research-card-reviewed",
+      payload: {
+        sessionId: "session-1",
+        cardId: "card-1",
+        response: {
+          action: "requestChanges",
+          message: "Add denominators before accepting.",
+          timestamp: "2026-01-01T00:02:00.000Z",
+        },
+      },
+    });
+
+    assert.strictEqual(proposed.type, "session.research-card-proposed");
+    assert.strictEqual(updated.type, "session.research-card-updated");
+    assert.strictEqual(reviewed.type, "session.research-card-reviewed");
+  }),
+);
+
+it.effect("rejects research card required fields that become empty after trim", () =>
+  Effect.gen(function* () {
+    const emptyCardId = yield* Effect.exit(
+      decodeOrchestrationResearchCard({
+        id: "  ",
+        type: "markdown",
+        status: "proposed",
+        title: "Eligibility summary",
+        turnId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    const emptyTitle = yield* Effect.exit(
+      decodeOrchestrationResearchCard({
+        id: "card-1",
+        type: "markdown",
+        status: "proposed",
+        title: "  ",
+        turnId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    const emptyArtifactId = yield* Effect.exit(
+      decodeOrchestrationResearchCard({
+        id: "card-1",
+        type: "table",
+        status: "proposed",
+        title: "Cohort table",
+        artifacts: [{ id: "  ", kind: "csv" }],
+        turnId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+
+    assert.strictEqual(emptyCardId._tag, "Failure");
+    assert.strictEqual(emptyTitle._tag, "Failure");
+    assert.strictEqual(emptyArtifactId._tag, "Failure");
   }),
 );
 

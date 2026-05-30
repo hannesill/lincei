@@ -1277,6 +1277,7 @@ function applyEnvironmentOrchestrationEvent(
           deletedAt: null,
           messages: [],
           proposedPlans: [],
+          researchCards: [],
           activities: [],
           checkpoints: [],
           session: null,

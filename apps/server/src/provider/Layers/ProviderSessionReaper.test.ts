@@ -110,6 +110,7 @@ function makeReadModel(
       session: session.session,
       activities: [],
       proposedPlans: [],
+      researchCards: [],
       checkpoints: [],
       deletedAt: null,
     })),
