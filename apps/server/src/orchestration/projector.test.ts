@@ -444,6 +444,209 @@ describe("orchestration projector", () => {
     expect(message?.updatedAt).toBe(completeAt);
   });
 
+  it("projects research card lifecycle events into in-memory session snapshots", async () => {
+    const createdAt = "2026-02-23T09:00:00.000Z";
+    const afterCreate = await Effect.runPromise(
+      projectEvent(
+        createEmptyReadModel(createdAt),
+        makeEvent({
+          sequence: 1,
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
+          occurredAt: createdAt,
+          commandId: "cmd-create",
+          payload: {
+            sessionId: "session-1",
+            projectId: "project-1",
+            title: "demo",
+            modelSelection: {
+              provider: ProviderDriverKind.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+            updatedAt: createdAt,
+          },
+        }),
+      ),
+    );
+
+    const events: ReadonlyArray<OrchestrationEvent> = [
+      makeEvent({
+        sequence: 2,
+        type: "session.turn-diff-completed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:01.000Z",
+        commandId: "cmd-turn-1",
+        payload: {
+          sessionId: "session-1",
+          turnId: "turn-1",
+          checkpointTurnCount: 1,
+          checkpointRef: "checkpoint-1",
+          status: "ready",
+          files: [],
+          assistantMessageId: null,
+          completedAt: "2026-02-23T09:00:01.000Z",
+        },
+      }),
+      makeEvent({
+        sequence: 3,
+        type: "session.turn-diff-completed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:02.000Z",
+        commandId: "cmd-turn-2",
+        payload: {
+          sessionId: "session-1",
+          turnId: "turn-2",
+          checkpointTurnCount: 2,
+          checkpointRef: "checkpoint-2",
+          status: "ready",
+          files: [],
+          assistantMessageId: null,
+          completedAt: "2026-02-23T09:00:02.000Z",
+        },
+      }),
+      makeEvent({
+        sequence: 4,
+        type: "session.research-card-proposed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:03.000Z",
+        commandId: "cmd-card-1",
+        payload: {
+          sessionId: "session-1",
+          researchCard: {
+            id: "card-1",
+            type: "markdown",
+            status: "proposed",
+            title: "Finding",
+            preview: { markdown: "first" },
+            artifacts: [],
+            provenance: [],
+            review: {
+              prompt: "Review?",
+              actions: [{ id: "accept", label: "Accept" }],
+            },
+            turnId: "turn-1",
+            createdAt: "2026-02-23T09:00:03.000Z",
+            updatedAt: "2026-02-23T09:00:03.000Z",
+          },
+        },
+      }),
+      makeEvent({
+        sequence: 5,
+        type: "session.research-card-updated",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:04.000Z",
+        commandId: "cmd-card-2",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          researchCard: {
+            id: "card-1",
+            type: "markdown",
+            status: "accepted",
+            title: "Updated finding",
+            artifacts: [],
+            provenance: [],
+            review: {
+              prompt: "Review?",
+              actions: [{ id: "accept", label: "Accept" }],
+            },
+            turnId: "turn-1",
+            createdAt: "2026-02-23T09:00:03.000Z",
+            updatedAt: "2026-02-23T09:00:04.000Z",
+          },
+        },
+      }),
+      makeEvent({
+        sequence: 6,
+        type: "session.research-card-reviewed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:05.000Z",
+        commandId: "cmd-card-3",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          response: {
+            action: "accept",
+            message: "Looks good",
+            timestamp: "2026-02-23T09:00:05.000Z",
+          },
+        },
+      }),
+      makeEvent({
+        sequence: 7,
+        type: "session.research-card-proposed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:06.000Z",
+        commandId: "cmd-card-4",
+        payload: {
+          sessionId: "session-1",
+          researchCard: {
+            id: "card-2",
+            type: "decision",
+            status: "proposed",
+            title: "Remove me",
+            artifacts: [],
+            provenance: [],
+            turnId: "turn-2",
+            createdAt: "2026-02-23T09:00:06.000Z",
+            updatedAt: "2026-02-23T09:00:06.000Z",
+          },
+        },
+      }),
+      makeEvent({
+        sequence: 8,
+        type: "session.reverted",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-23T09:00:07.000Z",
+        commandId: "cmd-revert",
+        payload: {
+          sessionId: "session-1",
+          turnCount: 1,
+        },
+      }),
+    ];
+
+    let current = afterCreate;
+    for (const event of events) {
+      current = await Effect.runPromise(projectEvent(current, event));
+    }
+
+    expect(current.sessions[0]?.researchCards).toEqual([
+      {
+        id: "card-1",
+        type: "markdown",
+        status: "accepted",
+        title: "Updated finding",
+        artifacts: [],
+        provenance: [],
+        review: {
+          prompt: "Review?",
+          actions: [{ id: "accept", label: "Accept" }],
+          response: {
+            action: "accept",
+            message: "Looks good",
+            timestamp: "2026-02-23T09:00:05.000Z",
+          },
+        },
+        turnId: "turn-1",
+        createdAt: "2026-02-23T09:00:03.000Z",
+        updatedAt: "2026-02-23T09:00:05.000Z",
+      },
+    ]);
+  });
+
   it("prunes reverted turn messages from in-memory session snapshot", async () => {
     const createdAt = "2026-02-23T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);

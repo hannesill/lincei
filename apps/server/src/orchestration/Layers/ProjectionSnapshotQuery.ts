@@ -7,9 +7,13 @@ import {
   OrchestrationCheckpointFile,
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
+  OrchestrationResearchCard,
   OrchestrationShellSnapshot,
   OrchestrationSession,
   ProjectScript,
+  ResearchCardArtifactReference,
+  ResearchCardProvenance,
+  ResearchCardReview,
   TurnId,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
@@ -44,6 +48,7 @@ import { ProjectionState } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionSessionActivity } from "../../persistence/Services/ProjectionSessionActivities.ts";
 import { ProjectionSessionMessage } from "../../persistence/Services/ProjectionSessionMessages.ts";
 import { ProjectionSessionProposedPlan } from "../../persistence/Services/ProjectionSessionProposedPlans.ts";
+import { ProjectionSessionResearchCard } from "../../persistence/Services/ProjectionSessionResearchCards.ts";
 import { ProjectionProviderRuntime } from "../../persistence/Services/ProjectionProviderRuntimes.ts";
 import { ProjectionSession } from "../../persistence/Services/ProjectionSessions.ts";
 import { RepositoryIdentityResolver } from "../../project/Services/RepositoryIdentityResolver.ts";
@@ -72,6 +77,14 @@ const ProjectionSessionMessageDbRowSchema = ProjectionSessionMessage.mapFields(
   }),
 );
 const ProjectionSessionProposedPlanDbRowSchema = ProjectionSessionProposedPlan;
+const ProjectionSessionResearchCardDbRowSchema = ProjectionSessionResearchCard.mapFields(
+  Struct.assign({
+    preview: Schema.NullOr(Schema.fromJsonString(Schema.Unknown)),
+    artifacts: Schema.fromJsonString(Schema.Array(ResearchCardArtifactReference)),
+    provenance: Schema.fromJsonString(Schema.Array(ResearchCardProvenance)),
+    review: Schema.NullOr(Schema.fromJsonString(ResearchCardReview)),
+  }),
+);
 const ProjectionSessionDbRowSchema = ProjectionSession.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
@@ -142,6 +155,7 @@ const REQUIRED_SNAPSHOT_PROJECTORS = [
   ORCHESTRATION_PROJECTOR_NAMES.sessions,
   ORCHESTRATION_PROJECTOR_NAMES.sessionMessages,
   ORCHESTRATION_PROJECTOR_NAMES.sessionProposedPlans,
+  ORCHESTRATION_PROJECTOR_NAMES.sessionResearchCards,
   ORCHESTRATION_PROJECTOR_NAMES.sessionActivities,
   ORCHESTRATION_PROJECTOR_NAMES.providerRuntimes,
   ORCHESTRATION_PROJECTOR_NAMES.checkpoints,
@@ -246,6 +260,24 @@ function mapProposedPlanRow(
     planMarkdown: row.planMarkdown,
     implementedAt: row.implementedAt,
     implementationSessionId: row.implementationSessionId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapResearchCardRow(
+  row: Schema.Schema.Type<typeof ProjectionSessionResearchCardDbRowSchema>,
+): OrchestrationResearchCard {
+  return {
+    id: row.cardId,
+    type: row.type,
+    status: row.status,
+    title: row.title,
+    ...(row.preview !== null ? { preview: row.preview } : {}),
+    artifacts: row.artifacts,
+    provenance: row.provenance,
+    ...(row.review !== null ? { review: row.review } : {}),
+    turnId: row.turnId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -437,6 +469,29 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           updated_at AS "updatedAt"
         FROM projection_session_proposed_plans
         ORDER BY session_id ASC, created_at ASC, plan_id ASC
+      `,
+  });
+
+  const listSessionResearchCardRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionSessionResearchCardDbRowSchema,
+    execute: () =>
+      sql`
+        SELECT
+          card_id AS "cardId",
+          session_id AS "sessionId",
+          turn_id AS "turnId",
+          type,
+          status,
+          title,
+          preview_json AS "preview",
+          artifacts_json AS "artifacts",
+          provenance_json AS "provenance",
+          review_json AS "review",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM projection_session_research_cards
+        ORDER BY session_id ASC, created_at ASC, card_id ASC
       `,
   });
 
@@ -802,6 +857,30 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
+  const listSessionResearchCardRowsBySession = SqlSchema.findAll({
+    Request: SessionIdLookupInput,
+    Result: ProjectionSessionResearchCardDbRowSchema,
+    execute: ({ sessionId }) =>
+      sql`
+        SELECT
+          card_id AS "cardId",
+          session_id AS "sessionId",
+          turn_id AS "turnId",
+          type,
+          status,
+          title,
+          preview_json AS "preview",
+          artifacts_json AS "artifacts",
+          provenance_json AS "provenance",
+          review_json AS "review",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM projection_session_research_cards
+        WHERE session_id = ${sessionId}
+        ORDER BY created_at ASC, card_id ASC
+      `,
+  });
+
   const listSessionActivityRowsBySession = SqlSchema.findAll({
     Request: SessionIdLookupInput,
     Result: ProjectionSessionActivityDbRowSchema,
@@ -961,6 +1040,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               ),
             ),
           ),
+          listSessionResearchCardRows(undefined).pipe(
+            Effect.mapError(
+              toPersistenceSqlOrDecodeError(
+                "ProjectionSnapshotQuery.getSnapshot:listSessionResearchCards:query",
+                "ProjectionSnapshotQuery.getSnapshot:listSessionResearchCards:decodeRows",
+              ),
+            ),
+          ),
           listSessionActivityRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
@@ -1010,6 +1097,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             sessionRows,
             messageRows,
             proposedPlanRows,
+            researchCardRows,
             activityRows,
             providerRuntimeRows,
             checkpointRows,
@@ -1019,6 +1107,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             Effect.gen(function* () {
               const messagesBySession = new Map<string, Array<OrchestrationMessage>>();
               const proposedPlansBySession = new Map<string, Array<OrchestrationProposedPlan>>();
+              const researchCardsBySession = new Map<string, Array<OrchestrationResearchCard>>();
               const activitiesBySession = new Map<string, Array<OrchestrationSessionActivity>>();
               const checkpointsBySession = new Map<string, Array<OrchestrationCheckpointSummary>>();
               const sessionsBySession = new Map<string, OrchestrationProviderRuntime>();
@@ -1065,6 +1154,13 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   updatedAt: row.updatedAt,
                 });
                 proposedPlansBySession.set(row.sessionId, sessionProposedPlans);
+              }
+
+              for (const row of researchCardRows) {
+                updatedAt = maxIso(updatedAt, row.updatedAt);
+                const sessionResearchCards = researchCardsBySession.get(row.sessionId) ?? [];
+                sessionResearchCards.push(mapResearchCardRow(row));
+                researchCardsBySession.set(row.sessionId, sessionResearchCards);
               }
 
               for (const row of activityRows) {
@@ -1183,7 +1279,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 deletedAt: row.deletedAt,
                 messages: messagesBySession.get(row.sessionId) ?? [],
                 proposedPlans: proposedPlansBySession.get(row.sessionId) ?? [],
-                researchCards: [],
+                researchCards: researchCardsBySession.get(row.sessionId) ?? [],
                 activities: activitiesBySession.get(row.sessionId) ?? [],
                 checkpoints: checkpointsBySession.get(row.sessionId) ?? [],
                 session: sessionsBySession.get(row.sessionId) ?? null,
@@ -1239,6 +1335,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               ),
             ),
           ),
+          listSessionResearchCardRows(undefined).pipe(
+            Effect.mapError(
+              toPersistenceSqlOrDecodeError(
+                "ProjectionSnapshotQuery.getCommandReadModel:listSessionResearchCards:query",
+                "ProjectionSnapshotQuery.getCommandReadModel:listSessionResearchCards:decodeRows",
+              ),
+            ),
+          ),
           listProviderRuntimeRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
@@ -1271,6 +1375,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             projectRows,
             sessionRows,
             proposedPlanRows,
+            researchCardRows,
             providerRuntimeRows,
             latestTurnRows,
             stateRows,
@@ -1306,6 +1411,13 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               }
               for (let index = 0; index < proposedPlanRows.length; index += 1) {
                 const row = proposedPlanRows[index];
+                if (!row) {
+                  continue;
+                }
+                updatedAt = maxIso(updatedAt, row.updatedAt);
+              }
+              for (let index = 0; index < researchCardRows.length; index += 1) {
+                const row = researchCardRows[index];
                 if (!row) {
                   continue;
                 }
@@ -1348,6 +1460,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 latestTurnBySession.set(row.sessionId, mapLatestTurn(row));
               }
               const proposedPlansBySession = new Map<string, Array<OrchestrationProposedPlan>>();
+              const researchCardsBySession = new Map<string, Array<OrchestrationResearchCard>>();
               const sessionBySession = new Map<string, OrchestrationProviderRuntime>();
 
               for (let index = 0; index < providerRuntimeRows.length; index += 1) {
@@ -1366,6 +1479,16 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 const sessionProposedPlans = proposedPlansBySession.get(row.sessionId) ?? [];
                 sessionProposedPlans.push(mapProposedPlanRow(row));
                 proposedPlansBySession.set(row.sessionId, sessionProposedPlans);
+              }
+
+              for (let index = 0; index < researchCardRows.length; index += 1) {
+                const row = researchCardRows[index];
+                if (!row) {
+                  continue;
+                }
+                const sessionResearchCards = researchCardsBySession.get(row.sessionId) ?? [];
+                sessionResearchCards.push(mapResearchCardRow(row));
+                researchCardsBySession.set(row.sessionId, sessionResearchCards);
               }
 
               for (let index = 0; index < sessionRows.length; index += 1) {
@@ -1389,7 +1512,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   deletedAt: row.deletedAt,
                   messages: [],
                   proposedPlans: proposedPlansBySession.get(row.sessionId) ?? [],
-                  researchCards: [],
+                  researchCards: researchCardsBySession.get(row.sessionId) ?? [],
                   activities: [],
                   checkpoints: [],
                   session: sessionBySession.get(row.sessionId) ?? null,
@@ -1903,6 +2026,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         sessionRow,
         messageRows,
         proposedPlanRows,
+        researchCardRows,
         activityRows,
         checkpointRows,
         latestTurnRow,
@@ -1929,6 +2053,14 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getSessionDetailById:listPlans:query",
               "ProjectionSnapshotQuery.getSessionDetailById:listPlans:decodeRows",
+            ),
+          ),
+        ),
+        listSessionResearchCardRowsBySession({ sessionId }).pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.getSessionDetailById:listResearchCards:query",
+              "ProjectionSnapshotQuery.getSessionDetailById:listResearchCards:decodeRows",
             ),
           ),
         ),
@@ -2000,6 +2132,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           return message;
         }),
         proposedPlans: proposedPlanRows.map(mapProposedPlanRow),
+        researchCards: researchCardRows.map(mapResearchCardRow),
         activities: activityRows.map((row) => {
           const activity = {
             id: row.activityId,

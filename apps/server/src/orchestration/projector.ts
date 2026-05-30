@@ -3,6 +3,7 @@ import {
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
   OrchestrationProviderRuntime,
+  OrchestrationResearchCard,
   OrchestrationSession,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -21,6 +22,9 @@ import {
   SessionInteractionModeSetPayload,
   SessionMetaUpdatedPayload,
   SessionProposedPlanUpsertedPayload,
+  SessionResearchCardProposedPayload,
+  SessionResearchCardReviewedPayload,
+  SessionResearchCardUpdatedPayload,
   SessionRuntimeModeSetPayload,
   SessionUnarchivedPayload,
   SessionRevertedPayload,
@@ -135,6 +139,15 @@ function retainSessionProposedPlansAfterRevert(
 ): ReadonlyArray<OrchestrationSession["proposedPlans"][number]> {
   return proposedPlans.filter(
     (proposedPlan) => proposedPlan.turnId === null || retainedTurnIds.has(proposedPlan.turnId),
+  );
+}
+
+function retainSessionResearchCardsAfterRevert(
+  researchCards: ReadonlyArray<OrchestrationResearchCard>,
+  retainedTurnIds: ReadonlySet<string>,
+): ReadonlyArray<OrchestrationResearchCard> {
+  return researchCards.filter(
+    (researchCard) => researchCard.turnId === null || retainedTurnIds.has(researchCard.turnId),
   );
 }
 
@@ -504,6 +517,104 @@ export function projectEvent(
         };
       });
 
+    case "session.research-card-proposed":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          SessionResearchCardProposedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
+          return nextBase;
+        }
+
+        const researchCards = [
+          ...session.researchCards.filter((entry) => entry.id !== payload.researchCard.id),
+          payload.researchCard,
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+
+        return {
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            researchCards,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "session.research-card-updated":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          SessionResearchCardUpdatedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
+          return nextBase;
+        }
+
+        const researchCards = [
+          ...session.researchCards.filter((entry) => entry.id !== payload.cardId),
+          payload.researchCard,
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+
+        return {
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            researchCards,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "session.research-card-reviewed":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          SessionResearchCardReviewedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
+          return nextBase;
+        }
+
+        const researchCards: OrchestrationResearchCard[] = [];
+        for (const researchCard of session.researchCards) {
+          if (researchCard.id !== payload.cardId || researchCard.review === undefined) {
+            researchCards.push(researchCard);
+            continue;
+          }
+          researchCards.push({
+            ...researchCard,
+            review: {
+              ...researchCard.review,
+              response: payload.response,
+            },
+            updatedAt: payload.response.timestamp,
+          });
+        }
+
+        return {
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            researchCards,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
     case "session.turn-diff-completed":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
@@ -594,6 +705,10 @@ export function projectEvent(
             session.proposedPlans,
             retainedTurnIds,
           ).slice(-200);
+          const researchCards = retainSessionResearchCardsAfterRevert(
+            session.researchCards,
+            retainedTurnIds,
+          );
           const activities = retainSessionActivitiesAfterRevert(
             session.activities,
             retainedTurnIds,
@@ -618,6 +733,7 @@ export function projectEvent(
               checkpoints,
               messages,
               proposedPlans,
+              researchCards,
               activities,
               latestTurn,
               updatedAt: event.occurredAt,
