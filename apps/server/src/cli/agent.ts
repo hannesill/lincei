@@ -12,6 +12,7 @@ import {
   type OrchestrationSession,
 } from "@t3tools/contracts";
 import * as Console from "effect/Console";
+import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -53,6 +54,16 @@ type SnapshotSource = "live" | "offline";
 class AgentCliError extends Data.TaggedError("AgentCliError")<{
   readonly message: string;
 }> {}
+
+const agentCommandUuid = Crypto.Crypto.pipe(
+  Effect.flatMap((crypto) => crypto.randomUUIDv4),
+  Effect.mapError(
+    () =>
+      new AgentCliError({
+        message: "Failed to generate an agent command identifier.",
+      }),
+  ),
+);
 
 const AGENT_CLI_LIVE_SERVER_TIMEOUT = Duration.seconds(1);
 
@@ -304,7 +315,7 @@ const runLiveWrite = Effect.fn("runAgentLiveWrite")(function* (
     dispatch: (
       command: AgentDispatchCommand,
     ) => Effect.Effect<void, AgentCliError, HttpClient.HttpClient>,
-  ) => Effect.Effect<unknown, AgentCliError, HttpClient.HttpClient>,
+  ) => Effect.Effect<unknown, AgentCliError, Crypto.Crypto | HttpClient.HttpClient>,
 ) {
   const logLevel = yield* GlobalFlag.LogLevel;
   const config = yield* resolveCliAuthConfig(flags, logLevel);
@@ -440,7 +451,7 @@ const makeCard = Effect.fn("makeAgentResearchCard")(function* (input: {
   }
   const now = DateTime.formatIso(yield* DateTime.now);
   return {
-    id: ResearchCardId.make(crypto.randomUUID()),
+    id: ResearchCardId.make(yield* agentCommandUuid),
     type: input.type,
     status: input.status ?? "proposed",
     title: trimmedTitle,
@@ -496,7 +507,7 @@ const runWriteCommand = (
     dispatch: (
       command: AgentDispatchCommand,
     ) => Effect.Effect<void, AgentCliError, HttpClient.HttpClient>,
-  ) => Effect.Effect<unknown, AgentCliError, HttpClient.HttpClient>,
+  ) => Effect.Effect<unknown, AgentCliError, Crypto.Crypto | HttpClient.HttpClient>,
 ) =>
   Effect.gen(function* () {
     const output = yield* runLiveWrite(flags, run);
@@ -565,7 +576,7 @@ const cardProposeCommand = Command.make("propose", {
         });
         yield* dispatch({
           type: "session.research-card.propose",
-          commandId: CommandId.make(crypto.randomUUID()),
+          commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           researchCard: card,
           createdAt: DateTime.formatIso(yield* DateTime.now),
@@ -604,7 +615,7 @@ const cardUpdateCommand = Command.make("update", {
         });
         yield* dispatch({
           type: "session.research-card.update",
-          commandId: CommandId.make(crypto.randomUUID()),
+          commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           cardId: flags.cardId,
           researchCard: card,
@@ -644,7 +655,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
         } satisfies OrchestrationResearchCard;
         yield* dispatch({
           type: "session.research-card.update",
-          commandId: CommandId.make(crypto.randomUUID()),
+          commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           cardId: flags.cardId,
           researchCard: card,
@@ -688,7 +699,7 @@ const cardSupersedeCommand = Command.make("supersede", {
         });
         yield* dispatch({
           type: "session.research-card.update",
-          commandId: CommandId.make(crypto.randomUUID()),
+          commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           cardId: flags.oldCardId,
           researchCard: rejectedOldCard,
@@ -696,7 +707,7 @@ const cardSupersedeCommand = Command.make("supersede", {
         });
         yield* dispatch({
           type: "session.research-card.propose",
-          commandId: CommandId.make(crypto.randomUUID()),
+          commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           researchCard: newCard,
           createdAt: DateTime.formatIso(yield* DateTime.now),

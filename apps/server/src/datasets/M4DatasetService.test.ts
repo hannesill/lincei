@@ -2,6 +2,7 @@ import * as NodeOS from "node:os";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, beforeEach, describe, expect, it, vi } from "@effect/vitest";
+import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -192,22 +193,25 @@ describe("M4DatasetService", () => {
       }).pipe(Effect.provide(makeLayer())),
     );
 
-    it.effect("defaults empty workspace settings to the managed datasets directory", () => {
-      const baseDir = `${NodeOS.tmpdir().replace(/[\\/]$/, "")}/t3-m4-managed-datasets-${crypto.randomUUID()}`;
-      return Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const service = yield* M4DatasetService;
+    it.effect("defaults empty workspace settings to the managed datasets directory", () =>
+      Effect.gen(function* () {
+        const crypto = yield* Crypto.Crypto;
+        const baseDir = `${NodeOS.tmpdir().replace(/[\\/]$/, "")}/t3-m4-managed-datasets-${yield* crypto.randomUUIDv4}`;
+        return yield* Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const service = yield* M4DatasetService;
 
-        yield* service.getStatus();
+          yield* service.getStatus();
 
-        const expectedWorkspacePath = path.join(baseDir, "datasets");
-        expect(mockStatus).toHaveBeenCalledWith(
-          expect.objectContaining({ cwd: expectedWorkspacePath }),
-        );
-        expect(yield* fileSystem.exists(expectedWorkspacePath).pipe(Effect.orDie)).toBe(true);
-      }).pipe(Effect.provide(makeLayer({}, baseDir)));
-    });
+          const expectedWorkspacePath = path.join(baseDir, "datasets");
+          expect(mockStatus).toHaveBeenCalledWith(
+            expect.objectContaining({ cwd: expectedWorkspacePath }),
+          );
+          expect(yield* fileSystem.exists(expectedWorkspacePath).pipe(Effect.orDie)).toBe(true);
+        }).pipe(Effect.provide(makeLayer({}, baseDir)));
+      }),
+    );
 
     it.effect(
       "materializes saved PhysioNet credentials and derived tables for local MIMIC-IV",

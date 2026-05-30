@@ -682,12 +682,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.research-card-proposed",
         payload: {
           sessionId: command.sessionId,
@@ -703,12 +703,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.research-card-updated",
         payload: {
           sessionId: command.sessionId,
@@ -725,12 +725,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       return {
-        ...withEventBase({
+        ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
-        }),
+        })),
         type: "session.research-card-reviewed",
         payload: {
           sessionId: command.sessionId,
