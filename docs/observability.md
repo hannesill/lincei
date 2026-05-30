@@ -22,7 +22,7 @@ If you want a log message to show up in the trace file, emit it inside an active
 
 ### Traces
 
-Completed spans are written as NDJSON records to `serverTracePath` (by default, `~/.t3/userdata/logs/server.trace.ndjson`).
+Completed spans are written as NDJSON records to `serverTracePath` (by default, `~/.lincei/userdata/logs/server.trace.ndjson`).
 
 Important fields in each record:
 
@@ -65,7 +65,7 @@ You do not need any extra env vars. Just run the app normally and inspect `serve
 Examples:
 
 ```bash
-npx t3
+npx lincei
 ```
 
 ```bash
@@ -116,7 +116,7 @@ export LINCEI_TRACE_TIMING_ENABLED=true
 CLI:
 
 ```bash
-npx t3
+npx lincei
 ```
 
 Monorepo web/server dev:

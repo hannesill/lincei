@@ -14,7 +14,12 @@ import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
 
-export const cli = Command.make("t3", { ...sharedServerCommandFlags }).pipe(
+const resolveCliName = () => {
+  const executableName = process.argv[1]?.split(/[\\/]/).pop();
+  return executableName === "t3" ? "t3" : "lincei";
+};
+
+export const cli = Command.make(resolveCliName(), { ...sharedServerCommandFlags }).pipe(
   Command.withDescription("Run the Lincei server."),
   Command.withHandler((flags) => runServerCommand(flags)),
   Command.withSubcommands([startCommand, serveCommand, authCommand, projectCommand, cardCommand]),

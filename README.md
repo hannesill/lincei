@@ -17,7 +17,7 @@ Lincei is based on the MIT-licensed T3 Code project.
 ### Run without installing
 
 ```bash
-npx t3
+npx lincei
 ```
 
 ### Desktop app
