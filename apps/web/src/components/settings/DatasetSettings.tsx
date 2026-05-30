@@ -1,16 +1,14 @@
 import {
   AlertCircleIcon,
-  CheckCircle2Icon,
   ChevronDownIcon,
   DatabaseIcon,
   KeyRoundIcon,
   Loader2Icon,
   PlayIcon,
-  RefreshCwIcon,
   Settings2Icon,
   Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DATASET_IDS,
   type DatasetBackendId,
@@ -23,7 +21,6 @@ import {
 
 import { ensureLocalApi } from "../../localApi";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
-import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -155,37 +152,18 @@ function ErrorDetail({ error }: { error: DatasetErrorDetail | null | undefined }
   );
 }
 
-function SummaryItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1 truncate text-sm font-medium text-foreground">{value}</div>
-    </div>
-  );
-}
-
 interface DatasetRowProps {
   readonly datasetId: DatasetId;
   readonly backendId: DatasetBackendId;
   readonly snapshot: DatasetStatusSnapshot | null;
   readonly busy: boolean;
   readonly onInitialize: (datasetId: DatasetId) => void;
-  readonly onSetActive: (datasetId: DatasetId) => void;
 }
 
-function DatasetRow({
-  datasetId,
-  backendId,
-  snapshot,
-  busy,
-  onInitialize,
-  onSetActive,
-}: DatasetRowProps) {
+function DatasetRow({ datasetId, backendId, snapshot, busy, onInitialize }: DatasetRowProps) {
   const readiness = snapshot?.readiness ?? "not_initialized";
   const initializing = readiness === "initializing";
-  const active = snapshot?.active ?? false;
+  const initialized = snapshot?.initialized ?? false;
   const derivedTablesLabel = formatDerivedTables(snapshot);
 
   return (
@@ -197,12 +175,10 @@ function DatasetRow({
               {DATASET_LABELS[datasetId]}
             </h3>
             <Badge variant={readinessVariant(readiness)}>{READINESS_LABELS[readiness]}</Badge>
-            {active ? <Badge variant="secondary">Active</Badge> : null}
           </div>
           <p className="mt-1 text-xs text-muted-foreground/80">{DATASET_DESCRIPTIONS[datasetId]}</p>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>Location: {DATA_LOCATION_LABELS[backendId]}</span>
-            <span>Checked: {formatDateTime(snapshot?.lastCheckedAt)}</span>
             {snapshot?.path ? <span className="truncate">Path: {snapshot.path}</span> : null}
             {snapshot?.tables[0]?.rowCount !== undefined ? (
               <span>{snapshot.tables[0].rowCount.toLocaleString()} rows</span>
@@ -218,28 +194,21 @@ function DatasetRow({
           <ErrorDetail error={snapshot?.error} />
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={busy || initializing}
-            onClick={() => onInitialize(datasetId)}
-          >
-            {initializing ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <PlayIcon className="size-3.5" />
-            )}
-            Initialize
-          </Button>
-          <Button
-            size="xs"
-            variant={active ? "secondary" : "outline"}
-            disabled={busy || initializing || active || readiness !== "ready"}
-            onClick={() => onSetActive(datasetId)}
-          >
-            <CheckCircle2Icon className="size-3.5" />
-            Set active
-          </Button>
+          {!initialized ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={busy || initializing}
+              onClick={() => onInitialize(datasetId)}
+            >
+              {initializing ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <PlayIcon className="size-3.5" />
+              )}
+              Initialize
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -252,6 +221,7 @@ export function DatasetSettingsPanel() {
   const [status, setStatus] = useState<DatasetStatusResult | null>(null);
   const [loadError, setLoadError] = useState<DatasetErrorDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [selectedBackend, setSelectedBackend] = useState<DatasetBackendId>(
     datasetSettings.preferredBackendId,
@@ -270,28 +240,61 @@ export function DatasetSettingsPanel() {
     setM4Command(datasetSettings.m4Command);
   }, [datasetSettings]);
 
-  const refreshStatus = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const nextStatus = await ensureLocalApi().datasets.getStatus();
-      setStatus(nextStatus);
-      setPhysioNetUsername(
-        (current) => current || (nextStatus.credentials.physioNet.username ?? ""),
-      );
-      setBigQueryProjectId(
-        (current) => current || (nextStatus.credentials.bigQuery.projectId ?? ""),
-      );
-      setUseBigQueryAdc(nextStatus.credentials.bigQuery.applicationDefaultCredentials);
-    } catch (error) {
-      setLoadError(formatError(error));
-    } finally {
-      setLoading(false);
+  const refreshStatus = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
     }
+
+    const showLoading = options.showLoading ?? false;
+    const refreshPromise = (async () => {
+      if (showLoading) {
+        setLoading(true);
+      }
+      setLoadError(null);
+      try {
+        const nextStatus = await ensureLocalApi().datasets.getStatus();
+        setStatus(nextStatus);
+        setPhysioNetUsername(
+          (current) => current || (nextStatus.credentials.physioNet.username ?? ""),
+        );
+        setBigQueryProjectId(
+          (current) => current || (nextStatus.credentials.bigQuery.projectId ?? ""),
+        );
+        setUseBigQueryAdc(nextStatus.credentials.bigQuery.applicationDefaultCredentials);
+      } catch (error) {
+        setLoadError(formatError(error));
+      } finally {
+        if (showLoading) {
+          setLoading(false);
+        }
+        refreshInFlightRef.current = null;
+      }
+    })();
+
+    refreshInFlightRef.current = refreshPromise;
+    return refreshPromise;
   }, []);
 
   useEffect(() => {
-    void refreshStatus();
+    void refreshStatus({ showLoading: true });
+
+    const handleRefreshRequest = () => {
+      if (document.visibilityState === "visible") {
+        void refreshStatus();
+      }
+    };
+    const refreshInterval = window.setInterval(() => {
+      void refreshStatus();
+    }, 30_000);
+
+    window.addEventListener("focus", handleRefreshRequest);
+    document.addEventListener("visibilitychange", handleRefreshRequest);
+
+    return () => {
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", handleRefreshRequest);
+      document.removeEventListener("visibilitychange", handleRefreshRequest);
+    };
   }, [refreshStatus]);
 
   const runAction = useCallback(async (key: string, action: () => Promise<void>) => {
@@ -332,51 +335,21 @@ export function DatasetSettingsPanel() {
   const appError = status?.appReadiness.error ?? null;
   const visibleError = loadError ?? runtimeError ?? appError;
   const busy = loading || actionKey !== null;
+  const demoDatasetInitialized = datasetSnapshots.get("mimic-iv-demo")?.initialized ?? false;
 
   return (
     <SettingsPageContainer className="max-w-5xl">
-      <SettingsSection
-        title="Clinical Data Setup"
-        headerAction={
-          <Button size="xs" variant="outline" disabled={busy} onClick={() => void refreshStatus()}>
-            <RefreshCwIcon className={cn("size-3.5", loading && "animate-spin")} />
-            Refresh
-          </Button>
-        }
-      >
+      <SettingsSection title="Clinical Data Setup">
         <div className="space-y-4 p-4 sm:p-5">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryItem
-              label="Active dataset"
-              value={
-                status?.appReadiness.activeDatasetId
-                  ? DATASET_LABELS[status.appReadiness.activeDatasetId]
-                  : "None"
-              }
-            />
-            <SummaryItem
-              label="Data location"
-              value={
-                status?.appReadiness.activeBackendId
-                  ? DATA_LOCATION_LABELS[status.appReadiness.activeBackendId]
-                  : DATA_LOCATION_LABELS[selectedBackend]
-              }
-            />
-            <SummaryItem
-              label="Clinical data"
-              value={status?.appReadiness.clinicalDataReady ? "Ready" : "Not ready"}
-            />
-            <SummaryItem
-              label="Last checked"
-              value={formatDateTime(status?.appReadiness.lastCheckedAt)}
-            />
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            <span className="min-w-0 text-muted-foreground">
+              Data location{" "}
+              <span className="font-medium text-foreground">
+                {DATA_LOCATION_LABELS[selectedBackend]}
+              </span>
+            </span>
           </div>
-          {status ? (
-            <Badge variant={readinessVariant(status.appReadiness.readiness)}>
-              {READINESS_LABELS[status.appReadiness.readiness]}
-            </Badge>
-          ) : null}
-          {!status?.appReadiness.clinicalDataReady ? (
+          {!status?.appReadiness.clinicalDataReady && !demoDatasetInitialized ? (
             <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 space-y-1">
@@ -417,11 +390,7 @@ export function DatasetSettingsPanel() {
                 </p>
               ) : null}
             </div>
-          ) : (
-            <div className="rounded-lg border border-success/20 bg-success/4 p-3 text-xs text-success-foreground">
-              Clinical data is ready for this workspace.
-            </div>
-          )}
+          ) : null}
           <ErrorDetail error={visibleError} />
         </div>
       </SettingsSection>
@@ -580,16 +549,6 @@ export function DatasetSettingsPanel() {
                 await refreshStatus();
               })
             }
-            onSetActive={(nextDatasetId) =>
-              void runAction(`activate-${nextDatasetId}`, async () => {
-                const result = await ensureLocalApi().datasets.setActiveDataset({
-                  datasetId: nextDatasetId,
-                  backendId: selectedBackend,
-                });
-                setStatus(result);
-                await refreshStatus();
-              })
-            }
           />
         ))}
       </SettingsSection>
@@ -602,7 +561,6 @@ export function DatasetSettingsPanel() {
               ? "Local dataset tooling is available."
               : "Local dataset tooling is not available from the configured command."
           }
-          status={`Checked: ${formatDateTime(status?.runtime.checkedAt)}`}
           control={
             <Badge variant={status?.runtime.available ? "success" : "error"}>
               {status?.runtime.available ? "Available" : "Unavailable"}
