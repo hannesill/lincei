@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -26,12 +27,13 @@ import {
   ProcessSpawnError,
   ProcessTimeoutError,
   type ProcessRunError,
+  type ProcessRunInput,
   type ProcessRunOutput,
 } from "../processRunner.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 
 const DEFAULT_M4_COMMAND = "uvx --from m4-infra m4";
-const M4_MINIMUM_VERSION = "0.4.4";
+const M4_MINIMUM_VERSION = "0.5.1";
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const STATUS_TIMEOUT = Duration.seconds(30);
 const COMMAND_TIMEOUT = Duration.minutes(15);
@@ -49,6 +51,7 @@ const M4CommandErrorPayload = Schema.Struct({
   message: Schema.String,
   hint: Schema.optional(Schema.String),
 });
+type M4CommandErrorPayload = typeof M4CommandErrorPayload.Type;
 
 const M4CommandEnvelope = Schema.Struct({
   version: Schema.Number,
@@ -60,13 +63,23 @@ const M4CommandEnvelope = Schema.Struct({
 
 export type M4CommandEnvelope = typeof M4CommandEnvelope.Type;
 
+const M4NdjsonEvent = Schema.Struct({
+  event: Schema.String,
+  result: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.Unknown),
+});
+
 const M4StatusDataset = Schema.Struct({
   name: Schema.String,
   active: Schema.Boolean,
+  raw_present: Schema.optional(Schema.Boolean),
   parquet_present: Schema.Boolean,
   db_present: Schema.Boolean,
-  parquet_root: M4NullableString,
-  db_path: M4NullableString,
+  parquet_root: Schema.optional(M4NullableString),
+  db_path: Schema.optional(M4NullableString),
+  requires_authentication: Schema.optional(Schema.Boolean),
+  download_available: Schema.optional(Schema.Boolean),
+  setup_state: Schema.optional(Schema.String),
   bigquery_available: Schema.Boolean,
   row_count: M4NullableNumber,
   parquet_size_gb: M4NullableNumber,
@@ -92,6 +105,7 @@ type M4StatusDataset = typeof M4StatusDataset.Type;
 
 const decodeM4CommandEnvelope = decodeJsonResult(M4CommandEnvelope);
 const decodeM4StatusSnapshot = decodeJsonResult(M4StatusSnapshot);
+const decodeM4NdjsonEvent = decodeJsonResult(M4NdjsonEvent);
 
 export interface M4CliStatusInput {
   readonly cwd: string;
@@ -106,6 +120,13 @@ export interface M4CliCommandInput {
 
 export interface M4CliInitializeInput extends M4CliCommandInput {
   readonly datasetId: DatasetId;
+  readonly download?: boolean | undefined;
+  readonly physioNetCredentialsFile?: string | undefined;
+}
+
+export interface M4CliInitializeDerivedInput extends M4CliCommandInput {
+  readonly datasetId: DatasetId;
+  readonly force?: boolean | undefined;
 }
 
 export interface M4CliSetActiveDatasetInput extends M4CliCommandInput {
@@ -126,6 +147,9 @@ export interface M4CliShape {
   readonly status: (input: M4CliStatusInput) => Effect.Effect<DatasetStatusResult, DatasetRpcError>;
   readonly initialize: (
     input: M4CliInitializeInput,
+  ) => Effect.Effect<M4CommandEnvelope, DatasetRpcError>;
+  readonly initializeDerived: (
+    input: M4CliInitializeDerivedInput,
   ) => Effect.Effect<M4CommandEnvelope, DatasetRpcError>;
   readonly use: (
     input: M4CliSetActiveDatasetInput,
@@ -319,6 +343,134 @@ function commandErrorFromEnvelope(
   });
 }
 
+function commandErrorPayloadToDatasetError(
+  error: M4CommandErrorPayload,
+  displayCommand: string,
+  exitCode: number | undefined,
+  stderr: string,
+): DatasetRpcError {
+  return commandFailed({
+    detail: error.message,
+    actionableMessage: error.hint ?? error.message,
+    command: displayCommand,
+    exitCode,
+    stderr,
+  });
+}
+
+function decodeUnknownResult<S extends Schema.Codec<unknown, unknown, never, never>>(
+  schema: S,
+  input: unknown,
+) {
+  const decoded = Schema.decodeUnknownExit(schema)(input);
+  if (Exit.isFailure(decoded)) {
+    return Result.fail(decoded.cause);
+  }
+  return Result.succeed(decoded.value);
+}
+
+function decodeNdjsonEnvelope(
+  output: ProcessRunOutput,
+  displayCommand: string,
+): Effect.Effect<M4CommandEnvelope, DatasetRpcError> {
+  return Effect.gen(function* () {
+    const stderr = safeOutput(output.stderr);
+    const truncatedTerminalEventNotRetained = () => {
+      const detail =
+        "M4 NDJSON output was truncated and the retained tail did not include an operation_completed or operation_failed terminal event.";
+      const exitCode = typeof output.code === "number" ? output.code : undefined;
+      if (output.code !== 0) {
+        return commandFailed({
+          detail,
+          command: displayCommand,
+          exitCode,
+          stderr,
+        });
+      }
+      return invalidStatus({
+        detail,
+        command: displayCommand,
+        stderr,
+      });
+    };
+    const events = output.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (events.length === 0) {
+      if (output.stdoutTruncated) {
+        return yield* truncatedTerminalEventNotRetained();
+      }
+      return yield* invalidStatus({
+        detail: "M4 returned an empty NDJSON event stream.",
+        command: displayCommand,
+        stderr,
+      });
+    }
+
+    let lastParseError: string | undefined;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const line = events[index]!;
+      const event = decodeM4NdjsonEvent(line);
+      if (Result.isFailure(event)) {
+        lastParseError = formatSchemaError(event.failure);
+        continue;
+      }
+
+      const eventName = event.success.event;
+      if (eventName === "operation_completed") {
+        const decoded = decodeUnknownResult(M4CommandEnvelope, event.success.result);
+        if (Result.isFailure(decoded)) {
+          return yield* invalidStatus({
+            detail: formatSchemaError(decoded.failure),
+            command: displayCommand,
+            stderr,
+          });
+        }
+        if (decoded.success.ok === false || output.code !== 0) {
+          return yield* commandErrorFromEnvelope(
+            decoded.success,
+            displayCommand,
+            typeof output.code === "number" ? output.code : undefined,
+            stderr,
+          );
+        }
+        return decoded.success;
+      }
+
+      if (eventName === "operation_failed") {
+        const decoded = decodeUnknownResult(M4CommandErrorPayload, event.success.error);
+        if (Result.isFailure(decoded)) {
+          return yield* invalidStatus({
+            detail: formatSchemaError(decoded.failure),
+            command: displayCommand,
+            stderr,
+          });
+        }
+        return yield* commandErrorPayloadToDatasetError(
+          decoded.success,
+          displayCommand,
+          typeof output.code === "number" ? output.code : undefined,
+          stderr,
+        );
+      }
+    }
+
+    if (output.stdoutTruncated) {
+      return yield* truncatedTerminalEventNotRetained();
+    }
+
+    return yield* invalidStatus({
+      detail: lastParseError
+        ? `M4 returned malformed NDJSON: ${lastParseError}`
+        : "M4 NDJSON did not include an operation_completed or operation_failed terminal event.",
+      command: displayCommand,
+      stderr,
+    });
+  });
+}
+
 function readinessForDataset(
   dataset: M4StatusDataset,
   backendId: DatasetBackendId,
@@ -438,6 +590,7 @@ export const makeM4Cli = Effect.gen(function* () {
     readonly env?: NodeJS.ProcessEnv | undefined;
     readonly lifecycleArgs: ReadonlyArray<string>;
     readonly timeout: Duration.Input;
+    readonly outputMode?: ProcessRunInput["outputMode"] | undefined;
   }) =>
     Effect.gen(function* () {
       const settings = yield* serverSettings.getSettings.pipe(Effect.mapError(settingsError));
@@ -452,7 +605,7 @@ export const makeM4Cli = Effect.gen(function* () {
           env: input.env,
           timeout: input.timeout,
           maxOutputBytes: MAX_OUTPUT_BYTES,
-          outputMode: "truncate",
+          outputMode: input.outputMode ?? "truncate",
           truncatedMarker: "\n[truncated]\n",
         })
         .pipe(Effect.mapError((error) => processRunErrorToDatasetError(error, displayCommand)));
@@ -527,7 +680,7 @@ export const makeM4Cli = Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
         env: input.env,
-        lifecycleArgs: ["status", "--all", "--json"],
+        lifecycleArgs: ["status", "--all", "--json", "--no-interactive"],
         timeout: STATUS_TIMEOUT,
       });
       yield* assertProcessAvailable(output, displayCommand);
@@ -582,15 +735,54 @@ export const makeM4Cli = Effect.gen(function* () {
       });
     });
 
-  const initialize: M4CliShape["initialize"] = (input) =>
+  const runLongNdjsonCommand = (input: {
+    readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv | undefined;
+    readonly lifecycleArgs: ReadonlyArray<string>;
+  }) =>
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
         env: input.env,
-        lifecycleArgs: ["init", input.datasetId, "--json"],
+        lifecycleArgs: input.lifecycleArgs,
         timeout: COMMAND_TIMEOUT,
+        outputMode: "tail",
       });
-      return yield* decodeEnvelope(output, displayCommand);
+      yield* assertProcessAvailable(output, displayCommand);
+      return yield* decodeNdjsonEnvelope(output, displayCommand);
+    });
+
+  const initialize: M4CliShape["initialize"] = (input) =>
+    runLongNdjsonCommand({
+      cwd: input.cwd,
+      env: input.env,
+      lifecycleArgs: [
+        "init",
+        input.datasetId,
+        "--json",
+        "--events",
+        "ndjson",
+        "--no-interactive",
+        ...(input.download ? ["--download"] : []),
+        ...(input.physioNetCredentialsFile
+          ? ["--physionet-credentials-file", input.physioNetCredentialsFile]
+          : []),
+      ],
+    });
+
+  const initializeDerived: M4CliShape["initializeDerived"] = (input) =>
+    runLongNdjsonCommand({
+      cwd: input.cwd,
+      env: input.env,
+      lifecycleArgs: [
+        "init-derived",
+        input.datasetId,
+        "--json",
+        "--events",
+        "ndjson",
+        "--no-interactive",
+        ...(input.force ? ["--force"] : []),
+      ],
     });
 
   const use: M4CliShape["use"] = (input) =>
@@ -625,6 +817,7 @@ export const makeM4Cli = Effect.gen(function* () {
     resolveCommand,
     status,
     initialize,
+    initializeDerived,
     use,
     backend,
   });

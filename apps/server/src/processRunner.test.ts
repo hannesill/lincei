@@ -180,6 +180,25 @@ describe("runProcess", () => {
     }),
   );
 
+  it.effect("retains output tail when outputMode is tail", () =>
+    Effect.gen(function* () {
+      const spawner = makeSpawner(() =>
+        Effect.succeed(makeHandle({ stdout: "prefix-terminal-event" })),
+      );
+
+      const result = yield* runWith(spawner)({
+        command: "fake",
+        args: ["stdout-tail"],
+        maxOutputBytes: 14,
+        outputMode: "tail",
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toBe("terminal-event");
+      expect(result.stdoutTruncated).toBe(true);
+    }),
+  );
+
   it.effect("writes stdin before waiting for exit", () =>
     Effect.gen(function* () {
       const stdinWritten = yield* Deferred.make<void>();

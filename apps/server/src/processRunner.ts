@@ -22,7 +22,7 @@ export interface ProcessRunInput {
   readonly env?: NodeJS.ProcessEnv | undefined;
   readonly stdin?: string | undefined;
   readonly maxOutputBytes?: number | undefined;
-  readonly outputMode?: "error" | "truncate" | undefined;
+  readonly outputMode?: "error" | "truncate" | "tail" | undefined;
   readonly truncatedMarker?: string | undefined;
   readonly shell?: boolean | string | undefined;
   /**
@@ -122,7 +122,7 @@ const collectText = Effect.fn("processRunner.collectText")(function* (input: {
   readonly streamName: "stdout" | "stderr";
   readonly stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
   readonly maxOutputBytes: number;
-  readonly outputMode: "error" | "truncate";
+  readonly outputMode: "error" | "truncate" | "tail";
   readonly truncatedMarker: string;
 }) {
   const stream = input.stream.pipe(
@@ -138,11 +138,12 @@ const collectText = Effect.fn("processRunner.collectText")(function* (input: {
     ),
   );
 
-  if (input.outputMode === "truncate") {
+  if (input.outputMode === "truncate" || input.outputMode === "tail") {
     return yield* collectUint8StreamText({
       stream,
       maxBytes: input.maxOutputBytes,
       truncatedMarker: input.truncatedMarker,
+      retention: input.outputMode === "tail" ? "tail" : "head",
     });
   }
 
