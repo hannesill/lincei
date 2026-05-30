@@ -198,6 +198,119 @@ describe("M4Cli", () => {
     }).pipe(Effect.provide(makeLayer())),
   );
 
+  it.effect("maps M4 derived table readiness into dataset snapshots", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              version: 1,
+              active_dataset: "mimic-iv",
+              backend: "duckdb",
+              bigquery_project_id: null,
+              datasets: [
+                {
+                  name: "mimic-iv",
+                  active: true,
+                  raw_present: true,
+                  parquet_present: true,
+                  db_present: true,
+                  requires_authentication: true,
+                  download_available: true,
+                  setup_state: "ready",
+                  bigquery_available: false,
+                  row_count: 1000,
+                  parquet_size_gb: 1.25,
+                  derived: {
+                    supported: true,
+                    total: 20,
+                    materialized: 12,
+                    bigquery: false,
+                  },
+                  warnings: [],
+                },
+              ],
+            }),
+          ),
+        ),
+      );
+
+      const m4 = yield* M4Cli;
+      const status = yield* m4.status({
+        cwd: "/repo",
+        credentials: {
+          ...emptyCredentials,
+          physioNet: { stored: true, username: "researcher" },
+        },
+      });
+
+      expect(status.datasets[0]?.derivedTables).toEqual({
+        supported: true,
+        ready: false,
+        total: 20,
+        materialized: 12,
+        backendAvailable: false,
+      });
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("maps failed M4 setup states to failed dataset readiness with warning detail", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              version: 1,
+              active_dataset: "mimic-iv",
+              backend: "duckdb",
+              bigquery_project_id: null,
+              datasets: [
+                {
+                  name: "mimic-iv",
+                  active: true,
+                  raw_present: false,
+                  parquet_present: false,
+                  db_present: false,
+                  requires_authentication: true,
+                  download_available: true,
+                  setup_state: "download_failed",
+                  bigquery_available: false,
+                  row_count: null,
+                  parquet_size_gb: null,
+                  derived: {
+                    supported: true,
+                    total: 20,
+                    materialized: 0,
+                    bigquery: false,
+                  },
+                  warnings: ["PhysioNet credentials were rejected."],
+                },
+              ],
+            }),
+          ),
+        ),
+      );
+
+      const m4 = yield* M4Cli;
+      const status = yield* m4.status({ cwd: "/repo", credentials: emptyCredentials });
+      const dataset = status.datasets[0]!;
+
+      expect(dataset.readiness).toBe("failed");
+      expect(dataset.error).toEqual(
+        expect.objectContaining({
+          code: "dataset_initialization_failed",
+          detail: expect.stringContaining("setup_state=download_failed"),
+        }),
+      );
+      expect(dataset.error?.detail).toContain("PhysioNet credentials were rejected.");
+      expect(status.appReadiness.readiness).toBe("failed");
+      expect(status.appReadiness.clinicalDataReady).toBe(false);
+      expect(status.appReadiness.error).toEqual(dataset.error);
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
   it.effect("splits configured commands and appends lifecycle arguments", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(Effect.succeed(processOutput(commandJson)));

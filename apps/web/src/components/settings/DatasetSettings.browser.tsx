@@ -197,6 +197,78 @@ describe("DatasetSettingsPanel", () => {
     await expect.element(page.getByText("100 rows")).toBeInTheDocument();
   });
 
+  it("renders derived table readiness only for supported datasets", async () => {
+    const status = createDatasetStatus();
+    installDatasetApi({
+      getStatus: vi.fn().mockResolvedValue({
+        ...status,
+        datasets: status.datasets.map((dataset) =>
+          dataset.datasetId === "mimic-iv"
+            ? Object.assign({}, dataset, {
+                readiness: "ready" as const,
+                initialized: true,
+                derivedTables: {
+                  supported: true,
+                  ready: false,
+                  total: 20,
+                  materialized: 12,
+                  backendAvailable: false,
+                },
+              })
+            : dataset,
+        ),
+      }),
+    });
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <DatasetSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect.element(page.getByText("Derived tables: 12/20 materialized")).toBeInTheDocument();
+    await expect.element(page.getByText("Derived tables ready")).not.toBeInTheDocument();
+  });
+
+  it("renders failed dataset readiness and error detail", async () => {
+    const status = createDatasetStatus();
+    installDatasetApi({
+      getStatus: vi.fn().mockResolvedValue({
+        ...status,
+        datasets: status.datasets.map((dataset) =>
+          dataset.datasetId === "mimic-iv"
+            ? Object.assign({}, dataset, {
+                readiness: "failed" as const,
+                error: {
+                  code: "dataset_initialization_failed" as const,
+                  detail:
+                    "M4 reported setup_state=download_failed for mimic-iv. Warnings: PhysioNet credentials were rejected.",
+                  actionableMessage:
+                    "Review the M4 dataset setup failure, fix the underlying issue, then initialize the dataset again.",
+                },
+              })
+            : dataset,
+        ),
+      }),
+    });
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <DatasetSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect.element(page.getByText("Failed").first()).toBeInTheDocument();
+    await expect
+      .element(
+        page.getByText(
+          "Review the M4 dataset setup failure, fix the underlying issue, then initialize the dataset again.",
+        ),
+      )
+      .toBeInTheDocument();
+    await expect.element(page.getByText(/setup_state=download_failed/)).toBeInTheDocument();
+  });
+
   it("clears secret fields after credential save", async () => {
     const storedStatus = createDatasetStatus({
       credentials: {
