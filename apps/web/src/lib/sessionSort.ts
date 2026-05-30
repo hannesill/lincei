@@ -13,6 +13,17 @@ export function toSortableTimestamp(iso: string | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function getFirstSortableTimestamp(...values: Array<string | null | undefined>): number | null {
+  for (const value of values) {
+    const timestamp = toSortableTimestamp(value ?? undefined);
+    if (timestamp !== null) {
+      return timestamp;
+    }
+  }
+
+  return null;
+}
+
 function getLatestUserMessageTimestamp(session: SessionSortInput): number {
   if (session.latestUserMessageAt) {
     return toSortableTimestamp(session.latestUserMessageAt) ?? Number.NEGATIVE_INFINITY;
@@ -34,7 +45,9 @@ function getLatestUserMessageTimestamp(session: SessionSortInput): number {
     return latestUserMessageTimestamp;
   }
 
-  return toSortableTimestamp(session.updatedAt ?? session.createdAt) ?? Number.NEGATIVE_INFINITY;
+  return (
+    getFirstSortableTimestamp(session.updatedAt, session.createdAt) ?? Number.NEGATIVE_INFINITY
+  );
 }
 
 export function getSessionSortTimestamp(
@@ -42,7 +55,9 @@ export function getSessionSortTimestamp(
   sortOrder: SidebarSessionSortOrder | Exclude<SidebarProjectSortOrder, "manual">,
 ): number {
   if (sortOrder === "created_at") {
-    return toSortableTimestamp(session.createdAt) ?? Number.NEGATIVE_INFINITY;
+    return (
+      getFirstSortableTimestamp(session.createdAt, session.updatedAt) ?? Number.NEGATIVE_INFINITY
+    );
   }
   return getLatestUserMessageTimestamp(session);
 }
