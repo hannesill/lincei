@@ -114,6 +114,31 @@ describe("sortSessions", () => {
     ]);
   });
 
+  it("falls back to createdAt when updatedAt is invalid", () => {
+    const sorted = sortSessions(
+      [
+        makeSession({
+          id: SessionId.make("session-1"),
+          createdAt: "2026-03-09T10:00:00.000Z",
+          updatedAt: "invalid-date" as never,
+          messages: [],
+        }),
+        makeSession({
+          id: SessionId.make("session-2"),
+          createdAt: "2026-03-09T09:00:00.000Z",
+          updatedAt: "2026-03-09T09:30:00.000Z",
+          messages: [],
+        }),
+      ],
+      "updated_at",
+    );
+
+    expect(sorted.map((session) => session.id)).toEqual([
+      SessionId.make("session-1"),
+      SessionId.make("session-2"),
+    ]);
+  });
+
   it("falls back to id ordering when sessions have no sortable timestamps", () => {
     const sorted = sortSessions(
       [
@@ -145,6 +170,29 @@ describe("sortSessions", () => {
         makeSession({
           id: SessionId.make("session-1"),
           createdAt: "2026-03-09T10:05:00.000Z",
+          updatedAt: "2026-03-09T10:05:00.000Z",
+        }),
+        makeSession({
+          id: SessionId.make("session-2"),
+          createdAt: "2026-03-09T10:00:00.000Z",
+          updatedAt: "2026-03-09T10:10:00.000Z",
+        }),
+      ],
+      "created_at",
+    );
+
+    expect(sorted.map((session) => session.id)).toEqual([
+      SessionId.make("session-1"),
+      SessionId.make("session-2"),
+    ]);
+  });
+
+  it("uses updatedAt as a fallback for created_at sorting when createdAt is invalid", () => {
+    const sorted = sortSessions(
+      [
+        makeSession({
+          id: SessionId.make("session-1"),
+          createdAt: "invalid-date" as never,
           updatedAt: "2026-03-09T10:05:00.000Z",
         }),
         makeSession({
