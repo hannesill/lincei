@@ -113,6 +113,23 @@ function readinessVariant(readiness: DatasetReadinessState) {
   }
 }
 
+function formatDerivedTables(snapshot: DatasetStatusSnapshot | null): string | null {
+  const derivedTables = snapshot?.derivedTables;
+  if (derivedTables?.supported !== true) {
+    return null;
+  }
+  if (derivedTables.ready) {
+    return "Derived tables ready";
+  }
+  if (derivedTables.total !== undefined && derivedTables.materialized !== undefined) {
+    return `Derived tables: ${derivedTables.materialized.toLocaleString()}/${derivedTables.total.toLocaleString()} materialized`;
+  }
+  if (derivedTables.materialized !== undefined) {
+    return `Derived tables: ${derivedTables.materialized.toLocaleString()} materialized`;
+  }
+  return "Derived tables not ready";
+}
+
 function ErrorDetail({ error }: { error: DatasetErrorDetail | null | undefined }) {
   if (!error) return null;
   return (
@@ -169,6 +186,7 @@ function DatasetRow({
   const readiness = snapshot?.readiness ?? "not_initialized";
   const initializing = readiness === "initializing";
   const active = snapshot?.active ?? false;
+  const derivedTablesLabel = formatDerivedTables(snapshot);
 
   return (
     <div className="border-t border-border/60 px-4 py-3 first:border-t-0 sm:px-5">
@@ -189,6 +207,7 @@ function DatasetRow({
             {snapshot?.tables[0]?.rowCount !== undefined ? (
               <span>{snapshot.tables[0].rowCount.toLocaleString()} rows</span>
             ) : null}
+            {derivedTablesLabel ? <span>{derivedTablesLabel}</span> : null}
           </div>
           {snapshot?.operation ? (
             <div className="mt-2 inline-flex items-center gap-2 text-xs text-info-foreground">

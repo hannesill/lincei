@@ -8,6 +8,7 @@ import {
   DatasetSaveBigQueryCredentialsInput,
   DatasetSavePhysioNetCredentialsInput,
   DatasetSettings,
+  DatasetStatusSnapshot,
   DatasetStatusResult,
 } from "./datasets.ts";
 
@@ -19,6 +20,7 @@ const decodeBigQueryCredentialsInput = Schema.decodeUnknownSync(
   DatasetSaveBigQueryCredentialsInput,
 );
 const decodeSettings = Schema.decodeUnknownSync(DatasetSettings);
+const decodeSnapshot = Schema.decodeUnknownSync(DatasetStatusSnapshot);
 const decodeStatus = Schema.decodeUnknownSync(DatasetStatusResult);
 const decodeInitializeInput = Schema.decodeUnknownSync(DatasetInitializeInput);
 const decodeClearCredentialsInput = Schema.decodeUnknownSync(DatasetClearCredentialsInput);
@@ -110,6 +112,47 @@ describe("dataset status contracts", () => {
     });
 
     expect(status.datasets[0]?.tables).toEqual([]);
+  });
+
+  it("decodes optional derived table readiness when present", () => {
+    const snapshot = decodeSnapshot({
+      datasetId: "mimic-iv",
+      backendId: "duckdb",
+      readiness: "ready",
+      initialized: true,
+      active: true,
+      lastCheckedAt: "2026-05-27T10:00:00.000Z",
+      derivedTables: {
+        supported: true,
+        ready: false,
+        total: 20,
+        materialized: 12,
+        backendAvailable: false,
+      },
+    });
+
+    expect(snapshot.derivedTables).toEqual({
+      supported: true,
+      ready: false,
+      total: 20,
+      materialized: 12,
+      backendAvailable: false,
+    });
+    expect(snapshot.tables).toEqual([]);
+  });
+
+  it("preserves backwards compatibility when derived table readiness is absent", () => {
+    const snapshot = decodeSnapshot({
+      datasetId: "mimic-iv-demo",
+      backendId: "duckdb",
+      readiness: "ready",
+      initialized: true,
+      active: true,
+      lastCheckedAt: "2026-05-27T10:00:00.000Z",
+    });
+
+    expect(snapshot.derivedTables).toBeUndefined();
+    expect(snapshot.tables).toEqual([]);
   });
 
   it("rejects unsupported dataset and credential ids", () => {

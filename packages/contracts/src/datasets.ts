@@ -117,6 +117,15 @@ export const DatasetTableReadiness = Schema.Struct({
 });
 export type DatasetTableReadiness = typeof DatasetTableReadiness.Type;
 
+export const DatasetDerivedTableReadiness = Schema.Struct({
+  supported: Schema.Boolean,
+  ready: Schema.Boolean,
+  total: Schema.optional(NonNegativeInt),
+  materialized: Schema.optional(NonNegativeInt),
+  backendAvailable: Schema.optional(Schema.Boolean),
+});
+export type DatasetDerivedTableReadiness = typeof DatasetDerivedTableReadiness.Type;
+
 export const DatasetStatusSnapshot = Schema.Struct({
   datasetId: DatasetId,
   backendId: DatasetBackendId,
@@ -125,6 +134,7 @@ export const DatasetStatusSnapshot = Schema.Struct({
   active: Schema.Boolean,
   path: Schema.optional(TrimmedNonEmptyString),
   tables: Schema.Array(DatasetTableReadiness).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  derivedTables: Schema.optional(DatasetDerivedTableReadiness),
   lastCheckedAt: IsoDateTime,
   operation: Schema.optional(DatasetInitOperationState),
   error: Schema.optional(DatasetErrorDetail),

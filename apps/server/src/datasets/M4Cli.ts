@@ -13,6 +13,7 @@ import {
   ServerSettingsError,
   type DatasetBackendId,
   type DatasetCredentialPresence,
+  type DatasetErrorDetail,
   type DatasetId,
   type DatasetReadinessState,
   type DatasetStatusResult,
@@ -476,6 +477,10 @@ function readinessForDataset(
   backendId: DatasetBackendId,
   credentials: DatasetCredentialPresence,
 ): DatasetReadinessState {
+  if (isFailedSetupState(dataset.setup_state)) {
+    return "failed";
+  }
+
   if (backendId === "bigquery") {
     if (!credentials.bigQuery.stored) {
       return "missing_credentials";
@@ -495,6 +500,52 @@ function readinessForDataset(
   return "not_initialized";
 }
 
+function isFailedSetupState(setupState: string | undefined): boolean {
+  return setupState !== undefined && /failed|failure|error|invalid/i.test(setupState);
+}
+
+function nonNegativeInteger(value: number | null): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function mapDerivedTables(
+  dataset: M4StatusDataset,
+  backendId: DatasetBackendId,
+): DatasetStatusSnapshot["derivedTables"] {
+  if (!dataset.derived.supported) {
+    return undefined;
+  }
+
+  const total = nonNegativeInteger(dataset.derived.total);
+  const materialized = nonNegativeInteger(dataset.derived.materialized);
+  const ready =
+    backendId === "bigquery"
+      ? dataset.derived.bigquery
+      : total !== undefined && materialized !== undefined && materialized >= total;
+
+  return {
+    supported: true,
+    ready,
+    ...(total !== undefined ? { total } : {}),
+    ...(materialized !== undefined ? { materialized } : {}),
+    backendAvailable: dataset.derived.bigquery,
+  };
+}
+
+function failedSetupError(dataset: M4StatusDataset): DatasetErrorDetail | undefined {
+  if (!isFailedSetupState(dataset.setup_state)) {
+    return undefined;
+  }
+
+  const warnings = dataset.warnings.length > 0 ? ` Warnings: ${dataset.warnings.join("; ")}` : "";
+  return {
+    code: "dataset_initialization_failed",
+    detail: `M4 reported setup_state=${dataset.setup_state} for ${dataset.name}.${warnings}`,
+    actionableMessage:
+      "Review the M4 dataset setup failure, fix the underlying issue, then initialize the dataset again.",
+  };
+}
+
 function mapM4Dataset(
   dataset: M4StatusDataset,
   backendId: DatasetBackendId,
@@ -507,6 +558,8 @@ function mapM4Dataset(
   const datasetId = dataset.name as DatasetId;
   const readiness = readinessForDataset(dataset, backendId, credentials);
   const rowCount = dataset.row_count;
+  const derivedTables = mapDerivedTables(dataset, backendId);
+  const error = failedSetupError(dataset);
 
   return {
     datasetId,
@@ -527,7 +580,9 @@ function mapM4Dataset(
             },
           ]
         : [],
+    ...(derivedTables ? { derivedTables } : {}),
     lastCheckedAt: checkedAt,
+    ...(error ? { error } : {}),
   };
 }
 
@@ -568,6 +623,7 @@ function mapStatusSnapshot(input: {
       clinicalDataReady: readiness === "ready",
       readiness,
       lastCheckedAt: checkedAt,
+      ...(activeDataset?.error ? { error: activeDataset.error } : {}),
     },
   };
 }
