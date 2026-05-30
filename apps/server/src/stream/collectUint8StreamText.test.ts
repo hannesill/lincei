@@ -36,4 +36,20 @@ describe("collectUint8StreamText", () => {
       });
     }),
   );
+
+  it.effect("retains the tail of a stream when requested", () =>
+    Effect.gen(function* () {
+      const result = yield* collectUint8StreamText({
+        stream: Stream.make(encoder.encode("abcdef"), encoder.encode("ghij")),
+        maxBytes: 5,
+        retention: "tail",
+      });
+
+      assert.deepStrictEqual(result, {
+        text: "fghij",
+        bytes: 5,
+        truncated: true,
+      });
+    }),
+  );
 });

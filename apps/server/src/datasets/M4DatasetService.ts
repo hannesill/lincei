@@ -30,6 +30,7 @@ import { M4Cli } from "./M4Cli.ts";
 
 const PHYSIONET_SECRET = "datasets-physionet-credentials";
 const BIGQUERY_SECRET = "datasets-bigquery-credentials";
+const DERIVED_TABLE_DATASETS = new Set<DatasetId>(["mimic-iv"]);
 
 const PhysioNetSecret = Schema.Struct({
   username: Schema.String,
@@ -118,6 +119,14 @@ function missingBigQueryCredentials(): DatasetRpcError {
   });
 }
 
+function missingPhysioNetCredentials(datasetId: DatasetId): DatasetRpcError {
+  return new DatasetRpcError({
+    code: "missing_credentials",
+    detail: `PhysioNet credentials must be saved before downloading ${datasetId}.`,
+    actionableMessage: "Save PhysioNet credentials before initializing this dataset locally.",
+  });
+}
+
 function invalidBigQueryCredentials(detail: string): DatasetRpcError {
   return new DatasetRpcError({
     code: "invalid_credentials",
@@ -127,12 +136,21 @@ function invalidBigQueryCredentials(detail: string): DatasetRpcError {
   });
 }
 
-function credentialFileError(error: unknown): DatasetRpcError {
+function bigQueryCredentialFileError(error: unknown): DatasetRpcError {
   const detail = error instanceof Error ? error.message : String(error);
   return new DatasetRpcError({
     code: "secret_store_error",
     detail,
     actionableMessage: "Lincei could not prepare BigQuery credentials for M4.",
+  });
+}
+
+function physioNetCredentialFileError(error: unknown): DatasetRpcError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new DatasetRpcError({
+    code: "secret_store_error",
+    detail,
+    actionableMessage: "Lincei could not prepare PhysioNet credentials for M4.",
   });
 }
 
@@ -396,9 +414,39 @@ export const makeM4DatasetService = Effect.gen(function* () {
             Effect.tap((filePath) =>
               fileSystem.writeFileString(filePath, secret.serviceAccountJson!),
             ),
-            Effect.mapError(credentialFileError),
+            Effect.mapError(bigQueryCredentialFileError),
           );
         return yield* effect({ GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath });
+      }),
+    );
+
+  const withPhysioNetCredentialsFile = <A>(
+    secret: PhysioNetSecret | null,
+    effect: (credentialsFilePath: string | undefined) => Effect.Effect<A, DatasetRpcError>,
+  ): Effect.Effect<A, DatasetRpcError> =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        if (!secret) {
+          return yield* effect(undefined);
+        }
+        const credentialsFilePath = yield* fileSystem
+          .makeTempFileScoped({
+            prefix: `lincei-physionet-${process.pid}-`,
+            suffix: ".json",
+          })
+          .pipe(
+            Effect.tap((filePath) =>
+              fileSystem.writeFileString(
+                filePath,
+                JSON.stringify({
+                  username: secret.username,
+                  password: secret.password,
+                }),
+              ),
+            ),
+            Effect.mapError(physioNetCredentialFileError),
+          );
+        return yield* effect(credentialsFilePath);
       }),
     );
 
@@ -437,7 +485,26 @@ export const makeM4DatasetService = Effect.gen(function* () {
               }),
             );
           } else {
-            yield* m4Cli.initialize({ cwd, datasetId: input.datasetId });
+            const physioNetSecret = yield* readPhysioNetSecret;
+            if (input.datasetId !== "mimic-iv-demo" && physioNetSecret === null) {
+              return yield* missingPhysioNetCredentials(input.datasetId);
+            }
+            yield* withPhysioNetCredentialsFile(physioNetSecret, (physioNetCredentialsFile) =>
+              Effect.gen(function* () {
+                yield* m4Cli.initialize({
+                  cwd,
+                  datasetId: input.datasetId,
+                  download: input.datasetId !== "mimic-iv-demo",
+                  physioNetCredentialsFile,
+                });
+                if (DERIVED_TABLE_DATASETS.has(input.datasetId)) {
+                  yield* m4Cli.initializeDerived({
+                    cwd,
+                    datasetId: input.datasetId,
+                  });
+                }
+              }),
+            );
           }
 
           yield* persistDatasetSelection({ datasetId: input.datasetId, backendId });

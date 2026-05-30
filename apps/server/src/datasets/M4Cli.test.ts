@@ -20,12 +20,12 @@ const emptyCredentials: DatasetCredentialPresence = {
   },
 };
 
-const processOutput = (stdout: string, code = 0, stderr = "") => ({
+const processOutput = (stdout: string, code = 0, stderr = "", stdoutTruncated = false) => ({
   stdout,
   stderr,
   code: ChildProcessSpawner.ExitCode(code),
   timedOut: false,
-  stdoutTruncated: false,
+  stdoutTruncated,
   stderrTruncated: false,
 });
 
@@ -38,10 +38,12 @@ const statusJson = JSON.stringify({
     {
       name: "mimic-iv-demo",
       active: true,
+      raw_present: true,
       parquet_present: true,
       db_present: true,
-      parquet_root: "/repo/m4_data/parquet/mimic-iv-demo",
-      db_path: "/repo/m4_data/duckdb/mimic-iv-demo.duckdb",
+      requires_authentication: false,
+      download_available: true,
+      setup_state: "ready",
       bigquery_available: false,
       row_count: 100,
       parquet_size_gb: 0.01,
@@ -64,6 +66,81 @@ const commandJson = JSON.stringify({
   backend: "duckdb",
   warnings: [],
 });
+
+const initNdjson = [
+  JSON.stringify({
+    version: 1,
+    sequence: 1,
+    time: 1,
+    event: "operation_started",
+    command: "init",
+    dataset: "mimic-iv",
+    download: true,
+    no_interactive: true,
+  }),
+  JSON.stringify({
+    version: 1,
+    sequence: 2,
+    time: 2,
+    event: "operation_completed",
+    command: "init",
+    result: {
+      version: 1,
+      ok: true,
+      command: "init",
+      dataset: "mimic-iv",
+      warnings: [],
+    },
+  }),
+].join("\n");
+
+const initDerivedNdjson = [
+  JSON.stringify({
+    version: 1,
+    sequence: 1,
+    time: 1,
+    event: "operation_started",
+    command: "init-derived",
+    dataset: "mimic-iv",
+  }),
+  JSON.stringify({
+    version: 1,
+    sequence: 2,
+    time: 2,
+    event: "operation_completed",
+    command: "init-derived",
+    result: {
+      version: 1,
+      ok: true,
+      command: "init-derived",
+      dataset: "mimic-iv",
+      warnings: [],
+    },
+  }),
+].join("\n");
+
+const failedNdjson = [
+  JSON.stringify({
+    version: 1,
+    sequence: 1,
+    time: 1,
+    event: "operation_started",
+    command: "init",
+    dataset: "mimic-iv",
+  }),
+  JSON.stringify({
+    version: 1,
+    sequence: 2,
+    time: 2,
+    event: "operation_failed",
+    command: "init",
+    error: {
+      code: "download_failed",
+      message: "PhysioNet download failed.",
+      hint: "Check PhysioNet credentials.",
+    },
+  }),
+].join("\n");
 
 const mockRun = vi.fn<ProcessRunnerShape["run"]>();
 
@@ -107,7 +184,6 @@ describe("M4Cli", () => {
         readiness: "ready",
         initialized: true,
         active: true,
-        path: "/repo/m4_data/duckdb/mimic-iv-demo.duckdb",
         tables: [{ name: "primary", ready: true, rowCount: 100 }],
         lastCheckedAt: dataset.lastCheckedAt,
       });
@@ -115,7 +191,7 @@ describe("M4Cli", () => {
       expect(mockRun).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "uvx",
-          args: ["--from", "m4-infra", "m4", "status", "--all", "--json"],
+          args: ["--from", "m4-infra", "m4", "status", "--all", "--json", "--no-interactive"],
           cwd: "/repo",
         }),
       );
@@ -143,17 +219,51 @@ describe("M4Cli", () => {
     }).pipe(Effect.provide(makeLayer("uv run m4"))),
   );
 
-  it.effect("builds init, use, and backend JSON commands", () =>
+  it.effect("builds init, init-derived, use, and backend JSON commands", () =>
     Effect.gen(function* () {
-      mockRun.mockReturnValue(Effect.succeed(processOutput(commandJson)));
+      mockRun
+        .mockReturnValueOnce(Effect.succeed(processOutput(initNdjson)))
+        .mockReturnValueOnce(Effect.succeed(processOutput(initDerivedNdjson)))
+        .mockReturnValueOnce(Effect.succeed(processOutput(commandJson)))
+        .mockReturnValueOnce(Effect.succeed(processOutput(commandJson)));
 
       const m4 = yield* M4Cli;
-      yield* m4.initialize({ cwd: "/repo", datasetId: "mimic-iv-demo" });
+      yield* m4.initialize({
+        cwd: "/repo",
+        datasetId: "mimic-iv",
+        download: true,
+        physioNetCredentialsFile: "/tmp/physionet.json",
+      });
+      yield* m4.initializeDerived({ cwd: "/repo", datasetId: "mimic-iv" });
       yield* m4.use({ cwd: "/repo", datasetId: "mimic-iv-demo" });
       yield* m4.backend({ cwd: "/repo", backendId: "bigquery", projectId: "clinical-project" });
 
       expect(mockRun.mock.calls.map(([input]) => input.args)).toEqual([
-        ["--from", "m4-infra", "m4", "init", "mimic-iv-demo", "--json"],
+        [
+          "--from",
+          "m4-infra",
+          "m4",
+          "init",
+          "mimic-iv",
+          "--json",
+          "--events",
+          "ndjson",
+          "--no-interactive",
+          "--download",
+          "--physionet-credentials-file",
+          "/tmp/physionet.json",
+        ],
+        [
+          "--from",
+          "m4-infra",
+          "m4",
+          "init-derived",
+          "mimic-iv",
+          "--json",
+          "--events",
+          "ndjson",
+          "--no-interactive",
+        ],
         ["--from", "m4-infra", "m4", "use", "mimic-iv-demo", "--json"],
         [
           "--from",
@@ -165,6 +275,38 @@ describe("M4Cli", () => {
           "clinical-project",
           "--json",
         ],
+      ]);
+      expect(mockRun.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          outputMode: "tail",
+        }),
+      );
+      expect(mockRun.mock.calls[1]?.[0]).toEqual(
+        expect.objectContaining({
+          outputMode: "tail",
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("passes --force only when init-derived explicitly requests it", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(initDerivedNdjson)));
+
+      const m4 = yield* M4Cli;
+      yield* m4.initializeDerived({ cwd: "/repo", datasetId: "mimic-iv", force: true });
+
+      expect(mockRun.mock.calls[0]?.[0].args).toEqual([
+        "--from",
+        "m4-infra",
+        "m4",
+        "init-derived",
+        "mimic-iv",
+        "--json",
+        "--events",
+        "ndjson",
+        "--no-interactive",
+        "--force",
       ]);
     }).pipe(Effect.provide(makeLayer())),
   );
@@ -216,6 +358,86 @@ describe("M4Cli", () => {
       if (Result.isFailure(result)) {
         expect(result.failure.code).toBe("m4_command_failed");
         expect(result.failure.actionableMessage).toContain("--project-id");
+      }
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("decodes terminal completion from retained NDJSON tail", () =>
+    Effect.gen(function* () {
+      const progress = Array.from({ length: 64 }, (_, index) =>
+        JSON.stringify({
+          version: 1,
+          sequence: index + 1,
+          event: "progress",
+          message: "x".repeat(4096),
+        }),
+      ).join("\n");
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(processOutput(`${progress}\n${initNdjson}`, 0, "", true)),
+      );
+
+      const m4 = yield* M4Cli;
+      const result = yield* m4.initialize({ cwd: "/repo", datasetId: "mimic-iv" });
+
+      expect(result.ok).toBe(true);
+      expect(result.command).toBe("init");
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("maps terminal NDJSON failures to m4_command_failed", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(failedNdjson, 1)));
+
+      const m4 = yield* M4Cli;
+      const result = yield* Effect.result(m4.initialize({ cwd: "/repo", datasetId: "mimic-iv" }));
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.code).toBe("m4_command_failed");
+        expect(result.failure.actionableMessage).toContain("PhysioNet credentials");
+      }
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("ignores malformed retained first line when a later terminal event exists", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(processOutput(`not-a-complete-json-line\n${initNdjson}`, 0, "", true)),
+      );
+
+      const m4 = yield* M4Cli;
+      const result = yield* m4.initialize({ cwd: "/repo", datasetId: "mimic-iv" });
+
+      expect(result.ok).toBe(true);
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("reports missing retained terminal event after truncated NDJSON", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              version: 1,
+              sequence: 120,
+              event: "progress",
+              message: "still working",
+            }),
+            0,
+            "",
+            true,
+          ),
+        ),
+      );
+
+      const m4 = yield* M4Cli;
+      const result = yield* Effect.result(m4.initialize({ cwd: "/repo", datasetId: "mimic-iv" }));
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.code).toBe("invalid_m4_status");
+        expect(result.failure.detail).toContain("terminal event");
       }
     }).pipe(Effect.provide(makeLayer())),
   );

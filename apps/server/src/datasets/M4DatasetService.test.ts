@@ -68,6 +68,7 @@ function statusResult(
 
 const mockStatus = vi.fn<M4CliShape["status"]>();
 const mockInitialize = vi.fn<M4CliShape["initialize"]>();
+const mockInitializeDerived = vi.fn<M4CliShape["initializeDerived"]>();
 const mockUse = vi.fn<M4CliShape["use"]>();
 const mockBackend = vi.fn<M4CliShape["backend"]>();
 
@@ -84,6 +85,7 @@ const makeLayer = (settingsOverrides: Parameters<typeof ServerSettingsService.la
           }),
           status: mockStatus,
           initialize: mockInitialize,
+          initializeDerived: mockInitializeDerived,
           use: mockUse,
           backend: mockBackend,
         }),
@@ -94,13 +96,33 @@ const makeLayer = (settingsOverrides: Parameters<typeof ServerSettingsService.la
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-m4-dataset-service-test-" })),
   );
 
+const failingPhysioNetCredentialFileLayer = Layer.effect(
+  FileSystem.FileSystem,
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    return {
+      ...fileSystem,
+      writeFileString: ((filePath: string, contents: string, options?: unknown) =>
+        filePath.includes("lincei-physionet-")
+          ? Effect.fail("physionet temp denied")
+          : fileSystem.writeFileString(
+              filePath,
+              contents,
+              options as never,
+            )) as typeof fileSystem.writeFileString,
+    } satisfies FileSystem.FileSystem;
+  }),
+).pipe(Layer.provide(NodeServices.layer));
+
 beforeEach(() => {
   mockStatus.mockReset();
   mockInitialize.mockReset();
+  mockInitializeDerived.mockReset();
   mockUse.mockReset();
   mockBackend.mockReset();
   mockStatus.mockImplementation(({ credentials }) => Effect.succeed(statusResult(credentials)));
   mockInitialize.mockReturnValue(Effect.succeed(commandResult));
+  mockInitializeDerived.mockReturnValue(Effect.succeed(commandResult));
   mockUse.mockReturnValue(Effect.succeed(commandResult));
   mockBackend.mockReturnValue(Effect.succeed(commandResult));
 });
@@ -150,9 +172,96 @@ describe("M4DatasetService", () => {
         expect(mockInitialize).toHaveBeenCalledWith({
           cwd: process.cwd(),
           datasetId: "mimic-iv-demo",
+          download: false,
+          physioNetCredentialsFile: undefined,
         });
+        expect(mockInitializeDerived).not.toHaveBeenCalled();
         expect(mockBackend).not.toHaveBeenCalled();
       }).pipe(Effect.provide(makeLayer())),
+    );
+
+    it.effect(
+      "materializes saved PhysioNet credentials and derived tables for local MIMIC-IV",
+      () =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          let credentialsFilePath: string | undefined;
+          mockInitialize.mockImplementationOnce((input) =>
+            Effect.gen(function* () {
+              credentialsFilePath = input.physioNetCredentialsFile;
+              expect(input.download).toBe(true);
+              expect(credentialsFilePath).toBeDefined();
+              const credentialsJson = yield* fileSystem
+                .readFileString(credentialsFilePath!)
+                .pipe(Effect.orDie);
+              expect(credentialsJson).toBe(
+                '{"username":"researcher","password":"secret-password"}',
+              );
+              return commandResult;
+            }),
+          );
+          const service = yield* M4DatasetService;
+
+          yield* service.savePhysioNetCredentials({
+            username: "researcher",
+            password: "secret-password",
+          });
+          yield* service.initialize({ datasetId: "mimic-iv", backendId: "duckdb" });
+
+          expect(mockInitialize).toHaveBeenCalledWith({
+            cwd: process.cwd(),
+            datasetId: "mimic-iv",
+            download: true,
+            physioNetCredentialsFile: credentialsFilePath,
+          });
+          expect(mockInitializeDerived).toHaveBeenCalledWith({
+            cwd: process.cwd(),
+            datasetId: "mimic-iv",
+          });
+          const credentialFileStillExists =
+            credentialsFilePath === undefined
+              ? false
+              : yield* fileSystem.exists(credentialsFilePath).pipe(Effect.orDie);
+          expect(credentialFileStillExists).toBe(false);
+        }).pipe(Effect.provide(makeLayer())),
+    );
+
+    it.effect("does not materialize derived tables for demo, notes, or eICU datasets", () =>
+      Effect.gen(function* () {
+        const service = yield* M4DatasetService;
+        yield* service.savePhysioNetCredentials({
+          username: "researcher",
+          password: "secret-password",
+        });
+
+        yield* service.initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" });
+        yield* service.initialize({ datasetId: "mimic-iv-note", backendId: "duckdb" });
+        yield* service.initialize({ datasetId: "eicu", backendId: "duckdb" });
+
+        expect(mockInitialize).toHaveBeenCalledTimes(3);
+        expect(mockInitializeDerived).not.toHaveBeenCalled();
+      }).pipe(Effect.provide(makeLayer())),
+    );
+
+    it.effect("uses PhysioNet-specific messaging for PhysioNet credential file failures", () =>
+      Effect.gen(function* () {
+        const service = yield* M4DatasetService;
+        yield* service.savePhysioNetCredentials({
+          username: "researcher",
+          password: "secret-password",
+        });
+
+        const result = yield* Effect.result(
+          service.initialize({ datasetId: "mimic-iv", backendId: "duckdb" }),
+        );
+
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure.code).toBe("secret_store_error");
+          expect(result.failure.actionableMessage).toContain("PhysioNet credentials");
+          expect(result.failure.actionableMessage).not.toContain("BigQuery");
+        }
+      }).pipe(Effect.provide(makeLayer().pipe(Layer.provide(failingPhysioNetCredentialFileLayer)))),
     );
 
     it.effect("activates BigQuery with saved project credentials", () =>
@@ -174,6 +283,7 @@ describe("M4DatasetService", () => {
           cwd: process.cwd(),
           datasetId: "mimic-iv",
         });
+        expect(mockInitializeDerived).not.toHaveBeenCalled();
       }).pipe(Effect.provide(makeLayer())),
     );
 
@@ -268,6 +378,10 @@ describe("M4DatasetService", () => {
           Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
         );
         const service = yield* M4DatasetService;
+        yield* service.savePhysioNetCredentials({
+          username: "researcher",
+          password: "secret-password",
+        });
 
         const first = yield* service
           .initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" })
@@ -331,6 +445,10 @@ describe("M4DatasetService", () => {
             Deferred.succeed(secondEntered, undefined).pipe(Effect.andThen(Effect.never)),
           );
         const service = yield* M4DatasetService;
+        yield* service.savePhysioNetCredentials({
+          username: "researcher",
+          password: "secret-password",
+        });
 
         const first = yield* service
           .initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" })
