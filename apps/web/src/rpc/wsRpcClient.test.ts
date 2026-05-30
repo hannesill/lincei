@@ -61,7 +61,6 @@ describe("wsRpcClient", () => {
     const rpcMethods = {
       "datasets.getStatus": vi.fn(async () => datasetStatus),
       "datasets.initialize": vi.fn(async () => datasetStatus),
-      "datasets.setActiveDataset": vi.fn(async () => datasetStatus),
     };
     const request = vi.fn((connect: (client: unknown) => Promise<unknown>) => connect(rpcMethods));
     const transport = {
@@ -77,9 +76,6 @@ describe("wsRpcClient", () => {
     await expect(client.datasets.getStatus()).resolves.toEqual(datasetStatus);
     await expect(
       client.datasets.initialize({ datasetId: "mimic-iv-demo", backendId: "duckdb" }),
-    ).resolves.toEqual(datasetStatus);
-    await expect(
-      client.datasets.setActiveDataset({ datasetId: "mimic-iv-demo", backendId: "duckdb" }),
     ).resolves.toEqual(datasetStatus);
     expect(rpcMethods["datasets.getStatus"]).toHaveBeenCalledWith({});
     expect(rpcMethods["datasets.initialize"]).toHaveBeenCalledWith({

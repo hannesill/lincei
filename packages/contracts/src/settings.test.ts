@@ -105,7 +105,6 @@ describe("ServerSettingsPatch.datasets", () => {
       datasets: {
         workspacePath: "  ~/.lincei/m4  ",
         preferredBackendId: "bigquery",
-        activeDatasetId: "mimic-iv-demo",
         m4Command: "  uvx --from m4-infra m4  ",
       },
     });
@@ -113,7 +112,6 @@ describe("ServerSettingsPatch.datasets", () => {
     expect(patch.datasets).toEqual({
       workspacePath: "~/.lincei/m4",
       preferredBackendId: "bigquery",
-      activeDatasetId: "mimic-iv-demo",
       m4Command: "uvx --from m4-infra m4",
     });
   });

@@ -69,7 +69,7 @@ function createDatasetStatus(overrides: Partial<DatasetStatusResult> = {}): Data
         backendId: "duckdb",
         readiness: "ready",
         initialized: true,
-        active: true,
+        selected: true,
         tables: [{ name: "primary", ready: true, rowCount: 100 }],
         lastCheckedAt: "2026-05-28T10:00:00.000Z",
       },
@@ -78,7 +78,7 @@ function createDatasetStatus(overrides: Partial<DatasetStatusResult> = {}): Data
         backendId: "duckdb",
         readiness: "missing_credentials",
         initialized: false,
-        active: false,
+        selected: false,
         tables: [],
         lastCheckedAt: "2026-05-28T10:00:00.000Z",
       },
@@ -87,7 +87,7 @@ function createDatasetStatus(overrides: Partial<DatasetStatusResult> = {}): Data
         backendId: "duckdb",
         readiness: "not_initialized",
         initialized: false,
-        active: false,
+        selected: false,
         tables: [],
         lastCheckedAt: "2026-05-28T10:00:00.000Z",
       },
@@ -96,14 +96,14 @@ function createDatasetStatus(overrides: Partial<DatasetStatusResult> = {}): Data
         backendId: "duckdb",
         readiness: "ready",
         initialized: true,
-        active: false,
+        selected: false,
         tables: [],
         lastCheckedAt: "2026-05-28T10:00:00.000Z",
       },
     ],
     appReadiness: {
-      activeDatasetId: "mimic-iv-demo",
-      activeBackendId: "duckdb",
+      selectedDatasetId: "mimic-iv-demo",
+      selectedBackendId: "duckdb",
       clinicalDataReady: true,
       readiness: "ready",
       lastCheckedAt: "2026-05-28T10:00:00.000Z",
@@ -122,7 +122,6 @@ function installDatasetApi(overrides: Partial<LocalApi["datasets"]> = {}) {
       credentials: createDatasetStatus().credentials,
     }),
     initialize: vi.fn().mockResolvedValue(createDatasetStatus()),
-    setActiveDataset: vi.fn().mockResolvedValue(createDatasetStatus()),
     clearCredentials: vi.fn().mockResolvedValue({
       credentials: createDatasetStatus().credentials,
     }),
@@ -188,7 +187,7 @@ describe("DatasetSettingsPanel", () => {
     );
 
     await expect
-      .element(page.getByRole("heading", { name: "Clinical Data Setup", exact: true }))
+      .element(page.getByRole("heading", { name: "Datasets", exact: true }))
       .toBeInTheDocument();
     await expect.element(page.getByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
     await expect.element(page.getByText("Last checked")).not.toBeInTheDocument();

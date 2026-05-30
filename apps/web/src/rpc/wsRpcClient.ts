@@ -152,7 +152,6 @@ export interface WsRpcClient {
       typeof WS_METHODS.datasetsSaveBigQueryCredentials
     >;
     readonly initialize: RpcUnaryMethod<typeof WS_METHODS.datasetsInitialize>;
-    readonly setActiveDataset: RpcUnaryMethod<typeof WS_METHODS.datasetsSetActiveDataset>;
     readonly clearCredentials: RpcUnaryMethod<typeof WS_METHODS.datasetsClearCredentials>;
   };
   readonly orchestration: {
@@ -317,8 +316,6 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.datasetsSaveBigQueryCredentials](input)),
       initialize: (input) =>
         transport.request((client) => client[WS_METHODS.datasetsInitialize](input)),
-      setActiveDataset: (input) =>
-        transport.request((client) => client[WS_METHODS.datasetsSetActiveDataset](input)),
       clearCredentials: (input) =>
         transport.request((client) => client[WS_METHODS.datasetsClearCredentials](input)),
     },

@@ -49,6 +49,10 @@ const datasetFlag = Flag.choice("dataset", DATASET_IDS).pipe(
   Flag.optional,
 );
 
+const requiredDatasetFlag = Flag.choice("dataset", DATASET_IDS).pipe(
+  Flag.withDescription("Dataset id for this request."),
+);
+
 const backendFlag = Flag.choice("backend", DATASET_BACKEND_IDS).pipe(
   Flag.withDescription("Dataset backend for this command."),
   Flag.optional,
@@ -75,8 +79,20 @@ interface DatasetSelectionFlags {
   readonly backendId: Option.Option<DatasetBackendId>;
 }
 
+interface RequiredDatasetSelectionFlags {
+  readonly datasetId: DatasetId;
+  readonly backendId: Option.Option<DatasetBackendId>;
+}
+
 const selectionFromFlags = (flags: DatasetSelectionFlags): DatasetCommandSelection => ({
   ...(Option.isSome(flags.datasetId) ? { datasetId: flags.datasetId.value } : {}),
+  ...(Option.isSome(flags.backendId) ? { backendId: flags.backendId.value } : {}),
+});
+
+const selectionFromRequiredDatasetFlags = (
+  flags: RequiredDatasetSelectionFlags,
+): DatasetCommandSelection => ({
+  datasetId: flags.datasetId,
   ...(Option.isSome(flags.backendId) ? { backendId: flags.backendId.value } : {}),
 });
 
@@ -134,14 +150,14 @@ const capabilitiesCommand = Command.make("capabilities", {
 
 const schemaCommand = Command.make("schema", {
   ...authLocationFlags,
-  datasetId: datasetFlag,
+  datasetId: requiredDatasetFlag,
   backendId: backendFlag,
 }).pipe(
-  Command.withDescription("Show the active dataset schema."),
+  Command.withDescription("Show the schema for an explicitly selected dataset."),
   Command.withHandler((flags) =>
     runWithDatasetGateway(flags, (gateway) =>
       gateway
-        .schema(selectionFromFlags(flags))
+        .schema(selectionFromRequiredDatasetFlags(flags))
         .pipe(Effect.flatMap((result) => Console.log(toJson(result.json)))),
     ),
   ),
@@ -149,7 +165,7 @@ const schemaCommand = Command.make("schema", {
 
 const describeTableCommand = Command.make("describe-table", {
   ...authLocationFlags,
-  datasetId: datasetFlag,
+  datasetId: requiredDatasetFlag,
   backendId: backendFlag,
   table: tableArgument,
 }).pipe(
@@ -157,7 +173,7 @@ const describeTableCommand = Command.make("describe-table", {
   Command.withHandler((flags) =>
     runWithDatasetGateway(flags, (gateway) =>
       gateway
-        .describeTable({ ...selectionFromFlags(flags), table: flags.table })
+        .describeTable({ ...selectionFromRequiredDatasetFlags(flags), table: flags.table })
         .pipe(Effect.flatMap((result) => Console.log(toJson(result.json)))),
     ),
   ),
@@ -165,7 +181,7 @@ const describeTableCommand = Command.make("describe-table", {
 
 const queryCommand = Command.make("query", {
   ...authLocationFlags,
-  datasetId: datasetFlag,
+  datasetId: requiredDatasetFlag,
   backendId: backendFlag,
   sql: sqlFlag,
 }).pipe(
@@ -173,7 +189,7 @@ const queryCommand = Command.make("query", {
   Command.withHandler((flags) =>
     runWithDatasetGateway(flags, (gateway) =>
       gateway
-        .query({ ...selectionFromFlags(flags), sql: flags.sql })
+        .query({ ...selectionFromRequiredDatasetFlags(flags), sql: flags.sql })
         .pipe(Effect.flatMap((result) => Console.log(toJson(result.json)))),
     ),
   ),

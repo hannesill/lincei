@@ -179,10 +179,6 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.datasets.initialize(input)
           : Promise.reject(unavailableLocalBackendError()),
-      setActiveDataset: (input) =>
-        rpcClient
-          ? rpcClient.datasets.setActiveDataset(input)
-          : Promise.reject(unavailableLocalBackendError()),
       clearCredentials: (input) =>
         rpcClient
           ? rpcClient.datasets.clearCredentials(input)

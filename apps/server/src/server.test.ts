@@ -2215,11 +2215,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 datasetId: "mimic-iv-demo",
                 backendId: "duckdb",
               });
-              const active = yield* client[WS_METHODS.datasetsSetActiveDataset]({
-                datasetId: "mimic-iv-demo",
-                backendId: "duckdb",
-              });
-              return { initial, initialized, active };
+              return { initial, initialized };
             }),
           ),
         );
@@ -2227,16 +2223,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.equal(result.initial.runtime.available, true);
         assert.equal(result.initial.runtime.command, "uvx --from m4-infra m4");
         assert.equal(result.initial.runtime.workspacePath, workspacePath);
-        assert.equal(result.initial.appReadiness.activeBackendId, "duckdb");
+        assert.equal(result.initial.appReadiness.selectedBackendId, "duckdb");
         assert.equal(result.initial.appReadiness.clinicalDataReady, false);
         assert.equal(
           result.initial.datasets.some((dataset) => dataset.datasetId === "mimic-iv-demo"),
           true,
         );
-        assert.equal(result.initialized.appReadiness.activeDatasetId, "mimic-iv-demo");
+        assert.equal(result.initialized.appReadiness.selectedDatasetId, "mimic-iv-demo");
         assert.equal(result.initialized.appReadiness.clinicalDataReady, true);
-        assert.equal(result.active.appReadiness.activeDatasetId, "mimic-iv-demo");
-        assert.equal(result.active.appReadiness.clinicalDataReady, true);
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
     180_000,
   );

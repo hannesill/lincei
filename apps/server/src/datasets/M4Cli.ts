@@ -34,7 +34,7 @@ import {
 import { ServerSettingsService } from "../serverSettings.ts";
 
 const DEFAULT_M4_COMMAND = "uvx --from m4-infra m4";
-const M4_MINIMUM_VERSION = "0.5.1";
+const M4_MINIMUM_VERSION = "0.5.3";
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const STATUS_TIMEOUT = Duration.seconds(30);
 const COMMAND_TIMEOUT = Duration.minutes(15);
@@ -72,7 +72,8 @@ const M4NdjsonEvent = Schema.Struct({
 
 const M4StatusDataset = Schema.Struct({
   name: Schema.String,
-  active: Schema.Boolean,
+  selected: Schema.optional(Schema.Boolean),
+  active: Schema.optional(Schema.Boolean),
   raw_present: Schema.optional(Schema.Boolean),
   parquet_present: Schema.Boolean,
   db_present: Schema.Boolean,
@@ -95,7 +96,8 @@ const M4StatusDataset = Schema.Struct({
 
 const M4StatusSnapshot = Schema.Struct({
   version: Schema.Number,
-  active_dataset: M4NullableString,
+  selected_dataset: Schema.optional(M4NullableString),
+  active_dataset: Schema.optional(M4NullableString),
   backend: M4BackendId,
   bigquery_project_id: M4NullableString,
   datasets: Schema.Array(M4StatusDataset),
@@ -112,6 +114,9 @@ const decodeJsonUnknown = decodeJsonResult(Schema.Unknown);
 export interface M4CliStatusInput {
   readonly cwd: string;
   readonly credentials: DatasetCredentialPresence;
+  readonly datasetId?: DatasetId | undefined;
+  readonly backendId?: DatasetBackendId | undefined;
+  readonly includePaths?: boolean | undefined;
   readonly env?: NodeJS.ProcessEnv | undefined;
 }
 
@@ -129,10 +134,6 @@ export interface M4CliInitializeInput extends M4CliCommandInput {
 export interface M4CliInitializeDerivedInput extends M4CliCommandInput {
   readonly datasetId: DatasetId;
   readonly force?: boolean | undefined;
-}
-
-export interface M4CliSetActiveDatasetInput extends M4CliCommandInput {
-  readonly datasetId: DatasetId;
 }
 
 export interface M4CliSetBackendInput extends M4CliCommandInput {
@@ -176,9 +177,6 @@ export interface M4CliShape {
   ) => Effect.Effect<M4CommandEnvelope, DatasetRpcError>;
   readonly initializeDerived: (
     input: M4CliInitializeDerivedInput,
-  ) => Effect.Effect<M4CommandEnvelope, DatasetRpcError>;
-  readonly use: (
-    input: M4CliSetActiveDatasetInput,
   ) => Effect.Effect<M4CommandEnvelope, DatasetRpcError>;
   readonly backend: (
     input: M4CliSetBackendInput,
@@ -576,6 +574,7 @@ function mapM4Dataset(
   backendId: DatasetBackendId,
   checkedAt: string,
   credentials: DatasetCredentialPresence,
+  selectedDatasetId: DatasetId | undefined,
 ): DatasetStatusSnapshot | null {
   if (!datasetIds.has(dataset.name)) {
     return null;
@@ -591,7 +590,7 @@ function mapM4Dataset(
     backendId,
     readiness,
     initialized: backendId === "bigquery" ? dataset.bigquery_available : dataset.db_present,
-    active: dataset.active,
+    selected: dataset.selected ?? dataset.active ?? selectedDatasetId === datasetId,
     ...(dataset.db_path || dataset.parquet_root
       ? { path: dataset.db_path ?? dataset.parquet_root ?? undefined }
       : {}),
@@ -620,17 +619,25 @@ function mapStatusSnapshot(input: {
 }): DatasetStatusResult {
   const checkedAt = input.checkedAt;
   const backendId = input.snapshot.backend;
+  const selectedDatasetId =
+    input.snapshot.selected_dataset && datasetIds.has(input.snapshot.selected_dataset)
+      ? (input.snapshot.selected_dataset as DatasetId)
+      : input.snapshot.active_dataset && datasetIds.has(input.snapshot.active_dataset)
+        ? (input.snapshot.active_dataset as DatasetId)
+        : undefined;
   const datasets = input.snapshot.datasets.flatMap((dataset) => {
-    const mapped = mapM4Dataset(dataset, backendId, checkedAt, input.credentials);
+    const mapped = mapM4Dataset(
+      dataset,
+      backendId,
+      checkedAt,
+      input.credentials,
+      selectedDatasetId,
+    );
     return mapped ? [mapped] : [];
   });
-  const activeDataset = datasets.find((dataset) => dataset.active);
-  const activeDatasetId =
-    activeDataset?.datasetId ??
-    (input.snapshot.active_dataset && datasetIds.has(input.snapshot.active_dataset)
-      ? (input.snapshot.active_dataset as DatasetId)
-      : undefined);
-  const readiness = activeDataset?.readiness ?? "not_initialized";
+  const selectedDataset = datasets.find((dataset) => dataset.selected === true);
+  const effectiveSelectedDatasetId = selectedDataset?.datasetId ?? selectedDatasetId;
+  const readiness = selectedDataset?.readiness ?? "not_initialized";
 
   return {
     runtime: {
@@ -643,12 +650,12 @@ function mapStatusSnapshot(input: {
     credentials: input.credentials,
     datasets,
     appReadiness: {
-      ...(activeDatasetId ? { activeDatasetId } : {}),
-      activeBackendId: backendId,
+      ...(effectiveSelectedDatasetId ? { selectedDatasetId: effectiveSelectedDatasetId } : {}),
+      selectedBackendId: backendId,
       clinicalDataReady: readiness === "ready",
       readiness,
       lastCheckedAt: checkedAt,
-      ...(activeDataset?.error ? { error: activeDataset.error } : {}),
+      ...(selectedDataset?.error ? { error: selectedDataset.error } : {}),
     },
   };
 }
@@ -842,10 +849,28 @@ export const makeM4Cli = Effect.gen(function* () {
 
   const status: M4CliShape["status"] = (input) =>
     Effect.gen(function* () {
+      const lifecycleArgs =
+        input.datasetId !== undefined
+          ? [
+              "status",
+              "--dataset",
+              input.datasetId,
+              ...(input.backendId ? ["--backend", input.backendId] : []),
+              ...(input.includePaths ? ["--include-paths"] : []),
+              "--json",
+              "--no-interactive",
+            ]
+          : [
+              "status",
+              "--all",
+              ...(input.includePaths ? ["--include-paths"] : []),
+              "--json",
+              "--no-interactive",
+            ];
       const { output, displayCommand } = yield* run({
         cwd: input.cwd,
         env: input.env,
-        lifecycleArgs: ["status", "--all", "--json", "--no-interactive"],
+        lifecycleArgs,
         timeout: STATUS_TIMEOUT,
       });
       yield* assertProcessAvailable(output, displayCommand);
@@ -950,17 +975,6 @@ export const makeM4Cli = Effect.gen(function* () {
       ],
     });
 
-  const use: M4CliShape["use"] = (input) =>
-    Effect.gen(function* () {
-      const { output, displayCommand } = yield* run({
-        cwd: input.cwd,
-        env: input.env,
-        lifecycleArgs: ["use", input.datasetId, "--json"],
-        timeout: STATUS_TIMEOUT,
-      });
-      return yield* decodeEnvelope(output, displayCommand);
-    });
-
   const backend: M4CliShape["backend"] = (input) =>
     Effect.gen(function* () {
       const { output, displayCommand } = yield* run({
@@ -985,7 +999,6 @@ export const makeM4Cli = Effect.gen(function* () {
     status,
     initialize,
     initializeDerived,
-    use,
     backend,
   });
 });

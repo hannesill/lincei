@@ -98,13 +98,13 @@ describe("dataset status contracts", () => {
           backendId: "duckdb",
           readiness: "ready",
           initialized: true,
-          active: true,
+          selected: true,
           lastCheckedAt: "2026-05-27T10:00:00.000Z",
         },
       ],
       appReadiness: {
-        activeDatasetId: "mimic-iv-demo",
-        activeBackendId: "duckdb",
+        selectedDatasetId: "mimic-iv-demo",
+        selectedBackendId: "duckdb",
         clinicalDataReady: true,
         readiness: "ready",
         lastCheckedAt: "2026-05-27T10:00:00.000Z",
@@ -120,7 +120,7 @@ describe("dataset status contracts", () => {
       backendId: "duckdb",
       readiness: "ready",
       initialized: true,
-      active: true,
+      selected: true,
       lastCheckedAt: "2026-05-27T10:00:00.000Z",
       derivedTables: {
         supported: true,
@@ -147,7 +147,7 @@ describe("dataset status contracts", () => {
       backendId: "duckdb",
       readiness: "ready",
       initialized: true,
-      active: true,
+      selected: true,
       lastCheckedAt: "2026-05-27T10:00:00.000Z",
     });
 

@@ -342,8 +342,7 @@ export function DatasetSettingsPanel() {
   }, [selectedBackend, status?.datasets]);
 
   const runtimeError = status?.runtime.error ?? null;
-  const appError = status?.appReadiness.error ?? null;
-  const visibleError = loadError ?? runtimeError ?? appError;
+  const visibleError = loadError ?? runtimeError;
   const busy = loading || actionKey !== null;
 
   return (

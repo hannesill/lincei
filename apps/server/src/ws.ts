@@ -976,10 +976,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(WS_METHODS.datasetsInitialize, datasets.initialize(input), {
             "rpc.aggregate": "datasets",
           }),
-        [WS_METHODS.datasetsSetActiveDataset]: (input) =>
-          observeRpcEffect(WS_METHODS.datasetsSetActiveDataset, datasets.setActiveDataset(input), {
-            "rpc.aggregate": "datasets",
-          }),
         [WS_METHODS.datasetsClearCredentials]: (input) =>
           observeRpcEffect(WS_METHODS.datasetsClearCredentials, datasets.clearCredentials(input), {
             "rpc.aggregate": "datasets",

@@ -74,7 +74,6 @@ import type {
   DatasetInitializeInput,
   DatasetSaveBigQueryCredentialsInput,
   DatasetSavePhysioNetCredentialsInput,
-  DatasetSetActiveDatasetInput,
   DatasetStatusResult,
 } from "./datasets.ts";
 import type {
@@ -507,7 +506,6 @@ export interface LocalApi {
       input: DatasetSaveBigQueryCredentialsInput,
     ) => Promise<DatasetCredentialsResult>;
     initialize: (input: DatasetInitializeInput) => Promise<DatasetStatusResult>;
-    setActiveDataset: (input: DatasetSetActiveDatasetInput) => Promise<DatasetStatusResult>;
     clearCredentials: (input: DatasetClearCredentialsInput) => Promise<DatasetCredentialsResult>;
   };
 }

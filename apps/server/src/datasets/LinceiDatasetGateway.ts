@@ -21,7 +21,7 @@ import { M4DatasetService } from "./M4DatasetService.ts";
 import { makeDatasetWorkspacePathResolver } from "./workspace.ts";
 
 export const DATASET_CONTEXT_SAFE_COMMAND_GUIDANCE =
-  "Use `lincei dataset ...` for dataset operations. Do not call bare `m4`, `uvx m4`, or `uv run m4` directly.";
+  "Use `lincei dataset ... --dataset <id> --backend <backend>` for dataset operations. Avoid `m4 use` and bare `m4`, `uvx m4`, or `uv run m4` calls; Lincei treats dataset selection as request-scoped.";
 
 const DATASET_TOOLS = [
   "status",
@@ -58,7 +58,6 @@ export interface DatasetCommandSelection {
 
 export interface DatasetGatewayResolvedContext {
   readonly workspacePath: string;
-  readonly defaultDatasetId?: DatasetId | undefined;
   readonly defaultBackendId: DatasetBackendId;
   readonly m4Command: string;
 }
@@ -79,7 +78,7 @@ export interface DatasetGatewayRawResult {
 export interface DatasetGatewayContextResult {
   readonly guidance: string;
   readonly workspacePath: string;
-  readonly defaultDatasetId?: DatasetId | undefined;
+  readonly selectedDatasetId?: DatasetId | undefined;
   readonly defaultBackendId: DatasetBackendId;
   readonly commands: ReadonlyArray<string>;
   readonly status: DatasetStatusResult;
@@ -128,6 +127,14 @@ function policyDenied(detail: string): DatasetRpcError {
     code: "policy_denied",
     detail,
     actionableMessage: detail,
+  });
+}
+
+function missingDatasetSelection(tool: LinceiDatasetTool): DatasetRpcError {
+  return new DatasetRpcError({
+    code: "policy_denied",
+    detail: `Dataset tool '${tool}' requires an explicit --dataset value.`,
+    actionableMessage: `Run this command with --dataset <${DATASET_IDS.join("|")}>.`,
   });
 }
 
@@ -188,7 +195,6 @@ function selectionArgs(selection: DatasetCommandSelection): ReadonlyArray<string
 }
 
 export function formatDatasetContextMarkdown(context: DatasetGatewayContextResult): string {
-  const activeDataset = context.status.appReadiness.activeDatasetId ?? context.defaultDatasetId;
   return [
     "# Lincei Dataset Context",
     "",
@@ -196,9 +202,13 @@ export function formatDatasetContextMarkdown(context: DatasetGatewayContextResul
     "",
     `Workspace: ${context.workspacePath}`,
     `Default backend: ${context.defaultBackendId}`,
-    activeDataset ? `Default dataset: ${activeDataset}` : "Default dataset: not configured",
-    `Clinical data ready: ${context.status.appReadiness.clinicalDataReady ? "yes" : "no"}`,
-    `Readiness: ${context.status.appReadiness.readiness}`,
+    ...(context.selectedDatasetId
+      ? [
+          `Selected dataset: ${context.selectedDatasetId}`,
+          `Selected dataset ready: ${context.status.appReadiness.clinicalDataReady ? "yes" : "no"}`,
+          `Readiness: ${context.status.appReadiness.readiness}`,
+        ]
+      : ["Selected dataset: not provided", "Clinical data readiness is per dataset request."]),
     "",
     "Preferred commands:",
     ...context.commands.map((command) => `- ${command}`),
@@ -256,7 +266,6 @@ export const makeLinceiDatasetGateway = (
         const workspacePath = yield* resolveDatasetWorkspacePath(settings.datasets.workspacePath);
         return {
           workspacePath,
-          defaultDatasetId: settings.datasets.activeDatasetId,
           defaultBackendId: settings.datasets.preferredBackendId,
           m4Command: settings.datasets.m4Command || m4Cli.defaultCommand,
         };
@@ -266,7 +275,7 @@ export const makeLinceiDatasetGateway = (
       Effect.gen(function* () {
         const context = yield* resolveContext();
         const selection = {
-          datasetId: input?.datasetId ?? context.defaultDatasetId,
+          datasetId: input?.datasetId,
           backendId: input?.backendId ?? context.defaultBackendId,
         } satisfies DatasetCommandSelection;
         yield* enforceSelection(selection);
@@ -277,10 +286,14 @@ export const makeLinceiDatasetGateway = (
       readonly tool: Exclude<LinceiDatasetTool, "status" | "context" | "m4">;
       readonly selection?: DatasetCommandSelection | undefined;
       readonly args: ReadonlyArray<string>;
+      readonly requireDataset?: boolean | undefined;
     }) =>
       Effect.gen(function* () {
         yield* enforceTool(input.tool);
         const { context, selection } = yield* resolveSelection(input.selection);
+        if (input.requireDataset === true && selection.datasetId === undefined) {
+          return yield* missingDatasetSelection(input.tool);
+        }
         const result = yield* m4Cli.json({
           cwd: context.workspacePath,
           args: [...input.args, ...selectionArgs(selection), "--json", "--no-interactive"],
@@ -295,23 +308,28 @@ export const makeLinceiDatasetGateway = (
     const status: LinceiDatasetGatewayShape["status"] = (input) =>
       Effect.gen(function* () {
         yield* enforceTool("status");
+        if (input?.datasetId !== undefined) {
+          const { selection } = yield* resolveSelection(input);
+          return yield* datasetService.getStatus(selection);
+        }
         if (input !== undefined) {
           yield* enforceSelection(input);
         }
-        return yield* datasetService.getStatus();
+        return yield* datasetService.getStatus(input);
       });
 
     const capabilities: LinceiDatasetGatewayShape["capabilities"] = (input) =>
       runJsonTool({ tool: "capabilities", selection: input, args: ["capabilities"] });
 
     const schema: LinceiDatasetGatewayShape["schema"] = (input) =>
-      runJsonTool({ tool: "schema", selection: input, args: ["schema"] });
+      runJsonTool({ tool: "schema", selection: input, args: ["schema"], requireDataset: true });
 
     const describeTable: LinceiDatasetGatewayShape["describeTable"] = (input) =>
       runJsonTool({
         tool: "describe-table",
         selection: input,
         args: ["describe-table", input.table],
+        requireDataset: true,
       });
 
     const query: LinceiDatasetGatewayShape["query"] = (input) =>
@@ -323,6 +341,7 @@ export const makeLinceiDatasetGateway = (
           tool: "query",
           selection: input,
           args: ["query", "--sql", input.sql],
+          requireDataset: true,
         });
       });
 
@@ -336,15 +355,18 @@ export const makeLinceiDatasetGateway = (
         return {
           guidance: DATASET_CONTEXT_SAFE_COMMAND_GUIDANCE,
           workspacePath: resolved.context.workspacePath,
-          defaultDatasetId: resolved.selection.datasetId,
+          ...(resolved.selection.datasetId
+            ? { selectedDatasetId: resolved.selection.datasetId }
+            : {}),
           defaultBackendId: resolved.selection.backendId ?? resolved.context.defaultBackendId,
           commands: [
             "lincei dataset status",
-            "lincei dataset capabilities",
-            "lincei dataset schema",
-            "lincei dataset describe-table <table>",
-            'lincei dataset query --sql "select ... limit 10"',
-            "lincei dataset context --format markdown",
+            "lincei dataset status --dataset mimic-iv-demo --backend duckdb",
+            "lincei dataset capabilities --backend duckdb",
+            "lincei dataset schema --dataset mimic-iv-demo --backend duckdb",
+            "lincei dataset describe-table admissions --dataset mimic-iv-demo --backend duckdb",
+            'lincei dataset query --dataset mimic-iv-demo --backend duckdb --sql "select ... limit 10"',
+            "lincei dataset context --dataset mimic-iv-demo --backend duckdb --format markdown",
           ],
           status: statusResult,
         };

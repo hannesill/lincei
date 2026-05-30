@@ -47,13 +47,13 @@ const processOutput = (stdout: string, code = 0, stderr = "") => ({
 
 const statusJson = JSON.stringify({
   version: 1,
-  active_dataset: "mimic-iv-demo",
+  selected_dataset: "mimic-iv-demo",
   backend: "duckdb",
   bigquery_project_id: null,
   datasets: [
     {
       name: "mimic-iv-demo",
-      active: true,
+      selected: true,
       raw_present: true,
       parquet_present: true,
       db_present: true,
@@ -86,7 +86,6 @@ const makeLayer = (input: {
     datasets: {
       workspacePath: input.workspacePath,
       preferredBackendId: "duckdb",
-      activeDatasetId: "mimic-iv-demo",
       m4Command: "",
     },
   });
@@ -143,6 +142,38 @@ describe("LinceiDatasetGateway", () => {
     }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
   });
 
+  it.effect("passes explicit status dataset selection through to M4", () => {
+    const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-status-selected-caller-"));
+    const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-status-selected-base-"));
+    const workspacePath = mkdtempSync(join(tmpdir(), "lincei-gateway-status-selected-workspace-"));
+
+    return Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
+
+      const gateway = yield* LinceiDatasetGateway;
+      yield* gateway.status({ datasetId: "mimic-iv-demo" });
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "uvx",
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--dataset",
+            "mimic-iv-demo",
+            "--backend",
+            "duckdb",
+            "--json",
+            "--no-interactive",
+          ],
+          cwd: workspacePath,
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
+  });
+
   it.effect("ignores study-local M4 project files when resolving the launcher", () => {
     const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-local-caller-"));
     const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-local-base-"));
@@ -179,8 +210,8 @@ describe("LinceiDatasetGateway", () => {
         .mockReturnValueOnce(Effect.succeed(processOutput(queryJson)));
 
       const gateway = yield* LinceiDatasetGateway;
-      yield* gateway.schema();
-      yield* gateway.query({ sql: "select 1" });
+      yield* gateway.schema({ datasetId: "mimic-iv-demo" });
+      yield* gateway.query({ datasetId: "mimic-iv-demo", sql: "select 1" });
 
       expect(mockRun).toHaveBeenNthCalledWith(
         1,
@@ -223,6 +254,24 @@ describe("LinceiDatasetGateway", () => {
     }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
   });
 
+  it.effect("requires explicit dataset selection for schema, describe-table, and query", () => {
+    const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-required-caller-"));
+    const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-required-base-"));
+    const workspacePath = mkdtempSync(join(tmpdir(), "lincei-gateway-required-workspace-"));
+
+    return Effect.gen(function* () {
+      const gateway = yield* LinceiDatasetGateway;
+      const schemaResult = yield* Effect.result(gateway.schema());
+      const describeResult = yield* Effect.result(gateway.describeTable({ table: "patients" }));
+      const queryResult = yield* Effect.result(gateway.query({ sql: "select 1" }));
+
+      expect(Result.isFailure(schemaResult)).toBe(true);
+      expect(Result.isFailure(describeResult)).toBe(true);
+      expect(Result.isFailure(queryResult)).toBe(true);
+      expect(mockRun).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
+  });
+
   it.effect("emits safe markdown guidance for agent prompts", () => {
     const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-context-caller-"));
     const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-context-base-"));
@@ -237,7 +286,7 @@ describe("LinceiDatasetGateway", () => {
 
       assert.isTrue(markdown.includes(DATASET_CONTEXT_SAFE_COMMAND_GUIDANCE));
       assert.isTrue(markdown.includes("lincei dataset status"));
-      assert.isTrue(markdown.includes("Do not call bare `m4`, `uvx m4`, or `uv run m4` directly."));
+      assert.isTrue(markdown.includes("Avoid `m4 use`"));
     }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
   });
 

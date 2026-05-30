@@ -31,13 +31,13 @@ const processOutput = (stdout: string, code = 0, stderr = "", stdoutTruncated = 
 
 const statusJson = JSON.stringify({
   version: 1,
-  active_dataset: "mimic-iv-demo",
+  selected_dataset: "mimic-iv-demo",
   backend: "duckdb",
   bigquery_project_id: null,
   datasets: [
     {
       name: "mimic-iv-demo",
-      active: true,
+      selected: true,
       raw_present: true,
       parquet_present: true,
       db_present: true,
@@ -61,8 +61,8 @@ const statusJson = JSON.stringify({
 const commandJson = JSON.stringify({
   version: 1,
   ok: true,
-  command: "use",
-  active_dataset: "mimic-iv-demo",
+  command: "backend",
+  selected_dataset: "mimic-iv-demo",
   backend: "duckdb",
   warnings: [],
 });
@@ -183,7 +183,7 @@ describe("M4Cli", () => {
         backendId: "duckdb",
         readiness: "ready",
         initialized: true,
-        active: true,
+        selected: true,
         tables: [{ name: "primary", ready: true, rowCount: 100 }],
         lastCheckedAt: dataset.lastCheckedAt,
       });
@@ -206,13 +206,13 @@ describe("M4Cli", () => {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             JSON.stringify({
               version: 1,
-              active_dataset: "mimic-iv",
+              selected_dataset: "mimic-iv",
               backend: "duckdb",
               bigquery_project_id: null,
               datasets: [
                 {
                   name: "mimic-iv",
-                  active: true,
+                  selected: true,
                   raw_present: true,
                   parquet_present: true,
                   db_present: true,
@@ -255,6 +255,83 @@ describe("M4Cli", () => {
     }).pipe(Effect.provide(makeLayer())),
   );
 
+  it.effect("passes request-scoped dataset and backend to status", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
+
+      const m4 = yield* M4Cli;
+      yield* m4.status({
+        cwd: "/repo",
+        credentials: emptyCredentials,
+        datasetId: "mimic-iv-demo",
+        backendId: "duckdb",
+      });
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--dataset",
+            "mimic-iv-demo",
+            "--backend",
+            "duckdb",
+            "--json",
+            "--no-interactive",
+          ],
+        }),
+      );
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
+  it.effect("decodes older M4 active status fields as selected compatibility fields", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              version: 1,
+              active_dataset: "mimic-iv-demo",
+              backend: "duckdb",
+              bigquery_project_id: null,
+              datasets: [
+                {
+                  name: "mimic-iv-demo",
+                  active: true,
+                  raw_present: true,
+                  parquet_present: true,
+                  db_present: true,
+                  requires_authentication: false,
+                  download_available: true,
+                  setup_state: "ready",
+                  bigquery_available: false,
+                  row_count: 100,
+                  parquet_size_gb: 0.01,
+                  derived: {
+                    supported: false,
+                    total: null,
+                    materialized: null,
+                    bigquery: false,
+                  },
+                  warnings: [],
+                },
+              ],
+            }),
+          ),
+        ),
+      );
+
+      const m4 = yield* M4Cli;
+      const status = yield* m4.status({ cwd: "/repo", credentials: emptyCredentials });
+
+      expect(status.datasets[0]?.selected).toBe(true);
+      expect(status.appReadiness.selectedDatasetId).toBe("mimic-iv-demo");
+    }).pipe(Effect.provide(makeLayer())),
+  );
+
   it.effect("maps failed M4 setup states to failed dataset readiness with warning detail", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(
@@ -263,13 +340,13 @@ describe("M4Cli", () => {
             // @effect-diagnostics-next-line preferSchemaOverJson:off
             JSON.stringify({
               version: 1,
-              active_dataset: "mimic-iv",
+              selected_dataset: "mimic-iv",
               backend: "duckdb",
               bigquery_project_id: null,
               datasets: [
                 {
                   name: "mimic-iv",
-                  active: true,
+                  selected: true,
                   raw_present: false,
                   parquet_present: false,
                   db_present: false,
@@ -321,23 +398,22 @@ describe("M4Cli", () => {
         prefixArgs: ["run", "m4"],
       });
 
-      yield* m4.use({ cwd: "/repo", datasetId: "mimic-iv-demo" });
+      yield* m4.backend({ cwd: "/repo", backendId: "duckdb" });
 
       expect(mockRun).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "uv",
-          args: ["run", "m4", "use", "mimic-iv-demo", "--json"],
+          args: ["run", "m4", "backend", "duckdb", "--json"],
         }),
       );
     }).pipe(Effect.provide(makeLayer("uv run m4"))),
   );
 
-  it.effect("builds init, init-derived, use, and backend JSON commands", () =>
+  it.effect("builds init, init-derived, and backend JSON commands", () =>
     Effect.gen(function* () {
       mockRun
         .mockReturnValueOnce(Effect.succeed(processOutput(initNdjson)))
         .mockReturnValueOnce(Effect.succeed(processOutput(initDerivedNdjson)))
-        .mockReturnValueOnce(Effect.succeed(processOutput(commandJson)))
         .mockReturnValueOnce(Effect.succeed(processOutput(commandJson)));
 
       const m4 = yield* M4Cli;
@@ -348,7 +424,6 @@ describe("M4Cli", () => {
         physioNetCredentialsFile: "/tmp/physionet.json",
       });
       yield* m4.initializeDerived({ cwd: "/repo", datasetId: "mimic-iv" });
-      yield* m4.use({ cwd: "/repo", datasetId: "mimic-iv-demo" });
       yield* m4.backend({ cwd: "/repo", backendId: "bigquery", projectId: "clinical-project" });
 
       expect(mockRun.mock.calls.map(([input]) => input.args)).toEqual([
@@ -377,7 +452,6 @@ describe("M4Cli", () => {
           "ndjson",
           "--no-interactive",
         ],
-        ["--from", "m4-infra", "m4", "use", "mimic-iv-demo", "--json"],
         [
           "--from",
           "m4-infra",

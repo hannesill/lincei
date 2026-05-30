@@ -30,7 +30,6 @@ export const DatasetOperationKind = Schema.Literals([
   "initialize",
   "save_credentials",
   "clear_credentials",
-  "set_active_dataset",
 ]);
 export type DatasetOperationKind = typeof DatasetOperationKind.Type;
 
@@ -132,7 +131,8 @@ export const DatasetStatusSnapshot = Schema.Struct({
   backendId: DatasetBackendId,
   readiness: DatasetReadinessState,
   initialized: Schema.Boolean,
-  active: Schema.Boolean,
+  selected: Schema.optional(Schema.Boolean),
+  active: Schema.optional(Schema.Boolean),
   path: Schema.optional(TrimmedNonEmptyString),
   tables: Schema.Array(DatasetTableReadiness).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   derivedTables: Schema.optional(DatasetDerivedTableReadiness),
@@ -143,6 +143,8 @@ export const DatasetStatusSnapshot = Schema.Struct({
 export type DatasetStatusSnapshot = typeof DatasetStatusSnapshot.Type;
 
 export const DatasetAppReadiness = Schema.Struct({
+  selectedDatasetId: Schema.optional(DatasetId),
+  selectedBackendId: Schema.optional(DatasetBackendId),
   activeDatasetId: Schema.optional(DatasetId),
   activeBackendId: Schema.optional(DatasetBackendId),
   clinicalDataReady: Schema.Boolean,
@@ -163,7 +165,6 @@ export type DatasetStatusResult = typeof DatasetStatusResult.Type;
 export const DatasetSettings = Schema.Struct({
   workspacePath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   preferredBackendId: DatasetBackendId.pipe(Schema.withDecodingDefault(Effect.succeed("duckdb"))),
-  activeDatasetId: Schema.optional(DatasetId),
   m4Command: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type DatasetSettings = typeof DatasetSettings.Type;
@@ -171,7 +172,6 @@ export type DatasetSettings = typeof DatasetSettings.Type;
 export const DatasetSettingsPatch = Schema.Struct({
   workspacePath: Schema.optionalKey(TrimmedString),
   preferredBackendId: Schema.optionalKey(DatasetBackendId),
-  activeDatasetId: Schema.optionalKey(DatasetId),
   m4Command: Schema.optionalKey(TrimmedString),
 });
 export type DatasetSettingsPatch = typeof DatasetSettingsPatch.Type;
@@ -199,12 +199,6 @@ export const DatasetInitializeInput = Schema.Struct({
   backendId: Schema.optional(DatasetBackendId),
 });
 export type DatasetInitializeInput = typeof DatasetInitializeInput.Type;
-
-export const DatasetSetActiveDatasetInput = Schema.Struct({
-  datasetId: DatasetId,
-  backendId: DatasetBackendId,
-});
-export type DatasetSetActiveDatasetInput = typeof DatasetSetActiveDatasetInput.Type;
 
 export const DatasetCredentialKind = Schema.Literals(["physionet", "bigquery", "all"]);
 export type DatasetCredentialKind = typeof DatasetCredentialKind.Type;

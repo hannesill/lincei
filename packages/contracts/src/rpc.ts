@@ -11,7 +11,6 @@ import {
   DatasetRpcError,
   DatasetSaveBigQueryCredentialsInput,
   DatasetSavePhysioNetCredentialsInput,
-  DatasetSetActiveDatasetInput,
   DatasetStatusResult,
 } from "./datasets.ts";
 import {
@@ -165,7 +164,6 @@ export const WS_METHODS = {
   datasetsSavePhysioNetCredentials: "datasets.savePhysioNetCredentials",
   datasetsSaveBigQueryCredentials: "datasets.saveBigQueryCredentials",
   datasetsInitialize: "datasets.initialize",
-  datasetsSetActiveDataset: "datasets.setActiveDataset",
   datasetsClearCredentials: "datasets.clearCredentials",
 
   // Source control methods
@@ -284,12 +282,6 @@ export const WsDatasetsSaveBigQueryCredentialsRpc = Rpc.make(
 
 export const WsDatasetsInitializeRpc = Rpc.make(WS_METHODS.datasetsInitialize, {
   payload: DatasetInitializeInput,
-  success: DatasetStatusResult,
-  error: DatasetRpcError,
-});
-
-export const WsDatasetsSetActiveDatasetRpc = Rpc.make(WS_METHODS.datasetsSetActiveDataset, {
-  payload: DatasetSetActiveDatasetInput,
   success: DatasetStatusResult,
   error: DatasetRpcError,
 });
@@ -549,7 +541,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsDatasetsSavePhysioNetCredentialsRpc,
   WsDatasetsSaveBigQueryCredentialsRpc,
   WsDatasetsInitializeRpc,
-  WsDatasetsSetActiveDatasetRpc,
   WsDatasetsClearCredentialsRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,

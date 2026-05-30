@@ -46,7 +46,7 @@ function statusResult(
     backendId: "duckdb",
     readiness: "ready",
     initialized: true,
-    active: true,
+    selected: true,
     tables: [],
     lastCheckedAt: "2026-05-28T10:00:00.000Z",
   },
@@ -60,8 +60,8 @@ function statusResult(
     credentials,
     datasets: [dataset],
     appReadiness: {
-      activeDatasetId: dataset.datasetId,
-      activeBackendId: dataset.backendId,
+      selectedDatasetId: dataset.datasetId,
+      selectedBackendId: dataset.backendId,
       clinicalDataReady: true,
       readiness: "ready",
       lastCheckedAt: "2026-05-28T10:00:00.000Z",
@@ -72,7 +72,6 @@ function statusResult(
 const mockStatus = vi.fn<M4CliShape["status"]>();
 const mockInitialize = vi.fn<M4CliShape["initialize"]>();
 const mockInitializeDerived = vi.fn<M4CliShape["initializeDerived"]>();
-const mockUse = vi.fn<M4CliShape["use"]>();
 const mockBackend = vi.fn<M4CliShape["backend"]>();
 const mockExec = vi.fn<M4CliShape["exec"]>();
 const mockJson = vi.fn<M4CliShape["json"]>();
@@ -100,7 +99,6 @@ const makeLayer = (
           status: mockStatus,
           initialize: mockInitialize,
           initializeDerived: mockInitializeDerived,
-          use: mockUse,
           backend: mockBackend,
         }),
       ),
@@ -132,14 +130,12 @@ beforeEach(() => {
   mockStatus.mockReset();
   mockInitialize.mockReset();
   mockInitializeDerived.mockReset();
-  mockUse.mockReset();
   mockBackend.mockReset();
   mockExec.mockReset();
   mockJson.mockReset();
   mockStatus.mockImplementation(({ credentials }) => Effect.succeed(statusResult(credentials)));
   mockInitialize.mockReturnValue(Effect.succeed(commandResult));
   mockInitializeDerived.mockReturnValue(Effect.succeed(commandResult));
-  mockUse.mockReturnValue(Effect.succeed(commandResult));
   mockBackend.mockReturnValue(Effect.succeed(commandResult));
 });
 
@@ -297,7 +293,7 @@ describe("M4DatasetService", () => {
       }).pipe(Effect.provide(makeLayer().pipe(Layer.provide(failingPhysioNetCredentialFileLayer)))),
     );
 
-    it.effect("activates BigQuery with saved project credentials", () =>
+    it.effect("configures BigQuery with saved project credentials without m4 use", () =>
       Effect.gen(function* () {
         const service = yield* M4DatasetService;
 
@@ -312,9 +308,14 @@ describe("M4DatasetService", () => {
           backendId: "bigquery",
           projectId: "clinical-project",
         });
-        expect(mockUse).toHaveBeenCalledWith({
+        expect(mockStatus).toHaveBeenCalledWith({
+          credentials: expect.objectContaining({
+            bigQuery: expect.objectContaining({ projectId: "clinical-project", stored: true }),
+          }),
           cwd: process.cwd(),
           datasetId: "mimic-iv",
+          backendId: "bigquery",
+          env: undefined,
         });
         expect(mockInitializeDerived).not.toHaveBeenCalled();
       }).pipe(Effect.provide(makeLayer())),
@@ -350,13 +351,10 @@ describe("M4DatasetService", () => {
           projectId: "clinical-project",
           env: { GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath },
         });
-        expect(mockUse).toHaveBeenCalledWith({
-          cwd: process.cwd(),
-          datasetId: "mimic-iv",
-          env: { GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath },
-        });
         expect(mockStatus).toHaveBeenCalledWith(
           expect.objectContaining({
+            datasetId: "mimic-iv",
+            backendId: "bigquery",
             env: { GOOGLE_APPLICATION_CREDENTIALS: credentialFilePath },
           }),
         );
@@ -389,11 +387,11 @@ describe("M4DatasetService", () => {
       }).pipe(Effect.provide(makeLayer())),
     );
 
-    it.effect("requires BigQuery credentials before activation", () =>
+    it.effect("requires BigQuery credentials before BigQuery setup", () =>
       Effect.gen(function* () {
         const service = yield* M4DatasetService;
         const result = yield* Effect.result(
-          service.setActiveDataset({ datasetId: "mimic-iv", backendId: "bigquery" }),
+          service.initialize({ datasetId: "mimic-iv", backendId: "bigquery" }),
         );
 
         expect(Result.isFailure(result)).toBe(true);

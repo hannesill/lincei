@@ -98,7 +98,6 @@ const rpcClientMock = {
     savePhysioNetCredentials: vi.fn(),
     saveBigQueryCredentials: vi.fn(),
     initialize: vi.fn(),
-    setActiveDataset: vi.fn(),
     clearCredentials: vi.fn(),
   },
   orchestration: {
