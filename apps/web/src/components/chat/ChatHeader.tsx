@@ -9,7 +9,7 @@ import { scopeSessionRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
-import { DiffIcon, TerminalSquareIcon } from "lucide-react";
+import { DiffIcon, LayersIcon, TerminalSquareIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { Toggle } from "../ui/toggle";
@@ -33,6 +33,8 @@ interface ChatHeaderProps {
   terminalOpen: boolean;
   terminalToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
+  researchCardCount: number;
+  researchCardsOpen: boolean;
   gitCwd: string | null;
   diffOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -41,6 +43,7 @@ interface ChatHeaderProps {
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
+  onToggleResearchCards: () => void;
   reserveTitleBarControlInset?: boolean;
 }
 
@@ -72,6 +75,8 @@ export const ChatHeader = memo(function ChatHeader({
   terminalOpen,
   terminalToggleShortcutLabel,
   diffToggleShortcutLabel,
+  researchCardCount,
+  researchCardsOpen,
   gitCwd,
   diffOpen,
   onRunProjectScript,
@@ -80,6 +85,7 @@ export const ChatHeader = memo(function ChatHeader({
   onDeleteProjectScript,
   onToggleTerminal,
   onToggleDiff,
+  onToggleResearchCards,
   reserveTitleBarControlInset,
 }: ChatHeaderProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -119,6 +125,26 @@ export const ChatHeader = memo(function ChatHeader({
               {...(draftId ? { draftId } : {})}
             />
           )}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  className="shrink-0"
+                  pressed={researchCardsOpen}
+                  onPressedChange={onToggleResearchCards}
+                  aria-label="Toggle research card drawer"
+                  variant="outline"
+                  size="xs"
+                >
+                  <LayersIcon className="size-3" />
+                  {researchCardCount > 0 ? (
+                    <span className="ml-1 text-[10px] leading-none">{researchCardCount}</span>
+                  ) : null}
+                </Toggle>
+              }
+            />
+            <TooltipPopup side="bottom">Toggle research card drawer</TooltipPopup>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger
               render={

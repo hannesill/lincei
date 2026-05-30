@@ -647,6 +647,107 @@ describe("orchestration projector", () => {
     ]);
   });
 
+  it("keeps superseded research cards inspectable", async () => {
+    const now = "2026-02-24T09:00:00.000Z";
+    let current = await Effect.runPromise(
+      projectEvent(
+        createEmptyReadModel(now),
+        makeEvent({
+          sequence: 1,
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
+          occurredAt: now,
+          commandId: "cmd-session-create",
+          payload: {
+            sessionId: "session-1",
+            projectId: "project-1",
+            title: "Research session",
+            modelSelection: {
+              provider: ProviderDriverKind.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        }),
+      ),
+    );
+
+    const card = {
+      id: "card-1",
+      type: "markdown" as const,
+      status: "proposed" as const,
+      title: "Initial finding",
+      artifacts: [],
+      provenance: [],
+      turnId: null,
+      createdAt: "2026-02-24T09:00:01.000Z",
+      updatedAt: "2026-02-24T09:00:01.000Z",
+    };
+    const replacementCard = {
+      ...card,
+      id: "card-2",
+      title: "Replacement finding",
+      createdAt: "2026-02-24T09:00:03.000Z",
+      updatedAt: "2026-02-24T09:00:03.000Z",
+    };
+
+    for (const event of [
+      makeEvent({
+        sequence: 2,
+        type: "session.research-card-proposed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:01.000Z",
+        commandId: "cmd-card-1",
+        payload: {
+          sessionId: "session-1",
+          researchCard: card,
+        },
+      }),
+      makeEvent({
+        sequence: 3,
+        type: "session.research-card-lifecycle-updated",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:02.000Z",
+        commandId: "cmd-card-review",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          status: "review-requested",
+          action: "request_review",
+          updatedAt: "2026-02-24T09:00:02.000Z",
+        },
+      }),
+      makeEvent({
+        sequence: 4,
+        type: "session.research-card-superseded",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:03.000Z",
+        commandId: "cmd-card-supersede",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          replacementCard,
+          supersededAt: "2026-02-24T09:00:03.000Z",
+        },
+      }),
+    ]) {
+      current = await Effect.runPromise(projectEvent(current, event));
+    }
+
+    expect(current.sessions[0]?.researchCards.map((entry) => [entry.id, entry.status])).toEqual([
+      ["card-1", "superseded"],
+      ["card-2", "proposed"],
+    ]);
+  });
+
   it("prunes reverted turn messages from in-memory session snapshot", async () => {
     const createdAt = "2026-02-23T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);

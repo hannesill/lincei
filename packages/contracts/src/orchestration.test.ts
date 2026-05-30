@@ -801,10 +801,34 @@ it.effect("decodes research card command shapes", () =>
       },
       createdAt: "2026-01-01T00:02:00.000Z",
     });
+    const lifecycle = yield* decodeOrchestrationCommand({
+      type: "session.research-card.lifecycle",
+      commandId: "cmd-card-lifecycle",
+      sessionId: "session-1",
+      cardId: "card-1",
+      action: "request_review",
+      note: "Ready for review.",
+      createdAt: "2026-01-01T00:03:00.000Z",
+    });
+    const superseded = yield* decodeOrchestrationCommand({
+      type: "session.research-card.supersede",
+      commandId: "cmd-card-supersede",
+      sessionId: "session-1",
+      cardId: "card-1",
+      replacementCard: {
+        ...researchCard,
+        id: "card-2",
+        title: "Replacement decision",
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      },
+      createdAt: "2026-01-01T00:04:00.000Z",
+    });
 
     assert.strictEqual(proposed.type, "session.research-card.propose");
     assert.strictEqual(updated.type, "session.research-card.update");
     assert.strictEqual(reviewed.type, "session.research-card.review");
+    assert.strictEqual(lifecycle.type, "session.research-card.lifecycle");
+    assert.strictEqual(superseded.type, "session.research-card.supersede");
   }),
 );
 
@@ -869,10 +893,42 @@ it.effect("decodes research card event shapes", () =>
         },
       },
     });
+    const lifecycle = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 4,
+      eventId: "event-card-lifecycle",
+      type: "session.research-card-lifecycle-updated",
+      payload: {
+        sessionId: "session-1",
+        cardId: "card-1",
+        status: "review-requested",
+        action: "request_review",
+        updatedAt: "2026-01-01T00:03:00.000Z",
+      },
+    });
+    const superseded = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 5,
+      eventId: "event-card-superseded",
+      type: "session.research-card-superseded",
+      payload: {
+        sessionId: "session-1",
+        cardId: "card-1",
+        replacementCard: {
+          ...researchCard,
+          id: "card-2",
+          title: "Replacement finding",
+          updatedAt: "2026-01-01T00:04:00.000Z",
+        },
+        supersededAt: "2026-01-01T00:04:00.000Z",
+      },
+    });
 
     assert.strictEqual(proposed.type, "session.research-card-proposed");
     assert.strictEqual(updated.type, "session.research-card-updated");
     assert.strictEqual(reviewed.type, "session.research-card-reviewed");
+    assert.strictEqual(lifecycle.type, "session.research-card-lifecycle-updated");
+    assert.strictEqual(superseded.type, "session.research-card-superseded");
   }),
 );
 

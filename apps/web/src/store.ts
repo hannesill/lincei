@@ -17,6 +17,7 @@ import type {
   ProjectId,
   ScopedProjectRef,
   ScopedSessionRef,
+  ResearchCardLifecycleStatus,
 } from "@t3tools/contracts";
 import { isProviderDriverKind, ProviderDriverKind } from "@t3tools/contracts";
 import type { SessionId, TurnId } from "@t3tools/contracts";
@@ -27,6 +28,7 @@ import {
   type ChatMessage,
   type Project,
   type ProposedPlan,
+  type ResearchCard,
   type SidebarSessionSummary,
   type Session,
   type ProviderRuntime,
@@ -75,6 +77,8 @@ export interface EnvironmentState {
   activityBySessionId: Record<SessionId, Record<string, OrchestrationSessionActivity>>;
   proposedPlanIdsBySessionId: Record<SessionId, string[]>;
   proposedPlanBySessionId: Record<SessionId, Record<string, ProposedPlan>>;
+  researchCardIdsBySessionId?: Record<SessionId, string[]>;
+  researchCardBySessionId?: Record<SessionId, Record<string, ResearchCard>>;
   turnDiffIdsBySessionId: Record<SessionId, TurnId[]>;
   turnDiffSummaryBySessionId: Record<SessionId, Record<TurnId, TurnDiffSummary>>;
 
@@ -109,6 +113,8 @@ const initialEnvironmentState: EnvironmentState = {
   activityBySessionId: {},
   proposedPlanIdsBySessionId: {},
   proposedPlanBySessionId: {},
+  researchCardIdsBySessionId: {},
+  researchCardBySessionId: {},
   turnDiffIdsBySessionId: {},
   turnDiffSummaryBySessionId: {},
   sidebarSessionSummaryById: {},
@@ -243,6 +249,7 @@ function mapSession(session: OrchestrationSession, environmentId: EnvironmentId)
     session: session.session ? mapProviderRuntime(session.session) : null,
     messages: session.messages.map((message) => mapMessage(environmentId, message)),
     proposedPlans: session.proposedPlans.map(mapProposedPlan),
+    researchCards: session.researchCards.map((card) => ({ ...card })),
     error: sanitizeSessionErrorMessage(session.session?.lastError),
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
@@ -482,6 +489,18 @@ function buildProposedPlanSlice(session: Session): {
   };
 }
 
+function buildResearchCardSlice(session: Session): {
+  ids: string[];
+  byId: Record<string, ResearchCard>;
+} {
+  return {
+    ids: (session.researchCards ?? []).map((card) => card.id),
+    byId: Object.fromEntries(
+      (session.researchCards ?? []).map((card) => [card.id, card] as const),
+    ) as Record<string, ResearchCard>,
+  };
+}
+
 function buildTurnDiffSlice(session: Session): {
   ids: TurnId[];
   byId: Record<TurnId, TurnDiffSummary>;
@@ -665,6 +684,21 @@ function writeSessionState(
     };
   }
 
+  if (previousSession?.researchCards !== nextSession.researchCards) {
+    const nextResearchCardSlice = buildResearchCardSlice(nextSession);
+    nextState = {
+      ...nextState,
+      researchCardIdsBySessionId: {
+        ...nextState.researchCardIdsBySessionId,
+        [nextSession.id]: nextResearchCardSlice.ids,
+      },
+      researchCardBySessionId: {
+        ...nextState.researchCardBySessionId,
+        [nextSession.id]: nextResearchCardSlice.byId,
+      },
+    };
+  }
+
   if (previousSession?.turnDiffSummaries !== nextSession.turnDiffSummaries) {
     const nextTurnDiffSlice = buildTurnDiffSlice(nextSession);
     nextState = {
@@ -809,6 +843,10 @@ function removeSessionState(state: EnvironmentState, sessionId: SessionId): Envi
   const { [sessionId]: _removedPlanIds, ...proposedPlanIdsBySessionId } =
     state.proposedPlanIdsBySessionId;
   const { [sessionId]: _removedPlans, ...proposedPlanBySessionId } = state.proposedPlanBySessionId;
+  const { [sessionId]: _removedResearchCardIds, ...researchCardIdsBySessionId } =
+    state.researchCardIdsBySessionId ?? {};
+  const { [sessionId]: _removedResearchCards, ...researchCardBySessionId } =
+    state.researchCardBySessionId ?? {};
   const { [sessionId]: _removedTurnDiffIds, ...turnDiffIdsBySessionId } =
     state.turnDiffIdsBySessionId;
   const { [sessionId]: _removedTurnDiffs, ...turnDiffSummaryBySessionId } =
@@ -829,6 +867,8 @@ function removeSessionState(state: EnvironmentState, sessionId: SessionId): Envi
     activityBySessionId,
     proposedPlanIdsBySessionId,
     proposedPlanBySessionId,
+    researchCardIdsBySessionId,
+    researchCardBySessionId,
     turnDiffIdsBySessionId,
     turnDiffSummaryBySessionId,
     sidebarSessionSummaryById,
@@ -860,6 +900,29 @@ function compareActivities(
   }
 
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+}
+
+function reviewActionToResearchCardStatus(
+  action: string,
+  currentStatus: ResearchCardLifecycleStatus,
+): ResearchCardLifecycleStatus {
+  switch (action) {
+    case "accept":
+    case "accepted":
+      return "accepted";
+    case "requestChanges":
+    case "request_changes":
+    case "changes-requested":
+      return "changes-requested";
+    case "reject":
+    case "rejected":
+      return "rejected";
+    case "dismiss":
+    case "dismissed":
+      return "dismissed";
+    default:
+      return currentStatus;
+  }
 }
 
 function buildLatestTurn(params: {
@@ -992,6 +1055,15 @@ function retainSessionProposedPlansAfterRevert(
 ): ProposedPlan[] {
   return proposedPlans.filter(
     (proposedPlan) => proposedPlan.turnId === null || retainedTurnIds.has(proposedPlan.turnId),
+  );
+}
+
+function retainSessionResearchCardsAfterRevert(
+  researchCards: ReadonlyArray<ResearchCard>,
+  retainedTurnIds: ReadonlySet<string>,
+): ResearchCard[] {
+  return researchCards.filter(
+    (researchCard) => researchCard.turnId === null || retainedTurnIds.has(researchCard.turnId),
   );
 }
 
@@ -1525,6 +1597,121 @@ function applyEnvironmentOrchestrationEvent(
         };
       });
 
+    case "session.research-card-proposed":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const researchCard: ResearchCard = { ...event.payload.researchCard };
+        const researchCards = [
+          ...(session.researchCards ?? []).filter((entry) => entry.id !== researchCard.id),
+          researchCard,
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        return {
+          ...session,
+          researchCards,
+          updatedAt: event.occurredAt,
+        };
+      });
+
+    case "session.research-card-updated":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const researchCard: ResearchCard = { ...event.payload.researchCard };
+        const researchCards = [
+          ...(session.researchCards ?? []).filter((entry) => entry.id !== event.payload.cardId),
+          researchCard,
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        return {
+          ...session,
+          researchCards,
+          updatedAt: event.occurredAt,
+        };
+      });
+
+    case "session.research-card-reviewed":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const researchCards: ResearchCard[] = [];
+        for (const researchCard of session.researchCards ?? []) {
+          if (researchCard.id !== event.payload.cardId) {
+            researchCards.push(researchCard);
+            continue;
+          }
+          const review =
+            researchCard.review === undefined
+              ? undefined
+              : {
+                  ...researchCard.review,
+                  response: event.payload.response,
+                };
+          researchCards.push({
+            ...researchCard,
+            status: reviewActionToResearchCardStatus(
+              event.payload.response.action,
+              researchCard.status,
+            ),
+            ...(review !== undefined ? { review } : {}),
+            updatedAt: event.payload.response.timestamp,
+          });
+        }
+        return {
+          ...session,
+          researchCards,
+          updatedAt: event.occurredAt,
+        };
+      });
+
+    case "session.research-card-lifecycle-updated":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const researchCards: ResearchCard[] = [];
+        for (const researchCard of session.researchCards ?? []) {
+          researchCards.push(
+            researchCard.id === event.payload.cardId
+              ? {
+                  ...researchCard,
+                  status: event.payload.status,
+                  updatedAt: event.payload.updatedAt,
+                }
+              : researchCard,
+          );
+        }
+        return {
+          ...session,
+          researchCards,
+          updatedAt: event.occurredAt,
+        };
+      });
+
+    case "session.research-card-superseded":
+      return updateSessionState(state, event.payload.sessionId, (session) => {
+        const nextResearchCards: ResearchCard[] = [];
+        for (const researchCard of session.researchCards ?? []) {
+          if (researchCard.id === event.payload.replacementCard.id) {
+            continue;
+          }
+          nextResearchCards.push(
+            researchCard.id === event.payload.cardId
+              ? {
+                  ...researchCard,
+                  status: "superseded",
+                  updatedAt: event.payload.supersededAt,
+                }
+              : researchCard,
+          );
+        }
+        const researchCards = [...nextResearchCards, { ...event.payload.replacementCard }].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        return {
+          ...session,
+          researchCards,
+          updatedAt: event.occurredAt,
+        };
+      });
+
     case "session.turn-diff-completed":
       return updateSessionState(state, event.payload.sessionId, (session) => {
         const checkpoint = mapTurnDiffSummary({
@@ -1597,6 +1784,10 @@ function applyEnvironmentOrchestrationEvent(
           session.proposedPlans,
           retainedTurnIds,
         ).slice(-MAX_THREAD_PROPOSED_PLANS);
+        const researchCards = retainSessionResearchCardsAfterRevert(
+          session.researchCards ?? [],
+          retainedTurnIds,
+        );
         const activities = retainSessionActivitiesAfterRevert(session.activities, retainedTurnIds);
         const latestCheckpoint = turnDiffSummaries.at(-1) ?? null;
 
@@ -1605,6 +1796,7 @@ function applyEnvironmentOrchestrationEvent(
           turnDiffSummaries,
           messages,
           proposedPlans,
+          researchCards,
           activities,
           pendingSourceProposedPlan: undefined,
           latestTurn:

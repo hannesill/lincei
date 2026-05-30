@@ -15,6 +15,7 @@ import type {
   ProviderInstanceId,
   CheckpointRef,
   ProviderInteractionMode,
+  OrchestrationResearchCard,
   RuntimeMode,
 } from "@t3tools/contracts";
 
@@ -64,6 +65,8 @@ export interface ProposedPlan {
   updatedAt: string;
 }
 
+export type ResearchCard = OrchestrationResearchCard;
+
 export interface TurnDiffFileChange {
   path: string;
   kind?: string | undefined;
@@ -105,6 +108,7 @@ export interface Session {
   session: ProviderRuntime | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  researchCards?: ResearchCard[];
   error: string | null;
   createdAt: string;
   archivedAt: string | null;

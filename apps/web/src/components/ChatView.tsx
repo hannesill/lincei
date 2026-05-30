@@ -103,6 +103,7 @@ import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../shortcuts";
 import PlanSidebar from "./PlanSidebar";
+import ResearchCardDrawer from "./ResearchCardDrawer";
 import SessionTerminalDrawer from "./SessionTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
 import { cn, randomUUID } from "~/lib/utils";
@@ -718,7 +719,9 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [researchCardDrawerOpen, setResearchCardDrawerOpen] = useState(false);
   const shouldUsePlanSidebarSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUseResearchCardDrawerSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the session-change reset effect will open the sidebar instead of closing it.
@@ -2170,6 +2173,12 @@ export default function ChatView(props: ChatViewProps) {
     planSidebarDismissedForTurnRef.current =
       activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
   }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+  const toggleResearchCardDrawer = useCallback(() => {
+    setResearchCardDrawerOpen((open) => !open);
+  }, []);
+  const closeResearchCardDrawer = useCallback(() => {
+    setResearchCardDrawerOpen(false);
+  }, []);
 
   const persistSessionSettingsForNextTurn = useCallback(
     async (input: {
@@ -3558,6 +3567,15 @@ export default function ChatView(props: ChatViewProps) {
         terminalOpen={terminalState.terminalOpen}
         terminalToggleShortcutLabel={terminalToggleShortcutLabel}
         diffToggleShortcutLabel={diffPanelShortcutLabel}
+        researchCardCount={
+          (activeSession.researchCards ?? []).filter(
+            (card) =>
+              card.status !== "dismissed" &&
+              card.status !== "rejected" &&
+              card.status !== "superseded",
+          ).length
+        }
+        researchCardsOpen={researchCardDrawerOpen}
         gitCwd={gitCwd}
         diffOpen={diffOpen}
         onRunProjectScript={runProjectScript}
@@ -3566,6 +3584,7 @@ export default function ChatView(props: ChatViewProps) {
         onDeleteProjectScript={deleteProjectScript}
         onToggleTerminal={toggleTerminalVisibility}
         onToggleDiff={onToggleDiff}
+        onToggleResearchCards={toggleResearchCardDrawer}
         reserveTitleBarControlInset={reserveTitleBarControlInset}
       />
 
@@ -3777,6 +3796,16 @@ export default function ChatView(props: ChatViewProps) {
             onClose={closePlanSidebar}
           />
         ) : null}
+        {researchCardDrawerOpen && !shouldUseResearchCardDrawerSheet ? (
+          <ResearchCardDrawer
+            cards={activeSession.researchCards ?? []}
+            environmentId={environmentId}
+            sessionId={activeSession.id}
+            markdownCwd={gitCwd ?? undefined}
+            mode="sidebar"
+            onClose={closeResearchCardDrawer}
+          />
+        ) : null}
       </div>
       {/* end horizontal flex container */}
 
@@ -3811,6 +3840,18 @@ export default function ChatView(props: ChatViewProps) {
             timestampFormat={timestampFormat}
             mode="sheet"
             onClose={closePlanSidebar}
+          />
+        </RightPanelSheet>
+      ) : null}
+      {shouldUseResearchCardDrawerSheet ? (
+        <RightPanelSheet open={researchCardDrawerOpen} onClose={closeResearchCardDrawer}>
+          <ResearchCardDrawer
+            cards={activeSession.researchCards ?? []}
+            environmentId={environmentId}
+            sessionId={activeSession.id}
+            markdownCwd={gitCwd ?? undefined}
+            mode="sheet"
+            onClose={closeResearchCardDrawer}
           />
         </RightPanelSheet>
       ) : null}

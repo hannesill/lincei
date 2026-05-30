@@ -2,6 +2,8 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationResearchCard,
+  ResearchCardLifecycleStatus,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -45,6 +47,64 @@ type PlannedOrchestrationEvent = Omit<OrchestrationEvent, "sequence">;
 type DecideOrchestrationCommandResult =
   | PlannedOrchestrationEvent
   | ReadonlyArray<PlannedOrchestrationEvent>;
+
+function invariantError(commandType: string, detail: string): OrchestrationCommandInvariantError {
+  return new OrchestrationCommandInvariantError({
+    commandType,
+    detail,
+  });
+}
+
+function requireResearchCard(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly sessionId: string;
+  readonly cardId: string;
+}): Effect.Effect<OrchestrationResearchCard, OrchestrationCommandInvariantError> {
+  const session = input.readModel.sessions.find((entry) => entry.id === input.sessionId);
+  const card = session?.researchCards.find((entry) => entry.id === input.cardId);
+  if (card) {
+    return Effect.succeed(card);
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Research card '${input.cardId}' does not exist in session '${input.sessionId}' for command '${input.command.type}'.`,
+    ),
+  );
+}
+
+function requireResearchCardAbsent(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly sessionId: string;
+  readonly cardId: string;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const session = input.readModel.sessions.find((entry) => entry.id === input.sessionId);
+  const card = session?.researchCards.find((entry) => entry.id === input.cardId);
+  if (!card) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    invariantError(
+      input.command.type,
+      `Research card '${input.cardId}' already exists in session '${input.sessionId}'.`,
+    ),
+  );
+}
+
+function lifecycleActionToStatus(
+  action: Extract<OrchestrationCommand, { type: "session.research-card.lifecycle" }>["action"],
+): ResearchCardLifecycleStatus {
+  switch (action) {
+    case "request_review":
+      return "review-requested";
+    case "withdraw":
+      return "withdrawn";
+    case "dismiss":
+      return "dismissed";
+  }
+}
 
 const decideCommandSequence = Effect.fn("decideCommandSequence")(function* ({
   commands,
@@ -660,6 +720,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         sessionId: command.sessionId,
       });
+      yield* requireResearchCardAbsent({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+        cardId: command.researchCard.id,
+      });
       return {
         ...withEventBase({
           aggregateKind: "session",
@@ -681,6 +747,18 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         sessionId: command.sessionId,
       });
+      yield* requireResearchCard({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+        cardId: command.cardId,
+      });
+      if (command.researchCard.id !== command.cardId) {
+        return yield* invariantError(
+          command.type,
+          `Research card update id '${command.researchCard.id}' must match target card '${command.cardId}'.`,
+        );
+      }
       return {
         ...withEventBase({
           aggregateKind: "session",
@@ -703,6 +781,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         sessionId: command.sessionId,
       });
+      yield* requireResearchCard({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+        cardId: command.cardId,
+      });
       return {
         ...withEventBase({
           aggregateKind: "session",
@@ -715,6 +799,78 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           sessionId: command.sessionId,
           cardId: command.cardId,
           response: command.response,
+        },
+      };
+    }
+
+    case "session.research-card.lifecycle": {
+      yield* requireSession({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      yield* requireResearchCard({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+        cardId: command.cardId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "session.research-card-lifecycle-updated",
+        payload: {
+          sessionId: command.sessionId,
+          cardId: command.cardId,
+          status: lifecycleActionToStatus(command.action),
+          action: command.action,
+          ...(command.note !== undefined ? { note: command.note } : {}),
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "session.research-card.supersede": {
+      yield* requireSession({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      yield* requireResearchCard({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+        cardId: command.cardId,
+      });
+      if (command.replacementCard.id === command.cardId) {
+        return yield* invariantError(
+          command.type,
+          "Replacement research card id must be different from the superseded card id.",
+        );
+      }
+      yield* requireResearchCardAbsent({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+        cardId: command.replacementCard.id,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "session.research-card-superseded",
+        payload: {
+          sessionId: command.sessionId,
+          cardId: command.cardId,
+          replacementCard: command.replacementCard,
+          supersededAt: command.createdAt,
         },
       };
     }
