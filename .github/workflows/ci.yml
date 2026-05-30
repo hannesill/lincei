@@ -5,11 +5,16 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
     name: Format, Lint, Typecheck, Test, Browser Test, Build
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -36,6 +41,7 @@ jobs:
             ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
 
       - name: Cache Playwright browsers
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -59,24 +65,29 @@ jobs:
         run: bun run test
 
       - name: Install browser test runtime
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           cd apps/web
           bunx playwright install --with-deps chromium
 
       - name: Browser test
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: bun run --cwd apps/web test:browser
 
       - name: Build desktop pipeline
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: bun run build:desktop
 
       - name: Verify preload bundle output
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           test -f apps/desktop/dist-electron/preload.cjs
           grep -nE "desktopBridge|getLocalEnvironmentBootstrap|PICK_FOLDER_CHANNEL|wsUrl" apps/desktop/dist-electron/preload.cjs
 
   release_smoke:
     name: Release Smoke
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
