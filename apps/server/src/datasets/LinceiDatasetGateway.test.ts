@@ -285,23 +285,32 @@ describe("LinceiDatasetGateway", () => {
     }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
   });
 
-  it.effect("requires explicit dataset selection for schema, describe-table, and query", () => {
-    const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-required-caller-"));
-    const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-required-base-"));
-    const workspacePath = mkdtempSync(join(tmpdir(), "lincei-gateway-required-workspace-"));
+  it.effect(
+    "fails when dataset selection cannot be inferred for schema, describe-table, and query",
+    () => {
+      const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-required-caller-"));
+      const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-required-base-"));
+      const workspacePath = mkdtempSync(join(tmpdir(), "lincei-gateway-required-workspace-"));
 
-    return Effect.gen(function* () {
-      const gateway = yield* LinceiDatasetGateway;
-      const schemaResult = yield* Effect.result(gateway.schema());
-      const describeResult = yield* Effect.result(gateway.describeTable({ table: "patients" }));
-      const queryResult = yield* Effect.result(gateway.query({ sql: "select 1" }));
+      return Effect.gen(function* () {
+        const gateway = yield* LinceiDatasetGateway;
+        const schemaResult = yield* Effect.result(gateway.schema());
+        const describeResult = yield* Effect.result(gateway.describeTable({ table: "patients" }));
+        const queryResult = yield* Effect.result(gateway.query({ sql: "select 1" }));
 
-      expect(Result.isFailure(schemaResult)).toBe(true);
-      expect(Result.isFailure(describeResult)).toBe(true);
-      expect(Result.isFailure(queryResult)).toBe(true);
-      expect(mockRun).not.toHaveBeenCalled();
-    }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
-  });
+        expect(Result.isFailure(schemaResult)).toBe(true);
+        expect(Result.isFailure(describeResult)).toBe(true);
+        expect(Result.isFailure(queryResult)).toBe(true);
+        expect(mockRun).toHaveBeenCalledTimes(3);
+        expect(mockRun).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({
+            args: expect.arrayContaining(["status", "--all", "--backend", "duckdb"]),
+          }),
+        );
+      }).pipe(Effect.provide(makeLayer({ callerCwd, baseDir, workspacePath })));
+    },
+  );
 
   it.effect("emits safe markdown guidance for agent prompts", () => {
     const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-context-caller-"));

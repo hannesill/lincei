@@ -50,7 +50,8 @@ const datasetFlag = Flag.choice("dataset", DATASET_IDS).pipe(
 );
 
 const requiredDatasetFlag = Flag.choice("dataset", DATASET_IDS).pipe(
-  Flag.withDescription("Dataset id for this request."),
+  Flag.withDescription("Dataset id for this request. Defaults when Lincei can infer one."),
+  Flag.optional,
 );
 
 const backendFlag = Flag.choice("backend", DATASET_BACKEND_IDS).pipe(
@@ -80,7 +81,7 @@ interface DatasetSelectionFlags {
 }
 
 interface RequiredDatasetSelectionFlags {
-  readonly datasetId: DatasetId;
+  readonly datasetId: Option.Option<DatasetId>;
   readonly backendId: Option.Option<DatasetBackendId>;
 }
 
@@ -92,7 +93,7 @@ const selectionFromFlags = (flags: DatasetSelectionFlags): DatasetCommandSelecti
 const selectionFromRequiredDatasetFlags = (
   flags: RequiredDatasetSelectionFlags,
 ): DatasetCommandSelection => ({
-  datasetId: flags.datasetId,
+  ...(Option.isSome(flags.datasetId) ? { datasetId: flags.datasetId.value } : {}),
   ...(Option.isSome(flags.backendId) ? { backendId: flags.backendId.value } : {}),
 });
 

@@ -17,6 +17,8 @@ import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -39,6 +41,11 @@ import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSna
 import { OrchestrationLayerLive } from "../orchestration/runtimeLayer.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "../persistence/Layers/Sqlite.ts";
 import { RepositoryIdentityResolverLive } from "../project/Layers/RepositoryIdentityResolver.ts";
+import {
+  LINCEI_PROJECT_ID_ENV,
+  LINCEI_SESSION_ID_ENV,
+  LINCEI_WORKSPACE_ROOT_ENV,
+} from "../provider/LinceiAmbientEnvironment.ts";
 import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
@@ -89,8 +96,9 @@ const allFlag = Flag.boolean("all").pipe(
 );
 
 const sessionFlag = Flag.string("session").pipe(
-  Flag.withDescription("Session id."),
+  Flag.withDescription("Session id. Defaults to the current Lincei session when available."),
   Flag.withSchema(SessionId),
+  Flag.optional,
 );
 
 const cardTypeFlag = Flag.choice("type", ResearchCardType.literals).pipe(
@@ -108,8 +116,23 @@ const previewJsonFlag = Flag.string("preview-json").pipe(
   Flag.optional,
 );
 
+const previewFlag = Flag.string("preview").pipe(
+  Flag.withDescription("Markdown preview text."),
+  Flag.optional,
+);
+
+const previewFileFlag = Flag.string("preview-file").pipe(
+  Flag.withDescription("Path to a markdown or JSON preview file."),
+  Flag.optional,
+);
+
 const artifactsJsonFlag = Flag.string("artifacts-json").pipe(
   Flag.withDescription("JSON array of artifact references."),
+  Flag.optional,
+);
+
+const artifactsFileFlag = Flag.string("artifacts-file").pipe(
+  Flag.withDescription("Path to a JSON array of artifact references."),
   Flag.optional,
 );
 
@@ -134,32 +157,93 @@ const decodeArtifactsJson = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Array(ResearchCardArtifactReference)),
 );
 
-const parsePreviewJson = (value: Option.Option<string>) =>
-  Option.match(value, {
-    onNone: () => Effect.void,
-    onSome: (raw) =>
-      decodeUnknownJson(raw).pipe(
+const parseJsonValue = (raw: string, flagName: string) =>
+  decodeUnknownJson(raw).pipe(
+    Effect.mapError(
+      (cause) =>
+        new AgentCliError({
+          message: `Invalid ${flagName}: ${String(cause)}`,
+        }),
+    ),
+  );
+
+const parseArtifactsJsonText = (raw: string, sourceName: string) =>
+  decodeArtifactsJson(raw).pipe(
+    Effect.mapError(
+      (cause) =>
+        new AgentCliError({
+          message: `Invalid ${sourceName}: ${String(cause)}`,
+        }),
+    ),
+  );
+
+const parsePreviewInput = (input: {
+  readonly previewJson: Option.Option<string>;
+  readonly preview: Option.Option<string>;
+  readonly previewFile: Option.Option<string>;
+}) =>
+  Effect.gen(function* () {
+    const provided = [
+      Option.isSome(input.previewJson),
+      Option.isSome(input.preview),
+      Option.isSome(input.previewFile),
+    ].filter(Boolean).length;
+    if (provided > 1) {
+      return yield* new AgentCliError({
+        message: "Use only one of --preview-json, --preview, or --preview-file.",
+      });
+    }
+    if (Option.isSome(input.previewJson)) {
+      return yield* parseJsonValue(input.previewJson.value, "--preview-json");
+    }
+    if (Option.isSome(input.preview)) {
+      return { markdown: input.preview.value };
+    }
+    if (Option.isSome(input.previewFile)) {
+      const previewFile = input.previewFile.value;
+      const fs = yield* FileSystem.FileSystem;
+      const raw = yield* fs.readFileString(previewFile).pipe(
         Effect.mapError(
           (cause) =>
             new AgentCliError({
-              message: `Invalid --preview-json: ${String(cause)}`,
+              message: `Failed to read --preview-file '${previewFile}': ${String(cause)}`,
             }),
         ),
-      ),
+      );
+      return previewFile.endsWith(".json")
+        ? yield* parseJsonValue(raw, "--preview-file")
+        : { markdown: raw };
+    }
+    return undefined;
   });
 
-const parseArtifactsJson = (value: Option.Option<string>) =>
-  Option.match(value, {
-    onNone: () => Effect.succeed([]),
-    onSome: (raw) =>
-      decodeArtifactsJson(raw).pipe(
+const parseArtifactsInput = (input: {
+  readonly artifactsJson: Option.Option<string>;
+  readonly artifactsFile: Option.Option<string>;
+}) =>
+  Effect.gen(function* () {
+    if (Option.isSome(input.artifactsJson) && Option.isSome(input.artifactsFile)) {
+      return yield* new AgentCliError({
+        message: "Use only one of --artifacts-json or --artifacts-file.",
+      });
+    }
+    if (Option.isSome(input.artifactsJson)) {
+      return yield* parseArtifactsJsonText(input.artifactsJson.value, "--artifacts-json");
+    }
+    if (Option.isSome(input.artifactsFile)) {
+      const artifactsFile = input.artifactsFile.value;
+      const fs = yield* FileSystem.FileSystem;
+      const raw = yield* fs.readFileString(artifactsFile).pipe(
         Effect.mapError(
           (cause) =>
             new AgentCliError({
-              message: `Invalid --artifacts-json: ${String(cause)}`,
+              message: `Failed to read --artifacts-file '${artifactsFile}': ${String(cause)}`,
             }),
         ),
-      ),
+      );
+      return yield* parseArtifactsJsonText(raw, "--artifacts-file");
+    }
+    return [];
   });
 
 const runLiveServerRequest = <A, E, R>(
@@ -318,7 +402,11 @@ const runLiveWrite = Effect.fn("runAgentLiveWrite")(function* (
     dispatch: (
       command: AgentDispatchCommand,
     ) => Effect.Effect<void, AgentCliError, HttpClient.HttpClient>,
-  ) => Effect.Effect<unknown, AgentCliError, Crypto.Crypto | HttpClient.HttpClient>,
+  ) => Effect.Effect<
+    unknown,
+    AgentCliError,
+    Crypto.Crypto | FileSystem.FileSystem | HttpClient.HttpClient | Path.Path
+  >,
 ) {
   const logLevel = yield* GlobalFlag.LogLevel;
   const config = yield* resolveCliAuthConfig(flags, logLevel);
@@ -369,6 +457,126 @@ const findSession = (snapshot: OrchestrationReadModel, sessionId: SessionId) => 
   }
   return Effect.succeed(session);
 };
+
+const activeSessions = (snapshot: OrchestrationReadModel) =>
+  snapshot.sessions.filter((session) => session.deletedAt === null && session.archivedAt === null);
+
+const activeProjects = (snapshot: OrchestrationReadModel) =>
+  snapshot.projects.filter((project) => project.deletedAt === null);
+
+const readProcessEnv = (name: string) =>
+  Effect.sync(() => {
+    const value = process.env[name]?.trim();
+    return value && value.length > 0 ? value : undefined;
+  });
+
+const formatCandidateSessions = (sessions: ReadonlyArray<OrchestrationSession>) =>
+  sessions
+    .slice(0, 8)
+    .map((session) => `${session.id} (${session.title})`)
+    .join(", ");
+
+const formatCandidateProjects = (projects: ReadonlyArray<OrchestrationProject>) =>
+  projects
+    .slice(0, 8)
+    .map((project) => `${project.id} (${project.title}, ${project.workspaceRoot})`)
+    .join(", ");
+
+const pathWithinWorkspace = (candidatePath: string, workspaceRoot: string) => {
+  const normalizedPath = candidatePath.replace(/\/+$/g, "");
+  const normalizedRoot = workspaceRoot.replace(/\/+$/g, "");
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+};
+
+const findProjectByIdentifier = Effect.fn("findAgentProjectByIdentifier")(function* (
+  snapshot: OrchestrationReadModel,
+  identifier: string,
+) {
+  const path = yield* Path.Path;
+  const trimmed = identifier.trim();
+  const resolvedPath = trimmed.length > 0 ? path.resolve(trimmed) : trimmed;
+  return activeProjects(snapshot).find(
+    (project) =>
+      project.id === trimmed ||
+      project.workspaceRoot === trimmed ||
+      project.workspaceRoot === resolvedPath ||
+      pathWithinWorkspace(resolvedPath, project.workspaceRoot),
+  );
+});
+
+const resolveProjectTarget = Effect.fn("resolveAgentProjectTarget")(function* (
+  snapshot: OrchestrationReadModel,
+  explicitProject: Option.Option<string>,
+) {
+  const envProjectId = yield* readProcessEnv(LINCEI_PROJECT_ID_ENV);
+  const envWorkspaceRoot = yield* readProcessEnv(LINCEI_WORKSPACE_ROOT_ENV);
+  const cwd = process.cwd();
+  const candidates = [
+    Option.getOrUndefined(explicitProject),
+    envProjectId,
+    envWorkspaceRoot,
+    cwd,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  for (const candidate of candidates) {
+    const project = yield* findProjectByIdentifier(snapshot, candidate);
+    if (project) {
+      return project;
+    }
+  }
+
+  const projects = activeProjects(snapshot);
+  if (projects.length === 1) {
+    return projects[0]!;
+  }
+
+  return yield* new AgentCliError({
+    message:
+      projects.length === 0
+        ? "No active project found."
+        : `Could not infer project. Pass --project <id-or-workspace-root>. Candidates: ${formatCandidateProjects(projects)}.`,
+  });
+});
+
+const resolveSessionTarget = Effect.fn("resolveAgentSessionTarget")(function* (
+  snapshot: OrchestrationReadModel,
+  explicitSession: Option.Option<SessionId>,
+) {
+  const explicit = Option.getOrUndefined(explicitSession);
+  if (explicit !== undefined) {
+    return yield* findSession(snapshot, explicit);
+  }
+
+  const envSessionId = yield* readProcessEnv(LINCEI_SESSION_ID_ENV);
+  if (envSessionId !== undefined) {
+    return yield* findSession(snapshot, SessionId.make(envSessionId));
+  }
+
+  const project = yield* Effect.exit(resolveProjectTarget(snapshot, Option.none()));
+  const sessions = activeSessions(snapshot);
+  const projectId = Exit.isSuccess(project) ? project.value.id : undefined;
+  const projectSessions =
+    projectId !== undefined ? sessions.filter((session) => session.projectId === projectId) : [];
+
+  if (projectSessions.length === 1) {
+    return projectSessions[0]!;
+  }
+  if (projectSessions.length > 1) {
+    return yield* new AgentCliError({
+      message: `Could not infer session for project '${projectId}'. Pass --session <id>. Candidates: ${formatCandidateSessions(projectSessions)}.`,
+    });
+  }
+  if (sessions.length === 1) {
+    return sessions[0]!;
+  }
+
+  return yield* new AgentCliError({
+    message:
+      sessions.length === 0
+        ? "No active session found."
+        : `Could not infer session. Pass --session <id>. Candidates: ${formatCandidateSessions(sessions)}.`,
+  });
+});
 
 const findCard = (session: OrchestrationSession, cardId: ResearchCardId) => {
   const card = session.researchCards.find((candidate) => candidate.id === cardId);
@@ -507,7 +715,11 @@ const runWriteCommand = (
     dispatch: (
       command: AgentDispatchCommand,
     ) => Effect.Effect<void, AgentCliError, HttpClient.HttpClient>,
-  ) => Effect.Effect<unknown, AgentCliError, Crypto.Crypto | HttpClient.HttpClient>,
+  ) => Effect.Effect<
+    unknown,
+    AgentCliError,
+    Crypto.Crypto | FileSystem.FileSystem | HttpClient.HttpClient | Path.Path
+  >,
 ) =>
   Effect.gen(function* () {
     const output = yield* runLiveWrite(flags, run);
@@ -524,7 +736,7 @@ const cardListCommand = Command.make("list", {
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
         return relevantCards(session, flags.all).map(compactCard);
       }),
     ),
@@ -541,7 +753,7 @@ const cardContextCommand = Command.make("context", {
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot, source) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
         return {
           source,
           session: makeSessionContext(session, flags.all),
@@ -557,16 +769,19 @@ const cardProposeCommand = Command.make("propose", {
   title: titleFlag,
   type: cardTypeFlag,
   previewJson: previewJsonFlag,
+  preview: previewFlag,
+  previewFile: previewFileFlag,
   artifactsJson: artifactsJsonFlag,
+  artifactsFile: artifactsFileFlag,
   json: jsonFlag,
 }).pipe(
   Command.withDescription("Propose a research card."),
   Command.withHandler((flags) =>
     runWriteCommand(flags, (snapshot, dispatch) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
-        const preview = yield* parsePreviewJson(flags.previewJson);
-        const artifacts = yield* parseArtifactsJson(flags.artifactsJson);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
+        const preview = yield* parsePreviewInput(flags);
+        const artifacts = yield* parseArtifactsInput(flags);
         const card = yield* makeCard({
           session,
           title: flags.title,
@@ -577,7 +792,7 @@ const cardProposeCommand = Command.make("propose", {
         yield* dispatch({
           type: "session.research-card.propose",
           commandId: CommandId.make(yield* agentCommandUuid),
-          sessionId: flags.session,
+          sessionId: session.id,
           researchCard: card,
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
@@ -594,29 +809,38 @@ const cardUpdateCommand = Command.make("update", {
   title: optionalTitleFlag,
   status: cardStatusFlag,
   previewJson: previewJsonFlag,
+  preview: previewFlag,
+  previewFile: previewFileFlag,
   artifactsJson: artifactsJsonFlag,
+  artifactsFile: artifactsFileFlag,
   json: jsonFlag,
 }).pipe(
   Command.withDescription("Update a research card."),
   Command.withHandler((flags) =>
     runWriteCommand(flags, (snapshot, dispatch) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
         const existing = yield* findCard(session, flags.cardId);
-        const preview = yield* parsePreviewJson(flags.previewJson);
-        const artifacts = yield* parseArtifactsJson(flags.artifactsJson);
+        const preview = yield* parsePreviewInput(flags);
+        const artifacts = yield* parseArtifactsInput(flags);
+        const shouldReplacePreview =
+          Option.isSome(flags.previewJson) ||
+          Option.isSome(flags.preview) ||
+          Option.isSome(flags.previewFile);
         const card = yield* updateCard({
           card: existing,
           ...(Option.isSome(flags.title) ? { title: flags.title.value } : {}),
           ...(Option.isSome(flags.status) ? { status: flags.status.value } : {}),
           preview,
-          replacePreview: Option.isSome(flags.previewJson),
-          ...(Option.isSome(flags.artifactsJson) ? { artifacts } : {}),
+          replacePreview: shouldReplacePreview,
+          ...(Option.isSome(flags.artifactsJson) || Option.isSome(flags.artifactsFile)
+            ? { artifacts }
+            : {}),
         });
         yield* dispatch({
           type: "session.research-card.update",
           commandId: CommandId.make(yield* agentCommandUuid),
-          sessionId: flags.session,
+          sessionId: session.id,
           cardId: flags.cardId,
           researchCard: card,
           createdAt: DateTime.formatIso(yield* DateTime.now),
@@ -638,14 +862,14 @@ const cardRequestReviewCommand = Command.make("request-review", {
   Command.withHandler((flags) =>
     runWriteCommand(flags, (snapshot, dispatch) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
         const now = DateTime.formatIso(yield* DateTime.now);
         const existing = yield* findCard(session, flags.cardId);
         const reviewPrompt = Option.getOrElse(flags.note, () => "Review this research card.");
         yield* dispatch({
           type: "session.research-card.lifecycle",
           commandId: CommandId.make(yield* agentCommandUuid),
-          sessionId: flags.session,
+          sessionId: session.id,
           cardId: flags.cardId,
           action: "request_review",
           ...(Option.isSome(flags.note) ? { note: flags.note.value } : {}),
@@ -655,7 +879,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
           yield* dispatch({
             type: "session.research-card.update",
             commandId: CommandId.make(yield* agentCommandUuid),
-            sessionId: flags.session,
+            sessionId: session.id,
             cardId: flags.cardId,
             researchCard: {
               ...existing,
@@ -692,17 +916,20 @@ const cardSupersedeCommand = Command.make("supersede", {
   title: titleFlag,
   type: cardTypeFlag,
   previewJson: previewJsonFlag,
+  preview: previewFlag,
+  previewFile: previewFileFlag,
   artifactsJson: artifactsJsonFlag,
+  artifactsFile: artifactsFileFlag,
   json: jsonFlag,
 }).pipe(
   Command.withDescription("Supersede a research card with a new proposal."),
   Command.withHandler((flags) =>
     runWriteCommand(flags, (snapshot, dispatch) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
         const oldCard = yield* findCard(session, flags.oldCardId);
-        const preview = yield* parsePreviewJson(flags.previewJson);
-        const artifacts = yield* parseArtifactsJson(flags.artifactsJson);
+        const preview = yield* parsePreviewInput(flags);
+        const artifacts = yield* parseArtifactsInput(flags);
         const newCard = yield* makeCard({
           session,
           title: flags.title,
@@ -713,7 +940,7 @@ const cardSupersedeCommand = Command.make("supersede", {
         yield* dispatch({
           type: "session.research-card.supersede",
           commandId: CommandId.make(yield* agentCommandUuid),
-          sessionId: flags.session,
+          sessionId: session.id,
           cardId: flags.oldCardId,
           replacementCard: newCard,
           createdAt: DateTime.formatIso(yield* DateTime.now),
@@ -745,7 +972,7 @@ const contextSessionCommand = Command.make("session", {
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot, source) =>
       Effect.gen(function* () {
-        const session = yield* findSession(snapshot, flags.session);
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
         return { source, session: makeSessionContext(session, true) };
       }),
     ),
@@ -757,6 +984,7 @@ const contextProjectCommand = Command.make("project", {
   project: Flag.string("project").pipe(
     Flag.withDescription("Project id or workspace root."),
     Flag.withAlias("workspace-root"),
+    Flag.optional,
   ),
   json: jsonFlag,
 }).pipe(
@@ -764,21 +992,7 @@ const contextProjectCommand = Command.make("project", {
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot, source) =>
       Effect.gen(function* () {
-        const path = yield* Path.Path;
-        const projectInput = flags.project.trim();
-        const projectPath = projectInput.length > 0 ? path.resolve(projectInput) : projectInput;
-        const project = snapshot.projects.find(
-          (candidate) =>
-            candidate.deletedAt === null &&
-            (candidate.id === projectInput ||
-              candidate.workspaceRoot === projectInput ||
-              candidate.workspaceRoot === projectPath),
-        );
-        if (!project) {
-          return yield* new AgentCliError({
-            message: `No active project found for '${flags.project}'.`,
-          });
-        }
+        const project = yield* resolveProjectTarget(snapshot, flags.project);
         const sessions = snapshot.sessions.filter(
           (session) =>
             session.projectId === project.id &&
@@ -786,6 +1000,44 @@ const contextProjectCommand = Command.make("project", {
             session.deletedAt === null,
         );
         return { source, project: compactProject(project, sessions) };
+      }),
+    ),
+  ),
+);
+
+const contextCurrentCommand = Command.make("current", {
+  ...projectLocationFlags,
+  json: jsonFlag,
+}).pipe(
+  Command.withDescription("Show inferred current Lincei session and project context."),
+  Command.withHandler((flags) =>
+    runReadCommand(flags, (snapshot, source) =>
+      Effect.gen(function* () {
+        const envSessionId = yield* readProcessEnv(LINCEI_SESSION_ID_ENV);
+        const envProjectId = yield* readProcessEnv(LINCEI_PROJECT_ID_ENV);
+        const envWorkspaceRoot = yield* readProcessEnv(LINCEI_WORKSPACE_ROOT_ENV);
+        const projectExit = yield* Effect.exit(resolveProjectTarget(snapshot, Option.none()));
+        const sessionExit = yield* Effect.exit(resolveSessionTarget(snapshot, Option.none()));
+        return {
+          source,
+          cwd: process.cwd(),
+          env: {
+            sessionId: envSessionId ?? null,
+            projectId: envProjectId ?? null,
+            workspaceRoot: envWorkspaceRoot ?? null,
+          },
+          project: Exit.isSuccess(projectExit)
+            ? compactProject(
+                projectExit.value,
+                activeSessions(snapshot).filter(
+                  (session) => session.projectId === projectExit.value.id,
+                ),
+              )
+            : { error: "Could not infer current project." },
+          session: Exit.isSuccess(sessionExit)
+            ? makeSessionContext(sessionExit.value, true)
+            : { error: "Could not infer current session." },
+        };
       }),
     ),
   ),
@@ -823,5 +1075,10 @@ const contextSummaryCommand = Command.make("summary", {
 
 export const contextCommand = Command.make("context").pipe(
   Command.withDescription("Read compact orchestration context."),
-  Command.withSubcommands([contextSessionCommand, contextProjectCommand, contextSummaryCommand]),
+  Command.withSubcommands([
+    contextCurrentCommand,
+    contextSessionCommand,
+    contextProjectCommand,
+    contextSummaryCommand,
+  ]),
 );

@@ -21,7 +21,7 @@ import { M4DatasetService } from "./M4DatasetService.ts";
 import { makeDatasetWorkspacePathResolver } from "./workspace.ts";
 
 export const DATASET_CONTEXT_SAFE_COMMAND_GUIDANCE =
-  "Use `lincei dataset ... --dataset <id> --backend <backend>` for dataset operations. Avoid `m4 use` and bare `m4`, `uvx m4`, or `uv run m4` calls; Lincei treats dataset selection as request-scoped.";
+  "Use `lincei dataset ...` for dataset operations; Lincei infers dataset/backend when unambiguous. Avoid `m4 use` and bare `m4`, `uvx m4`, or `uv run m4` calls; Lincei treats dataset selection as request-scoped.";
 
 const DATASET_TOOLS = [
   "status",
@@ -133,8 +133,19 @@ function policyDenied(detail: string): DatasetRpcError {
 function missingDatasetSelection(tool: LinceiDatasetTool): DatasetRpcError {
   return new DatasetRpcError({
     code: "policy_denied",
-    detail: `Dataset tool '${tool}' requires an explicit --dataset value.`,
+    detail: `Dataset tool '${tool}' could not infer a single dataset.`,
     actionableMessage: `Run this command with --dataset <${DATASET_IDS.join("|")}>.`,
+  });
+}
+
+function ambiguousDatasetSelection(
+  tool: LinceiDatasetTool,
+  candidates: ReadonlyArray<DatasetId>,
+): DatasetRpcError {
+  return new DatasetRpcError({
+    code: "policy_denied",
+    detail: `Dataset tool '${tool}' could not infer a single dataset. Candidates: ${candidates.join(", ")}.`,
+    actionableMessage: `Run this command with --dataset <${candidates.join("|")}>.`,
   });
 }
 
@@ -193,6 +204,36 @@ function selectionArgs(selection: DatasetCommandSelection): ReadonlyArray<string
     ...(selection.backendId ? ["--backend", selection.backendId] : []),
   ];
 }
+
+const inferDatasetSelection = Effect.fn("inferDatasetSelection")(function* (
+  tool: LinceiDatasetTool,
+  status: DatasetStatusResult,
+  backendId: DatasetBackendId | undefined,
+) {
+  const preferred = status.appReadiness.activeDatasetId ?? status.appReadiness.selectedDatasetId;
+  if (preferred !== undefined) {
+    return {
+      datasetId: preferred,
+      backendId:
+        backendId ?? status.appReadiness.activeBackendId ?? status.appReadiness.selectedBackendId,
+    };
+  }
+
+  const candidates = status.datasets
+    .filter((dataset) => backendId === undefined || dataset.backendId === backendId)
+    .filter(
+      (dataset) => dataset.active === true || dataset.selected === true || dataset.initialized,
+    )
+    .map((dataset) => dataset.datasetId);
+  const uniqueCandidates = [...new Set(candidates)];
+  if (uniqueCandidates.length === 1) {
+    return { datasetId: uniqueCandidates[0]!, ...(backendId ? { backendId } : {}) };
+  }
+  if (uniqueCandidates.length > 1) {
+    return yield* ambiguousDatasetSelection(tool, uniqueCandidates);
+  }
+  return yield* missingDatasetSelection(tool);
+});
 
 export function formatDatasetContextMarkdown(context: DatasetGatewayContextResult): string {
   return [
@@ -291,12 +332,19 @@ export const makeLinceiDatasetGateway = (
       Effect.gen(function* () {
         yield* enforceTool(input.tool);
         const { context, selection } = yield* resolveSelection(input.selection);
-        if (input.requireDataset === true && selection.datasetId === undefined) {
-          return yield* missingDatasetSelection(input.tool);
-        }
+        const effectiveSelection = yield* Effect.gen(function* () {
+          if (input.requireDataset !== true || selection.datasetId !== undefined) {
+            return selection;
+          }
+          const statusExit = yield* Effect.exit(datasetService.getStatus(selection));
+          if (statusExit._tag === "Failure") {
+            return yield* missingDatasetSelection(input.tool);
+          }
+          return yield* inferDatasetSelection(input.tool, statusExit.value, selection.backendId);
+        });
         const result = yield* m4Cli.json({
           cwd: context.workspacePath,
-          args: [...input.args, ...selectionArgs(selection), "--json", "--no-interactive"],
+          args: [...input.args, ...selectionArgs(effectiveSelection), "--json", "--no-interactive"],
         });
         return {
           command: result.command,
@@ -352,13 +400,21 @@ export const makeLinceiDatasetGateway = (
           resolveSelection(input),
           status(input),
         ]);
+        const inferredSelection =
+          resolved.selection.datasetId === undefined
+            ? yield* inferDatasetSelection(
+                "context",
+                statusResult,
+                resolved.selection.backendId,
+              ).pipe(Effect.catch(() => Effect.succeed(resolved.selection)))
+            : resolved.selection;
         return {
           guidance: DATASET_CONTEXT_SAFE_COMMAND_GUIDANCE,
           workspacePath: resolved.context.workspacePath,
-          ...(resolved.selection.datasetId
-            ? { selectedDatasetId: resolved.selection.datasetId }
+          ...(inferredSelection.datasetId
+            ? { selectedDatasetId: inferredSelection.datasetId }
             : {}),
-          defaultBackendId: resolved.selection.backendId ?? resolved.context.defaultBackendId,
+          defaultBackendId: inferredSelection.backendId ?? resolved.context.defaultBackendId,
           commands: [
             "lincei dataset status",
             "lincei dataset status --dataset mimic-iv-demo --backend duckdb",

@@ -50,6 +50,7 @@ import {
 } from "../opencodeRuntime.ts";
 import * as Option from "effect/Option";
 import { buildLinceiSessionInstructionFallback } from "../LinceiAgentInstructions.ts";
+import { makeLinceiSessionEnvironment } from "../LinceiAmbientEnvironment.ts";
 
 const PROVIDER = ProviderDriverKind.make("opencode");
 
@@ -1042,13 +1043,17 @@ export function makeOpenCodeAdapter(
           const sessionScope = yield* Scope.make();
           const startedExit = yield* Effect.exit(
             Effect.gen(function* () {
+              const sessionEnvironment = {
+                ...(options?.environment ?? process.env),
+                ...makeLinceiSessionEnvironment(input),
+              };
               // The runtime binds the server's lifetime to the Scope.Scope
               // we provide below — closing `sessionScope` kills the child
               // process automatically. No manual `server.close()` needed.
               const server = yield* openCodeRuntime.connectToOpenCodeServer({
                 binaryPath,
                 serverUrl,
-                ...(options?.environment ? { environment: options.environment } : {}),
+                environment: sessionEnvironment,
               });
               const client = openCodeRuntime.createOpenCodeSdkClient({
                 baseUrl: server.url,

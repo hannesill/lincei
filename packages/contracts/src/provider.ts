@@ -5,6 +5,7 @@ import {
   EventId,
   IsoDateTime,
   ProviderItemId,
+  ProjectId,
   SessionId,
   TurnId,
 } from "./baseSchemas.ts";
@@ -55,6 +56,8 @@ export const ProviderSessionStartInput = Schema.Struct({
   provider: Schema.optional(ProviderDriverKind),
   // See ProviderSession for the migration story.
   providerInstanceId: Schema.optional(ProviderInstanceId),
+  projectId: Schema.optional(ProjectId),
+  workspaceRoot: Schema.optional(TrimmedNonEmptyString),
   cwd: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
   resumeCursor: Schema.optional(Schema.Unknown),

@@ -25,6 +25,8 @@ describe("ProviderSessionStartInput", () => {
     const parsed = decodeProviderSessionStartInput({
       sessionId: "session-1",
       provider: "codex",
+      projectId: "project-1",
+      workspaceRoot: "/tmp/workspace",
       cwd: "/tmp/workspace",
       modelSelection: {
         provider: "codex",
@@ -37,6 +39,8 @@ describe("ProviderSessionStartInput", () => {
       runtimeMode: "full-access",
     });
     expect(parsed.runtimeMode).toBe("full-access");
+    expect(parsed.projectId).toBe("project-1");
+    expect(parsed.workspaceRoot).toBe("/tmp/workspace");
     expect(parsed.modelSelection?.instanceId).toBe("codex");
     expect(parsed.modelSelection?.model).toBe("gpt-5.3-codex");
     expect(getOptionValue(parsed.modelSelection?.options, "reasoningEffort")).toBe("high");

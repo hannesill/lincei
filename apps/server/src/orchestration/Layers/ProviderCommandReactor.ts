@@ -423,6 +423,8 @@ const make = Effect.gen(function* () {
         sessionId,
         ...(preferredProvider ? { provider: preferredProvider } : {}),
         providerInstanceId: desiredInstanceId,
+        projectId: session.projectId,
+        ...(project?.workspaceRoot ? { workspaceRoot: project.workspaceRoot } : {}),
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),

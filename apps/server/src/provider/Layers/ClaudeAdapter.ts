@@ -76,6 +76,7 @@ import {
   resolveClaudeEffort,
 } from "./ClaudeProvider.ts";
 import { LINCEI_AGENT_INSTRUCTIONS } from "../LinceiAgentInstructions.ts";
+import { makeLinceiSessionEnvironment } from "../LinceiAmbientEnvironment.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -2958,7 +2959,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(newSessionId ? { sessionId: newSessionId } : {}),
         includePartialMessages: true,
         canUseTool,
-        env: claudeEnvironment,
+        env: {
+          ...claudeEnvironment,
+          ...makeLinceiSessionEnvironment(input),
+        },
         ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
       };
