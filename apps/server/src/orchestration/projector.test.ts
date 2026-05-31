@@ -647,6 +647,143 @@ describe("orchestration projector", () => {
     ]);
   });
 
+  it("projects reviewless responses, lifecycle updates, and supersede events", async () => {
+    const createdAt = "2026-02-24T09:00:00.000Z";
+    let current = await Effect.runPromise(
+      projectEvent(
+        createEmptyReadModel(createdAt),
+        makeEvent({
+          sequence: 1,
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-1",
+          occurredAt: createdAt,
+          commandId: "cmd-create",
+          payload: {
+            sessionId: "session-1",
+            projectId: "project-1",
+            title: "demo",
+            modelSelection: {
+              provider: ProviderDriverKind.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+            updatedAt: createdAt,
+          },
+        }),
+      ),
+    );
+
+    const events: ReadonlyArray<OrchestrationEvent> = [
+      makeEvent({
+        sequence: 2,
+        type: "session.research-card-proposed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:01.000Z",
+        commandId: "cmd-card-1",
+        payload: {
+          sessionId: "session-1",
+          researchCard: {
+            id: "card-1",
+            type: "markdown",
+            status: "proposed",
+            title: "Finding",
+            artifacts: [],
+            provenance: [],
+            turnId: null,
+            createdAt: "2026-02-24T09:00:01.000Z",
+            updatedAt: "2026-02-24T09:00:01.000Z",
+          },
+        },
+      }),
+      makeEvent({
+        sequence: 3,
+        type: "session.research-card-reviewed",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:02.000Z",
+        commandId: "cmd-card-review",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          response: {
+            action: "request_changes",
+            message: "Needs detail",
+            timestamp: "2026-02-24T09:00:02.000Z",
+          },
+        },
+      }),
+      makeEvent({
+        sequence: 4,
+        type: "session.research-card-lifecycle-updated",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:03.000Z",
+        commandId: "cmd-card-lifecycle",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          status: "withdrawn",
+          action: "withdraw",
+          updatedAt: "2026-02-24T09:00:03.000Z",
+        },
+      }),
+      makeEvent({
+        sequence: 5,
+        type: "session.research-card-superseded",
+        aggregateKind: "session",
+        aggregateId: "session-1",
+        occurredAt: "2026-02-24T09:00:04.000Z",
+        commandId: "cmd-card-supersede",
+        payload: {
+          sessionId: "session-1",
+          cardId: "card-1",
+          replacementCard: {
+            id: "card-2",
+            type: "markdown",
+            status: "proposed",
+            title: "Replacement finding",
+            artifacts: [],
+            provenance: [],
+            turnId: null,
+            createdAt: "2026-02-24T09:00:04.000Z",
+            updatedAt: "2026-02-24T09:00:04.000Z",
+          },
+          supersededAt: "2026-02-24T09:00:04.000Z",
+        },
+      }),
+    ];
+
+    for (const event of events) {
+      current = await Effect.runPromise(projectEvent(current, event));
+    }
+
+    expect(current.sessions[0]?.researchCards).toMatchObject([
+      {
+        id: "card-1",
+        status: "superseded",
+        review: {
+          prompt: "Human review",
+          actions: [],
+          response: {
+            action: "request_changes",
+            message: "Needs detail",
+          },
+        },
+        updatedAt: "2026-02-24T09:00:04.000Z",
+      },
+      {
+        id: "card-2",
+        status: "proposed",
+        title: "Replacement finding",
+      },
+    ]);
+  });
+
   it("prunes reverted turn messages from in-memory session snapshot", async () => {
     const createdAt = "2026-02-23T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);

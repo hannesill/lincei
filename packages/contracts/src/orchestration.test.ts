@@ -690,6 +690,11 @@ it.effect("decodes a table research card with artifact references and provenance
           id: "artifact-csv-1",
           kind: "csv",
           path: "outputs/cohort-counts.csv",
+          lineStart: 10,
+          lineEnd: 20,
+          contentHash: "sha256:artifact",
+          checkpointRef: "refs/t3/checkpoints/session-1/turn/1",
+          role: "primary-result",
           label: "Cohort counts CSV",
           mimeType: "text/csv",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -702,10 +707,14 @@ it.effect("decodes a table research card with artifact references and provenance
       ],
       provenance: [
         {
+          sessionId: "session-1",
+          turnId: "turn-1",
           source: "ehr-extract",
           query: "select site, count(*) from cohort group by site",
+          queryHash: "sha256:query",
           codeHash: "sha256:abc123",
           dataset: "diabetes-cohort-v1",
+          backend: "duckdb",
           timestamp: "2026-01-01T00:00:00.000Z",
         },
       ],
@@ -716,7 +725,11 @@ it.effect("decodes a table research card with artifact references and provenance
 
     assert.strictEqual(parsed.artifacts.length, 2);
     assert.strictEqual(parsed.artifacts[0]?.kind, "csv");
+    assert.strictEqual(parsed.artifacts[0]?.lineStart, 10);
+    assert.strictEqual(parsed.artifacts[0]?.checkpointRef, "refs/t3/checkpoints/session-1/turn/1");
     assert.strictEqual(parsed.provenance[0]?.dataset, "diabetes-cohort-v1");
+    assert.strictEqual(parsed.provenance[0]?.queryHash, "sha256:query");
+    assert.strictEqual(parsed.provenance[0]?.backend, "duckdb");
   }),
 );
 
@@ -802,10 +815,36 @@ it.effect("decodes research card command shapes", () =>
       },
       createdAt: "2026-01-01T00:02:00.000Z",
     });
+    const lifecycle = yield* decodeOrchestrationCommand({
+      type: "session.research-card.lifecycle",
+      commandId: "cmd-card-lifecycle",
+      sessionId: "session-1",
+      cardId: "card-1",
+      action: "request_review",
+      note: "Please review the denominators.",
+      createdAt: "2026-01-01T00:03:00.000Z",
+    });
+    const superseded = yield* decodeOrchestrationCommand({
+      type: "session.research-card.supersede",
+      commandId: "cmd-card-supersede",
+      sessionId: "session-1",
+      cardId: "card-1",
+      replacementCard: {
+        ...researchCard,
+        id: "card-2",
+        status: "proposed",
+        title: "Replacement sensitivity analysis",
+        createdAt: "2026-01-01T00:04:00.000Z",
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      },
+      createdAt: "2026-01-01T00:04:00.000Z",
+    });
 
     assert.strictEqual(proposed.type, "session.research-card.propose");
     assert.strictEqual(updated.type, "session.research-card.update");
     assert.strictEqual(reviewed.type, "session.research-card.review");
+    assert.strictEqual(lifecycle.type, "session.research-card.lifecycle");
+    assert.strictEqual(superseded.type, "session.research-card.supersede");
   }),
 );
 
@@ -870,10 +909,43 @@ it.effect("decodes research card event shapes", () =>
         },
       },
     });
+    const lifecycle = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 4,
+      eventId: "event-card-lifecycle",
+      type: "session.research-card-lifecycle-updated",
+      payload: {
+        sessionId: "session-1",
+        cardId: "card-1",
+        status: "review-requested",
+        action: "request_review",
+        note: "Please review.",
+        updatedAt: "2026-01-01T00:03:00.000Z",
+      },
+    });
+    const superseded = yield* decodeOrchestrationEvent({
+      ...eventBase,
+      sequence: 5,
+      eventId: "event-card-superseded",
+      type: "session.research-card-superseded",
+      payload: {
+        sessionId: "session-1",
+        cardId: "card-1",
+        replacementCard: {
+          ...researchCard,
+          id: "card-2",
+          createdAt: "2026-01-01T00:04:00.000Z",
+          updatedAt: "2026-01-01T00:04:00.000Z",
+        },
+        supersededAt: "2026-01-01T00:04:00.000Z",
+      },
+    });
 
     assert.strictEqual(proposed.type, "session.research-card-proposed");
     assert.strictEqual(updated.type, "session.research-card-updated");
     assert.strictEqual(reviewed.type, "session.research-card-reviewed");
+    assert.strictEqual(lifecycle.type, "session.research-card-lifecycle-updated");
+    assert.strictEqual(superseded.type, "session.research-card-superseded");
   }),
 );
 

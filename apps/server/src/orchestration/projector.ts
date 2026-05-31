@@ -5,7 +5,9 @@ import {
   OrchestrationProviderRuntime,
   OrchestrationResearchCard,
   OrchestrationSession,
+  type ResearchCardLifecycleStatus,
 } from "@t3tools/contracts";
+import { attachResearchCardReviewResponse } from "@t3tools/shared/researchCards";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -22,8 +24,10 @@ import {
   SessionInteractionModeSetPayload,
   SessionMetaUpdatedPayload,
   SessionProposedPlanUpsertedPayload,
+  SessionResearchCardLifecycleUpdatedPayload,
   SessionResearchCardProposedPayload,
   SessionResearchCardReviewedPayload,
+  SessionResearchCardSupersededPayload,
   SessionResearchCardUpdatedPayload,
   SessionRuntimeModeSetPayload,
   SessionUnarchivedPayload,
@@ -166,6 +170,29 @@ function compareSessionActivities(
   }
 
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+}
+
+function reviewActionToStatus(
+  action: string,
+  currentStatus: ResearchCardLifecycleStatus,
+): ResearchCardLifecycleStatus {
+  switch (action) {
+    case "accept":
+    case "accepted":
+      return "accepted";
+    case "requestChanges":
+    case "request_changes":
+    case "changes-requested":
+      return "changes-requested";
+    case "reject":
+    case "rejected":
+      return "rejected";
+    case "dismiss":
+    case "dismissed":
+      return "dismissed";
+    default:
+      return currentStatus;
+  }
 }
 
 export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
@@ -592,19 +619,94 @@ export function projectEvent(
 
         const researchCards: OrchestrationResearchCard[] = [];
         for (const researchCard of session.researchCards) {
-          if (researchCard.id !== payload.cardId || researchCard.review === undefined) {
+          if (researchCard.id !== payload.cardId) {
             researchCards.push(researchCard);
             continue;
           }
           researchCards.push({
             ...researchCard,
-            review: {
-              ...researchCard.review,
-              response: payload.response,
-            },
+            status: reviewActionToStatus(payload.response.action, researchCard.status),
+            review: attachResearchCardReviewResponse(researchCard.review, payload.response),
             updatedAt: payload.response.timestamp,
           });
         }
+
+        return {
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            researchCards,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "session.research-card-lifecycle-updated":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          SessionResearchCardLifecycleUpdatedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
+          return nextBase;
+        }
+
+        const researchCards: OrchestrationResearchCard[] = [];
+        for (const researchCard of session.researchCards) {
+          researchCards.push(
+            researchCard.id === payload.cardId
+              ? {
+                  ...researchCard,
+                  status: payload.status,
+                  updatedAt: payload.updatedAt,
+                }
+              : researchCard,
+          );
+        }
+
+        return {
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            researchCards,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "session.research-card-superseded":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          SessionResearchCardSupersededPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
+        if (!session) {
+          return nextBase;
+        }
+
+        const nextResearchCards: OrchestrationResearchCard[] = [];
+        for (const researchCard of session.researchCards) {
+          if (researchCard.id === payload.replacementCard.id) {
+            continue;
+          }
+          nextResearchCards.push(
+            researchCard.id === payload.cardId
+              ? {
+                  ...researchCard,
+                  status: "superseded",
+                  updatedAt: payload.supersededAt,
+                }
+              : researchCard,
+          );
+        }
+        const researchCards = [...nextResearchCards, payload.replacementCard].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
 
         return {
           ...nextBase,

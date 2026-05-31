@@ -444,6 +444,194 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       });
     }),
   );
+
+  it.effect("persists research card lifecycle, supersede, and reviewless responses", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const sessionId = SessionId.make("session-research-card-lifecycle");
+      const projectId = ProjectId.make("project-research-card-lifecycle");
+      const now = "2026-01-03T00:00:00.000Z";
+
+      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+        eventStore
+          .append(event)
+          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.make("evt-research-card-lifecycle-1"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-research-card-lifecycle-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-research-card-lifecycle-1"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Research Card Lifecycle",
+          workspaceRoot: "/tmp/research-card-lifecycle",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.created",
+        eventId: EventId.make("evt-research-card-lifecycle-2"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-research-card-lifecycle-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-research-card-lifecycle-2"),
+        metadata: {},
+        payload: {
+          sessionId,
+          projectId,
+          title: "Research Card Lifecycle Session",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.research-card-proposed",
+        eventId: EventId.make("evt-research-card-lifecycle-3"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-01-03T00:00:01.000Z",
+        commandId: CommandId.make("cmd-research-card-lifecycle-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-research-card-lifecycle-3"),
+        metadata: {},
+        payload: {
+          sessionId,
+          researchCard: {
+            id: ResearchCardId.make("card-old"),
+            type: "markdown",
+            status: "proposed",
+            title: "Old finding",
+            artifacts: [],
+            provenance: [],
+            turnId: null,
+            createdAt: "2026-01-03T00:00:01.000Z",
+            updatedAt: "2026-01-03T00:00:01.000Z",
+          },
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.research-card-reviewed",
+        eventId: EventId.make("evt-research-card-lifecycle-4"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-01-03T00:00:02.000Z",
+        commandId: CommandId.make("cmd-research-card-lifecycle-4"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-research-card-lifecycle-4"),
+        metadata: {},
+        payload: {
+          sessionId,
+          cardId: ResearchCardId.make("card-old"),
+          response: {
+            action: "request_changes",
+            message: "Add denominators",
+            timestamp: "2026-01-03T00:00:02.000Z",
+          },
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.research-card-lifecycle-updated",
+        eventId: EventId.make("evt-research-card-lifecycle-5"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-01-03T00:00:03.000Z",
+        commandId: CommandId.make("cmd-research-card-lifecycle-5"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-research-card-lifecycle-5"),
+        metadata: {},
+        payload: {
+          sessionId,
+          cardId: ResearchCardId.make("card-old"),
+          status: "review-requested",
+          action: "request_review",
+          note: "Please review again.",
+          updatedAt: "2026-01-03T00:00:03.000Z",
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.research-card-superseded",
+        eventId: EventId.make("evt-research-card-lifecycle-6"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-01-03T00:00:04.000Z",
+        commandId: CommandId.make("cmd-research-card-lifecycle-6"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-research-card-lifecycle-6"),
+        metadata: {},
+        payload: {
+          sessionId,
+          cardId: ResearchCardId.make("card-old"),
+          replacementCard: {
+            id: ResearchCardId.make("card-new"),
+            type: "markdown",
+            status: "proposed",
+            title: "New finding",
+            artifacts: [],
+            provenance: [],
+            turnId: null,
+            createdAt: "2026-01-03T00:00:04.000Z",
+            updatedAt: "2026-01-03T00:00:04.000Z",
+          },
+          supersededAt: "2026-01-03T00:00:04.000Z",
+        },
+      });
+
+      const rows = yield* sql<{
+        readonly cardId: string;
+        readonly status: string;
+        readonly reviewJson: string | null;
+      }>`
+        SELECT
+          card_id AS "cardId",
+          status,
+          review_json AS "reviewJson"
+        FROM projection_session_research_cards
+        WHERE session_id = ${sessionId}
+        ORDER BY created_at ASC, card_id ASC
+      `;
+
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0]?.cardId, "card-old");
+      assert.equal(rows[0]?.status, "superseded");
+      assert.equal(rows[1]?.cardId, "card-new");
+      assert.equal(rows[1]?.status, "proposed");
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      assert.deepEqual(JSON.parse(rows[0]?.reviewJson ?? "null"), {
+        prompt: "Human review",
+        actions: [],
+        response: {
+          action: "request_changes",
+          message: "Add denominators",
+          timestamp: "2026-01-03T00:00:02.000Z",
+        },
+      });
+    }),
+  );
 });
 
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(

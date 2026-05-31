@@ -1,5 +1,6 @@
 import { useParams } from "@tanstack/react-router";
 import { scopeProjectRef } from "@t3tools/client-runtime";
+import { isActiveResearchCard } from "@t3tools/shared/researchCards";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import { LayersIcon } from "lucide-react";
 import { useMemo } from "react";
@@ -18,8 +19,6 @@ interface ResearchCardsPanelProps {
   mode?: DiffPanelMode;
 }
 
-const ACTIVE_CARD_STATUSES = new Set<ResearchCard["status"]>(["proposed", "changes-requested"]);
-
 function formatResearchCardLabel(value: string): string {
   return value
     .split("-")
@@ -31,18 +30,23 @@ function getStatusBadgeVariant(status: ResearchCard["status"]) {
   switch (status) {
     case "proposed":
       return "info" as const;
+    case "review-requested":
+      return "default" as const;
     case "changes-requested":
       return "warning" as const;
     case "accepted":
       return "success" as const;
     case "rejected":
+    case "withdrawn":
+    case "superseded":
+    case "dismissed":
       return "outline" as const;
   }
 }
 
 function compareResearchCards(left: ResearchCard, right: ResearchCard): number {
-  const leftActive = ACTIVE_CARD_STATUSES.has(left.status);
-  const rightActive = ACTIVE_CARD_STATUSES.has(right.status);
+  const leftActive = isActiveResearchCard(left);
+  const rightActive = isActiveResearchCard(right);
   if (leftActive !== rightActive) {
     return leftActive ? -1 : 1;
   }

@@ -51,6 +51,10 @@
       "types": "./src/schemaJson.ts",
       "import": "./src/schemaJson.ts"
     },
+    "./researchCards": {
+      "types": "./src/researchCards.ts",
+      "import": "./src/researchCards.ts"
+    },
     "./toolActivity": {
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"

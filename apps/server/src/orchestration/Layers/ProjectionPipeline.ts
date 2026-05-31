@@ -2,8 +2,10 @@ import {
   ApprovalRequestId,
   type ChatAttachment,
   type OrchestrationEvent,
+  type ResearchCardLifecycleStatus,
   SessionId,
 } from "@t3tools/contracts";
+import { attachResearchCardReviewResponse } from "@t3tools/shared/researchCards";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -99,6 +101,29 @@ function extractActivityRequestId(payload: unknown): ApprovalRequestId | null {
   }
   const requestId = (payload as Record<string, unknown>).requestId;
   return typeof requestId === "string" ? ApprovalRequestId.make(requestId) : null;
+}
+
+function reviewActionToResearchCardStatus(
+  action: string,
+  currentStatus: ResearchCardLifecycleStatus,
+): ResearchCardLifecycleStatus {
+  switch (action) {
+    case "accept":
+    case "accepted":
+      return "accepted";
+    case "requestChanges":
+    case "request_changes":
+    case "changes-requested":
+      return "changes-requested";
+    case "reject":
+    case "rejected":
+      return "rejected";
+    case "dismiss":
+    case "dismissed":
+      return "dismissed";
+    default:
+      return currentStatus;
+  }
 }
 
 function isStalePendingApprovalFailureDetail(detail: string | null): boolean {
@@ -721,6 +746,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         case "session.research-card-proposed":
         case "session.research-card-updated":
         case "session.research-card-reviewed":
+        case "session.research-card-lifecycle-updated":
+        case "session.research-card-superseded":
         case "session.activity-appended":
         case "session.approval-response-requested":
         case "session.user-input-response-requested": {
@@ -972,17 +999,66 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             sessionId: event.payload.sessionId,
           });
           const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
-          if (existingRow?.review === undefined) {
+          if (existingRow === undefined) {
             return;
           }
 
           yield* projectionSessionResearchCardRepository.upsert({
             ...existingRow,
-            review: {
-              ...existingRow.review,
-              response: event.payload.response,
-            },
+            status: reviewActionToResearchCardStatus(
+              event.payload.response.action,
+              existingRow.status,
+            ),
+            review: attachResearchCardReviewResponse(existingRow.review, event.payload.response),
             updatedAt: event.payload.response.timestamp,
+          });
+          return;
+        }
+
+        case "session.research-card-lifecycle-updated": {
+          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
+            sessionId: event.payload.sessionId,
+          });
+          const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
+          if (existingRow === undefined) {
+            return;
+          }
+
+          yield* projectionSessionResearchCardRepository.upsert({
+            ...existingRow,
+            status: event.payload.status,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "session.research-card-superseded": {
+          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
+            sessionId: event.payload.sessionId,
+          });
+          const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
+          if (existingRow !== undefined) {
+            yield* projectionSessionResearchCardRepository.upsert({
+              ...existingRow,
+              status: "superseded",
+              updatedAt: event.payload.supersededAt,
+            });
+          }
+
+          const replacement = event.payload.replacementCard;
+          yield* projectionSessionResearchCardRepository.upsert({
+            cardId: replacement.id,
+            sessionId: event.payload.sessionId,
+            turnId: replacement.turnId,
+            type: replacement.type,
+            status: replacement.status,
+            title: replacement.title,
+            ...(replacement.preview !== undefined ? { preview: replacement.preview } : {}),
+            artifacts: [...replacement.artifacts],
+            provenance: [...replacement.provenance],
+            ...(replacement.review !== undefined ? { review: replacement.review } : {}),
+            createdAt: replacement.createdAt,
+            updatedAt: replacement.updatedAt,
           });
           return;
         }

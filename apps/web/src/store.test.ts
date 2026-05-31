@@ -740,7 +740,77 @@ describe("incremental orchestration updates", () => {
       action: "accept",
       summary: "Looks correct.",
     });
+    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.status).toBe("accepted");
     expect(sessionsOf(reviewed)[0]?.researchCards[0]?.updatedAt).toBe("2026-02-13T00:00:03.000Z");
+
+    const lifecycleUpdated = applyOrchestrationEvent(
+      reviewed,
+      makeEvent("session.research-card-lifecycle-updated", {
+        sessionId: SessionId.make("session-1"),
+        cardId: card.id,
+        status: "withdrawn",
+        action: "withdraw",
+        updatedAt: "2026-02-13T00:00:04.000Z",
+      }),
+      localEnvironmentId,
+    );
+    expect(sessionsOf(lifecycleUpdated)[0]?.researchCards[0]).toMatchObject({
+      id: card.id,
+      status: "withdrawn",
+      updatedAt: "2026-02-13T00:00:04.000Z",
+    });
+
+    const replacementCard = makeResearchCard({
+      id: ResearchCardId.make("card-replacement"),
+      title: "Replacement cohort",
+      createdAt: "2026-02-13T00:00:05.000Z",
+      updatedAt: "2026-02-13T00:00:05.000Z",
+    });
+    const superseded = applyOrchestrationEvent(
+      lifecycleUpdated,
+      makeEvent("session.research-card-superseded", {
+        sessionId: SessionId.make("session-1"),
+        cardId: card.id,
+        replacementCard,
+        supersededAt: "2026-02-13T00:00:05.000Z",
+      }),
+      localEnvironmentId,
+    );
+    expect(sessionsOf(superseded)[0]?.researchCards).toMatchObject([
+      { id: card.id, status: "superseded" },
+      { id: replacementCard.id, title: "Replacement cohort" },
+    ]);
+  });
+
+  it("preserves research card review responses without an existing review envelope", () => {
+    const card = makeResearchCard({
+      id: ResearchCardId.make("card-reviewless"),
+      review: undefined,
+    });
+    const reviewed = applyOrchestrationEvent(
+      makeState(makeSession({ researchCards: [card] })),
+      makeEvent("session.research-card-reviewed", {
+        sessionId: SessionId.make("session-1"),
+        cardId: card.id,
+        response: {
+          action: "request_changes",
+          summary: "Needs more detail.",
+          timestamp: "2026-02-13T00:00:03.000Z",
+        },
+      }),
+      localEnvironmentId,
+    );
+
+    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.status).toBe("changes-requested");
+    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.review).toEqual({
+      prompt: "Human review",
+      actions: [],
+      response: {
+        action: "request_changes",
+        summary: "Needs more detail.",
+        timestamp: "2026-02-13T00:00:03.000Z",
+      },
+    });
   });
 
   it("clears research card slices when a session is removed", () => {

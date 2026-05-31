@@ -714,4 +714,69 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       ]);
     }),
   );
+
+  it.effect("dispatches lifecycle and supersede commands for agent card workflows", () =>
+    Effect.gen(function* () {
+      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-card-workflows-"));
+      const seeded = yield* seedOfflineAgentContext(baseDir);
+
+      yield* withLiveProjectCliServer(baseDir, () =>
+        Effect.gen(function* () {
+          yield* captureStdout(
+            runAgentCli([
+              "card",
+              "request-review",
+              seeded.cardId,
+              "--session",
+              seeded.sessionId,
+              "--note",
+              "Please verify denominators.",
+              "--base-dir",
+              baseDir,
+              "--json",
+            ]),
+          );
+
+          const reviewSnapshot = yield* readPersistedSnapshot(baseDir);
+          const reviewedCard = reviewSnapshot.sessions
+            .find((session) => session.id === seeded.sessionId)
+            ?.researchCards.find((card) => card.id === seeded.cardId);
+          assert.equal(reviewedCard?.status, "review-requested");
+          assert.equal(reviewedCard?.review?.prompt, "Please verify denominators.");
+
+          const supersedeOutput = yield* captureStdout(
+            runAgentCli([
+              "card",
+              "supersede",
+              seeded.cardId,
+              "--session",
+              seeded.sessionId,
+              "--title",
+              "Replacement cohort",
+              "--base-dir",
+              baseDir,
+              "--json",
+            ]),
+          );
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          const parsed = JSON.parse(supersedeOutput.output) as {
+            readonly supersededCardId: string;
+            readonly card: { readonly id: string; readonly title: string };
+          };
+
+          const snapshot = yield* readPersistedSnapshot(baseDir);
+          const cards = snapshot.sessions.find(
+            (session) => session.id === seeded.sessionId,
+          )?.researchCards;
+          assert.equal(parsed.supersededCardId, seeded.cardId);
+          assert.equal(parsed.card.title, "Replacement cohort");
+          assert.equal(cards?.find((card) => card.id === seeded.cardId)?.status, "superseded");
+          assert.equal(
+            cards?.find((card) => card.id === parsed.card.id)?.title,
+            "Replacement cohort",
+          );
+        }),
+      );
+    }),
+  );
 });

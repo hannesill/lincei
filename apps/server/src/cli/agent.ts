@@ -22,6 +22,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
+import { isActiveResearchCard } from "@t3tools/shared/researchCards";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 import {
   FetchHttpClient,
@@ -47,6 +48,8 @@ type AgentDispatchCommand = Extract<
   | { type: "session.research-card.propose" }
   | { type: "session.research-card.update" }
   | { type: "session.research-card.review" }
+  | { type: "session.research-card.lifecycle" }
+  | { type: "session.research-card.supersede" }
 >;
 
 type SnapshotSource = "live" | "offline";
@@ -375,11 +378,8 @@ const findCard = (session: OrchestrationSession, cardId: ResearchCardId) => {
   return Effect.succeed(card);
 };
 
-const isActiveCard = (card: OrchestrationResearchCard) =>
-  card.status === "proposed" || card.status === "changes-requested";
-
 const relevantCards = (session: OrchestrationSession, includeAll: boolean) =>
-  includeAll ? session.researchCards : session.researchCards.filter(isActiveCard);
+  includeAll ? session.researchCards : session.researchCards.filter(isActiveResearchCard);
 
 const compactCard = (card: OrchestrationResearchCard) => ({
   id: card.id,
@@ -424,8 +424,8 @@ const makeSessionContext = (session: OrchestrationSession, includeAll: boolean) 
   const cards = relevantCards(session, includeAll);
   return {
     ...compactSession(session),
-    activeCardIds: session.researchCards.filter(isActiveCard).map((card) => card.id),
-    activeCardCount: session.researchCards.filter(isActiveCard).length,
+    activeCardIds: session.researchCards.filter(isActiveResearchCard).map((card) => card.id),
+    activeCardCount: session.researchCards.filter(isActiveResearchCard).length,
     cards: cards.map(compactCard),
   };
 };
@@ -639,29 +639,47 @@ const cardRequestReviewCommand = Command.make("request-review", {
     runWriteCommand(flags, (snapshot, dispatch) =>
       Effect.gen(function* () {
         const session = yield* findSession(snapshot, flags.session);
-        const existing = yield* findCard(session, flags.cardId);
         const now = DateTime.formatIso(yield* DateTime.now);
-        const card = {
-          ...existing,
-          review: {
-            prompt: Option.getOrElse(flags.note, () => "Review this research card."),
-            actions: [
-              { id: "accept", label: "Accept" },
-              { id: "changes-requested", label: "Request changes" },
-              { id: "reject", label: "Reject" },
-            ],
-          },
-          updatedAt: now,
-        } satisfies OrchestrationResearchCard;
+        const existing = yield* findCard(session, flags.cardId);
+        const reviewPrompt = Option.getOrElse(flags.note, () => "Review this research card.");
         yield* dispatch({
-          type: "session.research-card.update",
+          type: "session.research-card.lifecycle",
           commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           cardId: flags.cardId,
-          researchCard: card,
+          action: "request_review",
+          ...(Option.isSome(flags.note) ? { note: flags.note.value } : {}),
           createdAt: now,
         });
-        return { card: compactCard(card) };
+        if (existing.review === undefined) {
+          yield* dispatch({
+            type: "session.research-card.update",
+            commandId: CommandId.make(yield* agentCommandUuid),
+            sessionId: flags.session,
+            cardId: flags.cardId,
+            researchCard: {
+              ...existing,
+              status: "review-requested",
+              review: {
+                prompt: reviewPrompt,
+                actions: [
+                  { id: "accept", label: "Accept" },
+                  { id: "changes-requested", label: "Request changes" },
+                  { id: "reject", label: "Reject" },
+                ],
+              },
+              updatedAt: now,
+            },
+            createdAt: now,
+          });
+        }
+        return {
+          card: compactCard({
+            ...existing,
+            status: "review-requested",
+            updatedAt: now,
+          }),
+        };
       }),
     ),
   ),
@@ -685,11 +703,6 @@ const cardSupersedeCommand = Command.make("supersede", {
         const oldCard = yield* findCard(session, flags.oldCardId);
         const preview = yield* parsePreviewJson(flags.previewJson);
         const artifacts = yield* parseArtifactsJson(flags.artifactsJson);
-        const rejectedOldCard = yield* updateCard({
-          card: oldCard,
-          status: "rejected",
-          replacePreview: false,
-        });
         const newCard = yield* makeCard({
           session,
           title: flags.title,
@@ -698,18 +711,11 @@ const cardSupersedeCommand = Command.make("supersede", {
           artifacts,
         });
         yield* dispatch({
-          type: "session.research-card.update",
+          type: "session.research-card.supersede",
           commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: flags.session,
           cardId: flags.oldCardId,
-          researchCard: rejectedOldCard,
-          createdAt: DateTime.formatIso(yield* DateTime.now),
-        });
-        yield* dispatch({
-          type: "session.research-card.propose",
-          commandId: CommandId.make(yield* agentCommandUuid),
-          sessionId: flags.session,
-          researchCard: newCard,
+          replacementCard: newCard,
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
         return { supersededCardId: flags.oldCardId, card: compactCard(newCard) };
