@@ -42,9 +42,9 @@ import { OrchestrationLayerLive } from "../orchestration/runtimeLayer.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "../persistence/Layers/Sqlite.ts";
 import { RepositoryIdentityResolverLive } from "../project/Layers/RepositoryIdentityResolver.ts";
 import {
+  LINCEI_PROJECT_DIR_ENV,
   LINCEI_PROJECT_ID_ENV,
   LINCEI_SESSION_ID_ENV,
-  LINCEI_WORKSPACE_ROOT_ENV,
 } from "../provider/LinceiAmbientEnvironment.ts";
 import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
@@ -525,12 +525,12 @@ const resolveProjectTarget = Effect.fn("resolveAgentProjectTarget")(function* (
   explicitProject: Option.Option<string>,
 ) {
   const envProjectId = yield* readProcessEnv(LINCEI_PROJECT_ID_ENV);
-  const envWorkspaceRoot = yield* readProcessEnv(LINCEI_WORKSPACE_ROOT_ENV);
+  const envProjectDir = yield* readProcessEnv(LINCEI_PROJECT_DIR_ENV);
   const cwd = process.cwd();
   const candidates = [
     Option.getOrUndefined(explicitProject),
     envProjectId,
-    envWorkspaceRoot,
+    envProjectDir,
     cwd,
   ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 
@@ -1191,7 +1191,7 @@ const contextCurrentCommand = Command.make("current", {
       Effect.gen(function* () {
         const envSessionId = yield* readProcessEnv(LINCEI_SESSION_ID_ENV);
         const envProjectId = yield* readProcessEnv(LINCEI_PROJECT_ID_ENV);
-        const envWorkspaceRoot = yield* readProcessEnv(LINCEI_WORKSPACE_ROOT_ENV);
+        const envProjectDir = yield* readProcessEnv(LINCEI_PROJECT_DIR_ENV);
         const projectExit = yield* Effect.exit(resolveProjectTarget(snapshot, Option.none()));
         const sessionExit = yield* Effect.exit(resolveSessionTarget(snapshot, Option.none()));
         return {
@@ -1200,7 +1200,7 @@ const contextCurrentCommand = Command.make("current", {
           env: {
             sessionId: envSessionId ?? null,
             projectId: envProjectId ?? null,
-            workspaceRoot: envWorkspaceRoot ?? null,
+            projectDir: envProjectDir ?? null,
           },
           project: Exit.isSuccess(projectExit)
             ? compactProject(

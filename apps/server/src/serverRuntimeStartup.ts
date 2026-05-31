@@ -33,6 +33,7 @@ import { ServerSettingsService } from "./serverSettings.ts";
 import { ServerEnvironment } from "./environment/Services/ServerEnvironment.ts";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
 import { ServerAuth } from "./auth/Services/ServerAuth.ts";
+import { ensureConfiguredLinceiCliShim } from "./linceiCliShim.ts";
 import { ProviderSessionReaper } from "./provider/Services/ProviderSessionReaper.ts";
 import {
   formatHeadlessServeOutput,
@@ -297,6 +298,9 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
   yield* Effect.addFinalizer(() => Scope.close(reactorScope, Exit.void));
 
   const startup = Effect.gen(function* () {
+    yield* Effect.logDebug("startup phase: ensuring Lincei CLI shim");
+    yield* runStartupPhase("cli-shim.ensure", ensureConfiguredLinceiCliShim(serverConfig));
+
     yield* Effect.logDebug("startup phase: starting shortcuts runtime");
     yield* runStartupPhase(
       "shortcuts.start",

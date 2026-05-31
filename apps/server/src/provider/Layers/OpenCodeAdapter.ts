@@ -1043,9 +1043,10 @@ export function makeOpenCodeAdapter(
           const sessionScope = yield* Scope.make();
           const startedExit = yield* Effect.exit(
             Effect.gen(function* () {
+              const baseEnvironment = options?.environment ?? process.env;
               const sessionEnvironment = {
-                ...(options?.environment ?? process.env),
-                ...makeLinceiSessionEnvironment(input),
+                ...baseEnvironment,
+                ...makeLinceiSessionEnvironment(input, baseEnvironment),
               };
               // The runtime binds the server's lifetime to the Scope.Scope
               // we provide below — closing `sessionScope` kills the child

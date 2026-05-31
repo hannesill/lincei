@@ -528,9 +528,10 @@ export function makeCursorAdapter(
           const effectiveCursorSettings = options?.resolveSettings
             ? yield* options.resolveSettings
             : cursorSettings;
+          const baseEnvironment = options?.environment ?? process.env;
           const sessionEnvironment = {
-            ...(options?.environment ?? process.env),
-            ...makeLinceiSessionEnvironment(input),
+            ...baseEnvironment,
+            ...makeLinceiSessionEnvironment(input, baseEnvironment),
           };
 
           const acp = yield* makeCursorAcpRuntime({

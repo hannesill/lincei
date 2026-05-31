@@ -1382,14 +1382,15 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           yield* Effect.suspend(() => stopSessionInternal(existing));
         }
 
+        const baseEnvironment = options?.environment ?? process.env;
         const runtimeInput: CodexSessionRuntimeOptions = {
           sessionId: input.sessionId,
           providerInstanceId: boundInstanceId,
           cwd: input.cwd ?? process.cwd(),
           binaryPath: codexConfig.binaryPath,
           environment: {
-            ...(options?.environment ?? process.env),
-            ...makeLinceiSessionEnvironment(input),
+            ...baseEnvironment,
+            ...makeLinceiSessionEnvironment(input, baseEnvironment),
           },
           ...(codexConfig.homePath ? { homePath: codexConfig.homePath } : {}),
           ...(isCodexResumeCursorSchema(input.resumeCursor)
