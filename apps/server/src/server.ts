@@ -14,6 +14,9 @@ import {
 import { fixPath } from "./os-jank.ts";
 import { websocketRpcRouteLayer } from "./ws.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
+import * as M4CliLayer from "./datasets/M4Cli.ts";
+import * as M4DatasetServiceLayer from "./datasets/M4DatasetService.ts";
+import * as LinceiDatasetGatewayLayer from "./datasets/LinceiDatasetGateway.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
 import { ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService.ts";
@@ -88,6 +91,8 @@ import {
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
+import { datasetHttpRouteLayer } from "./datasets/http.ts";
+import { layer as ProcessRunnerLive } from "./processRunner.ts";
 import * as NetService from "@t3tools/shared/Net";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
 
@@ -236,6 +241,25 @@ const AuthLayerLive = ServerAuthLive.pipe(
   Layer.provide(ServerSecretStoreLive),
 );
 
+const DatasetBaseLayerLive = Layer.mergeAll(
+  ProcessRunnerLive,
+  ServerSettingsLive,
+  ServerSecretStoreLive,
+);
+
+const M4CliLive = M4CliLayer.layer.pipe(Layer.provideMerge(DatasetBaseLayerLive));
+
+const M4DatasetServiceLive = M4DatasetServiceLayer.layer.pipe(
+  Layer.provideMerge(M4CliLive),
+  Layer.provideMerge(DatasetBaseLayerLive),
+);
+
+const DatasetGatewayLayerLive = LinceiDatasetGatewayLayer.layer.pipe(
+  Layer.provideMerge(M4DatasetServiceLive),
+  Layer.provideMerge(M4CliLive),
+  Layer.provideMerge(DatasetBaseLayerLive),
+);
+
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
@@ -276,6 +300,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
+  Layer.provideMerge(DatasetGatewayLayerLive),
 );
 
 const RuntimeDependenciesLive = RuntimeCoreDependenciesLive.pipe(
@@ -305,6 +330,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
   attachmentsRouteLayer,
+  datasetHttpRouteLayer,
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
   otlpTracesProxyRouteLayer,

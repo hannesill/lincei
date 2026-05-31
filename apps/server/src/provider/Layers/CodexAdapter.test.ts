@@ -277,7 +277,10 @@ validationLayer("CodexAdapterLive validation", (it) => {
         runtimeMode: "full-access",
       });
 
-      assert.deepStrictEqual(validationRuntimeFactory.factory.mock.calls[0]?.[0], {
+      const { environment, ...runtimeOptions } =
+        validationRuntimeFactory.factory.mock.calls[0]?.[0] ?? {};
+      assert.equal(environment?.LINCEI_SESSION_ID, "session-1");
+      assert.deepStrictEqual(runtimeOptions, {
         binaryPath: "codex",
         cwd: process.cwd(),
         developerInstructions: LINCEI_AGENT_INSTRUCTIONS,

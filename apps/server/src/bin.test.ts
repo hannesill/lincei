@@ -17,6 +17,7 @@ import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/unstable/cli";
+import { vi } from "vitest";
 
 import { cli } from "./bin.ts";
 import { deriveServerPaths, ServerConfig, type ServerConfigShape } from "./config.ts";
@@ -26,6 +27,7 @@ import {
   orchestrationDispatchRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
+import { datasetHttpRouteLayer } from "./datasets/http.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
 import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdentityResolver.ts";
 import {
@@ -34,6 +36,7 @@ import {
   ProjectId,
   ResearchCardId,
   SessionId,
+  type DatasetStatusResult,
   type ModelSelection,
   type OrchestrationResearchCard,
   type ResearchCardType,
@@ -46,6 +49,10 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import { agentCli } from "./lincei.ts";
+import {
+  LinceiDatasetGateway,
+  type LinceiDatasetGatewayShape,
+} from "./datasets/LinceiDatasetGateway.ts";
 import packageJson from "../package.json" with { type: "json" };
 import tsdownConfig from "../tsdown.config.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
@@ -151,6 +158,28 @@ const modelSelection = {
   options: [],
 } satisfies ModelSelection;
 
+const defaultDatasetStatus = {
+  runtime: {
+    available: true,
+    command: "remote-m4",
+    checkedAt: "2026-05-30T00:00:00.000Z",
+  },
+  credentials: {
+    physioNet: { stored: false },
+    bigQuery: {
+      stored: false,
+      serviceAccountJsonStored: false,
+      applicationDefaultCredentials: false,
+    },
+  },
+  datasets: [],
+  appReadiness: {
+    clinicalDataReady: false,
+    readiness: "not_initialized",
+    lastCheckedAt: "2026-05-30T00:00:00.000Z",
+  },
+} satisfies DatasetStatusResult;
+
 const seedOfflineAgentContext = (baseDir: string) =>
   Effect.gen(function* () {
     const config = yield* makeCliTestServerConfig(baseDir);
@@ -225,6 +254,110 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
         ),
       ),
       Layer.provideMerge(makeProjectPersistenceLayer(config)),
+      Layer.provideMerge(
+        NodeHttpServer.layer(NodeHttp.createServer, {
+          host: "127.0.0.1",
+          port: 0,
+        }),
+      ),
+      Layer.provideMerge(NodeServices.layer),
+      Layer.provide(Layer.succeed(ServerConfig, config)),
+    );
+
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* HttpServer.HttpServer;
+        const address = server.address;
+        if (typeof address === "string" || !("port" in address)) {
+          assert.fail(`Expected TCP address, got ${address}`);
+        }
+        yield* persistServerRuntimeState({
+          path: config.serverRuntimeStatePath,
+          state: yield* makePersistedServerRuntimeState({
+            config,
+            port: address.port,
+          }),
+        });
+        return yield* run();
+      }).pipe(Effect.provide(Layer.mergeAll(appLayer, NodeServices.layer))),
+    );
+  });
+
+const makeDatasetGatewayTestLayer = (overrides: Partial<LinceiDatasetGatewayShape>) =>
+  Layer.mock(LinceiDatasetGateway)({
+    resolveContext: () =>
+      Effect.succeed({
+        workspacePath: "/tmp/lincei-datasets",
+        defaultBackendId: "duckdb",
+        m4Command: "remote-m4",
+      }),
+    status: () => Effect.succeed(defaultDatasetStatus),
+    capabilities: () =>
+      Effect.succeed({
+        command: "remote-m4 capabilities --json",
+        workspacePath: "/tmp/lincei-datasets",
+        json: {},
+      }),
+    schema: () =>
+      Effect.succeed({
+        command: "remote-m4 schema --json",
+        workspacePath: "/tmp/lincei-datasets",
+        datasetId: "mimic-iv-demo",
+        backendId: "duckdb",
+        json: { tables: [] },
+      }),
+    describeTable: (input) =>
+      Effect.succeed({
+        command: `remote-m4 describe-table ${input.table} --json`,
+        workspacePath: "/tmp/lincei-datasets",
+        ...(input.datasetId ? { datasetId: input.datasetId } : {}),
+        ...(input.backendId ? { backendId: input.backendId } : {}),
+        json: { table: input.table },
+      }),
+    query: (input) =>
+      Effect.succeed({
+        command: "remote-m4 query --json",
+        workspacePath: "/tmp/lincei-datasets",
+        ...(input.datasetId ? { datasetId: input.datasetId } : {}),
+        ...(input.backendId ? { backendId: input.backendId } : {}),
+        json: { columns: ["one"], rows: [{ one: 1 }] },
+      }),
+    context: () =>
+      Effect.succeed({
+        guidance: "Use lincei dataset.",
+        workspacePath: "/tmp/lincei-datasets",
+        defaultBackendId: "duckdb",
+        commands: ["lincei dataset status"],
+        status: defaultDatasetStatus,
+      }),
+    runM4: () =>
+      Effect.succeed({
+        command: "remote-m4",
+        workspacePath: "/tmp/lincei-datasets",
+        stdout: "",
+        stderr: "",
+      }),
+    ...overrides,
+  });
+
+const withLiveDatasetCliServer = <A, E, R>(
+  baseDir: string,
+  gateway: Partial<LinceiDatasetGatewayShape>,
+  run: () => Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const config = yield* makeCliTestServerConfig(baseDir);
+    const appLayer = HttpRouter.serve(datasetHttpRouteLayer, {
+      disableListenLog: true,
+      disableLogger: true,
+    }).pipe(
+      Layer.provideMerge(
+        ServerAuthLive.pipe(
+          Layer.provideMerge(SqlitePersistenceLayerLive),
+          Layer.provide(ServerSecretStoreLive),
+        ),
+      ),
+      Layer.provide(makeDatasetGatewayTestLayer(gateway)),
       Layer.provideMerge(
         NodeHttpServer.layer(NodeHttp.createServer, {
           host: "127.0.0.1",
@@ -373,6 +506,58 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         Effect.flip,
       );
       assertCliShowHelpWithUnrecognizedCommand(error, ["t3"], "dataset");
+    }),
+  );
+
+  it.effect("prefers live dataset HTTP routes when runtime state is reachable", () =>
+    Effect.gen(function* () {
+      const baseDir = mkdtempSync(join(tmpdir(), "lincei-cli-dataset-live-"));
+      const status = vi.fn<LinceiDatasetGatewayShape["status"]>(() =>
+        Effect.succeed(defaultDatasetStatus),
+      );
+
+      const output = yield* withLiveDatasetCliServer(baseDir, { status }, () =>
+        captureStdout(runAgentCli(["dataset", "status", "--base-dir", baseDir])),
+      );
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      const body = JSON.parse(output.output) as DatasetStatusResult;
+
+      assert.equal(body.runtime.command, "remote-m4");
+      assert.equal(status.mock.calls.length, 1);
+    }),
+  );
+
+  it.effect("refuses stale dataset runtime state instead of falling back to local M4", () =>
+    Effect.gen(function* () {
+      const baseDir = mkdtempSync(join(tmpdir(), "lincei-cli-dataset-stale-"));
+      const config = yield* makeCliTestServerConfig(baseDir);
+      const stubPath = writeM4StatusStub(baseDir);
+      yield* writeDatasetCliSettings(baseDir, `${process.execPath} ${stubPath}`);
+      yield* persistServerRuntimeState({
+        path: config.serverRuntimeStatePath,
+        state: {
+          version: 1,
+          pid: 1,
+          host: "127.0.0.1",
+          port: 9,
+          origin: "http://127.0.0.1:9",
+          startedAt: "2026-05-30T00:00:00.000Z",
+        },
+      });
+
+      const error = yield* runAgentCliWithRuntime([
+        "dataset",
+        "status",
+        "--base-dir",
+        baseDir,
+      ]).pipe(Effect.flip);
+
+      const tagged = error as {
+        readonly _tag?: string;
+        readonly detail?: string;
+      };
+      assert.equal(tagged._tag, "DatasetRpcError");
+      assert.isTrue((tagged.detail ?? "").includes("refusing to use stale dataset state"));
     }),
   );
 

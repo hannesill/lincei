@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lincei"
+version = "0.1.0"
+description = "Python wrapper for the Lincei dataset CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+pandas = ["pandas"]
+test = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lincei"]

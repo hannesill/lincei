@@ -65,6 +65,8 @@ export interface DatasetGatewayResolvedContext {
 export interface DatasetGatewayJsonResult {
   readonly command: string;
   readonly workspacePath: string;
+  readonly datasetId?: DatasetId | undefined;
+  readonly backendId?: DatasetBackendId | undefined;
   readonly json: unknown;
 }
 
@@ -349,6 +351,8 @@ export const makeLinceiDatasetGateway = (
         return {
           command: result.command,
           workspacePath: context.workspacePath,
+          ...(effectiveSelection.datasetId ? { datasetId: effectiveSelection.datasetId } : {}),
+          ...(effectiveSelection.backendId ? { backendId: effectiveSelection.backendId } : {}),
           json: result.json,
         };
       });

@@ -24,6 +24,7 @@ import {
   WS_METHODS,
   WsRpcGroup,
   EditorId,
+  type DatasetStatusResult,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure, assertInclude, assertTrue } from "@effect/vitest/utils";
@@ -119,6 +120,10 @@ import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as Data from "effect/Data";
+import {
+  LinceiDatasetGateway,
+  type LinceiDatasetGatewayShape,
+} from "./datasets/LinceiDatasetGateway.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
 const defaultSessionId = SessionId.make("session-default");
@@ -127,6 +132,27 @@ const defaultModelSelection = {
   instanceId: ProviderInstanceId.make("codex"),
   model: "gpt-5-codex",
 } as const;
+const defaultDatasetStatus = {
+  runtime: {
+    available: true,
+    command: "uvx --from m4-infra m4",
+    checkedAt: "1970-01-01T00:00:00.000Z",
+  },
+  credentials: {
+    physioNet: { stored: false },
+    bigQuery: {
+      stored: false,
+      serviceAccountJsonStored: false,
+      applicationDefaultCredentials: false,
+    },
+  },
+  datasets: [],
+  appReadiness: {
+    clinicalDataReady: false,
+    readiness: "not_initialized",
+    lastCheckedAt: "1970-01-01T00:00:00.000Z",
+  },
+} satisfies DatasetStatusResult;
 const testEnvironmentDescriptor = {
   environmentId: EnvironmentId.make("environment-test"),
   label: "Test environment",
@@ -339,6 +365,7 @@ const buildAppUnderTest = (options?: {
     serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
     serverEnvironment?: Partial<ServerEnvironmentShape>;
     repositoryIdentityResolver?: Partial<RepositoryIdentityResolverShape>;
+    datasetGateway?: Partial<LinceiDatasetGatewayShape>;
   };
 }) =>
   Effect.gen(function* () {
@@ -684,6 +711,63 @@ const buildAppUnderTest = (options?: {
               diff: "",
             }),
           ...options?.layers?.checkpointDiffQuery,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(LinceiDatasetGateway)({
+          resolveContext: () =>
+            Effect.succeed({
+              workspacePath: "/tmp/lincei-datasets",
+              defaultBackendId: "duckdb",
+              m4Command: "uvx --from m4-infra m4",
+            }),
+          status: () => Effect.succeed(defaultDatasetStatus),
+          capabilities: () =>
+            Effect.succeed({
+              command: "m4 capabilities --json",
+              workspacePath: "/tmp/lincei-datasets",
+              json: {},
+            }),
+          schema: () =>
+            Effect.succeed({
+              command: "m4 schema --json",
+              workspacePath: "/tmp/lincei-datasets",
+              datasetId: "mimic-iv-demo",
+              backendId: "duckdb",
+              json: { tables: [] },
+            }),
+          describeTable: (input) =>
+            Effect.succeed({
+              command: `m4 describe-table ${input.table} --json`,
+              workspacePath: "/tmp/lincei-datasets",
+              datasetId: input.datasetId,
+              backendId: input.backendId,
+              json: { table: input.table },
+            }),
+          query: (input) =>
+            Effect.succeed({
+              command: "m4 query --json",
+              workspacePath: "/tmp/lincei-datasets",
+              datasetId: input.datasetId,
+              backendId: input.backendId,
+              json: { columns: ["one"], rows: [{ one: 1 }] },
+            }),
+          context: () =>
+            Effect.succeed({
+              guidance: "Use lincei dataset.",
+              workspacePath: "/tmp/lincei-datasets",
+              defaultBackendId: "duckdb",
+              commands: ["lincei dataset status"],
+              status: defaultDatasetStatus,
+            }),
+          runM4: () =>
+            Effect.succeed({
+              command: "m4",
+              workspacePath: "/tmp/lincei-datasets",
+              stdout: "",
+              stderr: "",
+            }),
+          ...options?.layers?.datasetGateway,
         }),
       ),
     );
@@ -1143,6 +1227,72 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(typeof wsTokenBody.token, "string");
       assert.isTrue(wsTokenBody.token.length > 0);
       assert.equal(typeof wsTokenBody.expiresAt, "string");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("requires owner auth for dataset HTTP routes", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const response = yield* HttpClient.get("/api/datasets/status");
+      const body = (yield* response.json) as { readonly error?: string };
+
+      assert.equal(response.status, 401);
+      assert.equal(typeof body.error, "string");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("routes dataset HTTP reads through the Lincei dataset gateway", () =>
+    Effect.gen(function* () {
+      const status = vi.fn<LinceiDatasetGatewayShape["status"]>(() =>
+        Effect.succeed(defaultDatasetStatus),
+      );
+      const query = vi.fn<LinceiDatasetGatewayShape["query"]>((input) =>
+        Effect.succeed({
+          command: "m4 query --json",
+          workspacePath: "/tmp/lincei-datasets",
+          datasetId: input.datasetId,
+          backendId: input.backendId,
+          json: { columns: ["one"], rows: [{ one: 1 }] },
+        }),
+      );
+      yield* buildAppUnderTest({
+        layers: {
+          datasetGateway: { status, query },
+        },
+      });
+
+      const bearerToken = yield* getAuthenticatedBearerSessionToken();
+      const statusResponse = yield* HttpClient.get(
+        "/api/datasets/status?dataset=mimic-iv-demo&backend=duckdb",
+        {
+          headers: {
+            authorization: `Bearer ${bearerToken}`,
+          },
+        },
+      );
+      const queryResponse = yield* HttpClient.post("/api/datasets/query", {
+        headers: {
+          authorization: `Bearer ${bearerToken}`,
+        },
+        body: yield* HttpBody.json({
+          datasetId: "mimic-iv-demo",
+          backendId: "duckdb",
+          sql: "select 1",
+        }),
+      });
+
+      assert.equal(statusResponse.status, 200);
+      assert.equal(queryResponse.status, 200);
+      assert.deepEqual(status.mock.calls[0]?.[0], {
+        datasetId: "mimic-iv-demo",
+        backendId: "duckdb",
+      });
+      assert.deepEqual(query.mock.calls[0]?.[0], {
+        datasetId: "mimic-iv-demo",
+        backendId: "duckdb",
+        sql: "select 1",
+      });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
