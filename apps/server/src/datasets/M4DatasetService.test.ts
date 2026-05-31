@@ -1,4 +1,9 @@
+// @effect-diagnostics nodeBuiltinImport:off - Test fixtures build tiny tar archives with Node stdlib.
+
 import * as NodeOS from "node:os";
+import * as NodeCrypto from "node:crypto";
+import * as NodeZlib from "node:zlib";
+import { promisify } from "node:util";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, beforeEach, describe, expect, it, vi } from "@effect/vitest";
@@ -19,6 +24,7 @@ import type {
 
 import { ServerSecretStoreLive } from "../auth/Layers/ServerSecretStore.ts";
 import { ServerConfig } from "../config.ts";
+import type { ServerConfigShape } from "../config.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { M4Cli, type M4CliShape } from "./M4Cli.ts";
 import { M4DatasetService } from "./M4DatasetService.ts";
@@ -30,6 +36,7 @@ const commandResult = {
   command: "ok",
   warnings: [],
 };
+const gzip = promisify(NodeZlib.gzip);
 
 const emptyCredentials: DatasetCredentialPresence = {
   physioNet: { stored: false },
@@ -84,6 +91,7 @@ const makeLayer = (
   baseDirOrPrefix: Parameters<typeof ServerConfig.layerTest>[1] = {
     prefix: "t3-m4-dataset-service-test-",
   },
+  configOverrides: Partial<ServerConfigShape> = {},
 ) =>
   M4DatasetServiceLayer.layer.pipe(
     Layer.provide(
@@ -106,8 +114,80 @@ const makeLayer = (
     ),
     Layer.provide(ServerSecretStoreLive),
     Layer.provide(ServerSettingsService.layerTest(settingsOverrides)),
-    Layer.provide(ServerConfig.layerTest(process.cwd(), baseDirOrPrefix)),
+    Layer.provide(
+      Layer.effect(
+        ServerConfig,
+        Effect.gen(function* () {
+          const config = yield* ServerConfig;
+          return { ...config, ...configOverrides };
+        }).pipe(Effect.provide(ServerConfig.layerTest(process.cwd(), baseDirOrPrefix))),
+      ),
+    ),
   );
+
+function writeOctal(value: number, width: number): Buffer {
+  const output = Buffer.alloc(width, 0);
+  output.write(value.toString(8).padStart(width - 1, "0"), 0, "ascii");
+  return output;
+}
+
+function tarHeader(name: string, size: number): Buffer {
+  const header = Buffer.alloc(512, 0);
+  Buffer.from(name).copy(header, 0);
+  writeOctal(0o644, 8).copy(header, 100);
+  writeOctal(0, 8).copy(header, 108);
+  writeOctal(0, 8).copy(header, 116);
+  writeOctal(size, 12).copy(header, 124);
+  writeOctal(0, 12).copy(header, 136);
+  header.fill(" ", 148, 156);
+  header.write("0", 156, "ascii");
+  header.write("ustar", 257, "ascii");
+  header.write("00", 263, "ascii");
+  let checksum = 0;
+  for (const byte of header) checksum += byte;
+  writeOctal(checksum, 8).copy(header, 148);
+  header[155] = 0x20;
+  return header;
+}
+
+async function makeArchive(files: Record<string, string>): Promise<Uint8Array> {
+  const chunks: Buffer[] = [];
+  for (const [name, contents] of Object.entries(files)) {
+    const bytes = Buffer.from(contents);
+    chunks.push(tarHeader(name, bytes.length), bytes);
+    const padding = (512 - (bytes.length % 512)) % 512;
+    if (padding > 0) chunks.push(Buffer.alloc(padding, 0));
+  }
+  chunks.push(Buffer.alloc(1024, 0));
+  return gzip(Buffer.concat(chunks));
+}
+
+const makeBundledAssetDir = Effect.fn("test.makeBundledAssetDir")(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "lincei-m4-service-asset-" });
+  const archive = yield* Effect.promise(() => makeArchive({ "hosp/patients.csv": "subject_id\n" }));
+  const archiveSha256 = NodeCrypto.createHash("sha256").update(archive).digest("hex");
+  yield* fs.writeFile(path.join(dir, "mimic-iv-demo.tar.gz"), archive);
+  yield* fs.writeFileString(
+    path.join(dir, "mimic-iv-demo.asset.json"),
+    // @effect-diagnostics-next-line preferSchemaOverJson:off - Small test manifest fixture.
+    JSON.stringify({
+      assetId: "mimic-iv-demo",
+      datasetId: "mimic-iv-demo",
+      sourceName: "MIMIC-IV Clinical Database Demo",
+      sourceVersion: "2.2",
+      sourceUrl: "https://physionet.org/content/mimic-iv-demo/2.2/",
+      license: "Open Data Commons Open Database License v1.0",
+      archiveFile: "mimic-iv-demo.tar.gz",
+      archiveSha256,
+      assetVersion: "mimic-iv-demo-2.2-test",
+      createdAt: "2026-05-31T00:00:00.000Z",
+      rootEntries: ["hosp"],
+    }),
+  );
+  return dir;
+});
 
 const failingPhysioNetCredentialFileLayer = Layer.effect(
   FileSystem.FileSystem,
@@ -191,6 +271,45 @@ describe("M4DatasetService", () => {
         expect(mockInitializeDerived).not.toHaveBeenCalled();
         expect(mockBackend).not.toHaveBeenCalled();
       }).pipe(Effect.provide(makeLayer())),
+    );
+
+    it.effect("seeds bundled desktop demo data without running m4 init", () =>
+      Effect.gen(function* () {
+        const assetDir = yield* makeBundledAssetDir();
+        yield* Effect.gen(function* () {
+          mockStatus
+            .mockImplementationOnce(({ credentials }) =>
+              Effect.succeed(
+                statusResult(credentials, {
+                  datasetId: "mimic-iv-demo",
+                  backendId: "duckdb",
+                  readiness: "not_initialized",
+                  initialized: false,
+                  selected: true,
+                  tables: [],
+                  lastCheckedAt: "2026-05-28T10:00:00.000Z",
+                }),
+              ),
+            )
+            .mockImplementation(({ credentials }) => Effect.succeed(statusResult(credentials)));
+          const service = yield* M4DatasetService;
+
+          const result = yield* service.initialize({
+            datasetId: "mimic-iv-demo",
+            backendId: "duckdb",
+          });
+
+          expect(mockInitialize).not.toHaveBeenCalled();
+          expect(result.datasets[0]).toEqual(expect.objectContaining({ bundled: true }));
+        }).pipe(
+          Effect.provide(
+            makeLayer(undefined, undefined, {
+              mode: "desktop",
+              bundledDatasetsDir: assetDir,
+            }),
+          ),
+        );
+      }),
     );
 
     it.effect("defaults empty workspace settings to the managed datasets directory", () =>

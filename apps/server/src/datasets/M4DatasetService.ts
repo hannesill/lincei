@@ -26,6 +26,11 @@ import {
 import { SecretStoreError, ServerSecretStore } from "../auth/Services/ServerSecretStore.ts";
 import { ServerConfig } from "../config.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
+import {
+  discoverBundledMimicDemoAsset,
+  markBundledMimicDemoFromSentinel,
+  seedBundledMimicDemo,
+} from "./bundledMimicDemo.ts";
 import { M4Cli } from "./M4Cli.ts";
 import { makeDatasetWorkspacePathResolver } from "./workspace.ts";
 
@@ -258,6 +263,21 @@ export const makeM4DatasetService = Effect.gen(function* () {
     Effect.flatMap((settings) => resolveDatasetWorkspacePath(settings.datasets.workspacePath)),
   );
 
+  const provideBundledDatasetServices = <A, E>(
+    effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
+  ) =>
+    effect.pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+    );
+  const bundledMimicDemoAsset = provideBundledDatasetServices(
+    discoverBundledMimicDemoAsset(config.bundledDatasetsDir),
+  );
+  const seedBundledMimicDemoWithServices = (input: Parameters<typeof seedBundledMimicDemo>[0]) =>
+    provideBundledDatasetServices(seedBundledMimicDemo(input));
+  const markBundledMimicDemoWithServices = (cwd: string, status: DatasetStatusResult) =>
+    provideBundledDatasetServices(markBundledMimicDemoFromSentinel(cwd, status));
+
   const mergeActiveOperations = (
     status: DatasetStatusResult,
     operations: ReadonlyMap<string, DatasetInitOperationState>,
@@ -312,7 +332,7 @@ export const makeM4DatasetService = Effect.gen(function* () {
       const credentials = credentialPresenceFromSecrets(secrets);
       return yield* withBigQueryEnvironment(secrets.bigQuery, (env) =>
         Effect.gen(function* () {
-          const [status, operations] = yield* Effect.all([
+          const [initialStatus, operations] = yield* Effect.all([
             m4Cli.status({
               cwd,
               credentials,
@@ -322,7 +342,26 @@ export const makeM4DatasetService = Effect.gen(function* () {
             }),
             Ref.get(activeOperations),
           ]);
-          return mergeActiveOperations(status, operations);
+          const asset = input?.backendId === "bigquery" ? null : yield* bundledMimicDemoAsset;
+          const seeded =
+            asset === null
+              ? false
+              : yield* seedBundledMimicDemoWithServices({
+                  workspacePath: cwd,
+                  asset,
+                  currentStatus: initialStatus,
+                });
+          const status = seeded
+            ? yield* m4Cli.status({
+                cwd,
+                credentials,
+                datasetId: input?.datasetId,
+                backendId: input?.backendId,
+                env,
+              })
+            : initialStatus;
+          const markedStatus = yield* markBundledMimicDemoWithServices(cwd, status);
+          return mergeActiveOperations(markedStatus, operations);
         }),
       );
     });
@@ -489,6 +528,31 @@ export const makeM4DatasetService = Effect.gen(function* () {
               }),
             );
           } else {
+            const asset =
+              input.datasetId === "mimic-iv-demo" && backendId === "duckdb"
+                ? yield* bundledMimicDemoAsset
+                : null;
+            if (asset !== null) {
+              const credentials = yield* readCredentialPresence;
+              const currentStatus = yield* m4Cli.status({
+                cwd,
+                credentials,
+                datasetId: input.datasetId,
+                backendId,
+              });
+              yield* seedBundledMimicDemoWithServices({
+                workspacePath: cwd,
+                asset,
+                currentStatus,
+              });
+              const seededStatus = yield* m4Cli.status({
+                cwd,
+                credentials,
+                datasetId: input.datasetId,
+                backendId,
+              });
+              return yield* markBundledMimicDemoWithServices(cwd, seededStatus);
+            }
             const physioNetSecret = yield* readPhysioNetSecret;
             if (input.datasetId !== "mimic-iv-demo" && physioNetSecret === null) {
               return yield* missingPhysioNetCredentials(input.datasetId);

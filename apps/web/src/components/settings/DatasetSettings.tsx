@@ -3,7 +3,6 @@ import {
   ChevronDownIcon,
   CircleHelpIcon,
   DatabaseIcon,
-  KeyRoundIcon,
   Loader2Icon,
   PlayIcon,
   Settings2Icon,
@@ -39,7 +38,7 @@ const DATASET_LABELS: Record<DatasetId, string> = {
 };
 
 const DATASET_DESCRIPTIONS: Record<DatasetId, string> = {
-  "mimic-iv-demo": "Small local sample for first-run validation.",
+  "mimic-iv-demo": "Bundled local sample for first-run validation.",
   "mimic-iv": "Credentialed MIMIC-IV clinical database.",
   "mimic-iv-note": "Credentialed MIMIC-IV clinical notes.",
   eicu: "eICU collaborative research database.",
@@ -174,6 +173,7 @@ function DatasetRow({ datasetId, backendId, snapshot, busy, onInitialize }: Data
   const readiness = snapshot?.readiness ?? "not_initialized";
   const initializing = readiness === "initializing";
   const initialized = snapshot?.initialized ?? false;
+  const bundled = datasetId === "mimic-iv-demo" || snapshot?.bundled === true;
   const derivedTablesLabel = formatDerivedTables(snapshot);
 
   return (
@@ -185,6 +185,7 @@ function DatasetRow({ datasetId, backendId, snapshot, busy, onInitialize }: Data
               {DATASET_LABELS[datasetId]}
             </h3>
             <Badge variant={readinessVariant(readiness)}>{READINESS_LABELS[readiness]}</Badge>
+            {bundled ? <Badge variant="outline">Bundled</Badge> : null}
           </div>
           <p className="mt-1 text-xs text-muted-foreground/80">{DATASET_DESCRIPTIONS[datasetId]}</p>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -204,7 +205,7 @@ function DatasetRow({ datasetId, backendId, snapshot, busy, onInitialize }: Data
           <ErrorDetail error={snapshot?.error} />
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          {!initialized ? (
+          {!initialized && datasetId !== "mimic-iv-demo" ? (
             <Button
               size="xs"
               variant="outline"
@@ -347,165 +348,6 @@ export function DatasetSettingsPanel() {
 
   return (
     <SettingsPageContainer className="max-w-5xl">
-      <SettingsSection title="Credentials" icon={<KeyRoundIcon className="size-3.5" />}>
-        <ErrorDetail error={visibleError} className="m-4" />
-        <SettingsRow
-          title="PhysioNet"
-          description="Required for downloading restricted MIMIC datasets. Saved secrets are never echoed back."
-          status={
-            status?.credentials.physioNet.stored
-              ? `Stored for ${status.credentials.physioNet.username ?? "saved user"}`
-              : "Not stored"
-          }
-        >
-          <div className="grid gap-3 pt-3 pb-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-            <Input
-              aria-label="PhysioNet username"
-              placeholder="Username"
-              value={physioNetUsername}
-              onChange={(event) => setPhysioNetUsername(event.currentTarget.value)}
-            />
-            <Input
-              aria-label="PhysioNet password"
-              nativeInput
-              placeholder="Password"
-              type="password"
-              value={physioNetPassword}
-              onChange={(event) => setPhysioNetPassword(event.currentTarget.value)}
-            />
-            <Button
-              size="sm"
-              disabled={busy || !physioNetUsername.trim() || !physioNetPassword.trim()}
-              onClick={() =>
-                void runAction("save-physionet", async () => {
-                  await ensureLocalApi().datasets.savePhysioNetCredentials({
-                    username: physioNetUsername,
-                    password: physioNetPassword,
-                  });
-                  setPhysioNetPassword("");
-                  await refreshStatus();
-                })
-              }
-            >
-              Save PhysioNet credentials
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy || !status?.credentials.physioNet.stored}
-              onClick={() =>
-                void runAction("clear-physionet", async () => {
-                  await ensureLocalApi().datasets.clearCredentials({ credentialKind: "physionet" });
-                  setPhysioNetPassword("");
-                  await refreshStatus();
-                })
-              }
-            >
-              <Trash2Icon className="size-3.5" />
-              Clear
-            </Button>
-          </div>
-        </SettingsRow>
-        {selectedBackend === "bigquery" || status?.credentials.bigQuery.stored ? (
-          <SettingsRow
-            title="BigQuery"
-            description="Required when the data location is Remote (BigQuery)."
-            status={
-              status?.credentials.bigQuery.stored
-                ? `Stored for ${status.credentials.bigQuery.projectId ?? "saved project"}`
-                : "Not stored"
-            }
-          >
-            <div className="space-y-3 pt-3 pb-4">
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <Input
-                  aria-label="BigQuery project ID"
-                  placeholder="Project ID"
-                  value={bigQueryProjectId}
-                  onChange={(event) => setBigQueryProjectId(event.currentTarget.value)}
-                />
-                <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                  <Switch
-                    aria-label="Use BigQuery application default credentials"
-                    checked={useBigQueryAdc}
-                    onCheckedChange={setUseBigQueryAdc}
-                  />
-                  Use ADC
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <button
-                          type="button"
-                          className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 hover:text-foreground"
-                          aria-label="Application Default Credentials details"
-                        >
-                          <CircleHelpIcon className="size-3.5" />
-                        </button>
-                      }
-                    />
-                    <TooltipPopup
-                      side="top"
-                      align="end"
-                      className="max-w-[min(320px,calc(100vw-2rem))] whitespace-normal text-left leading-relaxed text-wrap"
-                    >
-                      Use credentials already configured in your Google Cloud environment, such as
-                      gcloud application-default login or a runtime service account. When enabled,
-                      no service account JSON is stored.
-                    </TooltipPopup>
-                  </Tooltip>
-                </label>
-              </div>
-              <Textarea
-                aria-label="BigQuery service account JSON"
-                placeholder="Service account JSON"
-                value={bigQueryServiceAccountJson}
-                onChange={(event) => setBigQueryServiceAccountJson(event.currentTarget.value)}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  disabled={
-                    busy ||
-                    !bigQueryProjectId.trim() ||
-                    (!useBigQueryAdc && !bigQueryServiceAccountJson.trim())
-                  }
-                  onClick={() =>
-                    void runAction("save-bigquery", async () => {
-                      await ensureLocalApi().datasets.saveBigQueryCredentials({
-                        projectId: bigQueryProjectId,
-                        serviceAccountJson: bigQueryServiceAccountJson.trim() || undefined,
-                        useApplicationDefaultCredentials: useBigQueryAdc,
-                      });
-                      setBigQueryServiceAccountJson("");
-                      await refreshStatus();
-                    })
-                  }
-                >
-                  Save BigQuery credentials
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || !status?.credentials.bigQuery.stored}
-                  onClick={() =>
-                    void runAction("clear-bigquery", async () => {
-                      await ensureLocalApi().datasets.clearCredentials({
-                        credentialKind: "bigquery",
-                      });
-                      setBigQueryServiceAccountJson("");
-                      await refreshStatus();
-                    })
-                  }
-                >
-                  <Trash2Icon className="size-3.5" />
-                  Clear
-                </Button>
-              </div>
-            </div>
-          </SettingsRow>
-        ) : null}
-      </SettingsSection>
-
       <SettingsSection title="Datasets" icon={<DatabaseIcon className="size-3.5" />}>
         {DATASET_IDS.map((datasetId) => (
           <DatasetRow
@@ -529,6 +371,7 @@ export function DatasetSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection title="Advanced Setup" icon={<Settings2Icon className="size-3.5" />}>
+        <ErrorDetail error={visibleError} className="m-4" />
         {status?.runtime.available === false ? (
           <SettingsRow
             title="Dataset engine unavailable"
@@ -546,6 +389,163 @@ export function DatasetSettingsPanel() {
             Runtime and data location details
             <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
+          <SettingsRow
+            title="PhysioNet"
+            description="Required for downloading restricted MIMIC datasets. Saved secrets are never echoed back."
+            status={
+              status?.credentials.physioNet.stored
+                ? `Stored for ${status.credentials.physioNet.username ?? "saved user"}`
+                : "Not stored"
+            }
+          >
+            <div className="grid gap-3 pt-3 pb-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+              <Input
+                aria-label="PhysioNet username"
+                placeholder="Username"
+                value={physioNetUsername}
+                onChange={(event) => setPhysioNetUsername(event.currentTarget.value)}
+              />
+              <Input
+                aria-label="PhysioNet password"
+                nativeInput
+                placeholder="Password"
+                type="password"
+                value={physioNetPassword}
+                onChange={(event) => setPhysioNetPassword(event.currentTarget.value)}
+              />
+              <Button
+                size="sm"
+                disabled={busy || !physioNetUsername.trim() || !physioNetPassword.trim()}
+                onClick={() =>
+                  void runAction("save-physionet", async () => {
+                    await ensureLocalApi().datasets.savePhysioNetCredentials({
+                      username: physioNetUsername,
+                      password: physioNetPassword,
+                    });
+                    setPhysioNetPassword("");
+                    await refreshStatus();
+                  })
+                }
+              >
+                Save PhysioNet credentials
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || !status?.credentials.physioNet.stored}
+                onClick={() =>
+                  void runAction("clear-physionet", async () => {
+                    await ensureLocalApi().datasets.clearCredentials({
+                      credentialKind: "physionet",
+                    });
+                    setPhysioNetPassword("");
+                    await refreshStatus();
+                  })
+                }
+              >
+                <Trash2Icon className="size-3.5" />
+                Clear
+              </Button>
+            </div>
+          </SettingsRow>
+          {selectedBackend === "bigquery" || status?.credentials.bigQuery.stored ? (
+            <SettingsRow
+              title="BigQuery"
+              description="Required when the data location is Remote (BigQuery)."
+              status={
+                status?.credentials.bigQuery.stored
+                  ? `Stored for ${status.credentials.bigQuery.projectId ?? "saved project"}`
+                  : "Not stored"
+              }
+            >
+              <div className="space-y-3 pt-3 pb-4">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <Input
+                    aria-label="BigQuery project ID"
+                    placeholder="Project ID"
+                    value={bigQueryProjectId}
+                    onChange={(event) => setBigQueryProjectId(event.currentTarget.value)}
+                  />
+                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <Switch
+                      aria-label="Use BigQuery application default credentials"
+                      checked={useBigQueryAdc}
+                      onCheckedChange={setUseBigQueryAdc}
+                    />
+                    Use ADC
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 hover:text-foreground"
+                            aria-label="Application Default Credentials details"
+                          >
+                            <CircleHelpIcon className="size-3.5" />
+                          </button>
+                        }
+                      />
+                      <TooltipPopup
+                        side="top"
+                        align="end"
+                        className="max-w-[min(320px,calc(100vw-2rem))] whitespace-normal text-left leading-relaxed text-wrap"
+                      >
+                        Use credentials already configured in your Google Cloud environment, such as
+                        gcloud application-default login or a runtime service account. When enabled,
+                        no service account JSON is stored.
+                      </TooltipPopup>
+                    </Tooltip>
+                  </label>
+                </div>
+                <Textarea
+                  aria-label="BigQuery service account JSON"
+                  placeholder="Service account JSON"
+                  value={bigQueryServiceAccountJson}
+                  onChange={(event) => setBigQueryServiceAccountJson(event.currentTarget.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={
+                      busy ||
+                      !bigQueryProjectId.trim() ||
+                      (!useBigQueryAdc && !bigQueryServiceAccountJson.trim())
+                    }
+                    onClick={() =>
+                      void runAction("save-bigquery", async () => {
+                        await ensureLocalApi().datasets.saveBigQueryCredentials({
+                          projectId: bigQueryProjectId,
+                          serviceAccountJson: bigQueryServiceAccountJson.trim() || undefined,
+                          useApplicationDefaultCredentials: useBigQueryAdc,
+                        });
+                        setBigQueryServiceAccountJson("");
+                        await refreshStatus();
+                      })
+                    }
+                  >
+                    Save BigQuery credentials
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !status?.credentials.bigQuery.stored}
+                    onClick={() =>
+                      void runAction("clear-bigquery", async () => {
+                        await ensureLocalApi().datasets.clearCredentials({
+                          credentialKind: "bigquery",
+                        });
+                        setBigQueryServiceAccountJson("");
+                        await refreshStatus();
+                      })
+                    }
+                  >
+                    <Trash2Icon className="size-3.5" />
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </SettingsRow>
+          ) : null}
           <SettingsRow
             title="Workspace path"
             description="Directory where local dataset artifacts are managed."

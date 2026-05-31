@@ -69,6 +69,7 @@ function createDatasetStatus(overrides: Partial<DatasetStatusResult> = {}): Data
         backendId: "duckdb",
         readiness: "ready",
         initialized: true,
+        bundled: true,
         selected: true,
         tables: [{ name: "primary", ready: true, rowCount: 100 }],
         lastCheckedAt: "2026-05-28T10:00:00.000Z",
@@ -201,6 +202,7 @@ describe("DatasetSettingsPanel", () => {
       .element(page.getByRole("heading", { name: "MIMIC-IV Demo", exact: true }))
       .toBeInTheDocument();
     await expect.element(page.getByText("Ready").first()).toBeInTheDocument();
+    await expect.element(page.getByText("Bundled").first()).toBeInTheDocument();
     await expect.element(page.getByText("100 rows")).toBeInTheDocument();
   });
 
@@ -311,6 +313,7 @@ describe("DatasetSettingsPanel", () => {
       </AppAtomRegistryProvider>,
     );
 
+    await page.getByText("Runtime and data location details").click();
     const usernameInput = page.getByLabelText("PhysioNet username");
     await usernameInput.fill("");
     await usernameInput.fill("researcher");
@@ -357,6 +360,13 @@ describe("DatasetSettingsPanel", () => {
     );
 
     await expect.element(page.getByText("MIMIC-IV Note")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(
+        [...document.querySelectorAll("button")].filter(
+          (button) => button.textContent?.trim() === "Initialize",
+        ),
+      ).toHaveLength(2);
+    });
     await page.getByRole("button", { name: "Initialize" }).nth(1).click();
 
     await vi.waitFor(() => {

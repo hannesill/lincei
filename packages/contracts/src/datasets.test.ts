@@ -112,6 +112,7 @@ describe("dataset status contracts", () => {
     });
 
     expect(status.datasets[0]?.tables).toEqual([]);
+    expect(status.datasets[0]?.bundled).toBe(false);
   });
 
   it("decodes optional derived table readiness when present", () => {

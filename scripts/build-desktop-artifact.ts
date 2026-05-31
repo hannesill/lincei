@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// @effect-diagnostics nodeBuiltinImport:off - Desktop release staging hashes generated assets with Node stdlib.
+
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
@@ -18,6 +22,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/unstable/cli";
@@ -25,11 +30,27 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
 const BuildArch = Schema.Literals(["arm64", "x64", "universal"]);
+const BundledDatasetAssetManifest = Schema.Struct({
+  assetId: Schema.Literal("mimic-iv-demo"),
+  datasetId: Schema.Literal("mimic-iv-demo"),
+  sourceName: Schema.String,
+  sourceVersion: Schema.String,
+  sourceUrl: Schema.String,
+  license: Schema.String,
+  archiveFile: Schema.String,
+  archiveSha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  assetVersion: Schema.String,
+  createdAt: Schema.String,
+  rootEntries: Schema.Array(Schema.String),
+});
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
 );
 const encodeJsonString = Schema.encodeEffect(Schema.UnknownFromJsonString);
+const decodeBundledDatasetAssetManifest = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(BundledDatasetAssetManifest),
+);
 
 interface DesktopBuildIconAssets {
   readonly macIconPng: string;
@@ -519,6 +540,66 @@ function validateBundledClientAssets(clientDir: string) {
   });
 }
 
+async function sha256File(filePath: string): Promise<string> {
+  return createHash("sha256")
+    .update(await readFile(filePath))
+    .digest("hex");
+}
+
+export const stageBundledMimicDemoAsset = Effect.fn("stageBundledMimicDemoAsset")(function* (
+  repoRoot: string,
+  stageResourcesDir: string,
+): Effect.fn.Return<
+  void,
+  BuildScriptError | PlatformError.PlatformError,
+  FileSystem.FileSystem | Path.Path
+> {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const sourceDir = path.join(repoRoot, "assets/datasets/mimic-iv-demo");
+  const manifestPath = path.join(sourceDir, "mimic-iv-demo.asset.json");
+  if (!(yield* fs.exists(manifestPath).pipe(Effect.orElseSucceed(() => false)))) {
+    return yield* new BuildScriptError({
+      message: `Missing bundled MIMIC-IV Demo asset manifest at ${manifestPath}. Run 'bun run prepare:mimic-iv-demo-asset' before desktop release packaging.`,
+    });
+  }
+
+  const manifest = yield* fs.readFileString(manifestPath).pipe(
+    Effect.flatMap((raw) => decodeBundledDatasetAssetManifest(raw)),
+    Effect.mapError(
+      (cause) =>
+        new BuildScriptError({
+          message: `Invalid bundled MIMIC-IV Demo asset manifest at ${manifestPath}.`,
+          cause,
+        }),
+    ),
+  );
+  const archivePath = path.join(sourceDir, manifest.archiveFile);
+  if (!(yield* fs.exists(archivePath).pipe(Effect.orElseSucceed(() => false)))) {
+    return yield* new BuildScriptError({
+      message: `Missing bundled MIMIC-IV Demo archive at ${archivePath}. Run 'bun run prepare:mimic-iv-demo-asset'.`,
+    });
+  }
+  const actualSha256 = yield* Effect.tryPromise({
+    try: () => sha256File(archivePath),
+    catch: (cause) =>
+      new BuildScriptError({
+        message: `Could not hash bundled MIMIC-IV Demo archive at ${archivePath}.`,
+        cause,
+      }),
+  });
+  if (actualSha256 !== manifest.archiveSha256) {
+    return yield* new BuildScriptError({
+      message: `Bundled MIMIC-IV Demo archive checksum mismatch at ${archivePath}.`,
+    });
+  }
+
+  const targetDir = path.join(stageResourcesDir, "datasets");
+  yield* fs.makeDirectory(targetDir, { recursive: true });
+  yield* fs.copyFile(manifestPath, path.join(targetDir, "mimic-iv-demo.asset.json"));
+  yield* fs.copyFile(archivePath, path.join(targetDir, manifest.archiveFile));
+});
+
 export function resolveDesktopRuntimeDependencies(
   dependencies: Record<string, string> | undefined,
   catalog: Record<string, string>,
@@ -810,6 +891,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     },
     options.verbose,
   );
+  yield* stageBundledMimicDemoAsset(repoRoot, stageResourcesDir);
 
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));

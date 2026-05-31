@@ -28,3 +28,4 @@ squashfs-root/
 .gstack/
 dist-electron/
 .electron-runtime/
+assets/datasets/mimic-iv-demo/

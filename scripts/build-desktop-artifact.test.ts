@@ -1,8 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import { createHash } from "node:crypto";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 
 import {
   resolveDesktopRuntimeDependencies,
@@ -12,6 +15,7 @@ import {
   resolveDesktopUpdateChannel,
   resolveMockUpdateServerPort,
   resolveMockUpdateServerUrl,
+  stageBundledMimicDemoAsset,
 } from "./build-desktop-artifact.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 
@@ -123,6 +127,59 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(resolved.signed, false);
       assert.equal(resolved.verbose, false);
       assert.equal(resolved.mockUpdates, false);
+    }),
+  );
+
+  it.effect("stages the prepared MIMIC-IV Demo asset into desktop resources", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const repoRoot = yield* fs.makeTempDirectoryScoped({ prefix: "lincei-stage-asset-repo-" });
+      const sourceDir = path.join(repoRoot, "assets/datasets/mimic-iv-demo");
+      const resourcesDir = path.join(repoRoot, "stage-resources");
+      yield* fs.makeDirectory(sourceDir, { recursive: true });
+      const archiveBytes = new TextEncoder().encode("archive");
+      const archiveSha256 = createHash("sha256").update(archiveBytes).digest("hex");
+      yield* fs.writeFile(path.join(sourceDir, "mimic-iv-demo.tar.gz"), archiveBytes);
+      yield* fs.writeFileString(
+        path.join(sourceDir, "mimic-iv-demo.asset.json"),
+        // @effect-diagnostics-next-line preferSchemaOverJson:off - Small test manifest fixture.
+        JSON.stringify({
+          assetId: "mimic-iv-demo",
+          datasetId: "mimic-iv-demo",
+          sourceName: "MIMIC-IV Clinical Database Demo",
+          sourceVersion: "2.2",
+          sourceUrl: "https://physionet.org/content/mimic-iv-demo/2.2/",
+          license: "Open Data Commons Open Database License v1.0",
+          archiveFile: "mimic-iv-demo.tar.gz",
+          archiveSha256,
+          assetVersion: "mimic-iv-demo-2.2-test",
+          createdAt: "2026-05-31T00:00:00.000Z",
+          rootEntries: ["hosp"],
+        }),
+      );
+
+      yield* stageBundledMimicDemoAsset(repoRoot, resourcesDir);
+
+      assert.isTrue(
+        yield* fs
+          .exists(path.join(resourcesDir, "datasets/mimic-iv-demo.asset.json"))
+          .pipe(Effect.orDie),
+      );
+      assert.isTrue(
+        yield* fs
+          .exists(path.join(resourcesDir, "datasets/mimic-iv-demo.tar.gz"))
+          .pipe(Effect.orDie),
+      );
+    }),
+  );
+
+  it.effect("fails desktop asset staging when the prepared MIMIC-IV Demo asset is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const repoRoot = yield* fs.makeTempDirectoryScoped({ prefix: "lincei-stage-asset-missing-" });
+      const exit = yield* Effect.exit(stageBundledMimicDemoAsset(repoRoot, repoRoot));
+      assert.equal(exit._tag, "Failure");
     }),
   );
 });

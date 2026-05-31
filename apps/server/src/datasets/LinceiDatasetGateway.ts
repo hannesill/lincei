@@ -344,6 +344,13 @@ export const makeLinceiDatasetGateway = (
           }
           return yield* inferDatasetSelection(input.tool, statusExit.value, selection.backendId);
         });
+        if (
+          input.requireDataset === true &&
+          effectiveSelection.datasetId === "mimic-iv-demo" &&
+          effectiveSelection.backendId === "duckdb"
+        ) {
+          yield* datasetService.getStatus(effectiveSelection);
+        }
         const result = yield* m4Cli.json({
           cwd: context.workspacePath,
           args: [...input.args, ...selectionArgs(effectiveSelection), "--json", "--no-interactive"],

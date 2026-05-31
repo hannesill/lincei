@@ -66,6 +66,26 @@ const { logWarning: logBackendConfigurationWarning } = DesktopObservability.make
   "desktop-backend-configuration",
 );
 
+const resolveBundledDatasetsDir = Effect.fn(
+  "desktop.backendConfiguration.resolveBundledDatasetsDir",
+)(function* (): Effect.fn.Return<
+  Option.Option<string>,
+  never,
+  DesktopEnvironment.DesktopEnvironment | FileSystem.FileSystem
+> {
+  const environment = yield* DesktopEnvironment.DesktopEnvironment;
+  const fileSystem = yield* FileSystem.FileSystem;
+  for (const candidate of environment.resolveResourcePathCandidates(
+    "datasets/mimic-iv-demo.asset.json",
+  )) {
+    const exists = yield* fileSystem.exists(candidate).pipe(Effect.orElseSucceed(() => false));
+    if (exists) {
+      return Option.some(environment.path.dirname(candidate));
+    }
+  }
+  return Option.none<string>();
+});
+
 const readPersistedBackendObservabilitySettings: Effect.Effect<
   BackendObservabilitySettings,
   never,
@@ -102,11 +122,14 @@ const resolveBackendStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   }): Effect.fn.Return<
     DesktopBackendManager.DesktopBackendStartConfig,
     never,
-    DesktopEnvironment.DesktopEnvironment | DesktopServerExposure.DesktopServerExposure
+    | DesktopEnvironment.DesktopEnvironment
+    | DesktopServerExposure.DesktopServerExposure
+    | FileSystem.FileSystem
   > {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
     const backendExposure = yield* serverExposure.backendConfig;
+    const bundledDatasetsDir = yield* resolveBundledDatasetsDir();
 
     return {
       executablePath: process.execPath,
@@ -115,6 +138,10 @@ const resolveBackendStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       env: {
         ...backendChildEnvPatch(),
         ELECTRON_RUN_AS_NODE: "1",
+        ...Option.match(bundledDatasetsDir, {
+          onNone: () => ({}),
+          onSome: (dir) => ({ LINCEI_BUNDLED_DATASETS_DIR: dir }),
+        }),
       },
       bootstrap: {
         mode: "desktop",
@@ -171,6 +198,7 @@ export const layer = Layer.effect(
           observabilitySettings,
         }).pipe(
           Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(DesktopServerExposure.DesktopServerExposure, serverExposure),
         );
       }).pipe(Effect.withSpan("desktop.backendConfiguration.resolve")),

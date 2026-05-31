@@ -131,6 +131,9 @@ export const DatasetStatusSnapshot = Schema.Struct({
   backendId: DatasetBackendId,
   readiness: DatasetReadinessState,
   initialized: Schema.Boolean,
+  bundled: Schema.optionalKey(Schema.Boolean).pipe(
+    Schema.withDecodingDefaultType(Effect.succeed(false)),
+  ),
   selected: Schema.optional(Schema.Boolean),
   active: Schema.optional(Schema.Boolean),
   path: Schema.optional(TrimmedNonEmptyString),

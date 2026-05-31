@@ -237,7 +237,9 @@ describe("LinceiDatasetGateway", () => {
 
     return Effect.gen(function* () {
       mockRun
+        .mockReturnValueOnce(Effect.succeed(processOutput(statusJson)))
         .mockReturnValueOnce(Effect.succeed(processOutput(schemaJson)))
+        .mockReturnValueOnce(Effect.succeed(processOutput(statusJson)))
         .mockReturnValueOnce(Effect.succeed(processOutput(queryJson)));
 
       const gateway = yield* LinceiDatasetGateway;
@@ -246,6 +248,24 @@ describe("LinceiDatasetGateway", () => {
 
       expect(mockRun).toHaveBeenNthCalledWith(
         1,
+        expect.objectContaining({
+          cwd: workspacePath,
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--dataset",
+            "mimic-iv-demo",
+            "--backend",
+            "duckdb",
+            "--json",
+            "--no-interactive",
+          ],
+        }),
+      );
+      expect(mockRun).toHaveBeenNthCalledWith(
+        2,
         expect.objectContaining({
           cwd: workspacePath,
           args: [
@@ -263,7 +283,25 @@ describe("LinceiDatasetGateway", () => {
         }),
       );
       expect(mockRun).toHaveBeenNthCalledWith(
-        2,
+        3,
+        expect.objectContaining({
+          cwd: workspacePath,
+          args: [
+            "--from",
+            "m4-infra",
+            "m4",
+            "status",
+            "--dataset",
+            "mimic-iv-demo",
+            "--backend",
+            "duckdb",
+            "--json",
+            "--no-interactive",
+          ],
+        }),
+      );
+      expect(mockRun).toHaveBeenNthCalledWith(
+        4,
         expect.objectContaining({
           cwd: workspacePath,
           args: [

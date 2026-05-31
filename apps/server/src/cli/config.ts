@@ -149,6 +149,7 @@ const EnvServerConfig = Config.all({
   logWebSocketEvents: linceiConfig.boolean("LOG_WS_EVENTS"),
   tailscaleServeEnabled: linceiConfig.boolean("TAILSCALE_SERVE"),
   tailscaleServePort: linceiConfig.port("TAILSCALE_SERVE_PORT"),
+  bundledDatasetsDir: linceiConfig.string("BUNDLED_DATASETS_DIR"),
 });
 
 export interface CliServerFlags {
@@ -383,6 +384,7 @@ export const resolveServerConfig = (
       noBrowser,
       startupPresentation,
       desktopBootstrapToken,
+      bundledDatasetsDir: env.bundledDatasetsDir,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
       tailscaleServeEnabled,
