@@ -3,20 +3,31 @@ import { scopeProjectRef } from "@t3tools/client-runtime";
 import { isActiveResearchCard } from "@t3tools/shared/researchCards";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import { LayersIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { resolveSessionRouteRef } from "../sessionRoutes";
-import { selectProjectByRef, useStore } from "../store";
+import { selectProjectByRef, selectSessionsAcrossEnvironments, useStore } from "../store";
 import { createSessionSelectorByRef } from "../storeSelectors";
 import { formatShortTimestamp } from "../timestampFormat";
-import type { ResearchCard } from "../types";
+import type { ResearchCard, Session } from "../types";
 import { useSettings } from "../hooks/useSettings";
 import ChatMarkdown from "./ChatMarkdown";
 import { DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { Badge } from "./ui/badge";
+import { Toggle, ToggleGroup } from "./ui/toggle-group";
 
 interface ResearchCardsPanelProps {
   mode?: DiffPanelMode;
+}
+
+type ResearchCardScope = "session" | "study";
+
+interface ScopedResearchCard {
+  card: ResearchCard;
+  cwd: string | undefined;
+  sessionId: Session["id"];
+  sessionTitle: string;
 }
 
 function formatResearchCardLabel(value: string): string {
@@ -44,13 +55,71 @@ function getStatusBadgeVariant(status: ResearchCard["status"]) {
   }
 }
 
-function compareResearchCards(left: ResearchCard, right: ResearchCard): number {
-  const leftActive = isActiveResearchCard(left);
-  const rightActive = isActiveResearchCard(right);
+function compareResearchCards(left: ScopedResearchCard, right: ScopedResearchCard): number {
+  const leftActive = isActiveResearchCard(left.card);
+  const rightActive = isActiveResearchCard(right.card);
   if (leftActive !== rightActive) {
     return leftActive ? -1 : 1;
   }
-  return right.updatedAt.localeCompare(left.updatedAt) || left.title.localeCompare(right.title);
+  return (
+    right.card.updatedAt.localeCompare(left.card.updatedAt) ||
+    left.card.title.localeCompare(right.card.title) ||
+    left.sessionTitle.localeCompare(right.sessionTitle)
+  );
+}
+
+function cardCwd(session: Session, projectCwd: string | undefined): string | undefined {
+  return session.worktreePath ?? projectCwd;
+}
+
+function sessionScopedCards(
+  session: Session | undefined,
+  projectCwd: string | undefined,
+): ScopedResearchCard[] {
+  if (!session) {
+    return [];
+  }
+  return session.researchCards.map((card) => ({
+    card,
+    cwd: cardCwd(session, projectCwd),
+    sessionId: session.id,
+    sessionTitle: session.title,
+  }));
+}
+
+function studyScopedCards(input: {
+  readonly activeSession: Session | undefined;
+  readonly sessions: ReadonlyArray<Session>;
+  readonly projectCwd: string | undefined;
+}): ScopedResearchCard[] {
+  if (!input.activeSession) {
+    return [];
+  }
+
+  const byCardId = new Map<string, ScopedResearchCard>();
+  for (const session of input.sessions) {
+    if (
+      session.environmentId !== input.activeSession.environmentId ||
+      session.projectId !== input.activeSession.projectId
+    ) {
+      continue;
+    }
+
+    for (const card of session.researchCards) {
+      const nextCard = {
+        card,
+        cwd: cardCwd(session, input.projectCwd),
+        sessionId: session.id,
+        sessionTitle: session.title,
+      };
+      const existingCard = byCardId.get(card.id);
+      if (!existingCard || card.updatedAt.localeCompare(existingCard.card.updatedAt) > 0) {
+        byCardId.set(card.id, nextCard);
+      }
+    }
+  }
+
+  return [...byCardId.values()];
 }
 
 function PreviewContent(props: { card: ResearchCard; cwd: string | undefined }) {
@@ -151,38 +220,44 @@ function ReviewMetadata(props: { review: ResearchCard["review"] }) {
 }
 
 function ResearchCardItem(props: {
-  card: ResearchCard;
-  cwd: string | undefined;
+  item: ScopedResearchCard;
+  scope: ResearchCardScope;
   timestampFormat: TimestampFormat;
 }) {
-  const artifactCount = props.card.artifacts.length;
+  const { card } = props.item;
+  const artifactCount = card.artifacts.length;
   return (
     <article className="rounded-md border border-border/70 bg-card/70 p-3 shadow-xs">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-foreground" title={props.card.title}>
-            {props.card.title}
+          <h3 className="truncate text-sm font-semibold text-foreground" title={card.title}>
+            {card.title}
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary" size="sm">
-              {formatResearchCardLabel(props.card.type)}
+              {formatResearchCardLabel(card.type)}
             </Badge>
-            <Badge variant={getStatusBadgeVariant(props.card.status)} size="sm">
-              {formatResearchCardLabel(props.card.status)}
+            <Badge variant={getStatusBadgeVariant(card.status)} size="sm">
+              {formatResearchCardLabel(card.status)}
             </Badge>
           </div>
         </div>
         <div className="shrink-0 text-right text-[11px] text-muted-foreground/65">
-          <div>{formatShortTimestamp(props.card.updatedAt, props.timestampFormat)}</div>
+          <div>{formatShortTimestamp(card.updatedAt, props.timestampFormat)}</div>
           <div className="mt-0.5">
             {artifactCount} {artifactCount === 1 ? "artifact" : "artifacts"}
           </div>
         </div>
       </div>
       <div className="mt-3 space-y-3">
-        <PreviewContent card={props.card} cwd={props.cwd} />
-        <ArtifactReferences artifacts={props.card.artifacts} />
-        <ReviewMetadata review={props.card.review} />
+        {props.scope === "study" ? (
+          <p className="truncate text-[11px] text-muted-foreground/60">
+            Session: {props.item.sessionTitle}
+          </p>
+        ) : null}
+        <PreviewContent card={card} cwd={props.item.cwd} />
+        <ArtifactReferences artifacts={card.artifacts} />
+        <ReviewMetadata review={card.review} />
       </div>
     </article>
   );
@@ -190,6 +265,7 @@ function ResearchCardItem(props: {
 
 export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPanelProps) {
   const settings = useSettings();
+  const [scope, setScope] = useState<ResearchCardScope>("session");
   const routeSessionRef = useParams({
     strict: false,
     select: (params) => resolveSessionRouteRef(params),
@@ -205,21 +281,52 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
         )
       : undefined,
   );
+  const sessions = useStore(useShallow(selectSessionsAcrossEnvironments));
   const orderedCards = useMemo(
-    () => (activeSession?.researchCards ?? []).toSorted(compareResearchCards),
-    [activeSession?.researchCards],
+    () =>
+      (scope === "session"
+        ? sessionScopedCards(activeSession, activeProject?.cwd)
+        : studyScopedCards({
+            activeSession,
+            sessions,
+            projectCwd: activeProject?.cwd,
+          })
+      ).toSorted(compareResearchCards),
+    [activeProject?.cwd, activeSession, scope, sessions],
   );
-  const activeCwd = activeSession?.worktreePath ?? activeProject?.cwd;
   const header = (
-    <div className="flex min-w-0 flex-1 items-center gap-2 [-webkit-app-region:no-drag]">
-      <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background/70 text-muted-foreground">
-        <LayersIcon className="size-3.5" />
-      </span>
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-foreground">Research cards</div>
-        <div className="text-[11px] text-muted-foreground/65">
-          {orderedCards.length} {orderedCards.length === 1 ? "card" : "cards"}
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-3 [-webkit-app-region:no-drag]">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background/70 text-muted-foreground">
+          <LayersIcon className="size-3.5" />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-foreground">Research cards</div>
+          <div className="text-[11px] text-muted-foreground/65">
+            {orderedCards.length} {orderedCards.length === 1 ? "card" : "cards"}
+          </div>
         </div>
+      </div>
+      <div className="min-w-0">
+        <ToggleGroup
+          className="shrink-0"
+          variant="outline"
+          size="xs"
+          value={[scope]}
+          onValueChange={(value) => {
+            const nextScope = value[0];
+            if (nextScope === "session" || nextScope === "study") {
+              setScope(nextScope);
+            }
+          }}
+        >
+          <Toggle value="session" aria-label="Show cards for this session">
+            Session
+          </Toggle>
+          <Toggle value="study" aria-label="Show cards for this study">
+            Study
+          </Toggle>
+        </ToggleGroup>
       </div>
     </div>
   );
@@ -237,11 +344,11 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-3">
           <div className="space-y-3">
-            {orderedCards.map((card) => (
+            {orderedCards.map((item) => (
               <ResearchCardItem
-                key={card.id}
-                card={card}
-                cwd={activeCwd}
+                key={`${item.sessionId}:${item.card.id}`}
+                item={item}
+                scope={scope}
                 timestampFormat={settings.timestampFormat}
               />
             ))}
