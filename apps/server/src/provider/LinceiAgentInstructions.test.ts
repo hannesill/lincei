@@ -25,6 +25,12 @@ describe("LinceiAgentInstructions", () => {
     );
   });
 
+  it("describes the Lincei card CLI workflow", () => {
+    assert.match(LINCEI_AGENT_INSTRUCTIONS, /lincei context project --project "\$PWD"/);
+    assert.match(LINCEI_AGENT_INSTRUCTIONS, /lincei card propose --session <session-id>/);
+    assert.match(LINCEI_AGENT_INSTRUCTIONS, /ask the user which session should receive the card/);
+  });
+
   it("composes with existing provider instructions", () => {
     assert.equal(
       appendLinceiAgentInstructions("Existing instructions."),
