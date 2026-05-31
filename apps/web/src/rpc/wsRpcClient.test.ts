@@ -84,6 +84,74 @@ describe("wsRpcClient", () => {
     });
   });
 
+  it("exposes artifact study RPC methods under a typed namespace", async () => {
+    const artifactRecord = {
+      artifact: {
+        schemaVersion: 1,
+        id: "artifact-1",
+        kind: "csv",
+        relativePath: "outputs/cohort.csv",
+        mimeType: "text/csv",
+        size: 8,
+        contentHash: "sha256:abc",
+        createdAt: "2026-05-31T00:00:00.000Z",
+        updatedAt: "2026-05-31T00:00:00.000Z",
+      },
+      relativePath: "outputs/cohort.csv",
+      status: "current",
+      currentSize: 8,
+      currentMimeType: "text/csv",
+      currentContentHash: "sha256:abc",
+    };
+    const preview = {
+      artifact: artifactRecord,
+      preview: {
+        relativePath: "outputs/cohort.csv",
+        mimeType: "text/csv",
+        size: 8,
+        contentHash: "sha256:abc",
+        previewable: true,
+        truncated: false,
+        text: "a,b\n",
+        reason: null,
+      },
+    };
+    const rpcMethods = {
+      "study.listArtifacts": vi.fn(async () => ({ artifacts: [artifactRecord] })),
+      "study.getArtifact": vi.fn(async () => artifactRecord),
+      "study.previewArtifact": vi.fn(async () => preview),
+    };
+    const request = vi.fn((connect: (client: unknown) => Promise<unknown>) => connect(rpcMethods));
+    const transport = {
+      dispose: vi.fn(async () => undefined),
+      reconnect: vi.fn(async () => undefined),
+      request,
+      requestStream: vi.fn(),
+      subscribe: vi.fn(),
+    };
+    const client = createWsRpcClient(transport as unknown as WsTransport);
+
+    await expect(client.study.listArtifacts({ studyRoot: "/study" })).resolves.toEqual({
+      artifacts: [artifactRecord],
+    });
+    await expect(
+      client.study.getArtifact({ studyRoot: "/study", artifactId: "artifact-1" as never }),
+    ).resolves.toEqual(artifactRecord);
+    await expect(
+      client.study.previewArtifact({ studyRoot: "/study", artifactId: "artifact-1" as never }),
+    ).resolves.toEqual(preview);
+
+    expect(rpcMethods["study.listArtifacts"]).toHaveBeenCalledWith({ studyRoot: "/study" });
+    expect(rpcMethods["study.getArtifact"]).toHaveBeenCalledWith({
+      studyRoot: "/study",
+      artifactId: "artifact-1",
+    });
+    expect(rpcMethods["study.previewArtifact"]).toHaveBeenCalledWith({
+      studyRoot: "/study",
+      artifactId: "artifact-1",
+    });
+  });
+
   it("reduces vcs status stream events into flat status snapshots", () => {
     const subscribe = vi.fn(<TValue>(_connect: unknown, listener: (value: TValue) => void) => {
       for (const event of [

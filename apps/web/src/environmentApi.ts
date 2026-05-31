@@ -25,6 +25,9 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     },
     study: {
       getStatus: rpcClient.study.getStatus,
+      listArtifacts: rpcClient.study.listArtifacts,
+      getArtifact: rpcClient.study.getArtifact,
+      previewArtifact: rpcClient.study.previewArtifact,
       previewFile: rpcClient.study.previewFile,
     },
     sourceControl: {

@@ -86,8 +86,14 @@ import type {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import type {
+  StudyArtifactInput,
+  StudyArtifactPreviewInput,
   StudyFilePreviewInput,
   StudyFilePreviewResult,
+  StudyGetArtifactResult,
+  StudyListArtifactsInput,
+  StudyListArtifactsResult,
+  StudyPreviewArtifactResult,
   StudyStatusInput,
   StudyStatusResult,
 } from "./researchStudy.ts";
@@ -548,6 +554,9 @@ export interface EnvironmentApi {
   };
   study: {
     getStatus: (input: StudyStatusInput) => Promise<StudyStatusResult>;
+    listArtifacts: (input: StudyListArtifactsInput) => Promise<StudyListArtifactsResult>;
+    getArtifact: (input: StudyArtifactInput) => Promise<StudyGetArtifactResult>;
+    previewArtifact: (input: StudyArtifactPreviewInput) => Promise<StudyPreviewArtifactResult>;
     previewFile: (input: StudyFilePreviewInput) => Promise<StudyFilePreviewResult>;
   };
   sourceControl: {

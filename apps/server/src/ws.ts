@@ -95,7 +95,13 @@ import {
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
-import { getStudyStatus, previewStudyFile } from "./study/StudyRecordService.ts";
+import {
+  getArtifact,
+  getStudyStatus,
+  listArtifacts,
+  previewArtifact,
+  previewStudyFile,
+} from "./study/StudyRecordService.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
@@ -1050,6 +1056,48 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               catch: (cause) =>
                 new StudyRecordError({
                   message: cause instanceof Error ? cause.message : "Failed to preview study file.",
+                  cause,
+                }),
+            }),
+            { "rpc.aggregate": "study" },
+          ),
+        [WS_METHODS.studyListArtifacts]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.studyListArtifacts,
+            Effect.tryPromise({
+              try: () => listArtifacts(input.studyRoot),
+              catch: (cause) =>
+                new StudyRecordError({
+                  message:
+                    cause instanceof Error ? cause.message : "Failed to list study artifacts.",
+                  cause,
+                }),
+            }),
+            { "rpc.aggregate": "study" },
+          ),
+        [WS_METHODS.studyGetArtifact]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.studyGetArtifact,
+            Effect.tryPromise({
+              try: () => getArtifact(input),
+              catch: (cause) =>
+                new StudyRecordError({
+                  message:
+                    cause instanceof Error ? cause.message : "Failed to read study artifact.",
+                  cause,
+                }),
+            }),
+            { "rpc.aggregate": "study" },
+          ),
+        [WS_METHODS.studyPreviewArtifact]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.studyPreviewArtifact,
+            Effect.tryPromise({
+              try: () => previewArtifact(input),
+              catch: (cause) =>
+                new StudyRecordError({
+                  message:
+                    cause instanceof Error ? cause.message : "Failed to preview study artifact.",
                   cause,
                 }),
             }),

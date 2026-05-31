@@ -485,6 +485,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.isTrue(agentHelp.includes("USAGE\n  lincei"));
       assert.isTrue(agentHelp.includes("card"));
       assert.isTrue(agentHelp.includes("context"));
+      assert.isTrue(agentHelp.includes("artifact"));
       assert.isTrue(agentHelp.includes("dataset"));
       assert.isTrue(agentHelp.includes("m4"));
       assert.isFalse(agentHelp.includes("serve"));
@@ -566,6 +567,61 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       const error = yield* runCliWithRuntime(["m4"]).pipe(Effect.flip);
 
       assertCliShowHelpWithUnrecognizedCommand(error, ["t3"], "m4");
+    }),
+  );
+
+  it.effect("lists, shows, and previews study artifacts by id", () =>
+    Effect.gen(function* () {
+      const studyRoot = mkdtempSync(join(tmpdir(), "lincei-cli-artifacts-study-"));
+      const writerScript = join(studyRoot, "write-artifact.mjs");
+      writeFileSync(
+        writerScript,
+        "import { writeFileSync } from 'node:fs';\nwriteFileSync('artifact.txt', 'hello artifact\\n');\n",
+      );
+
+      yield* runAgentCliWithRuntime([
+        "run",
+        "capture",
+        "--study-root",
+        studyRoot,
+        "--out",
+        "artifact.txt",
+        "--json",
+        process.execPath,
+        writerScript,
+      ]);
+
+      const listOutput = yield* captureStdout(
+        runAgentCli(["artifact", "list", "--study-root", studyRoot, "--json"]),
+      );
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      const listed = JSON.parse(listOutput.output) as {
+        readonly artifacts: ReadonlyArray<{ readonly artifact: { readonly id: string } }>;
+      };
+      const artifactId = listed.artifacts[0]?.artifact.id ?? "";
+
+      const showOutput = yield* captureStdout(
+        runAgentCli(["artifact", "show", artifactId, "--study-root", studyRoot, "--json"]),
+      );
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
+      const shown = JSON.parse(showOutput.output) as {
+        readonly artifact: { readonly id: string; readonly relativePath: string };
+      };
+      const previewOutput = yield* captureStdout(
+        runAgentCli([
+          "artifact",
+          "preview",
+          artifactId,
+          "--study-root",
+          studyRoot,
+          "--max-bytes",
+          "128",
+        ]),
+      );
+
+      assert.equal(shown.artifact.id, artifactId);
+      assert.equal(shown.artifact.relativePath, "artifact.txt");
+      assert.equal(previewOutput.output, "hello artifact\n");
     }),
   );
 

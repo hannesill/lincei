@@ -7,10 +7,14 @@ import { describe, expect, it } from "vitest";
 import { ResearchCardId } from "@t3tools/contracts";
 
 import {
+  buildCardArtifactReferences,
   captureRun,
+  getArtifact,
   getStudyStatus,
   hashStudyFile,
   initializeStudyRecord,
+  listArtifacts,
+  previewArtifact,
   previewStudyFile,
   upsertCardManifest,
 } from "./StudyRecordService.ts";
@@ -107,5 +111,114 @@ describe("StudyRecordService", () => {
       previewable: true,
       text: "output\n",
     });
+  });
+
+  it("looks up and previews captured artifacts by stable id", async () => {
+    const studyRoot = await makeTempStudy();
+    await fs.mkdir(path.join(studyRoot, "analysis"), { recursive: true });
+    await fs.writeFile(path.join(studyRoot, "analysis", "input.txt"), "input\n");
+
+    const result = await captureRun({
+      studyRoot,
+      deps: ["analysis/input.txt"],
+      outs: ["analysis/output.csv"],
+      command: [
+        process.execPath,
+        "-e",
+        "require('node:fs').writeFileSync('analysis/output.csv', 'a,b\\n1,2\\n')",
+      ],
+    });
+    const artifactId = result.run.declaredOutputs[0]!.id;
+
+    await expect(listArtifacts(studyRoot)).resolves.toMatchObject({
+      artifacts: [{ artifact: { id: artifactId }, status: "current" }],
+    });
+    await expect(getArtifact({ studyRoot, artifactId })).resolves.toMatchObject({
+      artifact: { id: artifactId, relativePath: "analysis/output.csv" },
+      status: "current",
+      currentMimeType: "text/csv",
+    });
+    await expect(previewArtifact({ studyRoot, artifactId })).resolves.toMatchObject({
+      artifact: { artifact: { id: artifactId }, status: "current" },
+      preview: { previewable: true, text: "a,b\n1,2\n" },
+    });
+  });
+
+  it("reports stale and missing artifacts without throwing", async () => {
+    const studyRoot = await makeTempStudy();
+    await fs.mkdir(path.join(studyRoot, "analysis"), { recursive: true });
+    await fs.writeFile(path.join(studyRoot, "analysis", "output.txt"), "first\n");
+    const artifacts = await buildCardArtifactReferences({
+      studyRoot,
+      artifacts: [{ id: "legacy-output", kind: "other", path: "analysis/output.txt" }],
+    });
+    const artifactId = artifacts[0]!.id;
+
+    await fs.writeFile(path.join(studyRoot, "analysis", "output.txt"), "second\n");
+    await expect(getArtifact({ studyRoot, artifactId })).resolves.toMatchObject({
+      status: "stale",
+    });
+
+    await fs.unlink(path.join(studyRoot, "analysis", "output.txt"));
+    await expect(previewArtifact({ studyRoot, artifactId })).resolves.toMatchObject({
+      artifact: { status: "missing" },
+      preview: { previewable: false, reason: "missing" },
+    });
+  });
+
+  it("rejects artifact manifests that point outside the study root", async () => {
+    const studyRoot = await makeTempStudy();
+    await initializeStudyRecord({ studyRoot });
+    await fs.writeFile(
+      path.join(studyRoot, ".lincei", "artifacts", "artifact-bad.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          id: "artifact-bad",
+          kind: "other",
+          relativePath: "../secret.txt",
+          size: 0,
+          contentHash: "sha256:bad",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        null,
+        2,
+      ),
+    );
+
+    await expect(getArtifact({ studyRoot, artifactId: "artifact-bad" })).rejects.toThrow(
+      "must stay within the study root",
+    );
+  });
+
+  it("enriches card artifact references from artifact ids and path refs", async () => {
+    const studyRoot = await makeTempStudy();
+    await fs.mkdir(path.join(studyRoot, "analysis"), { recursive: true });
+    await fs.writeFile(path.join(studyRoot, "analysis", "table.csv"), "a\n1\n");
+    const [artifact] = await buildCardArtifactReferences({
+      studyRoot,
+      artifacts: [{ id: "path-ref", kind: "csv", path: "analysis/table.csv" }],
+    });
+    expect(artifact?.id).not.toBe("path-ref");
+    expect(artifact).toMatchObject({
+      kind: "csv",
+      path: "analysis/table.csv",
+      mimeType: "text/csv",
+    });
+
+    const manifest = await upsertCardManifest({
+      studyRoot,
+      card: makeCard(),
+      artifactIds: [artifact!.id],
+    });
+
+    expect(manifest.artifactIds).toEqual([artifact!.id]);
+    expect(manifest.artifacts[0]).toMatchObject({
+      id: artifact!.id,
+      path: "analysis/table.csv",
+      contentHash: artifact!.contentHash,
+    });
+    expect(manifest.card.artifacts[0]?.id).toBe(artifact!.id);
   });
 });

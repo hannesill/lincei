@@ -88,6 +88,9 @@ export interface WsRpcClient {
   };
   readonly study: {
     readonly getStatus: RpcUnaryMethod<typeof WS_METHODS.studyStatus>;
+    readonly listArtifacts: RpcUnaryMethod<typeof WS_METHODS.studyListArtifacts>;
+    readonly getArtifact: RpcUnaryMethod<typeof WS_METHODS.studyGetArtifact>;
+    readonly previewArtifact: RpcUnaryMethod<typeof WS_METHODS.studyPreviewArtifact>;
     readonly previewFile: RpcUnaryMethod<typeof WS_METHODS.studyPreviewFile>;
   };
   readonly vcs: {
@@ -218,6 +221,12 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     },
     study: {
       getStatus: (input) => transport.request((client) => client[WS_METHODS.studyStatus](input)),
+      listArtifacts: (input) =>
+        transport.request((client) => client[WS_METHODS.studyListArtifacts](input)),
+      getArtifact: (input) =>
+        transport.request((client) => client[WS_METHODS.studyGetArtifact](input)),
+      previewArtifact: (input) =>
+        transport.request((client) => client[WS_METHODS.studyPreviewArtifact](input)),
       previewFile: (input) =>
         transport.request((client) => client[WS_METHODS.studyPreviewFile](input)),
     },

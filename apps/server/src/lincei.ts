@@ -4,13 +4,14 @@ import { Command } from "effect/unstable/cli";
 import { cardCommand, contextCommand } from "./cli/agent.ts";
 import { datasetCommand, m4Command } from "./cli/dataset.ts";
 import { runCliMain } from "./cli/root.ts";
-import { runCommand, studyCommand } from "./cli/study.ts";
+import { artifactCommand, runCommand, studyCommand } from "./cli/study.ts";
 
 export const agentCli = Command.make("lincei").pipe(
   Command.withDescription("Run Lincei research operations."),
   Command.withSubcommands([
     cardCommand,
     contextCommand,
+    artifactCommand,
     studyCommand,
     runCommand,
     datasetCommand,

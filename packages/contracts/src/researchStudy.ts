@@ -132,6 +132,24 @@ export const StudyFilePreviewInput = Schema.Struct({
 });
 export type StudyFilePreviewInput = typeof StudyFilePreviewInput.Type;
 
+export const StudyListArtifactsInput = Schema.Struct({
+  studyRoot: TrimmedNonEmptyString,
+});
+export type StudyListArtifactsInput = typeof StudyListArtifactsInput.Type;
+
+export const StudyArtifactInput = Schema.Struct({
+  studyRoot: TrimmedNonEmptyString,
+  artifactId: ResearchArtifactId,
+});
+export type StudyArtifactInput = typeof StudyArtifactInput.Type;
+
+export const StudyArtifactPreviewInput = Schema.Struct({
+  studyRoot: TrimmedNonEmptyString,
+  artifactId: ResearchArtifactId,
+  maxBytes: Schema.optional(NonNegativeInt),
+});
+export type StudyArtifactPreviewInput = typeof StudyArtifactPreviewInput.Type;
+
 export const StudyStatusInput = Schema.Struct({
   studyRoot: TrimmedNonEmptyString,
 });
@@ -155,6 +173,33 @@ export const StudyFilePreviewResult = Schema.Struct({
   reason: Schema.NullOr(Schema.Literals(["missing", "directory", "binary", "too-large"])),
 });
 export type StudyFilePreviewResult = typeof StudyFilePreviewResult.Type;
+
+export const StudyArtifactFileStatus = Schema.Literals(["current", "stale", "missing"]);
+export type StudyArtifactFileStatus = typeof StudyArtifactFileStatus.Type;
+
+export const StudyArtifactRecord = Schema.Struct({
+  artifact: ResearchArtifactManifest,
+  relativePath: StudyRelativePath,
+  status: StudyArtifactFileStatus,
+  currentSize: Schema.NullOr(NonNegativeInt),
+  currentMimeType: Schema.NullOr(TrimmedNonEmptyString),
+  currentContentHash: Schema.NullOr(ResearchContentHash),
+});
+export type StudyArtifactRecord = typeof StudyArtifactRecord.Type;
+
+export const StudyListArtifactsResult = Schema.Struct({
+  artifacts: Schema.Array(StudyArtifactRecord),
+});
+export type StudyListArtifactsResult = typeof StudyListArtifactsResult.Type;
+
+export const StudyGetArtifactResult = StudyArtifactRecord;
+export type StudyGetArtifactResult = typeof StudyGetArtifactResult.Type;
+
+export const StudyPreviewArtifactResult = Schema.Struct({
+  artifact: StudyArtifactRecord,
+  preview: StudyFilePreviewResult,
+});
+export type StudyPreviewArtifactResult = typeof StudyPreviewArtifactResult.Type;
 
 export class StudyRecordError extends Schema.TaggedErrorClass<StudyRecordError>()(
   "StudyRecordError",

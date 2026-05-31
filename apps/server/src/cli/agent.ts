@@ -49,7 +49,7 @@ import {
 import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
-import { upsertCardManifest } from "../study/StudyRecordService.ts";
+import { buildCardArtifactReferences, upsertCardManifest } from "../study/StudyRecordService.ts";
 
 type AgentDispatchCommand = Extract<
   ClientOrchestrationCommand,
@@ -789,6 +789,31 @@ const persistCardStudyManifest = (input: {
     });
   });
 
+const buildStudyCardArtifacts = (input: {
+  readonly snapshot: OrchestrationReadModel;
+  readonly session: OrchestrationSession;
+  readonly artifactIds: ReadonlyArray<string>;
+  readonly artifacts: ReadonlyArray<ResearchCardArtifactReference>;
+}) =>
+  Effect.gen(function* () {
+    const studyRoot = yield* resolveStudyRootForSession(input.snapshot, input.session);
+    return yield* Effect.tryPromise({
+      try: () =>
+        buildCardArtifactReferences({
+          studyRoot,
+          artifactIds: input.artifactIds,
+          artifacts: input.artifacts,
+        }),
+      catch: (cause) =>
+        new AgentCliError({
+          message:
+            cause instanceof Error
+              ? `Failed to resolve study artifacts: ${cause.message}`
+              : "Failed to resolve study artifacts.",
+        }),
+    });
+  });
+
 const cardListCommand = Command.make("list", {
   ...projectLocationFlags,
   session: sessionFlag,
@@ -847,7 +872,12 @@ const cardProposeCommand = Command.make("propose", {
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
         const preview = yield* parsePreviewInput(flags);
-        const artifacts = yield* parseArtifactsInput(flags);
+        const artifacts = yield* buildStudyCardArtifacts({
+          snapshot,
+          session,
+          artifactIds: flags.artifact,
+          artifacts: yield* parseArtifactsInput(flags),
+        });
         const card = yield* makeCard({
           session,
           title: flags.title,
@@ -860,7 +890,7 @@ const cardProposeCommand = Command.make("propose", {
           session,
           card,
           deps: flags.dep,
-          artifactIds: flags.artifact,
+          artifactIds: [],
           artifacts,
           runId: flags.runId,
         });
@@ -900,27 +930,39 @@ const cardUpdateCommand = Command.make("update", {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
         const existing = yield* findCard(session, flags.cardId);
         const preview = yield* parsePreviewInput(flags);
-        const artifacts = yield* parseArtifactsInput(flags);
         const shouldReplacePreview =
           Option.isSome(flags.previewJson) ||
           Option.isSome(flags.preview) ||
           Option.isSome(flags.previewFile);
+        const shouldReplaceArtifacts =
+          Option.isSome(flags.artifactsJson) ||
+          Option.isSome(flags.artifactsFile) ||
+          flags.artifact.length > 0;
+        const artifacts = shouldReplaceArtifacts
+          ? yield* buildStudyCardArtifacts({
+              snapshot,
+              session,
+              artifactIds: flags.artifact,
+              artifacts:
+                Option.isSome(flags.artifactsJson) || Option.isSome(flags.artifactsFile)
+                  ? yield* parseArtifactsInput(flags)
+                  : existing.artifacts,
+            })
+          : existing.artifacts;
         const card = yield* updateCard({
           card: existing,
           ...(Option.isSome(flags.title) ? { title: flags.title.value } : {}),
           ...(Option.isSome(flags.status) ? { status: flags.status.value } : {}),
           preview,
           replacePreview: shouldReplacePreview,
-          ...(Option.isSome(flags.artifactsJson) || Option.isSome(flags.artifactsFile)
-            ? { artifacts }
-            : {}),
+          ...(shouldReplaceArtifacts ? { artifacts } : {}),
         });
         yield* persistCardStudyManifest({
           snapshot,
           session,
           card,
           deps: flags.dep,
-          artifactIds: flags.artifact,
+          artifactIds: [],
           artifacts: card.artifacts,
           runId: flags.runId,
         });
@@ -956,8 +998,18 @@ const cardRequestReviewCommand = Command.make("request-review", {
         const now = DateTime.formatIso(yield* DateTime.now);
         const existing = yield* findCard(session, flags.cardId);
         const reviewPrompt = Option.getOrElse(flags.note, () => "Review this research card.");
+        const artifacts =
+          flags.artifact.length > 0
+            ? yield* buildStudyCardArtifacts({
+                snapshot,
+                session,
+                artifactIds: flags.artifact,
+                artifacts: existing.artifacts,
+              })
+            : existing.artifacts;
         const reviewedCard = {
           ...existing,
+          artifacts,
           status: "review-requested" as const,
           updatedAt: now,
           ...(existing.review === undefined
@@ -978,7 +1030,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
           session,
           card: reviewedCard,
           deps: flags.dep,
-          artifactIds: flags.artifact,
+          artifactIds: [],
           artifacts: reviewedCard.artifacts,
           runId: flags.runId,
         });
@@ -991,7 +1043,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
           ...(Option.isSome(flags.note) ? { note: flags.note.value } : {}),
           createdAt: now,
         });
-        if (existing.review === undefined) {
+        if (existing.review === undefined || flags.artifact.length > 0) {
           yield* dispatch({
             type: "session.research-card.update",
             commandId: CommandId.make(yield* agentCommandUuid),
@@ -1039,7 +1091,12 @@ const cardSupersedeCommand = Command.make("supersede", {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
         const oldCard = yield* findCard(session, flags.oldCardId);
         const preview = yield* parsePreviewInput(flags);
-        const artifacts = yield* parseArtifactsInput(flags);
+        const artifacts = yield* buildStudyCardArtifacts({
+          snapshot,
+          session,
+          artifactIds: flags.artifact,
+          artifacts: yield* parseArtifactsInput(flags),
+        });
         const newCard = yield* makeCard({
           session,
           title: flags.title,
@@ -1052,7 +1109,7 @@ const cardSupersedeCommand = Command.make("supersede", {
           session,
           card: newCard,
           deps: flags.dep,
-          artifactIds: flags.artifact,
+          artifactIds: [],
           artifacts,
           runId: flags.runId,
         });

@@ -6,7 +6,7 @@ import type {
   ResearchCardDependency,
   ResearchCardDependencyStatus,
   ResearchCardManifest,
-  StudyRelativePath,
+  ResearchArtifactId,
 } from "@t3tools/contracts/researchStudy";
 import {
   BarChart3Icon,
@@ -36,6 +36,7 @@ import { useSettings } from "../hooks/useSettings";
 import { cn } from "../lib/utils";
 import ChatMarkdown from "./ChatMarkdown";
 import { DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
+import { loadResearchArtifactPreview } from "./ResearchCardsPanel.logic";
 import { Badge } from "./ui/badge";
 import { Toggle, ToggleGroup } from "./ui/toggle-group";
 
@@ -530,6 +531,7 @@ interface PreviewState {
   readonly status: "loading" | "ready" | "error";
   readonly text: string | null;
   readonly message: string | null;
+  readonly detail?: string;
 }
 
 function joinWorkspacePath(root: string, relativePath: string): string {
@@ -544,10 +546,6 @@ function shortContentHash(hash: string | undefined): string {
   return value.slice(0, 12);
 }
 
-function asStudyRelativePath(value: string): StudyRelativePath {
-  return value as StudyRelativePath;
-}
-
 function ArtifactReferences(props: {
   artifacts: ResearchCard["artifacts"];
   consistencyStatus: ResearchCardDependencyStatus;
@@ -560,34 +558,20 @@ function ArtifactReferences(props: {
   }
 
   const previewArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
-    if (!artifact.path || !props.cwd) return;
+    if (!props.cwd) return;
     setPreview({ artifactId: artifact.id, status: "loading", text: null, message: null });
     try {
-      const result = await ensureEnvironmentApi(props.environmentId).study.previewFile({
+      const result = await loadResearchArtifactPreview({
+        study: ensureEnvironmentApi(props.environmentId).study,
         studyRoot: props.cwd,
-        relativePath: asStudyRelativePath(artifact.path),
+        artifact,
       });
-      if (!result.previewable) {
-        setPreview({
-          artifactId: artifact.id,
-          status: "ready",
-          text: null,
-          message:
-            result.reason === "too-large"
-              ? "File is too large to preview."
-              : result.reason === "binary"
-                ? "Binary file is not previewable."
-                : result.reason === "missing"
-                  ? "Referenced file is missing."
-                  : "File is not previewable.",
-        });
-        return;
-      }
       setPreview({
         artifactId: artifact.id,
         status: "ready",
         text: result.text,
-        message: null,
+        message: result.message,
+        ...(result.detail ? { detail: result.detail } : {}),
       });
     } catch (error) {
       setPreview({
@@ -600,13 +584,23 @@ function ArtifactReferences(props: {
   };
 
   const openArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
-    if (!artifact.path || !props.cwd) return;
+    if (!props.cwd) return;
+    let relativePath = artifact.path;
+    try {
+      const result = await ensureEnvironmentApi(props.environmentId).study.getArtifact({
+        studyRoot: props.cwd,
+        artifactId: artifact.id as ResearchArtifactId,
+      });
+      relativePath = result.relativePath;
+    } catch {
+      if (!relativePath) return;
+    }
     const api = ensureLocalApi();
     const { availableEditors } = await api.server.getConfig();
     const editor = resolveAndPersistPreferredEditor(availableEditors);
     if (!editor) return;
     await api.shell.openInEditor(
-      joinWorkspacePath(props.cwd, artifact.path),
+      joinWorkspacePath(props.cwd, relativePath),
       editor,
       artifact.lineStart !== undefined ? { line: Math.max(1, artifact.lineStart) } : undefined,
     );
@@ -617,7 +611,7 @@ function ArtifactReferences(props: {
       {props.artifacts.map((artifact) => {
         const label = artifact.label ?? artifact.path ?? artifact.uri ?? artifact.id;
         const detail = artifact.path ?? artifact.uri ?? artifact.mimeType ?? artifact.id;
-        const canOpen = Boolean(artifact.path && props.cwd);
+        const canOpen = Boolean(props.cwd && (artifact.path || artifact.id));
         return (
           <div
             key={artifact.id}
@@ -670,13 +664,27 @@ function ArtifactReferences(props: {
                     Loading preview...
                   </div>
                 ) : preview.text !== null ? (
-                  <pre className="max-h-80 overflow-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
-                    {preview.text}
-                  </pre>
+                  <>
+                    {preview.detail ? (
+                      <div className="border-b border-border/50 px-3 py-1.5 font-mono text-[10px] text-muted-foreground/65">
+                        {preview.detail}
+                      </div>
+                    ) : null}
+                    <pre className="max-h-80 overflow-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
+                      {preview.text}
+                    </pre>
+                  </>
                 ) : (
-                  <div className="px-3 py-2 text-xs text-muted-foreground/70">
-                    {preview.message ?? "No preview available."}
-                  </div>
+                  <>
+                    {preview.detail ? (
+                      <div className="border-b border-border/50 px-3 py-1.5 font-mono text-[10px] text-muted-foreground/65">
+                        {preview.detail}
+                      </div>
+                    ) : null}
+                    <div className="px-3 py-2 text-xs text-muted-foreground/70">
+                      {preview.message ?? "No preview available."}
+                    </div>
+                  </>
                 )}
               </div>
             ) : null}
@@ -862,7 +870,7 @@ function ResearchCardItem(props: {
       <div className="space-y-3 px-3 py-3">
         <PreviewContent card={card} cwd={props.item.cwd} />
         <ArtifactReferences
-          artifacts={card.artifacts}
+          artifacts={props.manifest?.artifacts ?? card.artifacts}
           consistencyStatus={consistencyStatus}
           cwd={props.item.cwd}
           environmentId={props.item.environmentId}

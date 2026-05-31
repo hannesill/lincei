@@ -58,8 +58,14 @@ import {
   OrchestrationRpcSchemas,
 } from "./orchestration.ts";
 import {
+  StudyArtifactInput,
+  StudyArtifactPreviewInput,
   StudyFilePreviewInput,
   StudyFilePreviewResult,
+  StudyGetArtifactResult,
+  StudyListArtifactsInput,
+  StudyListArtifactsResult,
+  StudyPreviewArtifactResult,
   StudyRecordError,
   StudyStatusInput,
   StudyStatusResult,
@@ -128,6 +134,9 @@ export const WS_METHODS = {
 
   // Study record methods
   studyStatus: "study.status",
+  studyListArtifacts: "study.listArtifacts",
+  studyGetArtifact: "study.getArtifact",
+  studyPreviewArtifact: "study.previewArtifact",
   studyPreviewFile: "study.previewFile",
 
   // Filesystem methods
@@ -347,6 +356,24 @@ export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
 export const WsStudyPreviewFileRpc = Rpc.make(WS_METHODS.studyPreviewFile, {
   payload: StudyFilePreviewInput,
   success: StudyFilePreviewResult,
+  error: StudyRecordError,
+});
+
+export const WsStudyListArtifactsRpc = Rpc.make(WS_METHODS.studyListArtifacts, {
+  payload: StudyListArtifactsInput,
+  success: StudyListArtifactsResult,
+  error: StudyRecordError,
+});
+
+export const WsStudyGetArtifactRpc = Rpc.make(WS_METHODS.studyGetArtifact, {
+  payload: StudyArtifactInput,
+  success: StudyGetArtifactResult,
+  error: StudyRecordError,
+});
+
+export const WsStudyPreviewArtifactRpc = Rpc.make(WS_METHODS.studyPreviewArtifact, {
+  payload: StudyArtifactPreviewInput,
+  success: StudyPreviewArtifactResult,
   error: StudyRecordError,
 });
 
@@ -572,6 +599,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
   WsStudyStatusRpc,
+  WsStudyListArtifactsRpc,
+  WsStudyGetArtifactRpc,
+  WsStudyPreviewArtifactRpc,
   WsStudyPreviewFileRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeVcsStatusRpc,

@@ -15,6 +15,7 @@ import {
   ResearchRunManifest,
   ResearchStudyId,
   ResearchStudyManifest,
+  StudyArtifactRecord,
   StudyFilePreviewResult,
   type ResearchArtifactManifest as ResearchArtifactManifestType,
   type OrchestrationResearchCard,
@@ -42,6 +43,7 @@ const encodeRunManifest = Schema.encodeUnknownSync(ResearchRunManifest);
 const decodeRunManifest = Schema.decodeUnknownSync(ResearchRunManifest);
 const encodeArtifactManifest = Schema.encodeUnknownSync(ResearchArtifactManifest);
 const decodeArtifactManifest = Schema.decodeUnknownSync(ResearchArtifactManifest);
+const decodeArtifactRecord = Schema.decodeUnknownSync(StudyArtifactRecord);
 const decodeFilePreviewResult = Schema.decodeUnknownSync(StudyFilePreviewResult);
 const decodeContentHash = Schema.decodeUnknownSync(ResearchContentHash);
 const decodeRunId = Schema.decodeUnknownSync(ResearchRunId);
@@ -248,6 +250,11 @@ export interface StudyStatusResult {
   readonly summary: Record<ResearchCardDependencyStatus, number>;
 }
 
+export interface StudyPreviewArtifactResult {
+  readonly artifact: StudyArtifactRecord;
+  readonly preview: StudyFilePreviewResult;
+}
+
 export async function initializeStudyRecord(
   input: StudyRecordInitInput,
 ): Promise<ResearchStudyManifest> {
@@ -339,6 +346,31 @@ async function writeArtifactManifest(
   );
 }
 
+async function readArtifactManifest(
+  studyRoot: string,
+  artifactId: string,
+): Promise<ResearchArtifactManifest> {
+  const artifact = decodeArtifactManifest(
+    await readJsonFile(artifactManifestPath(studyRoot, artifactId)),
+  );
+  resolveStudyRelativePath(studyRoot, artifact.relativePath);
+  return artifact;
+}
+
+async function tryReadArtifactManifest(
+  studyRoot: string,
+  artifactId: string,
+): Promise<ResearchArtifactManifest | null> {
+  try {
+    if (!(await pathExists(artifactManifestPath(studyRoot, artifactId)))) {
+      return null;
+    }
+    return await readArtifactManifest(studyRoot, artifactId);
+  } catch {
+    return null;
+  }
+}
+
 export async function readCardManifests(studyRoot: string): Promise<ResearchCardManifest[]> {
   return readManifestFiles(resolveStudyRecordPaths(studyRoot).cardsDir, decodeCardManifest);
 }
@@ -350,7 +382,143 @@ export async function readRunManifests(studyRoot: string): Promise<ResearchRunMa
 export async function readArtifactManifests(
   studyRoot: string,
 ): Promise<ResearchArtifactManifest[]> {
-  return readManifestFiles(resolveStudyRecordPaths(studyRoot).artifactsDir, decodeArtifactManifest);
+  const artifacts = await readManifestFiles(
+    resolveStudyRecordPaths(studyRoot).artifactsDir,
+    decodeArtifactManifest,
+  );
+  return artifacts.map((artifact) => {
+    resolveStudyRelativePath(studyRoot, artifact.relativePath);
+    return artifact;
+  });
+}
+
+export async function resolveArtifactRecord(
+  studyRoot: string,
+  artifact: ResearchArtifactManifest,
+): Promise<StudyArtifactRecord> {
+  const relativePath = normalizeStudyRelativePath(artifact.relativePath);
+  const absolutePath = resolveStudyRelativePath(studyRoot, relativePath);
+  try {
+    const stat = await fs.stat(absolutePath);
+    if (stat.isDirectory()) {
+      return decodeArtifactRecord({
+        artifact,
+        relativePath,
+        status: "missing",
+        currentSize: null,
+        currentMimeType: null,
+        currentContentHash: null,
+      });
+    }
+    const currentContentHash = asContentHash(await hashStudyFile(studyRoot, relativePath));
+    return decodeArtifactRecord({
+      artifact,
+      relativePath,
+      status: currentContentHash === artifact.contentHash ? "current" : "stale",
+      currentSize: stat.size,
+      currentMimeType: inferMimeType(relativePath) ?? null,
+      currentContentHash,
+    });
+  } catch {
+    return decodeArtifactRecord({
+      artifact,
+      relativePath,
+      status: "missing",
+      currentSize: null,
+      currentMimeType: null,
+      currentContentHash: null,
+    });
+  }
+}
+
+export async function listArtifacts(
+  studyRoot: string,
+): Promise<{ artifacts: StudyArtifactRecord[] }> {
+  await readStudyManifest(studyRoot);
+  const artifacts = await Promise.all(
+    (await readArtifactManifests(studyRoot)).map((artifact) =>
+      resolveArtifactRecord(studyRoot, artifact),
+    ),
+  );
+  return {
+    artifacts: artifacts.toSorted((left, right) =>
+      left.artifact.id.localeCompare(right.artifact.id),
+    ),
+  };
+}
+
+export async function getArtifact(input: {
+  readonly studyRoot: string;
+  readonly artifactId: string;
+}): Promise<StudyArtifactRecord> {
+  await readStudyManifest(input.studyRoot);
+  const artifact = await readArtifactManifest(input.studyRoot, input.artifactId);
+  return resolveArtifactRecord(input.studyRoot, artifact);
+}
+
+export async function previewArtifact(input: {
+  readonly studyRoot: string;
+  readonly artifactId: string;
+  readonly maxBytes?: number | undefined;
+}): Promise<StudyPreviewArtifactResult> {
+  const artifact = await getArtifact(input);
+  return {
+    artifact,
+    preview: await previewStudyFile({
+      studyRoot: input.studyRoot,
+      relativePath: artifact.relativePath,
+      maxBytes: input.maxBytes,
+    }),
+  };
+}
+
+export async function buildCardArtifactReferences(input: {
+  readonly studyRoot: string;
+  readonly artifactIds?: ReadonlyArray<string>;
+  readonly artifacts?: ReadonlyArray<ResearchCardArtifactReference>;
+}): Promise<ResearchCardArtifactReference[]> {
+  await initializeStudyRecord({ studyRoot: input.studyRoot });
+  const references = new Map<string, ResearchCardArtifactReference>();
+  const addManifestReference = (
+    artifact: ResearchArtifactManifest,
+    source?: ResearchCardArtifactReference,
+  ) => {
+    references.set(artifact.id, {
+      ...source,
+      id: artifact.id,
+      kind: artifact.kind,
+      path: artifact.relativePath,
+      contentHash: artifact.contentHash,
+      ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+      createdAt: artifact.createdAt,
+    });
+  };
+
+  for (const artifactId of input.artifactIds ?? []) {
+    addManifestReference(await readArtifactManifest(input.studyRoot, artifactId));
+  }
+
+  for (const artifact of input.artifacts ?? []) {
+    if (artifact.path) {
+      const manifest = await makeArtifactManifest({
+        studyRoot: input.studyRoot,
+        relativePathInput: artifact.path,
+      });
+      await writeArtifactManifest(input.studyRoot, manifest);
+      addManifestReference(manifest, artifact);
+      continue;
+    }
+
+    const existingManifest = await tryReadArtifactManifest(input.studyRoot, artifact.id);
+    if (existingManifest) {
+      addManifestReference(existingManifest, artifact);
+      continue;
+    }
+
+    references.set(artifact.id, artifact);
+  }
+
+  return [...references.values()];
 }
 
 export async function computeCardConsistency(
@@ -406,39 +574,35 @@ export async function upsertCardManifest(
     (input.deps ?? []).map((dep) => makeDependency(input.studyRoot, dep)),
   );
   const artifactReferences: ResearchCardArtifactReference[] = [];
-  for (const artifact of input.artifacts ?? []) {
-    if (!artifact.path || artifact.contentHash) {
-      artifactReferences.push(artifact);
-      continue;
-    }
-    const normalizedPath = normalizeStudyRelativePath(artifact.path);
-    artifactReferences.push({
-      ...artifact,
-      path: normalizedPath,
-      contentHash: await hashStudyFile(input.studyRoot, normalizedPath),
-    });
-  }
+  artifactReferences.push(
+    ...(await buildCardArtifactReferences({
+      studyRoot: input.studyRoot,
+      ...(input.artifactIds ? { artifactIds: input.artifactIds } : {}),
+      ...(input.artifacts ? { artifacts: input.artifacts } : {}),
+    })),
+  );
+  const card = {
+    ...input.card,
+    artifacts: artifactReferences,
+  } satisfies OrchestrationResearchCard;
   const timestamp = nowIso();
   const runId = input.runId ? asRunId(input.runId) : undefined;
   const manifestWithoutConsistency = decodeCardManifestForWrite({
     schemaVersion: 1,
-    id: input.card.id,
-    card: input.card,
+    id: card.id,
+    card,
     dependencyIds: dependencies.map((dependency) => dependency.id),
     dependencies,
-    artifactIds: (input.artifactIds ?? []).map(asArtifactId),
+    artifactIds: artifactReferences.map((artifact) => asArtifactId(artifact.id)),
     artifacts: artifactReferences,
     runId,
     consistency: { status: "unknown", checkedAt: timestamp },
-    createdAt: input.card.createdAt,
+    createdAt: card.createdAt,
     updatedAt: timestamp,
   });
   const consistency = await computeCardConsistency(input.studyRoot, manifestWithoutConsistency);
   const manifest = { ...manifestWithoutConsistency, consistency };
-  await writeJsonFile(
-    cardManifestPath(input.studyRoot, input.card.id),
-    encodeCardManifest(manifest),
-  );
+  await writeJsonFile(cardManifestPath(input.studyRoot, card.id), encodeCardManifest(manifest));
   await writeJsonFile(
     dependencyIndexPath(input.studyRoot),
     manifest.dependencies.map((dependency) => ({
