@@ -406,7 +406,7 @@ function createSnapshotWithResearchCards(): OrchestrationReadModel {
             type: "markdown",
             status: "changes-requested",
             title: "Cohort definition",
-            preview: "Patients with **heart failure** and a baseline echo.",
+            preview: { markdown: "Patients with **heart failure** and a baseline echo." },
             artifacts: [
               {
                 id: "artifact-sql",
@@ -440,10 +440,13 @@ function createSnapshotWithResearchCards(): OrchestrationReadModel {
             type: "table",
             status: "accepted",
             title: "Baseline balance",
-            preview: [
-              { variable: "age", exposed: 67.4, control: 66.9 },
-              { variable: "bnp", exposed: 420, control: 395 },
-            ],
+            preview: {
+              columns: ["variable", "exposed", "control"],
+              rows: [
+                ["age", 67.4, 66.9],
+                ["bnp", 420, 395],
+              ],
+            },
             artifacts: [],
             provenance: [],
             turnId: null,
@@ -1892,7 +1895,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
         .toBeInTheDocument();
       await expect.element(page.getByText("Narrow the age range.")).toBeInTheDocument();
       await expect.element(page.getByText("Baseline balance")).toBeInTheDocument();
-      await expect.element(page.getByText(/"variable": "age"/)).toBeInTheDocument();
+      await expect.element(page.getByText("variable")).toBeInTheDocument();
+      await expect.element(page.getByText("67.4")).toBeInTheDocument();
     } finally {
       await mounted.cleanup();
     }
