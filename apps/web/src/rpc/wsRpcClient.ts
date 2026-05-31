@@ -82,7 +82,13 @@ export interface WsRpcClient {
     readonly openInEditor: (input: {
       readonly cwd: Parameters<LocalApi["shell"]["openInEditor"]>[0];
       readonly editor: Parameters<LocalApi["shell"]["openInEditor"]>[1];
+      readonly line?: number;
+      readonly column?: number;
     }) => ReturnType<LocalApi["shell"]["openInEditor"]>;
+  };
+  readonly study: {
+    readonly getStatus: RpcUnaryMethod<typeof WS_METHODS.studyStatus>;
+    readonly previewFile: RpcUnaryMethod<typeof WS_METHODS.studyPreviewFile>;
   };
   readonly vcs: {
     readonly pull: RpcUnaryMethod<typeof WS_METHODS.vcsPull>;
@@ -209,6 +215,11 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     shell: {
       openInEditor: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInEditor](input)),
+    },
+    study: {
+      getStatus: (input) => transport.request((client) => client[WS_METHODS.studyStatus](input)),
+      previewFile: (input) =>
+        transport.request((client) => client[WS_METHODS.studyPreviewFile](input)),
     },
     vcs: {
       pull: (input) => transport.request((client) => client[WS_METHODS.vcsPull](input)),

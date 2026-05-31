@@ -2,10 +2,18 @@ import { useParams } from "@tanstack/react-router";
 import { scopeProjectRef } from "@t3tools/client-runtime";
 import { isActiveResearchCard } from "@t3tools/shared/researchCards";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
+import type {
+  ResearchCardDependency,
+  ResearchCardDependencyStatus,
+  ResearchCardManifest,
+  StudyRelativePath,
+} from "@t3tools/contracts/researchStudy";
 import {
   BarChart3Icon,
   CheckSquareIcon,
   DatabaseIcon,
+  ExternalLinkIcon,
+  EyeIcon,
   FileTextIcon,
   ImageIcon,
   KeyRoundIcon,
@@ -13,9 +21,12 @@ import {
   Table2Icon,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import { resolveAndPersistPreferredEditor } from "../editorPreferences";
+import { ensureEnvironmentApi } from "../environmentApi";
+import { ensureLocalApi } from "../localApi";
 import { resolveSessionRouteRef } from "../sessionRoutes";
 import { selectProjectByRef, selectSessionsAcrossEnvironments, useStore } from "../store";
 import { createSessionSelectorByRef } from "../storeSelectors";
@@ -37,6 +48,7 @@ type ResearchCardScope = "session" | "study";
 interface ScopedResearchCard {
   card: ResearchCard;
   cwd: string | undefined;
+  environmentId: Session["environmentId"];
   sessionId: Session["id"];
   sessionTitle: string;
 }
@@ -159,6 +171,7 @@ function sessionScopedCards(
   return session.researchCards.map((card) => ({
     card,
     cwd: cardCwd(session, projectCwd),
+    environmentId: session.environmentId,
     sessionId: session.id,
     sessionTitle: session.title,
   }));
@@ -186,6 +199,7 @@ function studyScopedCards(input: {
       const nextCard = {
         card,
         cwd: cardCwd(session, input.projectCwd),
+        environmentId: session.environmentId,
         sessionId: session.id,
         sessionTitle: session.title,
       };
@@ -511,37 +525,200 @@ function PreviewContent(props: { card: ResearchCard; cwd: string | undefined }) 
   );
 }
 
-function ArtifactReferences(props: { artifacts: ResearchCard["artifacts"] }) {
+interface PreviewState {
+  readonly artifactId: string;
+  readonly status: "loading" | "ready" | "error";
+  readonly text: string | null;
+  readonly message: string | null;
+}
+
+function joinWorkspacePath(root: string, relativePath: string): string {
+  return `${root.replace(/[\\/]+$/, "")}/${relativePath.replace(/^[\\/]+/, "")}`;
+}
+
+function shortContentHash(hash: string | undefined): string {
+  if (!hash) {
+    return "unknown";
+  }
+  const value = hash.startsWith("sha256:") ? hash.slice("sha256:".length) : hash;
+  return value.slice(0, 12);
+}
+
+function asStudyRelativePath(value: string): StudyRelativePath {
+  return value as StudyRelativePath;
+}
+
+function ArtifactReferences(props: {
+  artifacts: ResearchCard["artifacts"];
+  consistencyStatus: ResearchCardDependencyStatus;
+  cwd: string | undefined;
+  environmentId: Session["environmentId"];
+}) {
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   if (props.artifacts.length === 0) {
     return null;
   }
+
+  const previewArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
+    if (!artifact.path || !props.cwd) return;
+    setPreview({ artifactId: artifact.id, status: "loading", text: null, message: null });
+    try {
+      const result = await ensureEnvironmentApi(props.environmentId).study.previewFile({
+        studyRoot: props.cwd,
+        relativePath: asStudyRelativePath(artifact.path),
+      });
+      if (!result.previewable) {
+        setPreview({
+          artifactId: artifact.id,
+          status: "ready",
+          text: null,
+          message:
+            result.reason === "too-large"
+              ? "File is too large to preview."
+              : result.reason === "binary"
+                ? "Binary file is not previewable."
+                : result.reason === "missing"
+                  ? "Referenced file is missing."
+                  : "File is not previewable.",
+        });
+        return;
+      }
+      setPreview({
+        artifactId: artifact.id,
+        status: "ready",
+        text: result.text,
+        message: null,
+      });
+    } catch (error) {
+      setPreview({
+        artifactId: artifact.id,
+        status: "error",
+        text: null,
+        message: error instanceof Error ? error.message : "Preview failed.",
+      });
+    }
+  };
+
+  const openArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
+    if (!artifact.path || !props.cwd) return;
+    const api = ensureLocalApi();
+    const { availableEditors } = await api.server.getConfig();
+    const editor = resolveAndPersistPreferredEditor(availableEditors);
+    if (!editor) return;
+    await api.shell.openInEditor(
+      joinWorkspacePath(props.cwd, artifact.path),
+      editor,
+      artifact.lineStart !== undefined ? { line: Math.max(1, artifact.lineStart) } : undefined,
+    );
+  };
 
   return (
     <div className="grid gap-1.5">
       {props.artifacts.map((artifact) => {
         const label = artifact.label ?? artifact.path ?? artifact.uri ?? artifact.id;
         const detail = artifact.path ?? artifact.uri ?? artifact.mimeType ?? artifact.id;
+        const canOpen = Boolean(artifact.path && props.cwd);
         return (
           <div
             key={artifact.id}
             className="rounded-md border border-border/50 bg-background/55 px-2.5 py-2 shadow-xs"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <Badge variant="outline" size="sm" className="font-mono">
                 {artifact.kind}
               </Badge>
               <span className="min-w-0 truncate text-xs font-medium text-foreground/85">
                 {label}
               </span>
+              <Badge variant="outline" size="sm" className="ml-auto font-mono">
+                {artifact.contentHash ? props.consistencyStatus : "unknown"}
+              </Badge>
+              <button
+                type="button"
+                disabled={!canOpen}
+                aria-label={`Preview ${label}`}
+                title="Preview"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/65 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => void previewArtifact(artifact)}
+              >
+                <EyeIcon className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                disabled={!canOpen}
+                aria-label={`Open ${label} in editor`}
+                title="Open in editor"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/65 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => void openArtifact(artifact)}
+              >
+                <ExternalLinkIcon className="size-3.5" />
+              </button>
             </div>
             {detail !== label ? (
-              <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground/60">
-                {detail}
+              <p className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px] text-muted-foreground/60">
+                <span className="min-w-0 truncate">{detail}</span>
+                <span className="shrink-0">#{shortContentHash(artifact.contentHash)}</span>
               </p>
+            ) : null}
+            {artifact.role ? (
+              <p className="mt-1 text-[11px] text-muted-foreground/65">{artifact.role}</p>
+            ) : null}
+            {preview?.artifactId === artifact.id ? (
+              <div className="mt-2 overflow-hidden rounded-md border border-border/55 bg-card/70">
+                {preview.status === "loading" ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground/70">
+                    Loading preview...
+                  </div>
+                ) : preview.text !== null ? (
+                  <pre className="max-h-80 overflow-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
+                    {preview.text}
+                  </pre>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-muted-foreground/70">
+                    {preview.message ?? "No preview available."}
+                  </div>
+                )}
+              </div>
             ) : null}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function DependencyReferences(props: {
+  dependencies: ReadonlyArray<ResearchCardDependency>;
+  consistencyStatus: ResearchCardDependencyStatus;
+  cwd: string | undefined;
+  environmentId: Session["environmentId"];
+}) {
+  const artifacts = props.dependencies.map((dependency) => ({
+    id: dependency.id,
+    kind: dependency.kind === "script" ? ("code" as const) : ("other" as const),
+    path: dependency.relativePath,
+    lineStart: dependency.lineRange?.start,
+    lineEnd: dependency.lineRange?.end,
+    contentHash: dependency.contentHash,
+    role: dependency.role,
+    label: dependency.relativePath,
+  }));
+
+  if (artifacts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[10px] font-semibold tracking-wide text-muted-foreground/65 uppercase">
+        Dependencies
+      </div>
+      <ArtifactReferences
+        artifacts={artifacts}
+        consistencyStatus={props.consistencyStatus}
+        cwd={props.cwd}
+        environmentId={props.environmentId}
+      />
     </div>
   );
 }
@@ -611,11 +788,13 @@ function ProvenanceSummary(props: { provenance: ResearchCard["provenance"] }) {
 
 function ResearchCardItem(props: {
   item: ScopedResearchCard;
+  manifest: ResearchCardManifest | undefined;
   scope: ResearchCardScope;
   timestampFormat: TimestampFormat;
 }) {
   const { card } = props.item;
   const artifactCount = card.artifacts.length;
+  const consistencyStatus = props.manifest?.consistency.status ?? "unknown";
   const presentation = CARD_TYPE_PRESENTATION[card.type];
   const isActive = isActiveResearchCard(card);
   const statusLabel = formatResearchCardLabel(card.status);
@@ -671,6 +850,9 @@ function ResearchCardItem(props: {
         <Badge variant={getStatusBadgeVariant(card.status)} size="sm">
           {statusLabel}
         </Badge>
+        <Badge variant="outline" size="sm" className="font-mono">
+          {consistencyStatus}
+        </Badge>
         {props.scope === "study" ? (
           <span className="min-w-0 truncate rounded-sm bg-background/45 px-1.5 py-0.5 text-[11px] text-muted-foreground/75">
             {props.item.sessionTitle}
@@ -679,7 +861,18 @@ function ResearchCardItem(props: {
       </div>
       <div className="space-y-3 px-3 py-3">
         <PreviewContent card={card} cwd={props.item.cwd} />
-        <ArtifactReferences artifacts={card.artifacts} />
+        <ArtifactReferences
+          artifacts={card.artifacts}
+          consistencyStatus={consistencyStatus}
+          cwd={props.item.cwd}
+          environmentId={props.item.environmentId}
+        />
+        <DependencyReferences
+          dependencies={props.manifest?.dependencies ?? []}
+          consistencyStatus={consistencyStatus}
+          cwd={props.item.cwd}
+          environmentId={props.item.environmentId}
+        />
         <ReviewMetadata review={card.review} />
       </div>
       <ProvenanceSummary provenance={card.provenance} />
@@ -690,6 +883,9 @@ function ResearchCardItem(props: {
 export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPanelProps) {
   const settings = useSettings();
   const [scope, setScope] = useState<ResearchCardScope>("session");
+  const [studyCardManifests, setStudyCardManifests] = useState<
+    Record<string, ResearchCardManifest>
+  >({});
   const routeSessionRef = useParams({
     strict: false,
     select: (params) => resolveSessionRouteRef(params),
@@ -706,6 +902,31 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
       : undefined,
   );
   const sessions = useStore(useShallow(selectSessionsAcrossEnvironments));
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeSession || !activeProject?.cwd) {
+      setStudyCardManifests({});
+      return;
+    }
+
+    void ensureEnvironmentApi(activeSession.environmentId)
+      .study.getStatus({ studyRoot: activeProject.cwd })
+      .then((status) => {
+        if (cancelled) return;
+        setStudyCardManifests(
+          Object.fromEntries(status.cards.map((manifest) => [manifest.id, manifest])),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStudyCardManifests({});
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject?.cwd, activeSession]);
   const orderedCards = useMemo(
     () =>
       (scope === "session"
@@ -772,6 +993,7 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
               <ResearchCardItem
                 key={`${item.sessionId}:${item.card.id}`}
                 item={item}
+                manifest={studyCardManifests[item.card.id]}
                 scope={scope}
                 timestampFormat={settings.timestampFormat}
               />

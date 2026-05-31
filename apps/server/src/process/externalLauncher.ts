@@ -109,6 +109,15 @@ function resolveEditorArgs(
   return [...baseArgs, ...resolveCommandEditorArgs(editor, target)];
 }
 
+function resolveEditorTarget(input: LaunchEditorInput): string {
+  if (input.line === undefined) {
+    return input.cwd;
+  }
+  return input.column === undefined
+    ? `${input.cwd}:${input.line}`
+    : `${input.cwd}:${input.line}:${input.column}`;
+}
+
 function resolveAvailableCommand(
   commands: ReadonlyArray<string>,
   options: CommandAvailabilityOptions = {},
@@ -286,7 +295,7 @@ export const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
     );
     return {
       command,
-      args: resolveEditorArgs(editorDef, input.cwd),
+      args: resolveEditorArgs(editorDef, resolveEditorTarget(input)),
     };
   }
 

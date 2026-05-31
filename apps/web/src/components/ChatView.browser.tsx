@@ -213,6 +213,14 @@ function createMockEnvironmentApi(input: {
     filesystem: {
       browse: input.browse,
     },
+    study: {
+      getStatus: (() => {
+        throw new Error("Not implemented in browser test.");
+      }) as EnvironmentApi["study"]["getStatus"],
+      previewFile: (() => {
+        throw new Error("Not implemented in browser test.");
+      }) as EnvironmentApi["study"]["previewFile"],
+    },
     sourceControl: {} as EnvironmentApi["sourceControl"],
     vcs: {} as EnvironmentApi["vcs"],
     git: {} as EnvironmentApi["git"],

@@ -85,6 +85,12 @@ import type {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import type {
+  StudyFilePreviewInput,
+  StudyFilePreviewResult,
+  StudyStatusInput,
+  StudyStatusResult,
+} from "./researchStudy.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -454,7 +460,11 @@ export interface LocalApi {
     confirm: (message: string) => Promise<boolean>;
   };
   shell: {
-    openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
+    openInEditor: (
+      cwd: string,
+      editor: EditorId,
+      target?: { readonly line?: number; readonly column?: number },
+    ) => Promise<void>;
     openExternal: (url: string) => Promise<void>;
   };
   contextMenu: {
@@ -535,6 +545,10 @@ export interface EnvironmentApi {
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;
+  };
+  study: {
+    getStatus: (input: StudyStatusInput) => Promise<StudyStatusResult>;
+    previewFile: (input: StudyFilePreviewInput) => Promise<StudyFilePreviewResult>;
   };
   sourceControl: {
     lookupRepository: (

@@ -30,6 +30,7 @@ import {
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
   SessionId,
+  StudyRecordError,
   type TerminalEvent,
   WS_METHODS,
   WsRpcGroup,
@@ -94,6 +95,7 @@ import {
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
+import { getStudyStatus, previewStudyFile } from "./study/StudyRecordService.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
@@ -1040,6 +1042,32 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, externalLauncher.launchEditor(input), {
             "rpc.aggregate": "workspace",
           }),
+        [WS_METHODS.studyPreviewFile]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.studyPreviewFile,
+            Effect.tryPromise({
+              try: () => previewStudyFile(input),
+              catch: (cause) =>
+                new StudyRecordError({
+                  message: cause instanceof Error ? cause.message : "Failed to preview study file.",
+                  cause,
+                }),
+            }),
+            { "rpc.aggregate": "study" },
+          ),
+        [WS_METHODS.studyStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.studyStatus,
+            Effect.tryPromise({
+              try: () => getStudyStatus(input.studyRoot),
+              catch: (cause) =>
+                new StudyRecordError({
+                  message: cause instanceof Error ? cause.message : "Failed to read study status.",
+                  cause,
+                }),
+            }),
+            { "rpc.aggregate": "study" },
+          ),
         [WS_METHODS.filesystemBrowse]: (input) =>
           observeRpcEffect(
             WS_METHODS.filesystemBrowse,

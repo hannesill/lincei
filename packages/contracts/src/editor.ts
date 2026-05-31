@@ -47,6 +47,8 @@ export type EditorId = typeof EditorId.Type;
 export const LaunchEditorInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   editor: EditorId,
+  line: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  column: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
 });
 export type LaunchEditorInput = typeof LaunchEditorInput.Type;
 

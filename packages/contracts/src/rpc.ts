@@ -57,6 +57,13 @@ import {
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
 } from "./orchestration.ts";
+import {
+  StudyFilePreviewInput,
+  StudyFilePreviewResult,
+  StudyRecordError,
+  StudyStatusInput,
+  StudyStatusResult,
+} from "./researchStudy.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   ProjectSearchEntriesError,
@@ -118,6 +125,10 @@ export const WS_METHODS = {
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
+
+  // Study record methods
+  studyStatus: "study.status",
+  studyPreviewFile: "study.previewFile",
 
   // Filesystem methods
   filesystemBrowse: "filesystem.browse",
@@ -331,6 +342,18 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: ExternalLauncherError,
+});
+
+export const WsStudyPreviewFileRpc = Rpc.make(WS_METHODS.studyPreviewFile, {
+  payload: StudyFilePreviewInput,
+  success: StudyFilePreviewResult,
+  error: StudyRecordError,
+});
+
+export const WsStudyStatusRpc = Rpc.make(WS_METHODS.studyStatus, {
+  payload: StudyStatusInput,
+  success: StudyStatusResult,
+  error: StudyRecordError,
 });
 
 export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
@@ -548,6 +571,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
+  WsStudyStatusRpc,
+  WsStudyPreviewFileRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
