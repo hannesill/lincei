@@ -9,6 +9,8 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationProviderRuntime,
   OrchestrationProviderRuntimeStatus,
+  ResearchCardSummary,
+  SessionId,
   OrchestrationSession,
   OrchestrationSessionShell,
 } from "@t3tools/contracts";
@@ -103,9 +105,27 @@ export function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): Propos
   };
 }
 
-export function mapResearchCard(researchCard: OrchestrationResearchCard): ResearchCard {
+export function mapResearchCard(researchCard: ResearchCardSummary): ResearchCard {
   return {
     ...researchCard,
+    artifacts: [],
+    provenance: [],
+  };
+}
+
+export function mapResearchCardDetail(
+  sessionId: SessionId,
+  researchCard: OrchestrationResearchCard,
+): ResearchCard {
+  return {
+    id: researchCard.id,
+    sessionId,
+    type: researchCard.type,
+    status: researchCard.status,
+    title: researchCard.title,
+    artifactCount: researchCard.artifacts.length,
+    hasPreview: researchCard.preview !== undefined,
+    ...(researchCard.preview !== undefined ? { preview: researchCard.preview } : {}),
     artifacts: researchCard.artifacts.map((artifact) => ({ ...artifact })),
     provenance: researchCard.provenance.map((entry) => ({ ...entry })),
     ...(researchCard.review
@@ -119,6 +139,9 @@ export function mapResearchCard(researchCard: OrchestrationResearchCard): Resear
           },
         }
       : {}),
+    turnId: researchCard.turnId,
+    createdAt: researchCard.createdAt,
+    updatedAt: researchCard.updatedAt,
   };
 }
 

@@ -34,7 +34,7 @@ import {
   mapProjectScripts,
   mapProposedPlan,
   mapProviderRuntime,
-  mapResearchCard,
+  mapResearchCardDetail,
   mapSession,
   mapSessionShell,
   mapTurnDiffSummary,
@@ -1274,7 +1274,10 @@ function applyEnvironmentOrchestrationEvent(
 
     case "session.research-card-proposed":
       return updateSessionState(state, event.payload.sessionId, (session) => {
-        const researchCard = mapResearchCard(event.payload.researchCard);
+        const researchCard = mapResearchCardDetail(
+          event.payload.sessionId,
+          event.payload.researchCard,
+        );
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== researchCard.id),
           researchCard,
@@ -1293,7 +1296,10 @@ function applyEnvironmentOrchestrationEvent(
 
     case "session.research-card-updated":
       return updateSessionState(state, event.payload.sessionId, (session) => {
-        const researchCard = mapResearchCard(event.payload.researchCard);
+        const researchCard = mapResearchCardDetail(
+          event.payload.sessionId,
+          event.payload.researchCard,
+        );
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== event.payload.cardId),
           researchCard,
@@ -1381,7 +1387,10 @@ function applyEnvironmentOrchestrationEvent(
               : researchCard,
           );
         }
-        const researchCards = [...nextResearchCards, mapResearchCard(event.payload.replacementCard)]
+        const researchCards = [
+          ...nextResearchCards,
+          mapResearchCardDetail(event.payload.sessionId, event.payload.replacementCard),
+        ]
           .toSorted(
             (left, right) =>
               left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),

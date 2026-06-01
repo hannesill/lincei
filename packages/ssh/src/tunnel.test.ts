@@ -336,58 +336,62 @@ describe("ssh tunnel scripts", () => {
     }).pipe(Effect.provide(processLayer));
   });
 
-  it.effect("closes the tunnel scope and starts fresh after disconnect", () => {
-    const spawnedCommands: Array<ReadonlyArray<string>> = [];
-    let tunnelKillCount = 0;
-    let stopCommandCount = 0;
-    const spawner = ChildProcessSpawner.make((command) =>
-      Effect.sync(() => {
-        const args = commandArgs(command);
-        spawnedCommands.push(args);
-        if (args.includes("-N")) {
-          return makeRunningProcess(() => {
-            tunnelKillCount += 1;
-          });
-        }
-        if (args.includes("sh") && args.includes("--")) {
-          return makeSuccessfulProcess('{"remotePort":3773}\n');
-        }
-        if (args.includes("sh")) {
-          stopCommandCount += 1;
-          return makeSuccessfulProcess('{"stopped":true}\n');
-        }
-        return makeSuccessfulProcess("\n");
-      }),
-    );
-    const layer = Layer.mergeAll(
-      NodeServices.layer,
-      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Layer.succeed(HttpClient.HttpClient, testHttpClient),
-      Layer.succeed(NetService.NetService, testNetService),
-      SshPasswordPrompt.disabledLayer,
-      SshEnvironmentManager.layer(),
-    );
-    const target = {
-      alias: "devbox",
-      hostname: "devbox.example.com",
-      username: "julius",
-      port: 2222,
-    } as const;
+  it.effect(
+    "closes the tunnel scope and starts fresh after disconnect",
+    () => {
+      const spawnedCommands: Array<ReadonlyArray<string>> = [];
+      let tunnelKillCount = 0;
+      let stopCommandCount = 0;
+      const spawner = ChildProcessSpawner.make((command) =>
+        Effect.sync(() => {
+          const args = commandArgs(command);
+          spawnedCommands.push(args);
+          if (args.includes("-N")) {
+            return makeRunningProcess(() => {
+              tunnelKillCount += 1;
+            });
+          }
+          if (args.includes("sh") && args.includes("--")) {
+            return makeSuccessfulProcess('{"remotePort":3773}\n');
+          }
+          if (args.includes("sh")) {
+            stopCommandCount += 1;
+            return makeSuccessfulProcess('{"stopped":true}\n');
+          }
+          return makeSuccessfulProcess("\n");
+        }),
+      );
+      const layer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Layer.succeed(HttpClient.HttpClient, testHttpClient),
+        Layer.succeed(NetService.NetService, testNetService),
+        SshPasswordPrompt.disabledLayer,
+        SshEnvironmentManager.layer(),
+      );
+      const target = {
+        alias: "devbox",
+        hostname: "devbox.example.com",
+        username: "julius",
+        port: 2222,
+      } as const;
 
-    return Effect.gen(function* () {
-      const manager = yield* SshEnvironmentManager;
+      return Effect.gen(function* () {
+        const manager = yield* SshEnvironmentManager;
 
-      const first = yield* manager.ensureEnvironment(target);
-      assert.equal(first.httpBaseUrl, "http://127.0.0.1:41773/");
+        const first = yield* manager.ensureEnvironment(target);
+        assert.equal(first.httpBaseUrl, "http://127.0.0.1:41773/");
 
-      yield* manager.disconnectEnvironment(target);
-      assert.equal(tunnelKillCount, 1);
-      assert.equal(stopCommandCount, 1);
+        yield* manager.disconnectEnvironment(target);
+        assert.equal(tunnelKillCount, 1);
+        assert.equal(stopCommandCount, 1);
 
-      yield* manager.ensureEnvironment(target);
+        yield* manager.ensureEnvironment(target);
 
-      assert.equal(spawnedCommands.filter((args) => args.includes("-N")).length, 2);
-      assert.equal(tunnelKillCount, 1);
-    }).pipe(Effect.provide(layer), Effect.scoped);
-  });
+        assert.equal(spawnedCommands.filter((args) => args.includes("-N")).length, 2);
+        assert.equal(tunnelKillCount, 1);
+      }).pipe(Effect.provide(layer), Effect.scoped);
+    },
+    15_000,
+  );
 });

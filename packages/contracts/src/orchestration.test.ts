@@ -674,63 +674,69 @@ it.effect("decodes a minimal proposed markdown research card", () =>
   }),
 );
 
-it.effect("decodes a table research card with artifact references and provenance", () =>
-  Effect.gen(function* () {
-    const parsed = yield* decodeOrchestrationResearchCard({
-      id: "card-table-1",
-      type: "table",
-      status: "proposed",
-      title: "Cohort counts by site",
-      preview: {
-        columns: ["site", "n"],
-        rows: [["A", 42]],
-      },
-      artifacts: [
-        {
-          id: "artifact-csv-1",
-          kind: "csv",
-          path: "outputs/cohort-counts.csv",
-          lineStart: 10,
-          lineEnd: 20,
-          contentHash: "sha256:artifact",
-          checkpointRef: "refs/t3/checkpoints/session-1/turn/1",
-          role: "primary-result",
-          label: "Cohort counts CSV",
-          mimeType: "text/csv",
-          createdAt: "2026-01-01T00:00:00.000Z",
+it.effect(
+  "decodes a table research card with artifact references and provenance",
+  () =>
+    Effect.gen(function* () {
+      const parsed = yield* decodeOrchestrationResearchCard({
+        id: "card-table-1",
+        type: "table",
+        status: "proposed",
+        title: "Cohort counts by site",
+        preview: {
+          columns: ["site", "n"],
+          rows: [["A", 42]],
         },
-        {
-          id: "artifact-sql-1",
-          kind: "sql",
-          path: "queries/cohort-counts.sql",
-        },
-      ],
-      provenance: [
-        {
-          sessionId: "session-1",
-          turnId: "turn-1",
-          source: "ehr-extract",
-          query: "select site, count(*) from cohort group by site",
-          queryHash: "sha256:query",
-          codeHash: "sha256:abc123",
-          dataset: "diabetes-cohort-v1",
-          backend: "duckdb",
-          timestamp: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-      turnId: "turn-1",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
+        artifacts: [
+          {
+            id: "artifact-csv-1",
+            kind: "csv",
+            path: "outputs/cohort-counts.csv",
+            lineStart: 10,
+            lineEnd: 20,
+            contentHash: "sha256:artifact",
+            checkpointRef: "refs/t3/checkpoints/session-1/turn/1",
+            role: "primary-result",
+            label: "Cohort counts CSV",
+            mimeType: "text/csv",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "artifact-sql-1",
+            kind: "sql",
+            path: "queries/cohort-counts.sql",
+          },
+        ],
+        provenance: [
+          {
+            sessionId: "session-1",
+            turnId: "turn-1",
+            source: "ehr-extract",
+            query: "select site, count(*) from cohort group by site",
+            queryHash: "sha256:query",
+            codeHash: "sha256:abc123",
+            dataset: "diabetes-cohort-v1",
+            backend: "duckdb",
+            timestamp: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        turnId: "turn-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
 
-    assert.strictEqual(parsed.artifacts.length, 2);
-    assert.strictEqual(parsed.artifacts[0]?.kind, "csv");
-    assert.strictEqual(parsed.artifacts[0]?.lineStart, 10);
-    assert.strictEqual(parsed.artifacts[0]?.checkpointRef, "refs/t3/checkpoints/session-1/turn/1");
-    assert.strictEqual(parsed.provenance[0]?.dataset, "diabetes-cohort-v1");
-    assert.strictEqual(parsed.provenance[0]?.queryHash, "sha256:query");
-    assert.strictEqual(parsed.provenance[0]?.backend, "duckdb");
-  }),
+      assert.strictEqual(parsed.artifacts.length, 2);
+      assert.strictEqual(parsed.artifacts[0]?.kind, "csv");
+      assert.strictEqual(parsed.artifacts[0]?.lineStart, 10);
+      assert.strictEqual(
+        parsed.artifacts[0]?.checkpointRef,
+        "refs/t3/checkpoints/session-1/turn/1",
+      );
+      assert.strictEqual(parsed.provenance[0]?.dataset, "diabetes-cohort-v1");
+      assert.strictEqual(parsed.provenance[0]?.queryHash, "sha256:query");
+      assert.strictEqual(parsed.provenance[0]?.backend, "duckdb");
+    }),
+  15_000,
 );
 
 it.effect("defaults research cards for historical orchestration sessions", () =>

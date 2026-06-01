@@ -79,6 +79,7 @@ const makeProjectionQuery = (input: {
       input.session && input.session.id === id ? Option.some(input.session) : Option.none(),
     ),
   getSessionDetailById: () => Effect.die("unused"),
+  getResearchCardDetail: () => Effect.die("unused"),
 });
 
 describe("StudyRootResolver", () => {

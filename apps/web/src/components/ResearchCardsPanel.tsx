@@ -19,7 +19,7 @@ import { resolveSessionRouteRef } from "../sessionRoutes";
 import { selectProjectByRef, selectSessionsAcrossEnvironments, useStore } from "../store";
 import { createSessionSelectorByRef } from "../storeSelectors";
 import { formatShortTimestamp } from "../timestampFormat";
-import type { ResearchCard, ResearchCardDetail, Session } from "../types";
+import type { ResearchCardDetail, Session } from "../types";
 import { useSettings } from "../hooks/useSettings";
 import { cn } from "../lib/utils";
 import ChatMarkdown from "./ChatMarkdown";
@@ -441,6 +441,7 @@ function ArtifactReferences(props: {
       {props.artifacts.map((artifact) => {
         const label = artifact.label ?? artifact.path ?? artifact.uri ?? artifact.id;
         const detail = artifact.path ?? artifact.uri ?? artifact.mimeType ?? artifact.id;
+        const canPreview = Boolean(artifact.id || artifact.path);
         const canOpen = Boolean(props.cwd && (artifact.path || artifact.id));
         return (
           <div
@@ -459,7 +460,7 @@ function ArtifactReferences(props: {
               </Badge>
               <button
                 type="button"
-                disabled={!canOpen}
+                disabled={!canPreview}
                 aria-label={`Preview ${label}`}
                 title="Preview"
                 className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/65 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
