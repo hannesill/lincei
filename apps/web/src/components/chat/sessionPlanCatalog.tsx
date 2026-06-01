@@ -5,7 +5,7 @@ import { useStore } from "../../store";
 import type { Session } from "../../types";
 
 const EMPTY_PROPOSED_PLANS: Session["proposedPlans"] = [];
-const AI_REVIEW_NOTICE = "AI can make mistakes. Review its outputs.";
+const AI_REVIEW_NOTICE = "Review AI outputs.";
 
 type SessionPlanCatalogEntry = Pick<Session, "id" | "proposedPlans">;
 
