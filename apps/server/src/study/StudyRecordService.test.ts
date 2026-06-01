@@ -54,6 +54,18 @@ describe("StudyRecordService", () => {
     ).resolves.toContain("artifacts/*");
   });
 
+  it("initializes the study .gitignore idempotently", async () => {
+    const studyRoot = await makeTempStudy();
+
+    await initializeStudyRecord({ studyRoot });
+    await initializeStudyRecord({ studyRoot });
+
+    const gitignore = await fs.readFile(path.join(studyRoot, ".lincei", ".gitignore"), "utf8");
+    expect(gitignore.split("\n").filter((line) => line === "artifacts/*")).toHaveLength(1);
+    expect(gitignore.split("\n").filter((line) => line === "!artifacts/.gitkeep")).toHaveLength(1);
+    expect(gitignore.split("\n").filter((line) => line === "!artifacts/*.json")).toHaveLength(1);
+  });
+
   it("hashes files deterministically and marks cards current, stale, and missing", async () => {
     const studyRoot = await makeTempStudy();
     await fs.mkdir(path.join(studyRoot, "analysis"), { recursive: true });
@@ -81,6 +93,41 @@ describe("StudyRecordService", () => {
     await expect(getStudyStatus(studyRoot)).resolves.toMatchObject({
       summary: { current: 0, stale: 0, missing: 1, unknown: 0 },
     });
+  });
+
+  it("merges dependency index entries across card upserts", async () => {
+    const studyRoot = await makeTempStudy();
+    await fs.mkdir(path.join(studyRoot, "analysis"), { recursive: true });
+    await fs.writeFile(path.join(studyRoot, "analysis", "cohort.sql"), "select 1;\n");
+    await fs.writeFile(path.join(studyRoot, "analysis", "outcomes.sql"), "select 2;\n");
+
+    await upsertCardManifest({
+      studyRoot,
+      card: makeCard("card-1"),
+      deps: ["analysis/cohort.sql"],
+    });
+    await upsertCardManifest({
+      studyRoot,
+      card: makeCard("card-2"),
+      deps: ["analysis/outcomes.sql"],
+    });
+
+    await expect(
+      fs
+        .readFile(path.join(studyRoot, ".lincei", "indexes", "dependencies.json"), "utf8")
+        .then((content) => JSON.parse(content) as unknown),
+    ).resolves.toEqual([
+      {
+        cardId: "card-1",
+        dependencyId: expect.any(String),
+        relativePath: "analysis/cohort.sql",
+      },
+      {
+        cardId: "card-2",
+        dependencyId: expect.any(String),
+        relativePath: "analysis/outcomes.sql",
+      },
+    ]);
   });
 
   it("captures runs, artifacts, and read-only previews without absolute manifest paths", async () => {

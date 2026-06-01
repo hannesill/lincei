@@ -1,29 +1,17 @@
 import type {
   EnvironmentId,
   MessageId,
-  OrchestrationCheckpointSummary,
   OrchestrationEvent,
-  OrchestrationLatestTurn,
-  OrchestrationMessage,
-  OrchestrationProposedPlan,
-  OrchestrationReadModel,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
-  OrchestrationProviderRuntime,
-  OrchestrationProviderRuntimeStatus,
   OrchestrationSession,
-  OrchestrationSessionShell,
   OrchestrationSessionActivity,
   ProjectId,
-  ResearchCardSummary,
   ResearchCardLifecycleStatus,
   ScopedProjectRef,
   ScopedSessionRef,
 } from "@t3tools/contracts";
-import { isProviderDriverKind, ProviderDriverKind } from "@t3tools/contracts";
 import type { SessionId, TurnId } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
-import { resolveModelSlugForProvider } from "@t3tools/shared/model";
 import { attachResearchCardReviewResponse } from "@t3tools/shared/researchCards";
 import { create } from "zustand";
 import {
@@ -38,11 +26,26 @@ import {
   type SessionTurnState,
   type TurnDiffSummary,
 } from "./types";
-import { resolveEnvironmentHttpUrl } from "./environments/runtime";
 import { sanitizeSessionErrorMessage } from "./rpc/transportError";
 import { getSessionFromEnvironmentState } from "./sessionDerivation";
-const isProviderDriverKindValue = Schema.is(ProviderDriverKind);
-
+import {
+  mapMessage,
+  mapProject,
+  mapProjectScripts,
+  mapProposedPlan,
+  mapProviderRuntime,
+  mapResearchCard,
+  mapSession,
+  mapSessionShell,
+  mapTurnDiffSummary,
+  normalizeModelSelection,
+  providerRuntimesEqual,
+  sessionShellsEqual,
+  sessionTurnStatesEqual,
+  sidebarSessionSummariesEqual,
+  toSessionShell,
+  toSessionTurnState,
+} from "./store/orchestrationMapping";
 export interface EnvironmentState {
   projectIds: ProjectId[];
   projectById: Record<ProjectId, Project>;
@@ -137,354 +140,6 @@ const EMPTY_THREAD_IDS: SessionId[] = [];
 
 function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-// Accepts the open `instanceId` string carried on `ModelSelection`; malformed
-// values pass through unchanged, while valid slugs use any registered alias
-// table for model normalization.
-function normalizeModelSelection<T extends { instanceId: string; model: string }>(selection: T): T {
-  if (!isProviderDriverKind(selection.instanceId)) {
-    return selection;
-  }
-  return {
-    ...selection,
-    model: resolveModelSlugForProvider(selection.instanceId, selection.model),
-  };
-}
-
-function mapProjectScripts(scripts: ReadonlyArray<Project["scripts"][number]>): Project["scripts"] {
-  return scripts.map((script) => ({ ...script }));
-}
-
-function mapProviderRuntime(session: OrchestrationProviderRuntime): ProviderRuntime {
-  return {
-    provider: toLegacyProvider(session.providerName),
-    providerInstanceId: session.providerInstanceId ?? undefined,
-    status: toLegacySessionStatus(session.status),
-    orchestrationStatus: session.status,
-    activeTurnId: session.activeTurnId ?? undefined,
-    createdAt: session.updatedAt,
-    updatedAt: session.updatedAt,
-    ...(session.lastError ? { lastError: session.lastError } : {}),
-  };
-}
-
-function mapMessage(environmentId: EnvironmentId, message: OrchestrationMessage): ChatMessage {
-  const attachments = message.attachments?.map((attachment) => ({
-    type: "image" as const,
-    id: attachment.id,
-    name: attachment.name,
-    mimeType: attachment.mimeType,
-    sizeBytes: attachment.sizeBytes,
-    previewUrl: resolveEnvironmentHttpUrl({
-      environmentId,
-      pathname: attachmentPreviewRoutePath(attachment.id),
-    }),
-  }));
-
-  return {
-    id: message.id,
-    role: message.role,
-    text: message.text,
-    turnId: message.turnId,
-    createdAt: message.createdAt,
-    streaming: message.streaming,
-    ...(message.streaming ? {} : { completedAt: message.updatedAt }),
-    ...(attachments && attachments.length > 0 ? { attachments } : {}),
-  };
-}
-
-function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): ProposedPlan {
-  return {
-    id: proposedPlan.id,
-    turnId: proposedPlan.turnId,
-    planMarkdown: proposedPlan.planMarkdown,
-    implementedAt: proposedPlan.implementedAt,
-    implementationSessionId: proposedPlan.implementationSessionId,
-    createdAt: proposedPlan.createdAt,
-    updatedAt: proposedPlan.updatedAt,
-  };
-}
-
-function mapResearchCard(researchCard: ResearchCardSummary): ResearchCard {
-  return {
-    ...researchCard,
-    artifacts: [],
-    provenance: [],
-  };
-}
-
-function summarizeResearchCard(input: {
-  readonly sessionId: string;
-  readonly card: {
-    readonly id: string;
-    readonly type: ResearchCardSummary["type"];
-    readonly status: ResearchCardSummary["status"];
-    readonly title: string;
-    readonly artifacts: ResearchCard["artifacts"];
-    readonly preview?: unknown;
-    readonly turnId: ResearchCardSummary["turnId"];
-    readonly createdAt: string;
-    readonly updatedAt: string;
-  };
-}): ResearchCard {
-  return {
-    id: input.card.id as ResearchCard["id"],
-    sessionId: input.sessionId as ResearchCard["sessionId"],
-    type: input.card.type,
-    status: input.card.status,
-    title: input.card.title as ResearchCard["title"],
-    artifactCount: input.card.artifacts.length,
-    hasPreview: input.card.preview !== undefined,
-    ...(input.card.preview !== undefined ? { preview: input.card.preview } : {}),
-    artifacts: input.card.artifacts.map((artifact) => ({ ...artifact })),
-    provenance: [],
-    turnId: input.card.turnId,
-    createdAt: input.card.createdAt as ResearchCard["createdAt"],
-    updatedAt: input.card.updatedAt as ResearchCard["updatedAt"],
-  };
-}
-
-function mapTurnDiffSummary(checkpoint: OrchestrationCheckpointSummary): TurnDiffSummary {
-  return {
-    turnId: checkpoint.turnId,
-    completedAt: checkpoint.completedAt,
-    status: checkpoint.status,
-    assistantMessageId: checkpoint.assistantMessageId ?? undefined,
-    checkpointTurnCount: checkpoint.checkpointTurnCount,
-    checkpointRef: checkpoint.checkpointRef,
-    files: checkpoint.files.map((file) => ({ ...file })),
-  };
-}
-
-function mapProject(
-  project:
-    | OrchestrationReadModel["projects"][number]
-    | OrchestrationShellSnapshot["projects"][number],
-  environmentId: EnvironmentId,
-): Project {
-  return {
-    id: project.id,
-    environmentId,
-    name: project.title,
-    cwd: project.workspaceRoot,
-    repositoryIdentity: project.repositoryIdentity ?? null,
-    defaultModelSelection: project.defaultModelSelection
-      ? normalizeModelSelection(project.defaultModelSelection)
-      : null,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    scripts: mapProjectScripts(project.scripts),
-  };
-}
-
-function mapSession(session: OrchestrationSession, environmentId: EnvironmentId): Session {
-  return {
-    id: session.id,
-    environmentId,
-    codexSessionId: null,
-    projectId: session.projectId,
-    title: session.title,
-    modelSelection: normalizeModelSelection(session.modelSelection),
-    runtimeMode: session.runtimeMode,
-    interactionMode: session.interactionMode,
-    session: session.session ? mapProviderRuntime(session.session) : null,
-    messages: session.messages.map((message) => mapMessage(environmentId, message)),
-    proposedPlans: session.proposedPlans.map(mapProposedPlan),
-    researchCards: session.researchCards.map(mapResearchCard),
-    error: sanitizeSessionErrorMessage(session.session?.lastError),
-    createdAt: session.createdAt,
-    archivedAt: session.archivedAt,
-    updatedAt: session.updatedAt,
-    latestTurn: session.latestTurn,
-    pendingSourceProposedPlan: session.latestTurn?.sourceProposedPlan,
-    branch: session.branch,
-    worktreePath: session.worktreePath,
-    turnDiffSummaries: session.checkpoints.map(mapTurnDiffSummary),
-    activities: session.activities.map((activity) => ({ ...activity })),
-  };
-}
-
-function mapSessionShell(
-  session: OrchestrationSessionShell,
-  environmentId: EnvironmentId,
-): {
-  shell: SessionShell;
-  session: ProviderRuntime | null;
-  turnState: SessionTurnState;
-  summary: SidebarSessionSummary;
-} {
-  const shell: SessionShell = {
-    id: session.id,
-    environmentId,
-    codexSessionId: null,
-    projectId: session.projectId,
-    title: session.title,
-    modelSelection: normalizeModelSelection(session.modelSelection),
-    runtimeMode: session.runtimeMode,
-    interactionMode: session.interactionMode,
-    error: sanitizeSessionErrorMessage(session.session?.lastError),
-    createdAt: session.createdAt,
-    archivedAt: session.archivedAt,
-    updatedAt: session.updatedAt,
-    branch: session.branch,
-    worktreePath: session.worktreePath,
-  };
-  const providerRuntime = session.session ? mapProviderRuntime(session.session) : null;
-  const turnState: SessionTurnState = {
-    latestTurn: session.latestTurn,
-    pendingSourceProposedPlan: session.latestTurn?.sourceProposedPlan,
-  };
-  const summary: SidebarSessionSummary = {
-    id: session.id,
-    environmentId,
-    projectId: session.projectId,
-    title: session.title,
-    interactionMode: session.interactionMode,
-    session: providerRuntime,
-    createdAt: session.createdAt,
-    archivedAt: session.archivedAt,
-    updatedAt: session.updatedAt,
-    latestTurn: session.latestTurn,
-    branch: session.branch,
-    worktreePath: session.worktreePath,
-    latestUserMessageAt: session.latestUserMessageAt,
-    hasPendingApprovals: session.hasPendingApprovals,
-    hasPendingUserInput: session.hasPendingUserInput,
-    hasActionableProposedPlan: session.hasActionableProposedPlan,
-  };
-  return {
-    shell,
-    session: providerRuntime,
-    turnState,
-    summary,
-  };
-}
-
-function toSessionShell(session: Session): SessionShell {
-  return {
-    id: session.id,
-    environmentId: session.environmentId,
-    codexSessionId: session.codexSessionId,
-    projectId: session.projectId,
-    title: session.title,
-    modelSelection: session.modelSelection,
-    runtimeMode: session.runtimeMode,
-    interactionMode: session.interactionMode,
-    error: session.error,
-    createdAt: session.createdAt,
-    archivedAt: session.archivedAt,
-    updatedAt: session.updatedAt,
-    branch: session.branch,
-    worktreePath: session.worktreePath,
-  };
-}
-
-function toSessionTurnState(session: Session): SessionTurnState {
-  return {
-    latestTurn: session.latestTurn,
-    ...(session.pendingSourceProposedPlan
-      ? { pendingSourceProposedPlan: session.pendingSourceProposedPlan }
-      : {}),
-  };
-}
-
-function sourceProposedPlansEqual(
-  left: OrchestrationLatestTurn["sourceProposedPlan"] | undefined,
-  right: OrchestrationLatestTurn["sourceProposedPlan"] | undefined,
-): boolean {
-  if (left === right) return true;
-  if (left === undefined || right === undefined) return false;
-  return left.sessionId === right.sessionId && left.planId === right.planId;
-}
-
-function latestTurnsEqual(
-  left: OrchestrationLatestTurn | null | undefined,
-  right: OrchestrationLatestTurn | null | undefined,
-): boolean {
-  if (left === right) return true;
-  if (left == null || right == null) return false;
-  return (
-    left.turnId === right.turnId &&
-    left.state === right.state &&
-    left.requestedAt === right.requestedAt &&
-    left.startedAt === right.startedAt &&
-    left.completedAt === right.completedAt &&
-    left.assistantMessageId === right.assistantMessageId &&
-    sourceProposedPlansEqual(left.sourceProposedPlan, right.sourceProposedPlan)
-  );
-}
-
-function providerRuntimesEqual(
-  left: ProviderRuntime | null | undefined,
-  right: ProviderRuntime | null | undefined,
-): boolean {
-  if (left === right) return true;
-  if (left == null || right == null) return false;
-  return (
-    left.provider === right.provider &&
-    left.status === right.status &&
-    left.orchestrationStatus === right.orchestrationStatus &&
-    left.activeTurnId === right.activeTurnId &&
-    left.createdAt === right.createdAt &&
-    left.updatedAt === right.updatedAt &&
-    left.lastError === right.lastError
-  );
-}
-
-function sidebarSessionSummariesEqual(
-  left: SidebarSessionSummary | undefined,
-  right: SidebarSessionSummary,
-): boolean {
-  return (
-    left !== undefined &&
-    left.id === right.id &&
-    left.projectId === right.projectId &&
-    left.title === right.title &&
-    left.interactionMode === right.interactionMode &&
-    providerRuntimesEqual(left.session, right.session) &&
-    left.createdAt === right.createdAt &&
-    left.archivedAt === right.archivedAt &&
-    left.updatedAt === right.updatedAt &&
-    latestTurnsEqual(left.latestTurn, right.latestTurn) &&
-    left.branch === right.branch &&
-    left.worktreePath === right.worktreePath &&
-    left.latestUserMessageAt === right.latestUserMessageAt &&
-    left.hasPendingApprovals === right.hasPendingApprovals &&
-    left.hasPendingUserInput === right.hasPendingUserInput &&
-    left.hasActionableProposedPlan === right.hasActionableProposedPlan
-  );
-}
-
-function sessionShellsEqual(left: SessionShell | undefined, right: SessionShell): boolean {
-  return (
-    left !== undefined &&
-    left.id === right.id &&
-    left.environmentId === right.environmentId &&
-    left.codexSessionId === right.codexSessionId &&
-    left.projectId === right.projectId &&
-    left.title === right.title &&
-    left.modelSelection === right.modelSelection &&
-    left.runtimeMode === right.runtimeMode &&
-    left.interactionMode === right.interactionMode &&
-    left.error === right.error &&
-    left.createdAt === right.createdAt &&
-    left.archivedAt === right.archivedAt &&
-    left.updatedAt === right.updatedAt &&
-    left.branch === right.branch &&
-    left.worktreePath === right.worktreePath
-  );
-}
-
-function sessionTurnStatesEqual(
-  left: SessionTurnState | undefined,
-  right: SessionTurnState,
-): boolean {
-  return (
-    left !== undefined &&
-    latestTurnsEqual(left.latestTurn, right.latestTurn) &&
-    sourceProposedPlansEqual(left.pendingSourceProposedPlan, right.pendingSourceProposedPlan)
-  );
 }
 
 function appendId<T extends string>(ids: readonly T[], id: T): T[] {
@@ -1109,36 +764,6 @@ function retainSessionResearchCardsAfterRevert(
   );
 }
 
-function toLegacySessionStatus(
-  status: OrchestrationProviderRuntimeStatus,
-): "connecting" | "ready" | "running" | "error" | "closed" {
-  switch (status) {
-    case "starting":
-      return "connecting";
-    case "running":
-      return "running";
-    case "error":
-      return "error";
-    case "ready":
-    case "interrupted":
-      return "ready";
-    case "idle":
-    case "stopped":
-      return "closed";
-  }
-}
-
-function toLegacyProvider(providerName: string | null): ProviderDriverKind {
-  if (isProviderDriverKindValue(providerName)) {
-    return providerName;
-  }
-  return ProviderDriverKind.make("codex");
-}
-
-function attachmentPreviewRoutePath(attachmentId: string): string {
-  return `/attachments/${encodeURIComponent(attachmentId)}`;
-}
-
 function updateSessionState(
   state: EnvironmentState,
   sessionId: SessionId,
@@ -1649,10 +1274,7 @@ function applyEnvironmentOrchestrationEvent(
 
     case "session.research-card-proposed":
       return updateSessionState(state, event.payload.sessionId, (session) => {
-        const researchCard = summarizeResearchCard({
-          sessionId: event.payload.sessionId,
-          card: event.payload.researchCard,
-        });
+        const researchCard = mapResearchCard(event.payload.researchCard);
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== researchCard.id),
           researchCard,
@@ -1671,10 +1293,7 @@ function applyEnvironmentOrchestrationEvent(
 
     case "session.research-card-updated":
       return updateSessionState(state, event.payload.sessionId, (session) => {
-        const researchCard = summarizeResearchCard({
-          sessionId: event.payload.sessionId,
-          card: event.payload.researchCard,
-        });
+        const researchCard = mapResearchCard(event.payload.researchCard);
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== event.payload.cardId),
           researchCard,
@@ -1762,13 +1381,7 @@ function applyEnvironmentOrchestrationEvent(
               : researchCard,
           );
         }
-        const researchCards = [
-          ...nextResearchCards,
-          summarizeResearchCard({
-            sessionId: event.payload.sessionId,
-            card: event.payload.replacementCard,
-          }),
-        ]
+        const researchCards = [...nextResearchCards, mapResearchCard(event.payload.replacementCard)]
           .toSorted(
             (left, right) =>
               left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
