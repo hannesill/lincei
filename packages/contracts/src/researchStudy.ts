@@ -3,7 +3,9 @@ import * as Schema from "effect/Schema";
 import {
   IsoDateTime,
   NonNegativeInt,
+  ProjectId,
   ResearchCardId,
+  SessionId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import {
@@ -126,32 +128,32 @@ export const ResearchCardManifest = Schema.Struct({
 export type ResearchCardManifest = typeof ResearchCardManifest.Type;
 
 export const StudyFilePreviewInput = Schema.Struct({
-  studyRoot: TrimmedNonEmptyString,
+  sessionId: SessionId,
   relativePath: StudyRelativePath,
   maxBytes: Schema.optional(NonNegativeInt),
 });
 export type StudyFilePreviewInput = typeof StudyFilePreviewInput.Type;
 
 export const StudyListArtifactsInput = Schema.Struct({
-  studyRoot: TrimmedNonEmptyString,
+  projectId: ProjectId,
 });
 export type StudyListArtifactsInput = typeof StudyListArtifactsInput.Type;
 
 export const StudyArtifactInput = Schema.Struct({
-  studyRoot: TrimmedNonEmptyString,
+  sessionId: SessionId,
   artifactId: ResearchArtifactId,
 });
 export type StudyArtifactInput = typeof StudyArtifactInput.Type;
 
 export const StudyArtifactPreviewInput = Schema.Struct({
-  studyRoot: TrimmedNonEmptyString,
+  sessionId: SessionId,
   artifactId: ResearchArtifactId,
   maxBytes: Schema.optional(NonNegativeInt),
 });
 export type StudyArtifactPreviewInput = typeof StudyArtifactPreviewInput.Type;
 
 export const StudyStatusInput = Schema.Struct({
-  studyRoot: TrimmedNonEmptyString,
+  projectId: ProjectId,
 });
 export type StudyStatusInput = typeof StudyStatusInput.Type;
 

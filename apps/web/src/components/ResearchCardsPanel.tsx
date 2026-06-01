@@ -551,6 +551,7 @@ function ArtifactReferences(props: {
   consistencyStatus: ResearchCardDependencyStatus;
   cwd: string | undefined;
   environmentId: Session["environmentId"];
+  sessionId: Session["id"];
 }) {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   if (props.artifacts.length === 0) {
@@ -558,12 +559,11 @@ function ArtifactReferences(props: {
   }
 
   const previewArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
-    if (!props.cwd) return;
     setPreview({ artifactId: artifact.id, status: "loading", text: null, message: null });
     try {
       const result = await loadResearchArtifactPreview({
         study: ensureEnvironmentApi(props.environmentId).study,
-        studyRoot: props.cwd,
+        sessionId: props.sessionId,
         artifact,
       });
       setPreview({
@@ -588,7 +588,7 @@ function ArtifactReferences(props: {
     let relativePath = artifact.path;
     try {
       const result = await ensureEnvironmentApi(props.environmentId).study.getArtifact({
-        studyRoot: props.cwd,
+        sessionId: props.sessionId,
         artifactId: artifact.id as ResearchArtifactId,
       });
       relativePath = result.relativePath;
@@ -700,6 +700,7 @@ function DependencyReferences(props: {
   consistencyStatus: ResearchCardDependencyStatus;
   cwd: string | undefined;
   environmentId: Session["environmentId"];
+  sessionId: Session["id"];
 }) {
   const artifacts = props.dependencies.map((dependency) => ({
     id: dependency.id,
@@ -726,6 +727,7 @@ function DependencyReferences(props: {
         consistencyStatus={props.consistencyStatus}
         cwd={props.cwd}
         environmentId={props.environmentId}
+        sessionId={props.sessionId}
       />
     </div>
   );
@@ -874,12 +876,14 @@ function ResearchCardItem(props: {
           consistencyStatus={consistencyStatus}
           cwd={props.item.cwd}
           environmentId={props.item.environmentId}
+          sessionId={props.item.sessionId}
         />
         <DependencyReferences
           dependencies={props.manifest?.dependencies ?? []}
           consistencyStatus={consistencyStatus}
           cwd={props.item.cwd}
           environmentId={props.item.environmentId}
+          sessionId={props.item.sessionId}
         />
         <ReviewMetadata review={card.review} />
       </div>
@@ -912,13 +916,13 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
   const sessions = useStore(useShallow(selectSessionsAcrossEnvironments));
   useEffect(() => {
     let cancelled = false;
-    if (!activeSession || !activeProject?.cwd) {
+    if (!activeSession) {
       setStudyCardManifests({});
       return;
     }
 
     void ensureEnvironmentApi(activeSession.environmentId)
-      .study.getStatus({ studyRoot: activeProject.cwd })
+      .study.getStatus({ projectId: activeSession.projectId })
       .then((status) => {
         if (cancelled) return;
         setStudyCardManifests(
@@ -934,7 +938,7 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
     return () => {
       cancelled = true;
     };
-  }, [activeProject?.cwd, activeSession]);
+  }, [activeSession]);
   const orderedCards = useMemo(
     () =>
       (scope === "session"

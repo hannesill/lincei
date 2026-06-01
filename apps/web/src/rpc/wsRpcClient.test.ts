@@ -1,8 +1,10 @@
-import type {
-  DatasetStatusResult,
-  VcsStatusLocalResult,
-  VcsStatusRemoteResult,
-  VcsStatusStreamEvent,
+import {
+  ProjectId,
+  SessionId,
+  type DatasetStatusResult,
+  type VcsStatusLocalResult,
+  type VcsStatusRemoteResult,
+  type VcsStatusStreamEvent,
 } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -121,6 +123,8 @@ describe("wsRpcClient", () => {
       "study.getArtifact": vi.fn(async () => artifactRecord),
       "study.previewArtifact": vi.fn(async () => preview),
     };
+    const projectId = ProjectId.make("project-1");
+    const sessionId = SessionId.make("session-1");
     const request = vi.fn((connect: (client: unknown) => Promise<unknown>) => connect(rpcMethods));
     const transport = {
       dispose: vi.fn(async () => undefined),
@@ -131,23 +135,23 @@ describe("wsRpcClient", () => {
     };
     const client = createWsRpcClient(transport as unknown as WsTransport);
 
-    await expect(client.study.listArtifacts({ studyRoot: "/study" })).resolves.toEqual({
+    await expect(client.study.listArtifacts({ projectId })).resolves.toEqual({
       artifacts: [artifactRecord],
     });
     await expect(
-      client.study.getArtifact({ studyRoot: "/study", artifactId: "artifact-1" as never }),
+      client.study.getArtifact({ sessionId, artifactId: "artifact-1" as never }),
     ).resolves.toEqual(artifactRecord);
     await expect(
-      client.study.previewArtifact({ studyRoot: "/study", artifactId: "artifact-1" as never }),
+      client.study.previewArtifact({ sessionId, artifactId: "artifact-1" as never }),
     ).resolves.toEqual(preview);
 
-    expect(rpcMethods["study.listArtifacts"]).toHaveBeenCalledWith({ studyRoot: "/study" });
+    expect(rpcMethods["study.listArtifacts"]).toHaveBeenCalledWith({ projectId });
     expect(rpcMethods["study.getArtifact"]).toHaveBeenCalledWith({
-      studyRoot: "/study",
+      sessionId,
       artifactId: "artifact-1",
     });
     expect(rpcMethods["study.previewArtifact"]).toHaveBeenCalledWith({
-      studyRoot: "/study",
+      sessionId,
       artifactId: "artifact-1",
     });
   });

@@ -1,4 +1,4 @@
-import type { EnvironmentApi, ResearchCardArtifactReference } from "@t3tools/contracts";
+import type { EnvironmentApi, ResearchCardArtifactReference, SessionId } from "@t3tools/contracts";
 import type { ResearchArtifactId, StudyRelativePath } from "@t3tools/contracts/researchStudy";
 
 export interface ResearchArtifactPreviewLoadResult {
@@ -35,12 +35,12 @@ function previewUnavailableMessage(reason: string | null): string {
 
 export async function loadResearchArtifactPreview(input: {
   readonly study: EnvironmentApi["study"];
-  readonly studyRoot: string;
+  readonly sessionId: SessionId;
   readonly artifact: ResearchCardArtifactReference;
 }): Promise<ResearchArtifactPreviewLoadResult> {
   try {
     const result = await input.study.previewArtifact({
-      studyRoot: input.studyRoot,
+      sessionId: input.sessionId,
       artifactId: asResearchArtifactId(input.artifact.id),
     });
     const filePreview = result.preview;
@@ -60,7 +60,7 @@ export async function loadResearchArtifactPreview(input: {
       throw error;
     }
     const result = await input.study.previewFile({
-      studyRoot: input.studyRoot,
+      sessionId: input.sessionId,
       relativePath: asStudyRelativePath(input.artifact.path),
     });
     return {

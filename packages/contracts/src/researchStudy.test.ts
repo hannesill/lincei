@@ -134,13 +134,13 @@ describe("research study schemas", () => {
       currentContentHash: "sha256:def",
     };
 
-    expect(decodeListArtifactsInput({ studyRoot: "/tmp/study" }).studyRoot).toBe("/tmp/study");
+    expect(decodeListArtifactsInput({ projectId: "project-1" }).projectId).toBe("project-1");
     expect(
-      decodeArtifactInput({ studyRoot: "/tmp/study", artifactId: "artifact-1" }).artifactId,
+      decodeArtifactInput({ sessionId: "session-1", artifactId: "artifact-1" }).artifactId,
     ).toBe("artifact-1");
     expect(
       decodeArtifactPreviewInput({
-        studyRoot: "/tmp/study",
+        sessionId: "session-1",
         artifactId: "artifact-1",
         maxBytes: 128,
       }).maxBytes,

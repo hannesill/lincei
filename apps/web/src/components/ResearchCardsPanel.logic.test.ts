@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { EnvironmentApi } from "@t3tools/contracts";
+import { SessionId, type EnvironmentApi } from "@t3tools/contracts";
 
 import { loadResearchArtifactPreview } from "./ResearchCardsPanel.logic";
 
@@ -15,6 +15,7 @@ const makeStudyApi = (overrides: Partial<EnvironmentApi["study"]>): EnvironmentA
 
 describe("loadResearchArtifactPreview", () => {
   it("previews artifacts by stable id", async () => {
+    const sessionId = SessionId.make("session-1");
     const study = makeStudyApi({
       previewArtifact: vi.fn(
         async () =>
@@ -53,7 +54,7 @@ describe("loadResearchArtifactPreview", () => {
     await expect(
       loadResearchArtifactPreview({
         study,
-        studyRoot: "/study",
+        sessionId,
         artifact: { id: "artifact-1", kind: "csv", path: "legacy.csv" },
       }),
     ).resolves.toMatchObject({
@@ -61,13 +62,14 @@ describe("loadResearchArtifactPreview", () => {
       detail: "outputs/cohort.csv · current · 8 bytes · #abc",
     });
     expect(study.previewArtifact).toHaveBeenCalledWith({
-      studyRoot: "/study",
+      sessionId,
       artifactId: "artifact-1",
     });
     expect(study.previewFile).not.toHaveBeenCalled();
   });
 
   it("falls back to path preview for legacy path-only cards", async () => {
+    const sessionId = SessionId.make("session-1");
     const study = makeStudyApi({
       previewArtifact: vi.fn(async () => {
         throw new Error("missing manifest");
@@ -90,12 +92,12 @@ describe("loadResearchArtifactPreview", () => {
     await expect(
       loadResearchArtifactPreview({
         study,
-        studyRoot: "/study",
+        sessionId,
         artifact: { id: "legacy-ref", kind: "csv", path: "legacy.csv" },
       }),
     ).resolves.toEqual({ text: "legacy\n", message: null });
     expect(study.previewFile).toHaveBeenCalledWith({
-      studyRoot: "/study",
+      sessionId,
       relativePath: "legacy.csv",
     });
   });

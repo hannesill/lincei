@@ -102,6 +102,10 @@ import {
   previewArtifact,
   previewStudyFile,
 } from "./study/StudyRecordService.ts";
+import {
+  resolveStudyRootForProject,
+  resolveStudyRootForSession,
+} from "./study/StudyRootResolver.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
@@ -1051,68 +1055,110 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         [WS_METHODS.studyPreviewFile]: (input) =>
           observeRpcEffect(
             WS_METHODS.studyPreviewFile,
-            Effect.tryPromise({
-              try: () => previewStudyFile(input),
-              catch: (cause) =>
-                new StudyRecordError({
-                  message: cause instanceof Error ? cause.message : "Failed to preview study file.",
-                  cause,
-                }),
+            Effect.gen(function* () {
+              const studyRoot = yield* resolveStudyRootForSession(
+                projectionSnapshotQuery,
+                input.sessionId,
+              );
+              return yield* Effect.tryPromise({
+                try: () =>
+                  previewStudyFile({
+                    studyRoot,
+                    relativePath: input.relativePath,
+                    ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+                  }),
+                catch: (cause) =>
+                  new StudyRecordError({
+                    message:
+                      cause instanceof Error ? cause.message : "Failed to preview study file.",
+                    cause,
+                  }),
+              });
             }),
             { "rpc.aggregate": "study" },
           ),
         [WS_METHODS.studyListArtifacts]: (input) =>
           observeRpcEffect(
             WS_METHODS.studyListArtifacts,
-            Effect.tryPromise({
-              try: () => listArtifacts(input.studyRoot),
-              catch: (cause) =>
-                new StudyRecordError({
-                  message:
-                    cause instanceof Error ? cause.message : "Failed to list study artifacts.",
-                  cause,
-                }),
+            Effect.gen(function* () {
+              const studyRoot = yield* resolveStudyRootForProject(
+                projectionSnapshotQuery,
+                input.projectId,
+              );
+              return yield* Effect.tryPromise({
+                try: () => listArtifacts(studyRoot),
+                catch: (cause) =>
+                  new StudyRecordError({
+                    message:
+                      cause instanceof Error ? cause.message : "Failed to list study artifacts.",
+                    cause,
+                  }),
+              });
             }),
             { "rpc.aggregate": "study" },
           ),
         [WS_METHODS.studyGetArtifact]: (input) =>
           observeRpcEffect(
             WS_METHODS.studyGetArtifact,
-            Effect.tryPromise({
-              try: () => getArtifact(input),
-              catch: (cause) =>
-                new StudyRecordError({
-                  message:
-                    cause instanceof Error ? cause.message : "Failed to read study artifact.",
-                  cause,
-                }),
+            Effect.gen(function* () {
+              const studyRoot = yield* resolveStudyRootForSession(
+                projectionSnapshotQuery,
+                input.sessionId,
+              );
+              return yield* Effect.tryPromise({
+                try: () => getArtifact({ studyRoot, artifactId: input.artifactId }),
+                catch: (cause) =>
+                  new StudyRecordError({
+                    message:
+                      cause instanceof Error ? cause.message : "Failed to read study artifact.",
+                    cause,
+                  }),
+              });
             }),
             { "rpc.aggregate": "study" },
           ),
         [WS_METHODS.studyPreviewArtifact]: (input) =>
           observeRpcEffect(
             WS_METHODS.studyPreviewArtifact,
-            Effect.tryPromise({
-              try: () => previewArtifact(input),
-              catch: (cause) =>
-                new StudyRecordError({
-                  message:
-                    cause instanceof Error ? cause.message : "Failed to preview study artifact.",
-                  cause,
-                }),
+            Effect.gen(function* () {
+              const studyRoot = yield* resolveStudyRootForSession(
+                projectionSnapshotQuery,
+                input.sessionId,
+              );
+              return yield* Effect.tryPromise({
+                try: () =>
+                  previewArtifact({
+                    studyRoot,
+                    artifactId: input.artifactId,
+                    ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
+                  }),
+                catch: (cause) =>
+                  new StudyRecordError({
+                    message:
+                      cause instanceof Error ? cause.message : "Failed to preview study artifact.",
+                    cause,
+                  }),
+              });
             }),
             { "rpc.aggregate": "study" },
           ),
         [WS_METHODS.studyStatus]: (input) =>
           observeRpcEffect(
             WS_METHODS.studyStatus,
-            Effect.tryPromise({
-              try: () => getStudyStatus(input.studyRoot),
-              catch: (cause) =>
-                new StudyRecordError({
-                  message: cause instanceof Error ? cause.message : "Failed to read study status.",
-                  cause,
-                }),
+            Effect.gen(function* () {
+              const studyRoot = yield* resolveStudyRootForProject(
+                projectionSnapshotQuery,
+                input.projectId,
+              );
+              return yield* Effect.tryPromise({
+                try: () => getStudyStatus(studyRoot),
+                catch: (cause) =>
+                  new StudyRecordError({
+                    message:
+                      cause instanceof Error ? cause.message : "Failed to read study status.",
+                    cause,
+                  }),
+              });
             }),
             { "rpc.aggregate": "study" },
           ),
