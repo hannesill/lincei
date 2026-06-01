@@ -1,6 +1,9 @@
 import { useParams } from "@tanstack/react-router";
 import { scopeProjectRef } from "@t3tools/client-runtime";
-import { isActiveResearchCard } from "@t3tools/shared/researchCards";
+import {
+  isActiveResearchCard,
+  normalizeResearchCardMarkdownPreviewText,
+} from "@t3tools/shared/researchCards";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import type {
   ResearchCardDependency,
@@ -302,7 +305,11 @@ function PreviewContent(props: { card: ResearchCardDetail; cwd: string | undefin
     }
     return (
       <div className="research-card-markdown text-sm leading-6">
-        <ChatMarkdown text={preview} cwd={props.cwd} isStreaming={false} />
+        <ChatMarkdown
+          text={normalizeResearchCardMarkdownPreviewText(preview)}
+          cwd={props.cwd}
+          isStreaming={false}
+        />
       </div>
     );
   }
@@ -317,7 +324,11 @@ function PreviewContent(props: { card: ResearchCardDetail; cwd: string | undefin
     if (props.card.type === "markdown" && markdown) {
       return (
         <div className="research-card-markdown text-sm leading-6">
-          <ChatMarkdown text={markdown.trim()} cwd={props.cwd} isStreaming={false} />
+          <ChatMarkdown
+            text={normalizeResearchCardMarkdownPreviewText(markdown.trim())}
+            cwd={props.cwd}
+            isStreaming={false}
+          />
         </div>
       );
     }
@@ -374,6 +385,16 @@ function shortContentHash(hash: string | undefined): string {
   }
   const value = hash.startsWith("sha256:") ? hash.slice("sha256:".length) : hash;
   return value.slice(0, 12);
+}
+
+function renderConsistencyStatus(
+  status: ResearchCardDependencyStatus,
+  options?: { readonly artifactHasHash?: boolean },
+) {
+  if (status === "unknown" || options?.artifactHasHash === false) {
+    return null;
+  }
+  return status;
 }
 
 function ArtifactReferences(props: {
@@ -443,6 +464,9 @@ function ArtifactReferences(props: {
         const detail = artifact.path ?? artifact.uri ?? artifact.mimeType ?? artifact.id;
         const canPreview = Boolean(artifact.id || artifact.path);
         const canOpen = Boolean(props.cwd && (artifact.path || artifact.id));
+        const consistencyLabel = renderConsistencyStatus(props.consistencyStatus, {
+          artifactHasHash: Boolean(artifact.contentHash),
+        });
         return (
           <div
             key={artifact.id}
@@ -455,9 +479,12 @@ function ArtifactReferences(props: {
               <span className="min-w-0 truncate text-xs font-medium text-foreground/85">
                 {label}
               </span>
-              <Badge variant="outline" size="sm" className="ml-auto font-mono">
-                {artifact.contentHash ? props.consistencyStatus : "unknown"}
-              </Badge>
+              <span className="ml-auto" />
+              {consistencyLabel ? (
+                <Badge variant="outline" size="sm" className="font-mono">
+                  {consistencyLabel}
+                </Badge>
+              ) : null}
               <button
                 type="button"
                 disabled={!canPreview}
@@ -661,6 +688,7 @@ function ResearchCardItem(props: {
   }, [card.id, props.item.environmentId, props.item.sessionId]);
   const artifactCount = detail?.artifacts.length ?? card.artifactCount;
   const consistencyStatus = props.manifest?.consistency.status ?? "unknown";
+  const consistencyLabel = renderConsistencyStatus(consistencyStatus);
   const presentation = CARD_TYPE_PRESENTATION[card.type];
   const isActive = isActiveResearchCard(card);
   const statusLabel = formatResearchCardLabel(card.status);
@@ -716,9 +744,11 @@ function ResearchCardItem(props: {
         <Badge variant={getStatusBadgeVariant(card.status)} size="sm">
           {statusLabel}
         </Badge>
-        <Badge variant="outline" size="sm" className="font-mono">
-          {consistencyStatus}
-        </Badge>
+        {consistencyLabel ? (
+          <Badge variant="outline" size="sm" className="font-mono">
+            {consistencyLabel}
+          </Badge>
+        ) : null}
         {props.scope === "study" ? (
           <span className="min-w-0 truncate rounded-sm bg-background/45 px-1.5 py-0.5 text-[11px] text-muted-foreground/75">
             {props.item.sessionTitle}

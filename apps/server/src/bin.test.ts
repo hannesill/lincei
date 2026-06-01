@@ -973,6 +973,50 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
     }),
   );
 
+  it.effect("normalizes escaped markdown preview text for agent card writes", () =>
+    Effect.gen(function* () {
+      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-card-preview-"));
+      const seeded = yield* seedOfflineAgentContext(baseDir);
+
+      yield* withLiveProjectCliServer(baseDir, () =>
+        Effect.gen(function* () {
+          const output = yield* captureStdout(
+            runAgentCli([
+              "card",
+              "propose",
+              "--session",
+              seeded.sessionId,
+              "--title",
+              "Escaped preview",
+              "--preview",
+              "# MIMIC cohort\\n\\n| group | n |\\n| - | -: |\\n| demo | 42 |",
+              "--base-dir",
+              baseDir,
+              "--json",
+            ]),
+          );
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          const parsed = JSON.parse(output.output) as {
+            readonly card: { readonly id: string };
+          };
+          const detail = yield* readPersistedResearchCardDetail(baseDir, {
+            sessionId: seeded.sessionId,
+            cardId: ResearchCardId.make(parsed.card.id),
+          });
+          assert.equal(detail._tag, "Some");
+          const preview =
+            detail._tag === "Some"
+              ? (detail.value.preview as { readonly markdown?: unknown } | undefined)
+              : undefined;
+          assert.equal(
+            preview?.markdown,
+            "# MIMIC cohort\n\n| group | n |\n| - | -: |\n| demo | 42 |",
+          );
+        }),
+      );
+    }),
+  );
+
   it.effect("dispatches lifecycle and supersede commands for agent card workflows", () =>
     Effect.gen(function* () {
       const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-card-workflows-"));

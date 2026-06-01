@@ -6,6 +6,7 @@ import {
   ORCHESTRATION_WS_METHODS,
   EnvironmentId,
   type EnvironmentApi,
+  type OrchestrationResearchCard,
   MessageId,
   type OrchestrationReadModel,
   type ProjectId,
@@ -14,7 +15,7 @@ import {
   ResearchCardId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
-  type SessionId,
+  SessionId,
   type TurnId,
   WS_METHODS,
   OrchestrationProviderRuntimeStatus,
@@ -448,6 +449,124 @@ function createSnapshotWithResearchCards(): OrchestrationReadModel {
         ],
       },
     ],
+  };
+}
+
+function createResearchCardDetailForTest(input: {
+  readonly sessionId: SessionId;
+  readonly cardId: ResearchCardId;
+}): OrchestrationResearchCard | undefined {
+  const session = fixture.snapshot.sessions.find((entry) => entry.id === input.sessionId);
+  const summary = session?.researchCards.find((card) => card.id === input.cardId);
+  if (!session || !summary) {
+    return undefined;
+  }
+
+  if (input.cardId === ResearchCardId.make("card-cohort")) {
+    return {
+      id: input.cardId,
+      type: "markdown",
+      status: "changes-requested",
+      title: "Cohort definition",
+      preview:
+        "# MIMIC cohort\\n\\nPatients with heart failure\\n\\n| group | n |\\n| - | -: |\\n| demo | 42 |",
+      artifacts: [
+        {
+          id: "artifact-cohort-sql",
+          kind: "sql",
+          path: "analysis/cohort.sql",
+          label: "Cohort SQL",
+          contentHash: "sha256:abcdef123456",
+        },
+        {
+          id: "artifact-cohort-md",
+          kind: "markdown",
+          path: "cards/cohort.md",
+          label: "Cohort notes",
+          contentHash: "sha256:fedcba654321",
+        },
+      ],
+      provenance: [{ dataset: "MIMIC-IV demo", backend: "duckdb" }],
+      review: {
+        prompt: "Confirm this definition before extraction.",
+        actions: [],
+        response: {
+          action: "request-changes",
+          message: "Narrow the age range.",
+          timestamp: isoAt(32),
+        },
+      },
+      turnId: null,
+      createdAt: summary.createdAt,
+      updatedAt: summary.updatedAt,
+    };
+  }
+
+  return {
+    id: input.cardId,
+    type: "table",
+    status: "accepted",
+    title: "Baseline balance",
+    preview: {
+      columns: ["variable", "mean"],
+      rows: [["Age", 67.4]],
+    },
+    artifacts: [],
+    provenance: [],
+    turnId: null,
+    createdAt: summary.createdAt,
+    updatedAt: summary.updatedAt,
+  };
+}
+
+function createResearchCardStatusForTest() {
+  const now = isoAt(33);
+  const cards = fixture.snapshot.sessions.flatMap((session) =>
+    session.researchCards.flatMap((summary) => {
+      const detail = createResearchCardDetailForTest({
+        sessionId: session.id,
+        cardId: summary.id,
+      });
+      if (!detail) {
+        return [];
+      }
+      const consistencyStatus =
+        detail.id === ResearchCardId.make("card-cohort") ? "unknown" : "current";
+      return [
+        {
+          schemaVersion: 1,
+          id: detail.id,
+          card: detail,
+          dependencyIds: [],
+          dependencies: [],
+          artifactIds: [],
+          artifacts: detail.artifacts,
+          consistency: {
+            status: consistencyStatus,
+            checkedAt: now,
+          },
+          createdAt: detail.createdAt,
+          updatedAt: detail.updatedAt,
+        },
+      ];
+    }),
+  );
+  return {
+    study: {
+      schemaVersion: 1,
+      studyId: "study-browser-test",
+      title: "Browser test study",
+      createdAt: NOW_ISO,
+      updatedAt: now,
+    },
+    cards,
+    summary: {
+      current: cards.filter((card) => card.consistency.status === "current").length,
+      stale: 0,
+      missing: 0,
+      "dirty-source": 0,
+      unknown: cards.filter((card) => card.consistency.status === "unknown").length,
+    },
   };
 }
 
@@ -1100,6 +1219,17 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
         },
       ],
     };
+  }
+  if (tag === WS_METHODS.studyStatus) {
+    return createResearchCardStatusForTest();
+  }
+  if (tag === ORCHESTRATION_WS_METHODS.getResearchCardDetail) {
+    const sessionId = typeof body.sessionId === "string" ? SessionId.make(body.sessionId) : null;
+    const cardId = typeof body.cardId === "string" ? ResearchCardId.make(body.cardId) : null;
+    if (sessionId && cardId) {
+      return createResearchCardDetailForTest({ sessionId, cardId }) ?? {};
+    }
+    return {};
   }
   if (tag === WS_METHODS.vcsListRefs) {
     return {
@@ -1860,6 +1990,26 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("renders seeded research cards with previews, artifacts, and review metadata", async () => {
+    const environmentApi = createMockEnvironmentApi({
+      browse: (async () => ({
+        parentPath: "/repo/project",
+        entries: [],
+      })) as EnvironmentApi["filesystem"]["browse"],
+      dispatchCommand: (async () => ({
+        sequence: 1,
+      })) as EnvironmentApi["orchestration"]["dispatchCommand"],
+    });
+    environmentApi.orchestration.getResearchCardDetail = (async (input) =>
+      createResearchCardDetailForTest({
+        sessionId: input.sessionId,
+        cardId: input.cardId,
+      }) ?? {}) as EnvironmentApi["orchestration"]["getResearchCardDetail"];
+    environmentApi.study.getStatus = (async () =>
+      createResearchCardStatusForTest() as unknown as Awaited<
+        ReturnType<EnvironmentApi["study"]["getStatus"]>
+      >) as EnvironmentApi["study"]["getStatus"];
+    __setEnvironmentApiOverrideForTests(LOCAL_ENVIRONMENT_ID, environmentApi);
+
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithResearchCards(),
@@ -1889,6 +2039,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(page.getByText("Baseline balance")).toBeInTheDocument();
       await expect.element(page.getByText("variable")).toBeInTheDocument();
       await expect.element(page.getByText("67.4")).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("unknown");
     } finally {
       await mounted.cleanup();
     }

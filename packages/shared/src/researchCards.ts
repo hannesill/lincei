@@ -22,6 +22,13 @@ export function activeResearchCards(
   return cards.filter(isActiveResearchCard);
 }
 
+export function normalizeResearchCardMarkdownPreviewText(text: string): string {
+  return text
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r");
+}
+
 export function attachResearchCardReviewResponse(
   review: ResearchCardReview | undefined,
   response: ResearchCardReviewResponse,

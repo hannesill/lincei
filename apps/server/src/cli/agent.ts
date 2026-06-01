@@ -26,7 +26,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
-import { isActiveResearchCard } from "@t3tools/shared/researchCards";
+import {
+  isActiveResearchCard,
+  normalizeResearchCardMarkdownPreviewText,
+} from "@t3tools/shared/researchCards";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 import {
   FetchHttpClient,
@@ -214,7 +217,7 @@ const parsePreviewInput = (input: {
       return yield* parseJsonValue(input.previewJson.value, "--preview-json");
     }
     if (Option.isSome(input.preview)) {
-      return { markdown: input.preview.value };
+      return { markdown: normalizeResearchCardMarkdownPreviewText(input.preview.value) };
     }
     if (Option.isSome(input.previewFile)) {
       const previewFile = input.previewFile.value;
@@ -229,7 +232,7 @@ const parsePreviewInput = (input: {
       );
       return previewFile.endsWith(".json")
         ? yield* parseJsonValue(raw, "--preview-file")
-        : { markdown: raw };
+        : { markdown: normalizeResearchCardMarkdownPreviewText(raw) };
     }
     return undefined;
   });

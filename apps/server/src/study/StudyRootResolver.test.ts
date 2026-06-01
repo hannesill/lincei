@@ -47,7 +47,6 @@ const makeSession = (
   createdAt: timestamp,
   updatedAt: timestamp,
   archivedAt: null,
-  hidden: false,
   session: null,
   latestUserMessageAt: null,
   hasPendingApprovals: false,

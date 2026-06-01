@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { attachResearchCardReviewResponse, isActiveResearchCard } from "./researchCards.ts";
+import {
+  attachResearchCardReviewResponse,
+  isActiveResearchCard,
+  normalizeResearchCardMarkdownPreviewText,
+} from "./researchCards.ts";
 
 describe("research card helpers", () => {
   it("treats terminal statuses as inactive", () => {
@@ -25,5 +29,11 @@ describe("research card helpers", () => {
         timestamp: "2026-01-02T00:00:00.000Z",
       },
     });
+  });
+
+  it("normalizes escaped markdown line breaks", () => {
+    expect(normalizeResearchCardMarkdownPreviewText("# Heading\\n\\n| a | b |\\n| - | - |")).toBe(
+      "# Heading\n\n| a | b |\n| - | - |",
+    );
   });
 });
