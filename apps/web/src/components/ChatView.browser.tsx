@@ -241,6 +241,9 @@ function createMockEnvironmentApi(input: {
       getFullSessionDiff: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getFullSessionDiff"],
+      getResearchCardDetail: (() => {
+        throw new Error("Not implemented in browser test.");
+      }) as EnvironmentApi["orchestration"]["getResearchCardDetail"],
       getArchivedShellSnapshot: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getArchivedShellSnapshot"],
@@ -420,52 +423,24 @@ function createSnapshotWithResearchCards(): OrchestrationReadModel {
         researchCards: [
           {
             id: ResearchCardId.make("card-cohort"),
+            sessionId: session.id,
             type: "markdown",
             status: "changes-requested",
             title: "Cohort definition",
-            preview: { markdown: "Patients with **heart failure** and a baseline echo." },
-            artifacts: [
-              {
-                id: "artifact-sql",
-                kind: "sql",
-                path: "analysis/cohort.sql",
-                label: "Cohort SQL",
-              },
-              {
-                id: "artifact-table",
-                kind: "table",
-                path: "outputs/cohort.csv",
-                label: "Cohort counts",
-              },
-            ],
-            provenance: [],
-            review: {
-              prompt: "Confirm this definition before extraction.",
-              actions: [{ id: "accept", label: "Accept" }],
-              response: {
-                action: "changes-requested",
-                summary: "Narrow the age range.",
-                timestamp: isoAt(30),
-              },
-            },
+            artifactCount: 2,
+            hasPreview: true,
             turnId: null,
             createdAt: isoAt(20),
             updatedAt: isoAt(31),
           },
           {
             id: ResearchCardId.make("card-balance"),
+            sessionId: session.id,
             type: "table",
             status: "accepted",
             title: "Baseline balance",
-            preview: {
-              columns: ["variable", "exposed", "control"],
-              rows: [
-                ["age", 67.4, 66.9],
-                ["bnp", 420, 395],
-              ],
-            },
-            artifacts: [],
-            provenance: [],
+            artifactCount: 0,
+            hasPreview: true,
             turnId: null,
             createdAt: isoAt(10),
             updatedAt: isoAt(10),

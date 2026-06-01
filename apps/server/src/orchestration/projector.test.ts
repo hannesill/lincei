@@ -626,20 +626,12 @@ describe("orchestration projector", () => {
     expect(current.sessions[0]?.researchCards).toEqual([
       {
         id: "card-1",
+        sessionId: "session-1",
         type: "markdown",
         status: "accepted",
         title: "Updated finding",
-        artifacts: [],
-        provenance: [],
-        review: {
-          prompt: "Review?",
-          actions: [{ id: "accept", label: "Accept" }],
-          response: {
-            action: "accept",
-            message: "Looks good",
-            timestamp: "2026-02-23T09:00:05.000Z",
-          },
-        },
+        artifactCount: 0,
+        hasPreview: false,
         turnId: "turn-1",
         createdAt: "2026-02-23T09:00:03.000Z",
         updatedAt: "2026-02-23T09:00:05.000Z",
@@ -766,14 +758,6 @@ describe("orchestration projector", () => {
       {
         id: "card-1",
         status: "superseded",
-        review: {
-          prompt: "Human review",
-          actions: [],
-          response: {
-            action: "request_changes",
-            message: "Needs detail",
-          },
-        },
         updatedAt: "2026-02-24T09:00:04.000Z",
       },
       {

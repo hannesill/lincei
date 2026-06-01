@@ -45,6 +45,7 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor.ts";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.ts";
 import { SessionDeletionReactorLive } from "./orchestration/Layers/SessionDeletionReactor.ts";
+import { StudyRecordReactorLive } from "./orchestration/Layers/StudyRecordReactor.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
 import { ServerSettingsLive } from "./serverSettings.ts";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
@@ -89,6 +90,7 @@ import {
 } from "./serverRuntimeState.ts";
 import {
   orchestrationDispatchRouteLayer,
+  orchestrationResearchCardDetailRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
 import { datasetHttpRouteLayer } from "./datasets/http.ts";
@@ -150,6 +152,7 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(SessionDeletionReactorLive),
+  Layer.provideMerge(StudyRecordReactorLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
 );
 
@@ -332,6 +335,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   attachmentsRouteLayer,
   datasetHttpRouteLayer,
   orchestrationDispatchRouteLayer,
+  orchestrationResearchCardDetailRouteLayer,
   orchestrationSnapshotRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,

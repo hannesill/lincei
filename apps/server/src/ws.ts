@@ -107,6 +107,7 @@ import {
   resolveStudyRootForSession,
 } from "./study/StudyRootResolver.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
+const isOrchestrationGetSnapshotError = Schema.is(OrchestrationGetSnapshotError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -120,6 +121,8 @@ function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
       | "session.research-card-proposed"
       | "session.research-card-updated"
       | "session.research-card-reviewed"
+      | "session.research-card-lifecycle-updated"
+      | "session.research-card-superseded"
       | "session.activity-appended"
       | "session.turn-diff-completed"
       | "session.reverted"
@@ -132,6 +135,8 @@ function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
     event.type === "session.research-card-proposed" ||
     event.type === "session.research-card-updated" ||
     event.type === "session.research-card-reviewed" ||
+    event.type === "session.research-card-lifecycle-updated" ||
+    event.type === "session.research-card-superseded" ||
     event.type === "session.activity-appended" ||
     event.type === "session.turn-diff-completed" ||
     event.type === "session.reverted" ||
@@ -737,6 +742,31 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                     message: "Failed to load full session diff",
                     cause,
                   }),
+              ),
+            ),
+            { "rpc.aggregate": "orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.getResearchCardDetail]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getResearchCardDetail,
+            projectionSnapshotQuery.getResearchCardDetail(input).pipe(
+              Effect.flatMap((card) =>
+                Option.isSome(card)
+                  ? Effect.succeed(card.value)
+                  : Effect.fail(
+                      new OrchestrationGetSnapshotError({
+                        message: `Research card ${input.cardId} was not found`,
+                        cause: input,
+                      }),
+                    ),
+              ),
+              Effect.mapError((cause) =>
+                isOrchestrationGetSnapshotError(cause)
+                  ? cause
+                  : new OrchestrationGetSnapshotError({
+                      message: "Failed to load research card detail",
+                      cause,
+                    }),
               ),
             ),
             { "rpc.aggregate": "orchestration" },

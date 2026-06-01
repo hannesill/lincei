@@ -167,6 +167,9 @@ export interface WsRpcClient {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullSessionDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullSessionDiff>;
+    readonly getResearchCardDetail: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getResearchCardDetail
+    >;
     readonly getArchivedShellSnapshot: RpcUnaryNoArgMethod<
       typeof ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot
     >;
@@ -346,6 +349,10 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getTurnDiff](input)),
       getFullSessionDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullSessionDiff](input)),
+      getResearchCardDetail: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.getResearchCardDetail](input),
+        ),
       getArchivedShellSnapshot: () =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),

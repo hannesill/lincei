@@ -25,6 +25,7 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
   orchestrationDispatchRouteLayer,
+  orchestrationResearchCardDetailRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
 import { datasetHttpRouteLayer } from "./datasets/http.ts";
@@ -126,6 +127,21 @@ const readPersistedSnapshot = (baseDir: string) =>
     return yield* Effect.gen(function* () {
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
       return yield* projectionSnapshotQuery.getSnapshot();
+    }).pipe(Effect.provide(makeProjectPersistenceLayer(config)));
+  });
+
+const readPersistedResearchCardDetail = (
+  baseDir: string,
+  input: {
+    readonly sessionId: SessionId;
+    readonly cardId: ResearchCardId;
+  },
+) =>
+  Effect.gen(function* () {
+    const config = yield* makeCliTestServerConfig(baseDir);
+    return yield* Effect.gen(function* () {
+      const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+      return yield* projectionSnapshotQuery.getResearchCardDetail(input);
     }).pipe(Effect.provide(makeProjectPersistenceLayer(config)));
   });
 
@@ -242,6 +258,7 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
     const routesLayer = Layer.mergeAll(
       orchestrationSnapshotRouteLayer,
       orchestrationDispatchRouteLayer,
+      orchestrationResearchCardDetailRouteLayer,
     );
     const appLayer = HttpRouter.serve(routesLayer, {
       disableListenLog: true,
@@ -982,8 +999,18 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
           const reviewedCard = reviewSnapshot.sessions
             .find((session) => session.id === seeded.sessionId)
             ?.researchCards.find((card) => card.id === seeded.cardId);
+          const reviewedCardDetail = yield* readPersistedResearchCardDetail(baseDir, {
+            sessionId: seeded.sessionId,
+            cardId: seeded.cardId,
+          });
           assert.equal(reviewedCard?.status, "review-requested");
-          assert.equal(reviewedCard?.review?.prompt, "Please verify denominators.");
+          assert.equal(reviewedCardDetail._tag, "Some");
+          assert.equal(
+            reviewedCardDetail._tag === "Some"
+              ? reviewedCardDetail.value.review?.prompt
+              : undefined,
+            "Please verify denominators.",
+          );
 
           const supersedeOutput = yield* captureStdout(
             runAgentCli([

@@ -31,7 +31,7 @@ import { resolveSessionRouteRef } from "../sessionRoutes";
 import { selectProjectByRef, selectSessionsAcrossEnvironments, useStore } from "../store";
 import { createSessionSelectorByRef } from "../storeSelectors";
 import { formatShortTimestamp } from "../timestampFormat";
-import type { ResearchCard, Session } from "../types";
+import type { ResearchCard, ResearchCardDetail, Session } from "../types";
 import { useSettings } from "../hooks/useSettings";
 import { cn } from "../lib/utils";
 import ChatMarkdown from "./ChatMarkdown";
@@ -389,7 +389,7 @@ function KeyValuePreview(props: { value: Record<string, unknown> }) {
   );
 }
 
-function ImagePreview(props: { card: ResearchCard; preview: Record<string, unknown> }) {
+function ImagePreview(props: { card: ResearchCardDetail; preview: Record<string, unknown> }) {
   const data = getStringValue(props.preview, ["data", "base64"]);
   const url = getStringValue(props.preview, ["url", "src", "uri"]);
   const format = getStringValue(props.preview, ["format", "mimeType"]) ?? "png";
@@ -460,7 +460,7 @@ function DecisionPreview(props: { preview: Record<string, unknown> }) {
   );
 }
 
-function PreviewContent(props: { card: ResearchCard; cwd: string | undefined }) {
+function PreviewContent(props: { card: ResearchCardDetail; cwd: string | undefined }) {
   if (props.card.preview === undefined) {
     return <p className="text-xs text-muted-foreground/55">No preview</p>;
   }
@@ -547,7 +547,7 @@ function shortContentHash(hash: string | undefined): string {
 }
 
 function ArtifactReferences(props: {
-  artifacts: ResearchCard["artifacts"];
+  artifacts: ResearchCardDetail["artifacts"];
   consistencyStatus: ResearchCardDependencyStatus;
   cwd: string | undefined;
   environmentId: Session["environmentId"];
@@ -558,7 +558,7 @@ function ArtifactReferences(props: {
     return null;
   }
 
-  const previewArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
+  const previewArtifact = async (artifact: ResearchCardDetail["artifacts"][number]) => {
     setPreview({ artifactId: artifact.id, status: "loading", text: null, message: null });
     try {
       const result = await loadResearchArtifactPreview({
@@ -583,7 +583,7 @@ function ArtifactReferences(props: {
     }
   };
 
-  const openArtifact = async (artifact: ResearchCard["artifacts"][number]) => {
+  const openArtifact = async (artifact: ResearchCardDetail["artifacts"][number]) => {
     if (!props.cwd) return;
     let relativePath = artifact.path;
     try {
@@ -733,7 +733,7 @@ function DependencyReferences(props: {
   );
 }
 
-function ReviewMetadata(props: { review: ResearchCard["review"] }) {
+function ReviewMetadata(props: { review: ResearchCardDetail["review"] }) {
   if (!props.review) {
     return null;
   }
@@ -764,7 +764,7 @@ function ReviewMetadata(props: { review: ResearchCard["review"] }) {
   );
 }
 
-function ProvenanceSummary(props: { provenance: ResearchCard["provenance"] }) {
+function ProvenanceSummary(props: { provenance: ResearchCardDetail["provenance"] }) {
   const provenance = props.provenance[0];
   if (!provenance) {
     return null;
@@ -803,7 +803,32 @@ function ResearchCardItem(props: {
   timestampFormat: TimestampFormat;
 }) {
   const { card } = props.item;
-  const artifactCount = card.artifacts.length;
+  const [detail, setDetail] = useState<ResearchCardDetail | null>(null);
+  const [detailFailed, setDetailFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    setDetailFailed(false);
+    void ensureEnvironmentApi(props.item.environmentId)
+      .orchestration.getResearchCardDetail({
+        sessionId: props.item.sessionId,
+        cardId: card.id,
+      })
+      .then((nextDetail) => {
+        if (!cancelled) {
+          setDetail(nextDetail);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetailFailed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.id, props.item.environmentId, props.item.sessionId]);
+  const artifactCount = detail?.artifacts.length ?? card.artifactCount;
   const consistencyStatus = props.manifest?.consistency.status ?? "unknown";
   const presentation = CARD_TYPE_PRESENTATION[card.type];
   const isActive = isActiveResearchCard(card);
@@ -870,14 +895,26 @@ function ResearchCardItem(props: {
         ) : null}
       </div>
       <div className="space-y-3 px-3 py-3">
-        <PreviewContent card={card} cwd={props.item.cwd} />
-        <ArtifactReferences
-          artifacts={props.manifest?.artifacts ?? card.artifacts}
-          consistencyStatus={consistencyStatus}
-          cwd={props.item.cwd}
-          environmentId={props.item.environmentId}
-          sessionId={props.item.sessionId}
-        />
+        {detail ? (
+          <>
+            <PreviewContent card={detail} cwd={props.item.cwd} />
+            <ArtifactReferences
+              artifacts={props.manifest?.artifacts ?? detail.artifacts}
+              consistencyStatus={consistencyStatus}
+              cwd={props.item.cwd}
+              environmentId={props.item.environmentId}
+              sessionId={props.item.sessionId}
+            />
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground/55">
+            {detailFailed
+              ? "Card detail unavailable"
+              : card.hasPreview || card.artifactCount > 0
+                ? "Loading card detail..."
+                : "No preview"}
+          </p>
+        )}
         <DependencyReferences
           dependencies={props.manifest?.dependencies ?? []}
           consistencyStatus={consistencyStatus}
@@ -885,9 +922,9 @@ function ResearchCardItem(props: {
           environmentId={props.item.environmentId}
           sessionId={props.item.sessionId}
         />
-        <ReviewMetadata review={card.review} />
+        <ReviewMetadata review={detail?.review} />
       </div>
-      <ProvenanceSummary provenance={card.provenance} />
+      <ProvenanceSummary provenance={detail?.provenance ?? []} />
     </article>
   );
 }

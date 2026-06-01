@@ -2,10 +2,10 @@ import type {
   OrchestrationCommand,
   OrchestrationProject,
   OrchestrationReadModel,
-  OrchestrationResearchCard,
   OrchestrationSession,
   ProjectId,
   ResearchCardId,
+  ResearchCardSummary,
   SessionId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -149,7 +149,7 @@ export function requireResearchCard(input: {
   readonly command: OrchestrationCommand;
   readonly sessionId: SessionId;
   readonly cardId: ResearchCardId;
-}): Effect.Effect<OrchestrationResearchCard, OrchestrationCommandInvariantError> {
+}): Effect.Effect<ResearchCardSummary, OrchestrationCommandInvariantError> {
   const session = findSessionById(input.readModel, input.sessionId);
   const card = session?.researchCards.find((entry) => entry.id === input.cardId);
   if (card) {

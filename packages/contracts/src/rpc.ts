@@ -50,6 +50,7 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullSessionDiffError,
   OrchestrationGetFullSessionDiffInput,
+  OrchestrationGetResearchCardDetailInput,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   OrchestrationGetTurnDiffInput,
@@ -517,6 +518,15 @@ export const WsOrchestrationGetFullSessionDiffRpc = Rpc.make(
   },
 );
 
+export const WsOrchestrationGetResearchCardDetailRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getResearchCardDetail,
+  {
+    payload: OrchestrationGetResearchCardDetailInput,
+    success: OrchestrationRpcSchemas.getResearchCardDetail.output,
+    error: OrchestrationGetSnapshotError,
+  },
+);
+
 export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.replayEvents, {
   payload: OrchestrationReplayEventsInput,
   success: OrchestrationRpcSchemas.replayEvents.output,
@@ -629,6 +639,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullSessionDiffRpc,
+  WsOrchestrationGetResearchCardDetailRpc,
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,

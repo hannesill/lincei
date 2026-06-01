@@ -26,6 +26,8 @@ import {
   type OrchestrationSessionShell,
   ModelSelection,
   ProjectId,
+  ResearchCardId,
+  ResearchCardSummary,
   SessionId,
 } from "@t3tools/contracts";
 import * as Arr from "effect/Array";
@@ -87,6 +89,18 @@ const ProjectionSessionResearchCardDbRowSchema = ProjectionSessionResearchCard.m
     review: Schema.NullOr(Schema.fromJsonString(ResearchCardReview)),
   }),
 );
+const ProjectionSessionResearchCardSummaryDbRowSchema = Schema.Struct({
+  cardId: ResearchCardId,
+  sessionId: SessionId,
+  turnId: Schema.NullOr(TurnId),
+  type: ProjectionSessionResearchCard.fields.type,
+  status: ProjectionSessionResearchCard.fields.status,
+  title: ProjectionSessionResearchCard.fields.title,
+  artifactCount: NonNegativeInt,
+  hasPreview: Schema.Number,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
 const ProjectionSessionDbRowSchema = ProjectionSession.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
@@ -285,6 +299,23 @@ function mapResearchCardRow(
   };
 }
 
+function mapResearchCardSummaryRow(
+  row: Schema.Schema.Type<typeof ProjectionSessionResearchCardSummaryDbRowSchema>,
+): ResearchCardSummary {
+  return {
+    id: row.cardId,
+    sessionId: row.sessionId,
+    type: row.type,
+    status: row.status,
+    title: row.title,
+    artifactCount: row.artifactCount,
+    hasPreview: row.hasPreview > 0,
+    turnId: row.turnId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: string) {
   return (cause: unknown): ProjectionRepositoryError =>
     Schema.isSchemaError(cause)
@@ -476,7 +507,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
   const listSessionResearchCardRows = SqlSchema.findAll({
     Request: Schema.Void,
-    Result: ProjectionSessionResearchCardDbRowSchema,
+    Result: ProjectionSessionResearchCardSummaryDbRowSchema,
     execute: () =>
       sql`
         SELECT
@@ -486,10 +517,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           type,
           status,
           title,
-          preview_json AS "preview",
-          artifacts_json AS "artifacts",
-          provenance_json AS "provenance",
-          review_json AS "review",
+          json_array_length(artifacts_json) AS "artifactCount",
+          CASE WHEN preview_json IS NULL THEN 0 ELSE 1 END AS "hasPreview",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
         FROM projection_session_research_cards
@@ -861,8 +890,33 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
   const listSessionResearchCardRowsBySession = SqlSchema.findAll({
     Request: SessionIdLookupInput,
-    Result: ProjectionSessionResearchCardDbRowSchema,
+    Result: ProjectionSessionResearchCardSummaryDbRowSchema,
     execute: ({ sessionId }) =>
+      sql`
+        SELECT
+          card_id AS "cardId",
+          session_id AS "sessionId",
+          turn_id AS "turnId",
+          type,
+          status,
+          title,
+          json_array_length(artifacts_json) AS "artifactCount",
+          CASE WHEN preview_json IS NULL THEN 0 ELSE 1 END AS "hasPreview",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM projection_session_research_cards
+        WHERE session_id = ${sessionId}
+        ORDER BY created_at ASC, card_id ASC
+      `,
+  });
+
+  const getSessionResearchCardDetailRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      sessionId: SessionId,
+      cardId: ResearchCardId,
+    }),
+    Result: ProjectionSessionResearchCardDbRowSchema,
+    execute: ({ sessionId, cardId }) =>
       sql`
         SELECT
           card_id AS "cardId",
@@ -879,7 +933,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           updated_at AS "updatedAt"
         FROM projection_session_research_cards
         WHERE session_id = ${sessionId}
-        ORDER BY created_at ASC, card_id ASC
+          AND card_id = ${cardId}
+        LIMIT 1
       `,
   });
 
@@ -1109,7 +1164,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             Effect.gen(function* () {
               const messagesBySession = new Map<string, Array<OrchestrationMessage>>();
               const proposedPlansBySession = new Map<string, Array<OrchestrationProposedPlan>>();
-              const researchCardsBySession = new Map<string, Array<OrchestrationResearchCard>>();
+              const researchCardsBySession = new Map<string, Array<ResearchCardSummary>>();
               const activitiesBySession = new Map<string, Array<OrchestrationSessionActivity>>();
               const checkpointsBySession = new Map<string, Array<OrchestrationCheckpointSummary>>();
               const sessionsBySession = new Map<string, OrchestrationProviderRuntime>();
@@ -1161,7 +1216,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               for (const row of researchCardRows) {
                 updatedAt = maxIso(updatedAt, row.updatedAt);
                 const sessionResearchCards = researchCardsBySession.get(row.sessionId) ?? [];
-                sessionResearchCards.push(mapResearchCardRow(row));
+                sessionResearchCards.push(mapResearchCardSummaryRow(row));
                 researchCardsBySession.set(row.sessionId, sessionResearchCards);
               }
 
@@ -1462,7 +1517,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 latestTurnBySession.set(row.sessionId, mapLatestTurn(row));
               }
               const proposedPlansBySession = new Map<string, Array<OrchestrationProposedPlan>>();
-              const researchCardsBySession = new Map<string, Array<OrchestrationResearchCard>>();
+              const researchCardsBySession = new Map<string, Array<ResearchCardSummary>>();
               const sessionBySession = new Map<string, OrchestrationProviderRuntime>();
 
               for (let index = 0; index < providerRuntimeRows.length; index += 1) {
@@ -1489,7 +1544,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   continue;
                 }
                 const sessionResearchCards = researchCardsBySession.get(row.sessionId) ?? [];
-                sessionResearchCards.push(mapResearchCardRow(row));
+                sessionResearchCards.push(mapResearchCardSummaryRow(row));
                 researchCardsBySession.set(row.sessionId, sessionResearchCards);
               }
 
@@ -2138,7 +2193,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           return message;
         }),
         proposedPlans: proposedPlanRows.map(mapProposedPlanRow),
-        researchCards: researchCardRows.map(mapResearchCardRow),
+        researchCards: researchCardRows.map(mapResearchCardSummaryRow),
         activities: activityRows.map((row) => {
           const activity = {
             id: row.activityId,
@@ -2175,6 +2230,17 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       );
     });
 
+  const getResearchCardDetail: ProjectionSnapshotQueryShape["getResearchCardDetail"] = (input) =>
+    getSessionResearchCardDetailRow(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.getResearchCardDetail:query",
+          "ProjectionSnapshotQuery.getResearchCardDetail:decodeRow",
+        ),
+      ),
+      Effect.map((row) => row.pipe(Option.map(mapResearchCardRow))),
+    );
+
   return {
     getCommandReadModel,
     getSnapshot,
@@ -2189,6 +2255,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getFullSessionDiffContext,
     getSessionShellById,
     getSessionDetailById,
+    getResearchCardDetail,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

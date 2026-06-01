@@ -99,11 +99,14 @@ function makeSession(overrides: Partial<Session> = {}): Session {
 function makeResearchCard(overrides: Partial<ResearchCard> = {}): ResearchCard {
   return {
     id: ResearchCardId.make("card-1"),
+    sessionId: SessionId.make("session-1"),
     type: "markdown",
     status: "proposed",
     title: "Baseline cohort",
     preview: "Initial cohort definition.",
     artifacts: [],
+    artifactCount: 0,
+    hasPreview: true,
     provenance: [],
     turnId: null,
     createdAt: "2026-02-13T00:00:00.000Z",

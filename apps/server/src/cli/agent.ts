@@ -1,5 +1,6 @@
 import {
   CommandId,
+  OrchestrationResearchCard,
   OrchestrationReadModel,
   ResearchCardArtifactReference,
   ResearchCardId,
@@ -8,7 +9,8 @@ import {
   SessionId,
   type ClientOrchestrationCommand,
   type OrchestrationProject,
-  type OrchestrationResearchCard,
+  type ResearchCardStudyRecordMetadata,
+  type ResearchCardSummary,
   type OrchestrationSession,
 } from "@t3tools/contracts";
 import * as Console from "effect/Console";
@@ -49,7 +51,6 @@ import {
 import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
-import { buildCardArtifactReferences, upsertCardManifest } from "../study/StudyRecordService.ts";
 
 type AgentDispatchCommand = Extract<
   ClientOrchestrationCommand,
@@ -344,6 +345,38 @@ const dispatchLiveOrchestrationCommand = (
   );
 };
 
+const fetchLiveResearchCardDetail = (
+  origin: string,
+  bearerToken: string,
+  input: {
+    readonly sessionId: SessionId;
+    readonly cardId: ResearchCardId;
+  },
+) =>
+  runLiveServerRequest(
+    HttpClientRequest.get(
+      `${origin}/api/orchestration/research-card-detail?sessionId=${encodeURIComponent(input.sessionId)}&cardId=${encodeURIComponent(input.cardId)}`,
+    ).pipe(HttpClientRequest.acceptJson, HttpClientRequest.bearerToken(bearerToken)),
+    HttpClientResponse.matchStatus({
+      "2xx": (response) =>
+        HttpClientResponse.schemaBodyJson(OrchestrationResearchCard)(response).pipe(
+          Effect.mapError(
+            () => new AgentCliError({ message: "Invalid research card detail response." }),
+          ),
+        ),
+      orElse: (response) =>
+        readErrorMessageFromResponse(response).pipe(
+          Effect.flatMap((message) => Effect.fail(new AgentCliError({ message }))),
+        ),
+    }),
+  ).pipe(
+    Effect.mapError((error) =>
+      error instanceof AgentCliError
+        ? error
+        : new AgentCliError({ message: "Failed to load research card detail." }),
+    ),
+  );
+
 const withAgentCliSessionToken = <A, E, R>(
   authControlPlane: AuthControlPlaneShape,
   run: (token: string) => Effect.Effect<A, E, R>,
@@ -418,6 +451,10 @@ const runLiveWrite = Effect.fn("runAgentLiveWrite")(function* (
     dispatch: (
       command: AgentDispatchCommand,
     ) => Effect.Effect<void, AgentCliError, HttpClient.HttpClient>,
+    loadCardDetail: (input: {
+      readonly sessionId: SessionId;
+      readonly cardId: ResearchCardId;
+    }) => Effect.Effect<OrchestrationResearchCard, AgentCliError, HttpClient.HttpClient>,
   ) => Effect.Effect<
     unknown,
     AgentCliError,
@@ -438,8 +475,10 @@ const runLiveWrite = Effect.fn("runAgentLiveWrite")(function* (
     return yield* withAgentCliSessionToken(authControlPlane, (token) =>
       Effect.gen(function* () {
         const snapshot = yield* fetchLiveOrchestrationSnapshot(runtimeState.value.origin, token);
-        return yield* run(snapshot, (command) =>
-          dispatchLiveOrchestrationCommand(runtimeState.value.origin, token, command),
+        return yield* run(
+          snapshot,
+          (command) => dispatchLiveOrchestrationCommand(runtimeState.value.origin, token, command),
+          (input) => fetchLiveResearchCardDetail(runtimeState.value.origin, token, input),
         );
       }),
     );
@@ -594,7 +633,7 @@ const resolveSessionTarget = Effect.fn("resolveAgentSessionTarget")(function* (
   });
 });
 
-const findCard = (session: OrchestrationSession, cardId: ResearchCardId) => {
+const findCardSummary = (session: OrchestrationSession, cardId: ResearchCardId) => {
   const card = session.researchCards.find((candidate) => candidate.id === cardId);
   if (!card) {
     return Effect.fail(new AgentCliError({ message: `No research card found for '${cardId}'.` }));
@@ -605,14 +644,14 @@ const findCard = (session: OrchestrationSession, cardId: ResearchCardId) => {
 const relevantCards = (session: OrchestrationSession, includeAll: boolean) =>
   includeAll ? session.researchCards : session.researchCards.filter(isActiveResearchCard);
 
-const compactCard = (card: OrchestrationResearchCard) => ({
+const compactCard = (card: OrchestrationResearchCard | ResearchCardSummary) => ({
   id: card.id,
   title: card.title,
   type: card.type,
   status: card.status,
   updatedAt: card.updatedAt,
-  artifactCount: card.artifacts.length,
-  hasPreview: card.preview !== undefined,
+  artifactCount: "artifactCount" in card ? card.artifactCount : card.artifacts.length,
+  hasPreview: "hasPreview" in card ? card.hasPreview : card.preview !== undefined,
 });
 
 const compactSession = (session: OrchestrationSession) => ({
@@ -731,6 +770,10 @@ const runWriteCommand = (
     dispatch: (
       command: AgentDispatchCommand,
     ) => Effect.Effect<void, AgentCliError, HttpClient.HttpClient>,
+    loadCardDetail: (input: {
+      readonly sessionId: SessionId;
+      readonly cardId: ResearchCardId;
+    }) => Effect.Effect<OrchestrationResearchCard, AgentCliError, HttpClient.HttpClient>,
   ) => Effect.Effect<
     unknown,
     AgentCliError,
@@ -742,77 +785,17 @@ const runWriteCommand = (
     yield* Console.log(formatOutput(output, flags.json));
   });
 
-const resolveStudyRootForSession = (
-  snapshot: OrchestrationReadModel,
-  session: OrchestrationSession,
-) =>
-  Effect.gen(function* () {
-    const project = snapshot.projects.find(
-      (candidate) => candidate.id === session.projectId && candidate.deletedAt === null,
-    );
-    if (!project) {
-      return yield* new AgentCliError({
-        message: `Project ${session.projectId} was not found for session ${session.id}.`,
-      });
-    }
-    return project.workspaceRoot;
-  });
-
-const persistCardStudyManifest = (input: {
-  readonly snapshot: OrchestrationReadModel;
-  readonly session: OrchestrationSession;
-  readonly card: OrchestrationResearchCard;
+const makeStudyRecordMetadata = (input: {
   readonly deps: ReadonlyArray<string>;
   readonly artifactIds: ReadonlyArray<string>;
   readonly artifacts: ReadonlyArray<ResearchCardArtifactReference>;
   readonly runId: Option.Option<string>;
-}) =>
-  Effect.gen(function* () {
-    const studyRoot = yield* resolveStudyRootForSession(input.snapshot, input.session);
-    yield* Effect.tryPromise({
-      try: () =>
-        upsertCardManifest({
-          studyRoot,
-          card: input.card,
-          deps: input.deps,
-          artifactIds: input.artifactIds,
-          artifacts: input.artifacts,
-          ...(Option.isSome(input.runId) ? { runId: input.runId.value } : {}),
-        }),
-      catch: (cause) =>
-        new AgentCliError({
-          message:
-            cause instanceof Error
-              ? `Failed to persist study card manifest: ${cause.message}`
-              : "Failed to persist study card manifest.",
-        }),
-    });
-  });
-
-const buildStudyCardArtifacts = (input: {
-  readonly snapshot: OrchestrationReadModel;
-  readonly session: OrchestrationSession;
-  readonly artifactIds: ReadonlyArray<string>;
-  readonly artifacts: ReadonlyArray<ResearchCardArtifactReference>;
-}) =>
-  Effect.gen(function* () {
-    const studyRoot = yield* resolveStudyRootForSession(input.snapshot, input.session);
-    return yield* Effect.tryPromise({
-      try: () =>
-        buildCardArtifactReferences({
-          studyRoot,
-          artifactIds: input.artifactIds,
-          artifacts: input.artifacts,
-        }),
-      catch: (cause) =>
-        new AgentCliError({
-          message:
-            cause instanceof Error
-              ? `Failed to resolve study artifacts: ${cause.message}`
-              : "Failed to resolve study artifacts.",
-        }),
-    });
-  });
+}): ResearchCardStudyRecordMetadata => ({
+  deps: [...input.deps],
+  artifactIds: [...input.artifactIds],
+  artifacts: input.artifacts.map((artifact) => ({ ...artifact })),
+  ...(Option.isSome(input.runId) ? { runId: input.runId.value } : {}),
+});
 
 const cardListCommand = Command.make("list", {
   ...projectLocationFlags,
@@ -872,12 +855,7 @@ const cardProposeCommand = Command.make("propose", {
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
         const preview = yield* parsePreviewInput(flags);
-        const artifacts = yield* buildStudyCardArtifacts({
-          snapshot,
-          session,
-          artifactIds: flags.artifact,
-          artifacts: yield* parseArtifactsInput(flags),
-        });
+        const artifacts = yield* parseArtifactsInput(flags);
         const card = yield* makeCard({
           session,
           title: flags.title,
@@ -885,20 +863,17 @@ const cardProposeCommand = Command.make("propose", {
           preview,
           artifacts,
         });
-        yield* persistCardStudyManifest({
-          snapshot,
-          session,
-          card,
-          deps: flags.dep,
-          artifactIds: [],
-          artifacts,
-          runId: flags.runId,
-        });
         yield* dispatch({
           type: "session.research-card.propose",
           commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: session.id,
           researchCard: card,
+          studyRecord: makeStudyRecordMetadata({
+            deps: flags.dep,
+            artifactIds: flags.artifact,
+            artifacts,
+            runId: flags.runId,
+          }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
         return { card: compactCard(card) };
@@ -925,10 +900,11 @@ const cardUpdateCommand = Command.make("update", {
 }).pipe(
   Command.withDescription("Update a research card."),
   Command.withHandler((flags) =>
-    runWriteCommand(flags, (snapshot, dispatch) =>
+    runWriteCommand(flags, (snapshot, dispatch, loadCardDetail) =>
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
-        const existing = yield* findCard(session, flags.cardId);
+        yield* findCardSummary(session, flags.cardId);
+        const existing = yield* loadCardDetail({ sessionId: session.id, cardId: flags.cardId });
         const preview = yield* parsePreviewInput(flags);
         const shouldReplacePreview =
           Option.isSome(flags.previewJson) ||
@@ -939,15 +915,9 @@ const cardUpdateCommand = Command.make("update", {
           Option.isSome(flags.artifactsFile) ||
           flags.artifact.length > 0;
         const artifacts = shouldReplaceArtifacts
-          ? yield* buildStudyCardArtifacts({
-              snapshot,
-              session,
-              artifactIds: flags.artifact,
-              artifacts:
-                Option.isSome(flags.artifactsJson) || Option.isSome(flags.artifactsFile)
-                  ? yield* parseArtifactsInput(flags)
-                  : existing.artifacts,
-            })
+          ? Option.isSome(flags.artifactsJson) || Option.isSome(flags.artifactsFile)
+            ? yield* parseArtifactsInput(flags)
+            : existing.artifacts
           : existing.artifacts;
         const card = yield* updateCard({
           card: existing,
@@ -957,21 +927,18 @@ const cardUpdateCommand = Command.make("update", {
           replacePreview: shouldReplacePreview,
           ...(shouldReplaceArtifacts ? { artifacts } : {}),
         });
-        yield* persistCardStudyManifest({
-          snapshot,
-          session,
-          card,
-          deps: flags.dep,
-          artifactIds: [],
-          artifacts: card.artifacts,
-          runId: flags.runId,
-        });
         yield* dispatch({
           type: "session.research-card.update",
           commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: session.id,
           cardId: flags.cardId,
           researchCard: card,
+          studyRecord: makeStudyRecordMetadata({
+            deps: flags.dep,
+            artifactIds: flags.artifact,
+            artifacts: card.artifacts,
+            runId: flags.runId,
+          }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
         return { card: compactCard(card) };
@@ -992,21 +959,14 @@ const cardRequestReviewCommand = Command.make("request-review", {
 }).pipe(
   Command.withDescription("Attach a review request to a research card."),
   Command.withHandler((flags) =>
-    runWriteCommand(flags, (snapshot, dispatch) =>
+    runWriteCommand(flags, (snapshot, dispatch, loadCardDetail) =>
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
         const now = DateTime.formatIso(yield* DateTime.now);
-        const existing = yield* findCard(session, flags.cardId);
+        yield* findCardSummary(session, flags.cardId);
+        const existing = yield* loadCardDetail({ sessionId: session.id, cardId: flags.cardId });
         const reviewPrompt = Option.getOrElse(flags.note, () => "Review this research card.");
-        const artifacts =
-          flags.artifact.length > 0
-            ? yield* buildStudyCardArtifacts({
-                snapshot,
-                session,
-                artifactIds: flags.artifact,
-                artifacts: existing.artifacts,
-              })
-            : existing.artifacts;
+        const artifacts = existing.artifacts;
         const reviewedCard = {
           ...existing,
           artifacts,
@@ -1025,12 +985,9 @@ const cardRequestReviewCommand = Command.make("request-review", {
               }
             : {}),
         };
-        yield* persistCardStudyManifest({
-          snapshot,
-          session,
-          card: reviewedCard,
+        const studyRecord = makeStudyRecordMetadata({
           deps: flags.dep,
-          artifactIds: [],
+          artifactIds: flags.artifact,
           artifacts: reviewedCard.artifacts,
           runId: flags.runId,
         });
@@ -1041,6 +998,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
           cardId: flags.cardId,
           action: "request_review",
           ...(Option.isSome(flags.note) ? { note: flags.note.value } : {}),
+          studyRecord,
           createdAt: now,
         });
         if (existing.review === undefined || flags.artifact.length > 0) {
@@ -1053,6 +1011,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
               ...reviewedCard,
               review: reviewedCard.review,
             },
+            studyRecord,
             createdAt: now,
           });
         }
@@ -1086,17 +1045,13 @@ const cardSupersedeCommand = Command.make("supersede", {
 }).pipe(
   Command.withDescription("Supersede a research card with a new proposal."),
   Command.withHandler((flags) =>
-    runWriteCommand(flags, (snapshot, dispatch) =>
+    runWriteCommand(flags, (snapshot, dispatch, loadCardDetail) =>
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
-        const oldCard = yield* findCard(session, flags.oldCardId);
+        yield* findCardSummary(session, flags.oldCardId);
+        const oldCard = yield* loadCardDetail({ sessionId: session.id, cardId: flags.oldCardId });
         const preview = yield* parsePreviewInput(flags);
-        const artifacts = yield* buildStudyCardArtifacts({
-          snapshot,
-          session,
-          artifactIds: flags.artifact,
-          artifacts: yield* parseArtifactsInput(flags),
-        });
+        const artifacts = yield* parseArtifactsInput(flags);
         const newCard = yield* makeCard({
           session,
           title: flags.title,
@@ -1104,21 +1059,18 @@ const cardSupersedeCommand = Command.make("supersede", {
           preview,
           artifacts,
         });
-        yield* persistCardStudyManifest({
-          snapshot,
-          session,
-          card: newCard,
-          deps: flags.dep,
-          artifactIds: [],
-          artifacts,
-          runId: flags.runId,
-        });
         yield* dispatch({
           type: "session.research-card.supersede",
           commandId: CommandId.make(yield* agentCommandUuid),
           sessionId: session.id,
           cardId: flags.oldCardId,
           replacementCard: newCard,
+          studyRecord: makeStudyRecordMetadata({
+            deps: flags.dep,
+            artifactIds: flags.artifact,
+            artifacts,
+            runId: flags.runId,
+          }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
         return { supersededCardId: flags.oldCardId, card: compactCard(newCard) };

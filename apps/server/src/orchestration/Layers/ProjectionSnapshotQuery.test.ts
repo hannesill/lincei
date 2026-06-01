@@ -340,6 +340,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
           deletedAt: null,
+          hidden: false,
           messages: [
             {
               id: asMessageId("message-1"),
@@ -365,32 +366,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           researchCards: [
             {
               id: ResearchCardId.make("card-1"),
+              sessionId: SessionId.make("session-1"),
               type: "markdown",
               status: "accepted",
               title: "Primary endpoint",
-              preview: { markdown: "The primary endpoint improved." },
-              artifacts: [
-                {
-                  id: "artifact-1",
-                  kind: "markdown",
-                  path: "cards/card-1.md",
-                },
-              ],
-              provenance: [
-                {
-                  source: "analysis",
-                  timestamp: "2026-02-24T00:00:05.750Z",
-                },
-              ],
-              review: {
-                prompt: "Review?",
-                actions: [{ id: "accept", label: "Accept" }],
-                response: {
-                  action: "accept",
-                  message: "Looks good",
-                  timestamp: "2026-02-24T00:00:05.800Z",
-                },
-              },
+              artifactCount: 1,
+              hasPreview: true,
               turnId: asTurnId("turn-1"),
               createdAt: "2026-02-24T00:00:05.750Z",
               updatedAt: "2026-02-24T00:00:05.800Z",
@@ -483,6 +464,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-02-24T00:00:02.000Z",
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
+          hidden: false,
           session: {
             sessionId: SessionId.make("session-1"),
             status: "running",
@@ -736,12 +718,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       assert.deepEqual(commandReadModel.sessions[0]?.researchCards, [
         {
           id: ResearchCardId.make("card-command"),
+          sessionId: SessionId.make("session-command-cards"),
           type: "keyValue",
           status: "proposed",
           title: "Baseline",
-          preview: { n: 42 },
-          artifacts: [],
-          provenance: [],
+          artifactCount: 0,
+          hasPreview: true,
           turnId: null,
           createdAt: "2026-02-25T00:00:02.000Z",
           updatedAt: "2026-02-25T00:00:02.000Z",

@@ -5,6 +5,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -13,6 +14,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   DeleteProjectionSessionResearchCardsInput,
+  GetProjectionSessionResearchCardInput,
   ListProjectionSessionResearchCardsInput,
   ProjectionSessionResearchCard,
   ProjectionSessionResearchCardRepository,
@@ -136,6 +138,30 @@ const makeProjectionSessionResearchCardRepository = Effect.gen(function* () {
     `,
   });
 
+  const getProjectionSessionResearchCardRow = SqlSchema.findOneOption({
+    Request: GetProjectionSessionResearchCardInput,
+    Result: ProjectionSessionResearchCardDbRowSchema,
+    execute: ({ sessionId, cardId }) => sql`
+      SELECT
+        card_id AS "cardId",
+        session_id AS "sessionId",
+        turn_id AS "turnId",
+        type,
+        status,
+        title,
+        preview_json AS "preview",
+        artifacts_json AS "artifacts",
+        provenance_json AS "provenance",
+        review_json AS "review",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM projection_session_research_cards
+      WHERE session_id = ${sessionId}
+        AND card_id = ${cardId}
+      LIMIT 1
+    `,
+  });
+
   const deleteProjectionSessionResearchCardRows = SqlSchema.void({
     Request: DeleteProjectionSessionResearchCardsInput,
     execute: ({ sessionId }) => sql`
@@ -161,6 +187,17 @@ const makeProjectionSessionResearchCardRepository = Effect.gen(function* () {
       Effect.map((rows) => rows.map(toProjectionSessionResearchCard)),
     );
 
+  const getBySessionAndCardId: ProjectionSessionResearchCardRepositoryShape["getBySessionAndCardId"] =
+    (input) =>
+      getProjectionSessionResearchCardRow(input).pipe(
+        Effect.mapError(
+          toPersistenceSqlError(
+            "ProjectionSessionResearchCardRepository.getBySessionAndCardId:query",
+          ),
+        ),
+        Effect.map((row) => row.pipe(Option.map(toProjectionSessionResearchCard))),
+      );
+
   const deleteBySessionId: ProjectionSessionResearchCardRepositoryShape["deleteBySessionId"] = (
     input,
   ) =>
@@ -173,6 +210,7 @@ const makeProjectionSessionResearchCardRepository = Effect.gen(function* () {
   return {
     upsert,
     listBySessionId,
+    getBySessionAndCardId,
     deleteBySessionId,
   } satisfies ProjectionSessionResearchCardRepositoryShape;
 });

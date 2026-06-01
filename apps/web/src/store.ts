@@ -7,7 +7,6 @@ import type {
   OrchestrationMessage,
   OrchestrationProposedPlan,
   OrchestrationReadModel,
-  OrchestrationResearchCard,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
   OrchestrationProviderRuntime,
@@ -16,6 +15,7 @@ import type {
   OrchestrationSessionShell,
   OrchestrationSessionActivity,
   ProjectId,
+  ResearchCardSummary,
   ResearchCardLifecycleStatus,
   ScopedProjectRef,
   ScopedSessionRef,
@@ -206,22 +206,42 @@ function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): ProposedPlan 
   };
 }
 
-function mapResearchCard(researchCard: OrchestrationResearchCard): ResearchCard {
+function mapResearchCard(researchCard: ResearchCardSummary): ResearchCard {
   return {
     ...researchCard,
-    artifacts: researchCard.artifacts.map((artifact) => ({ ...artifact })),
-    provenance: researchCard.provenance.map((entry) => ({ ...entry })),
-    ...(researchCard.review
-      ? {
-          review: {
-            ...researchCard.review,
-            actions: researchCard.review.actions.map((action) => ({ ...action })),
-            ...(researchCard.review.response
-              ? { response: { ...researchCard.review.response } }
-              : {}),
-          },
-        }
-      : {}),
+    artifacts: [],
+    provenance: [],
+  };
+}
+
+function summarizeResearchCard(input: {
+  readonly sessionId: string;
+  readonly card: {
+    readonly id: string;
+    readonly type: ResearchCardSummary["type"];
+    readonly status: ResearchCardSummary["status"];
+    readonly title: string;
+    readonly artifacts: ResearchCard["artifacts"];
+    readonly preview?: unknown;
+    readonly turnId: ResearchCardSummary["turnId"];
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  };
+}): ResearchCard {
+  return {
+    id: input.card.id as ResearchCard["id"],
+    sessionId: input.sessionId as ResearchCard["sessionId"],
+    type: input.card.type,
+    status: input.card.status,
+    title: input.card.title as ResearchCard["title"],
+    artifactCount: input.card.artifacts.length,
+    hasPreview: input.card.preview !== undefined,
+    ...(input.card.preview !== undefined ? { preview: input.card.preview } : {}),
+    artifacts: input.card.artifacts.map((artifact) => ({ ...artifact })),
+    provenance: [],
+    turnId: input.card.turnId,
+    createdAt: input.card.createdAt as ResearchCard["createdAt"],
+    updatedAt: input.card.updatedAt as ResearchCard["updatedAt"],
   };
 }
 
@@ -1629,7 +1649,10 @@ function applyEnvironmentOrchestrationEvent(
 
     case "session.research-card-proposed":
       return updateSessionState(state, event.payload.sessionId, (session) => {
-        const researchCard = mapResearchCard(event.payload.researchCard);
+        const researchCard = summarizeResearchCard({
+          sessionId: event.payload.sessionId,
+          card: event.payload.researchCard,
+        });
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== researchCard.id),
           researchCard,
@@ -1648,7 +1671,10 @@ function applyEnvironmentOrchestrationEvent(
 
     case "session.research-card-updated":
       return updateSessionState(state, event.payload.sessionId, (session) => {
-        const researchCard = mapResearchCard(event.payload.researchCard);
+        const researchCard = summarizeResearchCard({
+          sessionId: event.payload.sessionId,
+          card: event.payload.researchCard,
+        });
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== event.payload.cardId),
           researchCard,
@@ -1736,7 +1762,13 @@ function applyEnvironmentOrchestrationEvent(
               : researchCard,
           );
         }
-        const researchCards = [...nextResearchCards, mapResearchCard(event.payload.replacementCard)]
+        const researchCards = [
+          ...nextResearchCards,
+          summarizeResearchCard({
+            sessionId: event.payload.sessionId,
+            card: event.payload.replacementCard,
+          }),
+        ]
           .toSorted(
             (left, right) =>
               left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),

@@ -12,6 +12,7 @@ import {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -38,6 +39,13 @@ export const ListProjectionSessionResearchCardsInput = Schema.Struct({
 export type ListProjectionSessionResearchCardsInput =
   typeof ListProjectionSessionResearchCardsInput.Type;
 
+export const GetProjectionSessionResearchCardInput = Schema.Struct({
+  sessionId: SessionId,
+  cardId: ResearchCardId,
+});
+export type GetProjectionSessionResearchCardInput =
+  typeof GetProjectionSessionResearchCardInput.Type;
+
 export const DeleteProjectionSessionResearchCardsInput = Schema.Struct({
   sessionId: SessionId,
 });
@@ -51,6 +59,9 @@ export interface ProjectionSessionResearchCardRepositoryShape {
   readonly listBySessionId: (
     input: ListProjectionSessionResearchCardsInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionSessionResearchCard>, ProjectionRepositoryError>;
+  readonly getBySessionAndCardId: (
+    input: GetProjectionSessionResearchCardInput,
+  ) => Effect.Effect<Option.Option<ProjectionSessionResearchCard>, ProjectionRepositoryError>;
   readonly deleteBySessionId: (
     input: DeleteProjectionSessionResearchCardsInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;

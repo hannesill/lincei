@@ -4,6 +4,7 @@ import type {
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
   OrchestrationResearchCard,
+  ResearchCardSummary,
   RepositoryIdentity,
   OrchestrationProviderRuntimeStatus,
   OrchestrationSessionActivity,
@@ -65,7 +66,13 @@ export interface ProposedPlan {
   updatedAt: string;
 }
 
-export type ResearchCard = OrchestrationResearchCard;
+export type ResearchCard = ResearchCardSummary & {
+  preview?: OrchestrationResearchCard["preview"];
+  artifacts: OrchestrationResearchCard["artifacts"];
+  provenance: OrchestrationResearchCard["provenance"];
+  review?: OrchestrationResearchCard["review"];
+};
+export type ResearchCardDetail = OrchestrationResearchCard;
 
 export interface TurnDiffFileChange {
   path: string;

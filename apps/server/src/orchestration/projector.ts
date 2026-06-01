@@ -3,11 +3,11 @@ import {
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
   OrchestrationProviderRuntime,
-  OrchestrationResearchCard,
   OrchestrationSession,
+  type OrchestrationResearchCard,
   type ResearchCardLifecycleStatus,
+  type ResearchCardSummary,
 } from "@t3tools/contracts";
-import { attachResearchCardReviewResponse } from "@t3tools/shared/researchCards";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -147,12 +147,30 @@ function retainSessionProposedPlansAfterRevert(
 }
 
 function retainSessionResearchCardsAfterRevert(
-  researchCards: ReadonlyArray<OrchestrationResearchCard>,
+  researchCards: ReadonlyArray<ResearchCardSummary>,
   retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationResearchCard> {
+): ReadonlyArray<ResearchCardSummary> {
   return researchCards.filter(
     (researchCard) => researchCard.turnId === null || retainedTurnIds.has(researchCard.turnId),
   );
+}
+
+function summarizeResearchCard(
+  sessionId: SessionId,
+  card: OrchestrationResearchCard,
+): ResearchCardSummary {
+  return {
+    id: card.id,
+    sessionId,
+    type: card.type,
+    status: card.status,
+    title: card.title,
+    artifactCount: card.artifacts.length,
+    hasPreview: card.preview !== undefined,
+    turnId: card.turnId,
+    createdAt: card.createdAt,
+    updatedAt: card.updatedAt,
+  };
 }
 
 function compareSessionActivities(
@@ -559,7 +577,7 @@ export function projectEvent(
 
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== payload.researchCard.id),
-          payload.researchCard,
+          summarizeResearchCard(payload.sessionId, payload.researchCard),
         ].toSorted(
           (left, right) =>
             left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
@@ -589,7 +607,7 @@ export function projectEvent(
 
         const researchCards = [
           ...session.researchCards.filter((entry) => entry.id !== payload.cardId),
-          payload.researchCard,
+          summarizeResearchCard(payload.sessionId, payload.researchCard),
         ].toSorted(
           (left, right) =>
             left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
@@ -617,7 +635,7 @@ export function projectEvent(
           return nextBase;
         }
 
-        const researchCards: OrchestrationResearchCard[] = [];
+        const researchCards: ResearchCardSummary[] = [];
         for (const researchCard of session.researchCards) {
           if (researchCard.id !== payload.cardId) {
             researchCards.push(researchCard);
@@ -626,7 +644,6 @@ export function projectEvent(
           researchCards.push({
             ...researchCard,
             status: reviewActionToStatus(payload.response.action, researchCard.status),
-            review: attachResearchCardReviewResponse(researchCard.review, payload.response),
             updatedAt: payload.response.timestamp,
           });
         }
@@ -653,7 +670,7 @@ export function projectEvent(
           return nextBase;
         }
 
-        const researchCards: OrchestrationResearchCard[] = [];
+        const researchCards: ResearchCardSummary[] = [];
         for (const researchCard of session.researchCards) {
           researchCards.push(
             researchCard.id === payload.cardId
@@ -688,7 +705,7 @@ export function projectEvent(
           return nextBase;
         }
 
-        const nextResearchCards: OrchestrationResearchCard[] = [];
+        const nextResearchCards: ResearchCardSummary[] = [];
         for (const researchCard of session.researchCards) {
           if (researchCard.id === payload.replacementCard.id) {
             continue;
@@ -703,7 +720,10 @@ export function projectEvent(
               : researchCard,
           );
         }
-        const researchCards = [...nextResearchCards, payload.replacementCard].toSorted(
+        const researchCards = [
+          ...nextResearchCards,
+          summarizeResearchCard(payload.sessionId, payload.replacementCard),
+        ].toSorted(
           (left, right) =>
             left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
         );

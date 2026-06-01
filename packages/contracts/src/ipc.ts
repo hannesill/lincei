@@ -55,6 +55,8 @@ import type {
   ClientOrchestrationCommand,
   OrchestrationGetFullSessionDiffInput,
   OrchestrationGetFullSessionDiffResult,
+  OrchestrationGetResearchCardDetailInput,
+  OrchestrationGetResearchCardDetailResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationShellSnapshot,
@@ -599,6 +601,9 @@ export interface EnvironmentApi {
     getFullSessionDiff: (
       input: OrchestrationGetFullSessionDiffInput,
     ) => Promise<OrchestrationGetFullSessionDiffResult>;
+    getResearchCardDetail: (
+      input: OrchestrationGetResearchCardDetailInput,
+    ) => Promise<OrchestrationGetResearchCardDetailResult>;
     getArchivedShellSnapshot: () => Promise<OrchestrationShellSnapshot>;
     subscribeShell: (
       callback: (event: OrchestrationShellStreamItem) => void,

@@ -211,6 +211,7 @@ describe("ProviderSessionReaper", () => {
                 : Option.none(),
             ),
           getSessionDetailById: () => Effect.die("unused"),
+          getResearchCardDetail: () => Effect.die("unused"),
         }),
       ),
       Layer.provideMerge(NodeServices.layer),

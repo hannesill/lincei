@@ -721,6 +721,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           sessionId: command.sessionId,
           researchCard: command.researchCard,
+          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
         },
       };
     }
@@ -755,6 +756,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           sessionId: command.sessionId,
           cardId: command.cardId,
           researchCard: command.researchCard,
+          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
         },
       };
     }
@@ -783,6 +785,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           sessionId: command.sessionId,
           cardId: command.cardId,
           response: command.response,
+          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
         },
       };
     }
@@ -813,6 +816,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           status: lifecycleActionToStatus(command.action),
           action: command.action,
           ...(command.note !== undefined ? { note: command.note } : {}),
+          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
           updatedAt: command.createdAt,
         },
       };
@@ -854,6 +858,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           sessionId: command.sessionId,
           cardId: command.cardId,
           replacementCard: command.replacementCard,
+          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
           supersededAt: command.createdAt,
         },
       };

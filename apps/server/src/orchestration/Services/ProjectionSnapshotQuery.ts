@@ -12,10 +12,12 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
+  OrchestrationResearchCard,
   OrchestrationShellSnapshot,
   OrchestrationSession,
   OrchestrationSessionShell,
   ProjectId,
+  ResearchCardId,
   SessionId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -157,6 +159,14 @@ export interface ProjectionSnapshotQueryShape {
   readonly getSessionDetailById: (
     sessionId: SessionId,
   ) => Effect.Effect<Option.Option<OrchestrationSession>, ProjectionRepositoryError>;
+
+  /**
+   * Read a single full research-card detail payload by session and card id.
+   */
+  readonly getResearchCardDetail: (input: {
+    readonly sessionId: SessionId;
+    readonly cardId: ResearchCardId;
+  }) => Effect.Effect<Option.Option<OrchestrationResearchCard>, ProjectionRepositoryError>;
 }
 
 /**
