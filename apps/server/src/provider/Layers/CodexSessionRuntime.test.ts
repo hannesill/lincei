@@ -13,7 +13,7 @@ import {
 } from "../CodexDeveloperInstructions.ts";
 import {
   appendLinceiAgentInstructions,
-  LINCEI_AGENT_INSTRUCTIONS,
+  buildLinceiAgentInstructions,
 } from "../LinceiAgentInstructions.ts";
 import {
   buildTurnStartParams,
@@ -83,6 +83,27 @@ describe("buildTurnStartParams", () => {
         },
       },
     });
+  });
+
+  it("includes custom Lincei instructions in collaboration mode developer instructions", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        sessionId: "provider-session-1",
+        runtimeMode: "full-access",
+        prompt: "Make a plan",
+        model: "gpt-5.3-codex",
+        interactionMode: "plan",
+        linceiAgentCustomInstructions: "Prefer concise status updates.",
+      }),
+    );
+
+    assert.equal(
+      params.collaborationMode?.settings.developer_instructions,
+      appendLinceiAgentInstructions(
+        CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+        "Prefer concise status updates.",
+      ),
+    );
   });
 
   it("includes default collaboration mode and image attachments", () => {
@@ -226,6 +247,7 @@ describe("openCodexSession", () => {
       },
     };
 
+    const developerInstructions = buildLinceiAgentInstructions();
     const opened = await Effect.runPromise(
       openCodexSession({
         client,
@@ -234,7 +256,7 @@ describe("openCodexSession", () => {
         cwd: "/tmp/project",
         requestedModel: "gpt-5.3-codex",
         serviceTier: undefined,
-        developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+        developerInstructions,
         resumeSessionId: "stale-session",
       }),
     );
@@ -250,14 +272,14 @@ describe("openCodexSession", () => {
       approvalPolicy: "never",
       sandbox: "danger-full-access",
       model: "gpt-5.3-codex",
-      developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+      developerInstructions,
     });
     assert.deepStrictEqual(calls[1]?.payload, {
       cwd: "/tmp/project",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
       model: "gpt-5.3-codex",
-      developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+      developerInstructions,
     });
   });
 
@@ -281,6 +303,7 @@ describe("openCodexSession", () => {
       },
     };
 
+    const developerInstructions = buildLinceiAgentInstructions();
     await assert.rejects(
       Effect.runPromise(
         openCodexSession({
@@ -290,7 +313,7 @@ describe("openCodexSession", () => {
           cwd: "/tmp/project",
           requestedModel: "gpt-5.3-codex",
           serviceTier: undefined,
-          developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+          developerInstructions,
           resumeSessionId: "stale-session",
         }),
       ),

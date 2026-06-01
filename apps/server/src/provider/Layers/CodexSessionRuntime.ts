@@ -104,6 +104,7 @@ export interface CodexSessionRuntimeOptions {
   readonly model?: string;
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly developerInstructions?: string | undefined;
+  readonly linceiAgentCustomInstructions?: string | undefined;
   readonly resumeCursor?: CodexResumeCursor;
 }
 
@@ -326,6 +327,7 @@ function buildCodexCollaborationMode(input: {
   readonly interactionMode?: ProviderInteractionMode;
   readonly model?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
+  readonly linceiAgentCustomInstructions?: string | undefined;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
   if (input.interactionMode === undefined) {
     return undefined;
@@ -338,8 +340,14 @@ function buildCodexCollaborationMode(input: {
       reasoning_effort: input.effort ?? "medium",
       developer_instructions:
         input.interactionMode === "plan"
-          ? appendLinceiAgentInstructions(CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS)
-          : appendLinceiAgentInstructions(CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS),
+          ? appendLinceiAgentInstructions(
+              CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+              input.linceiAgentCustomInstructions,
+            )
+          : appendLinceiAgentInstructions(
+              CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+              input.linceiAgentCustomInstructions,
+            ),
     },
   };
 }
@@ -356,6 +364,7 @@ export function buildTurnStartParams(input: {
   readonly serviceTier?: CodexServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly linceiAgentCustomInstructions?: string | undefined;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -376,6 +385,9 @@ export function buildTurnStartParams(input: {
     ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
+    ...(input.linceiAgentCustomInstructions !== undefined
+      ? { linceiAgentCustomInstructions: input.linceiAgentCustomInstructions }
+      : {}),
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
@@ -1277,6 +1289,9 @@ export const makeCodexSessionRuntime = (
             ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
             ...(input.effort ? { effort: input.effort } : {}),
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+            ...(options.linceiAgentCustomInstructions !== undefined
+              ? { linceiAgentCustomInstructions: options.linceiAgentCustomInstructions }
+              : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
           const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(

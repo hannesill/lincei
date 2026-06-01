@@ -45,8 +45,9 @@ const asSessionId = (value: string): SessionId => SessionId.make(value);
 
 const openCodePromptParts = (
   text: string,
+  customInstructions?: string,
 ): Array<{ readonly type: "text"; readonly text: string }> => [
-  { type: "text", text: buildLinceiSessionInstructionFallback() },
+  { type: "text", text: buildLinceiSessionInstructionFallback(customInstructions) },
   { type: "text", text },
 ];
 
@@ -411,7 +412,11 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     ).pipe(
       Layer.provideMerge(Layer.succeed(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
-      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(
+        ServerSettingsService.layerTest({
+          linceiAgentCustomInstructions: "Prefer concise status updates.",
+        }),
+      ),
       Layer.provideMerge(providerSessionDirectoryTestLayer),
       Layer.provideMerge(NodeServices.layer),
     );
@@ -445,7 +450,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         },
         agent: "github-copilot",
         variant: "high",
-        parts: openCodePromptParts("Fix it"),
+        parts: openCodePromptParts("Fix it", "Prefer concise status updates."),
       });
     }).pipe(Effect.provide(adapterLayer));
   });

@@ -26,6 +26,7 @@ import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import {
   ProviderAdapterProcessError,
@@ -433,6 +434,7 @@ export function makeOpenCodeAdapter(
   return Effect.gen(function* () {
     const boundInstanceId = options?.instanceId ?? ProviderInstanceId.make("opencode");
     const serverConfig = yield* ServerConfig;
+    const serverSettings = yield* ServerSettingsService;
     const openCodeRuntime = yield* OpenCodeRuntime;
     const crypto = yield* Crypto.Crypto;
     const nativeEventLogger =
@@ -481,6 +483,22 @@ export function makeOpenCodeAdapter(
               }
             : {}),
         })),
+      );
+
+    const buildCurrentLinceiInstructionFallback = () =>
+      serverSettings.getSettings.pipe(
+        Effect.map((settings) =>
+          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions),
+        ),
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "server.getSettings",
+              detail: "Failed to read Lincei agent instruction settings.",
+              cause,
+            }),
+        ),
       );
 
     // Layer-level finalizer: when the adapter layer shuts down, stop every
@@ -1229,7 +1247,7 @@ export function makeOpenCodeAdapter(
         : [
             {
               type: "text" as const,
-              text: buildLinceiSessionInstructionFallback(),
+              text: yield* buildCurrentLinceiInstructionFallback(),
             },
           ];
       const promptParts = [

@@ -194,4 +194,19 @@ describe("serverSettings helpers", () => {
       config: { homePath: "~/.codex" },
     });
   });
+
+  it("applies custom instruction patches without changing unrelated settings", () => {
+    const current = {
+      ...DEFAULT_SERVER_SETTINGS,
+      addProjectBaseDirectory: "~/Studies",
+    };
+
+    const next = applyServerSettingsPatch(current, {
+      linceiAgentCustomInstructions: "Prefer concise status updates.",
+    });
+
+    expect(next.linceiAgentCustomInstructions).toBe("Prefer concise status updates.");
+    expect(next.addProjectBaseDirectory).toBe("~/Studies");
+    expect(next.providers).toEqual(current.providers);
+  });
 });

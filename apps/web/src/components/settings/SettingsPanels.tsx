@@ -1,7 +1,7 @@
 import { ArchiveIcon, ArchiveX, LoaderIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   defaultInstanceIdForDriver,
   type DesktopUpdateChannel,
@@ -54,6 +54,7 @@ import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 import { stackedSessionToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
@@ -421,6 +422,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
         ? ["Add study base directory"]
         : []),
+      ...(settings.linceiAgentCustomInstructions !==
+      DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions
+        ? ["Custom agent instructions"]
+        : []),
       ...(settings.confirmSessionArchive !== DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive
         ? ["Archive confirmation"]
         : []),
@@ -435,6 +440,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmSessionArchive,
       settings.confirmSessionDelete,
       settings.addProjectBaseDirectory,
+      settings.linceiAgentCustomInstructions,
       settings.defaultSessionEnvMode,
       settings.diffIgnoreWhitespace,
       settings.diffWordWrap,
@@ -467,6 +473,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
       defaultSessionEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultSessionEnvMode,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
+      linceiAgentCustomInstructions: DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions,
       confirmSessionArchive: DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive,
       confirmSessionDelete: DEFAULT_UNIFIED_SETTINGS.confirmSessionDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
@@ -512,10 +519,30 @@ export function GeneralSettingsPanel() {
     textGenInstanceId,
     textGenModel,
   );
+  const [customInstructionsDraft, setCustomInstructionsDraft] = useState(
+    settings.linceiAgentCustomInstructions,
+  );
+  useEffect(() => {
+    setCustomInstructionsDraft(settings.linceiAgentCustomInstructions);
+  }, [settings.linceiAgentCustomInstructions]);
   const isGitWritingModelDirty = !Equal.equals(
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  const customInstructionsDirty =
+    settings.linceiAgentCustomInstructions !==
+    DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions;
+  const commitCustomInstructions = useCallback(() => {
+    if (customInstructionsDraft !== settings.linceiAgentCustomInstructions) {
+      updateSettings({ linceiAgentCustomInstructions: customInstructionsDraft });
+    }
+  }, [customInstructionsDraft, settings.linceiAgentCustomInstructions, updateSettings]);
+  const resetCustomInstructions = useCallback(() => {
+    setCustomInstructionsDraft(DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions);
+    updateSettings({
+      linceiAgentCustomInstructions: DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions,
+    });
+  }, [updateSettings]);
 
   return (
     <SettingsPageContainer>
@@ -738,6 +765,31 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
+
+        <SettingsRow
+          title="Custom agent instructions"
+          description="Additional instructions appended to new provider sessions."
+          resetAction={
+            customInstructionsDirty ? (
+              <SettingResetButton
+                label="custom agent instructions"
+                onClick={resetCustomInstructions}
+              />
+            ) : null
+          }
+        >
+          <div className="mt-3 pb-4">
+            <Textarea
+              className="w-full"
+              value={customInstructionsDraft}
+              onChange={(event) => setCustomInstructionsDraft(event.target.value)}
+              onBlur={commitCustomInstructions}
+              placeholder="Add project-wide guidance for agents..."
+              spellCheck={true}
+              aria-label="Custom agent instructions"
+            />
+          </div>
+        </SettingsRow>
 
         <SettingsRow
           title="Add study starts in"

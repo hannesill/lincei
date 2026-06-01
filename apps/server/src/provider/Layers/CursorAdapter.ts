@@ -42,6 +42,7 @@ import type * as EffectAcpSchema from "effect-acp/schema";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -318,6 +319,7 @@ export function makeCursorAdapter(
     const path = yield* Path.Path;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const serverConfig = yield* Effect.service(ServerConfig);
+    const serverSettings = yield* ServerSettingsService;
     const crypto = yield* Crypto.Crypto;
     const nativeEventLogger =
       options?.nativeEventLogger ??
@@ -361,6 +363,22 @@ export function makeCursorAdapter(
 
     const offerRuntimeEvent = (event: ProviderRuntimeEvent) =>
       PubSub.publish(runtimeEventPubSub, event).pipe(Effect.asVoid);
+
+    const buildCurrentLinceiInstructionFallback = () =>
+      serverSettings.getSettings.pipe(
+        Effect.map((settings) =>
+          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions),
+        ),
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "server.getSettings",
+              detail: "Failed to read Lincei agent instruction settings.",
+              cause,
+            }),
+        ),
+      );
 
     const getSessionSemaphore = (sessionId: string) =>
       SynchronizedRef.modifyEffect(sessionLocksRef, (current) => {
@@ -932,7 +950,10 @@ export function makeCursorAdapter(
           Boolean(input.attachments && input.attachments.length > 0);
         const promptParts: Array<EffectAcpSchema.ContentBlock> = [];
         if (!ctx.linceiInstructionInjected) {
-          promptParts.push({ type: "text", text: buildLinceiSessionInstructionFallback() });
+          promptParts.push({
+            type: "text",
+            text: yield* buildCurrentLinceiInstructionFallback(),
+          });
         }
         if (input.input?.trim()) {
           promptParts.push({ type: "text", text: input.input.trim() });

@@ -21,6 +21,7 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("decodes a fully empty config (legacy on-disk shape) without complaint", () => {
     const decoded = decodeServerSettings({});
     expect(decoded.providerInstances).toEqual({});
+    expect(decoded.linceiAgentCustomInstructions).toBe("");
     // Legacy `providers` struct is still hydrated with its per-driver defaults
     // so existing call sites keep working through the migration.
     expect(decoded.providers.codex.enabled).toBe(true);
@@ -125,6 +126,7 @@ describe("ServerSettingsPatch string normalization", () => {
       observability: {
         otlpTracesUrl: "  http://localhost:4318/v1/traces  ",
       },
+      linceiAgentCustomInstructions: "  Prefer concise status updates.  ",
       providers: {
         codex: {
           binaryPath: "  /opt/homebrew/bin/codex  ",
@@ -141,6 +143,7 @@ describe("ServerSettingsPatch string normalization", () => {
     });
 
     expect(patch.addProjectBaseDirectory).toBe("~/Development");
+    expect(patch.linceiAgentCustomInstructions).toBe("Prefer concise status updates.");
     expect(patch.textGenerationModelSelection?.model).toBe("gpt-5.4-mini");
     expect(patch.observability?.otlpTracesUrl).toBe("http://localhost:4318/v1/traces");
     expect(patch.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
@@ -161,6 +164,7 @@ describe("ServerSettingsPatch string normalization", () => {
     const encoded = encodeServerSettings({
       ...defaultSettings,
       addProjectBaseDirectory: "  ~/Development  ",
+      linceiAgentCustomInstructions: "  Prefer concise status updates.  ",
       providers: {
         ...defaultSettings.providers,
         codex: {
@@ -171,6 +175,7 @@ describe("ServerSettingsPatch string normalization", () => {
     });
 
     expect(encoded.addProjectBaseDirectory).toBe("~/Development");
+    expect(encoded.linceiAgentCustomInstructions).toBe("Prefer concise status updates.");
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
   });
 });

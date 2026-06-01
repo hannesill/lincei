@@ -53,6 +53,7 @@ import {
 import { type CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   CodexResumeCursorSchema,
   CodexSessionRuntimeSessionIdMissingError,
@@ -62,7 +63,7 @@ import {
   type CodexSessionRuntimeShape,
 } from "./CodexSessionRuntime.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
-import { LINCEI_AGENT_INSTRUCTIONS } from "../LinceiAgentInstructions.ts";
+import { buildLinceiAgentInstructions } from "../LinceiAgentInstructions.ts";
 import { makeLinceiSessionEnvironment } from "../LinceiAmbientEnvironment.ts";
 const isCodexAppServerProcessExitedError = Schema.is(CodexErrors.CodexAppServerProcessExitedError);
 const isCodexAppServerTransportError = Schema.is(CodexErrors.CodexAppServerTransportError);
@@ -1354,6 +1355,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const crypto = yield* Crypto.Crypto;
   const serverConfig = yield* Effect.service(ServerConfig);
+  const serverSettings = yield* ServerSettingsService;
   const nativeEventLogger =
     options?.nativeEventLogger ??
     (options?.nativeEventLogPath !== undefined
@@ -1382,6 +1384,17 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           yield* Effect.suspend(() => stopSessionInternal(existing));
         }
 
+        const serverSettingsSnapshot = yield* serverSettings.getSettings.pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                sessionId: input.sessionId,
+                detail: "Failed to read Lincei agent instruction settings.",
+                cause,
+              }),
+          ),
+        );
         const baseEnvironment = options?.environment ?? process.env;
         const runtimeInput: CodexSessionRuntimeOptions = {
           sessionId: input.sessionId,
@@ -1397,7 +1410,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
-          developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+          developerInstructions: buildLinceiAgentInstructions(
+            serverSettingsSnapshot.linceiAgentCustomInstructions,
+          ),
+          linceiAgentCustomInstructions: serverSettingsSnapshot.linceiAgentCustomInstructions,
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }
             : {}),

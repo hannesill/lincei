@@ -761,6 +761,28 @@ describe("GeneralSettingsPanel observability", () => {
       .toBeInTheDocument();
   });
 
+  it("shows only editable custom agent instructions", async () => {
+    setServerConfigSnapshot({
+      ...createBaseServerConfig(),
+      settings: {
+        ...DEFAULT_SERVER_SETTINGS,
+        linceiAgentCustomInstructions: "Prefer concise status updates.",
+      },
+    });
+
+    mounted = await renderWithTestRouter(
+      <AppAtomRegistryProvider>
+        <GeneralSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect
+      .element(page.getByRole("textbox", { name: "Custom agent instructions" }))
+      .toHaveValue("Prefer concise status updates.");
+    await expect.element(page.getByText("lincei context current --json")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Effective prompt")).not.toBeInTheDocument();
+  });
+
   it("creates and shows a pairing link when network access is enabled", async () => {
     window.desktopBridge = createDesktopBridgeStub({
       serverExposureState: {

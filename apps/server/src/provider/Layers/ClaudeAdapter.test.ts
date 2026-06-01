@@ -37,7 +37,7 @@ import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
-import { LINCEI_AGENT_INSTRUCTIONS } from "../LinceiAgentInstructions.ts";
+import { buildLinceiAgentInstructions } from "../LinceiAgentInstructions.ts";
 import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
@@ -156,6 +156,7 @@ function makeHarness(config?: {
   readonly cwd?: string;
   readonly baseDir?: string;
   readonly claudeConfig?: Partial<ClaudeSettings>;
+  readonly serverSettings?: Parameters<typeof ServerSettingsService.layerTest>[0];
   readonly instanceId?: ProviderInstanceId;
 }) {
   const query = new FakeClaudeQuery();
@@ -198,7 +199,7 @@ function makeHarness(config?: {
           config?.baseDir ?? "/tmp",
         ),
       ),
-      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(ServerSettingsService.layerTest(config?.serverSettings)),
       Layer.provideMerge(NodeServices.layer),
     ),
     query,
@@ -314,10 +315,36 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(createInput?.options.systemPrompt, {
         type: "preset",
         preset: "claude_code",
-        append: LINCEI_AGENT_INSTRUCTIONS,
+        append: buildLinceiAgentInstructions(),
       });
       assert.equal(createInput?.options.permissionMode, "bypassPermissions");
       assert.equal(createInput?.options.allowDangerouslySkipPermissions, true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("appends custom Lincei instructions to Claude system prompt", () => {
+    const harness = makeHarness({
+      serverSettings: {
+        linceiAgentCustomInstructions: "Prefer concise status updates.",
+      },
+    });
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        sessionId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+
+      const createInput = harness.getLastCreateQueryInput();
+      assert.deepEqual(createInput?.options.systemPrompt, {
+        type: "preset",
+        preset: "claude_code",
+        append: buildLinceiAgentInstructions("Prefer concise status updates."),
+      });
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

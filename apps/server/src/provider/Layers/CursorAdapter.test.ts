@@ -344,7 +344,10 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const wrapperPath = yield* Effect.promise(() =>
         makeProbeWrapper(requestLogPath, argvLogPath),
       );
-      yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+      yield* serverSettings.updateSettings({
+        linceiAgentCustomInstructions: "Prefer concise status updates.",
+        providers: { cursor: { binaryPath: wrapperPath } },
+      });
 
       yield* adapter.startSession({
         sessionId,
@@ -386,7 +389,10 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       const promptRequest = requests.find((entry) => entry.method === "session/prompt");
       const prompt = (promptRequest?.params as { prompt?: Array<{ text?: string }> } | undefined)
         ?.prompt;
-      assert.equal(prompt?.[0]?.text, buildLinceiSessionInstructionFallback());
+      assert.equal(
+        prompt?.[0]?.text,
+        buildLinceiSessionInstructionFallback("Prefer concise status updates."),
+      );
       assert.equal(prompt?.[1]?.text, "plan this change");
     }),
   );

@@ -67,6 +67,7 @@ import * as Stream from "effect/Stream";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import {
   getClaudeModelCapabilities,
@@ -75,7 +76,7 @@ import {
   resolveClaudeApiModelId,
   resolveClaudeEffort,
 } from "./ClaudeProvider.ts";
-import { LINCEI_AGENT_INSTRUCTIONS } from "../LinceiAgentInstructions.ts";
+import { buildLinceiAgentInstructions } from "../LinceiAgentInstructions.ts";
 import { makeLinceiSessionEnvironment } from "../LinceiAmbientEnvironment.ts";
 import {
   ProviderAdapterProcessError,
@@ -1011,6 +1012,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig;
+  const serverSettings = yield* ServerSettingsService;
   const crypto = yield* Crypto.Crypto;
   const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, options?.environment).pipe(
     Effect.provideService(Path.Path, path),
@@ -2901,6 +2903,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         runPromise(canUseToolEffect(toolName, toolInput, callbackOptions));
 
       const claudeBinaryPath = claudeSettings.binaryPath;
+      const serverSettingsSnapshot = yield* serverSettings.getSettings.pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterProcessError({
+              provider: PROVIDER,
+              sessionId: input.sessionId,
+              detail: "Failed to read Lincei agent instruction settings.",
+              cause,
+            }),
+        ),
+      );
       const extraArgs = parseCliArgs(claudeSettings.launchArgs).flags;
       const modelSelection =
         input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
@@ -2941,7 +2954,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         systemPrompt: {
           type: "preset",
           preset: "claude_code",
-          append: LINCEI_AGENT_INSTRUCTIONS,
+          append: buildLinceiAgentInstructions(
+            serverSettingsSnapshot.linceiAgentCustomInstructions,
+          ),
         },
         settingSources: [...CLAUDE_SETTING_SOURCES],
         // `ultracode` is a Claude Code setting, not an API effort level. It is

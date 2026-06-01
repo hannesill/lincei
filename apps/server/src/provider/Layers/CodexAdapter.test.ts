@@ -39,7 +39,7 @@ import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
-import { LINCEI_AGENT_INSTRUCTIONS } from "../LinceiAgentInstructions.ts";
+import { buildLinceiAgentInstructions } from "../LinceiAgentInstructions.ts";
 import {
   type CodexSessionRuntimeOptions,
   type CodexSessionRuntimeSendTurnInput,
@@ -283,13 +283,38 @@ validationLayer("CodexAdapterLive validation", (it) => {
       assert.deepStrictEqual(runtimeOptions, {
         binaryPath: "codex",
         cwd: process.cwd(),
-        developerInstructions: LINCEI_AGENT_INSTRUCTIONS,
+        developerInstructions: buildLinceiAgentInstructions(),
+        linceiAgentCustomInstructions: "",
         model: "gpt-5.3-codex",
         providerInstanceId: ProviderInstanceId.make("codex"),
         serviceTier: "fast",
         sessionId: asSessionId("session-1"),
         runtimeMode: "full-access",
       });
+    }),
+  );
+
+  it.effect("passes custom Lincei instructions to the runtime", () =>
+    Effect.gen(function* () {
+      validationRuntimeFactory.factory.mockClear();
+      const serverSettings = yield* ServerSettingsService;
+      yield* serverSettings.updateSettings({
+        linceiAgentCustomInstructions: "Prefer concise status updates.",
+      });
+      const adapter = yield* CodexAdapter;
+
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        sessionId: asSessionId("session-custom-instructions"),
+        runtimeMode: "full-access",
+      });
+
+      const runtimeOptions = validationRuntimeFactory.factory.mock.calls[0]?.[0];
+      assert.equal(
+        runtimeOptions?.developerInstructions,
+        buildLinceiAgentInstructions("Prefer concise status updates."),
+      );
+      assert.equal(runtimeOptions?.linceiAgentCustomInstructions, "Prefer concise status updates.");
     }),
   );
 });
