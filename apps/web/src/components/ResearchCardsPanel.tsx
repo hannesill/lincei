@@ -7,6 +7,7 @@ import {
 import type {
   EnvironmentId,
   OrchestrationCommand,
+  ResearchCardDecisionPreview,
   ResearchCardId,
   SessionId,
 } from "@t3tools/contracts";
@@ -56,6 +57,7 @@ import {
   type ScopedResearchCard,
 } from "./researchCards/researchCardLists";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 interface ResearchCardsPanelProps {
@@ -924,11 +926,164 @@ function DependencyReferences(props: {
   );
 }
 
+function isDecisionPreview(value: unknown): value is ResearchCardDecisionPreview {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.fields) &&
+    value.fields.every(
+      (field) =>
+        isRecord(field) &&
+        typeof field.name === "string" &&
+        typeof field.question === "string" &&
+        Array.isArray(field.options),
+    )
+  );
+}
+
+function DecisionReviewControls(props: {
+  environmentId: EnvironmentId;
+  sessionId: SessionId;
+  card: ResearchCardDetail;
+  preview: ResearchCardDecisionPreview;
+}) {
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reviewActions = props.card.review?.actions ?? [
+    { id: "record", label: "Record decision" },
+    { id: "changes-requested", label: "Request changes" },
+  ];
+
+  const setFieldValue = (name: string, value: unknown) => {
+    setValues((existing) => ({ ...existing, [name]: value }));
+  };
+
+  const toggleFieldValue = (name: string, option: string) => {
+    setValues((existing) => {
+      const current = Array.isArray(existing[name]) ? (existing[name] as string[]) : [];
+      const next = current.includes(option)
+        ? current.filter((entry) => entry !== option)
+        : [...current, option];
+      return { ...existing, [name]: next };
+    });
+  };
+
+  const submit = async (action: string) => {
+    const timestamp = new Date().toISOString();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await ensureEnvironmentApi(props.environmentId).orchestration.dispatchCommand({
+        type: "session.research-card.review",
+        commandId: newCommandId(),
+        sessionId: props.sessionId,
+        cardId: props.card.id,
+        response: {
+          action,
+          ...(note.trim() ? { message: note.trim() } : {}),
+          values,
+          timestamp,
+        },
+        createdAt: timestamp,
+      });
+      setNote("");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Review submit failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-md border border-rose-200/70 bg-rose-50/55 px-3 py-2.5 shadow-xs dark:border-rose-400/15 dark:bg-rose-500/10">
+      {props.preview.fields.map((field) => (
+        <fieldset key={field.name} className="space-y-2">
+          <legend className="text-xs font-medium text-foreground/85">
+            {field.header ? `${field.header}: ` : ""}
+            {field.question}
+          </legend>
+          <div className="grid gap-1.5">
+            {field.options.map((option) => {
+              const selected = field.multiple
+                ? Array.isArray(values[field.name]) &&
+                  (values[field.name] as string[]).includes(option.label)
+                : values[field.name] === option.label;
+              return (
+                <label
+                  key={option.label}
+                  className="flex gap-2 rounded-md border border-border/55 bg-background/55 px-2.5 py-2 text-xs"
+                >
+                  <input
+                    type={field.multiple ? "checkbox" : "radio"}
+                    name={`${props.card.id}:${field.name}`}
+                    checked={selected}
+                    onChange={() =>
+                      field.multiple
+                        ? toggleFieldValue(field.name, option.label)
+                        : setFieldValue(field.name, option.label)
+                    }
+                  />
+                  <span className="grid gap-0.5">
+                    <span className="font-medium text-foreground/85">{option.label}</span>
+                    {option.description ? (
+                      <span className="text-muted-foreground/75">{option.description}</span>
+                    ) : null}
+                  </span>
+                </label>
+              );
+            })}
+            {field.allowOther ? (
+              <input
+                className="rounded-md border border-border/60 bg-background px-2.5 py-2 text-xs"
+                placeholder="Other"
+                value={(values[`${field.name}:other`] as string | undefined) ?? ""}
+                onChange={(event) => setFieldValue(`${field.name}:other`, event.target.value)}
+              />
+            ) : null}
+          </div>
+        </fieldset>
+      ))}
+      <textarea
+        className="min-h-20 w-full rounded-md border border-border/60 bg-background px-2.5 py-2 text-xs"
+        placeholder="Reviewer note"
+        value={note}
+        onChange={(event) => {
+          setNote(event.target.value);
+          if (error) {
+            setError(null);
+          }
+        }}
+      />
+      {error ? (
+        <p role="alert" className="text-xs leading-5 text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        {reviewActions.map((action) => (
+          <Button
+            key={action.id}
+            type="button"
+            size="xs"
+            variant={action.id === "record" || action.id === "accept" ? "default" : "outline"}
+            disabled={submitting}
+            onClick={() => void submit(action.id)}
+          >
+            {action.label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ResearchCardReviewSection(props: {
   review: ResearchCardDetail["review"] | undefined;
   environmentId: EnvironmentId;
   sessionId: SessionId;
   cardId: ResearchCardId;
+  card?: ResearchCardDetail | undefined;
 }) {
   const [note, setNote] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -942,6 +1097,10 @@ export function ResearchCardReviewSection(props: {
   const isSubmitting = submittingAction !== null;
   const isCompletedReview = props.review?.response !== undefined;
   const shouldShowControls = !isCompletedReview || isEditing;
+  const decisionPreview =
+    props.card?.type === "decision" && isDecisionPreview(props.card.preview)
+      ? props.card.preview
+      : null;
 
   const submitReview = async (action: ReviewUiAction) => {
     const actionMeta = REVIEW_ACTIONS.find((candidate) => candidate.uiAction === action);
@@ -1015,7 +1174,14 @@ export function ResearchCardReviewSection(props: {
           ) : null}
         </div>
       ) : null}
-      {shouldShowControls ? (
+      {!isCompletedReview && decisionPreview && props.card ? (
+        <DecisionReviewControls
+          environmentId={props.environmentId}
+          sessionId={props.sessionId}
+          card={props.card}
+          preview={decisionPreview}
+        />
+      ) : shouldShowControls ? (
         <div className="space-y-1.5">
           <label className="grid min-w-0 gap-1">
             <span className="sr-only">Reviewer note</span>
@@ -1283,6 +1449,7 @@ function ResearchCardItem(props: {
           environmentId={props.item.environmentId}
           sessionId={props.item.sessionId}
           cardId={card.id}
+          card={detail ?? undefined}
         />
       </div>
       <ProvenanceSummary provenance={detail?.provenance ?? []} />

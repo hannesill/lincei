@@ -1015,6 +1015,12 @@ function applyEnvironmentOrchestrationEvent(
           modelSelection: event.payload.modelSelection,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
+          ...(event.payload.workflowId !== undefined
+            ? { workflowId: event.payload.workflowId }
+            : {}),
+          ...(event.payload.workflowVersion !== undefined
+            ? { workflowVersion: event.payload.workflowVersion }
+            : {}),
           branch: event.payload.branch,
           worktreePath: event.payload.worktreePath,
           latestTurn: null,
@@ -1087,6 +1093,10 @@ function applyEnvironmentOrchestrationEvent(
           : {}),
         runtimeMode: event.payload.runtimeMode,
         interactionMode: event.payload.interactionMode,
+        ...(event.payload.workflowId !== undefined ? { workflowId: event.payload.workflowId } : {}),
+        ...(event.payload.workflowVersion !== undefined
+          ? { workflowVersion: event.payload.workflowVersion }
+          : {}),
         pendingSourceProposedPlan: event.payload.sourceProposedPlan,
         updatedAt: event.occurredAt,
       }));

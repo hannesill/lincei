@@ -158,6 +158,16 @@ const noteFlag = Flag.string("note").pipe(
   Flag.optional,
 );
 
+const actionFlag = Flag.string("action").pipe(
+  Flag.withDescription("Decision or review action."),
+  Flag.withDefault("record"),
+);
+
+const valuesJsonFlag = Flag.string("values-json").pipe(
+  Flag.withDescription("JSON object with decision answers."),
+  Flag.optional,
+);
+
 const depFlag = Flag.string("dep").pipe(
   Flag.withDescription("Study-relative dependency path. May be repeated."),
   Flag.atLeast(0),
@@ -668,6 +678,24 @@ const compactCard = (card: OrchestrationResearchCard | ResearchCardSummary) => (
   hasPreview: "hasPreview" in card ? card.hasPreview : card.preview !== undefined,
 });
 
+const compactDecisionRecord = (card: OrchestrationResearchCard | ResearchCardSummary) => ({
+  id: card.id,
+  title: card.title,
+  action: card.status,
+  artifactReferences: "artifacts" in card ? card.artifacts.map((artifact) => artifact.id) : [],
+  timestamp: card.updatedAt,
+});
+
+const pendingDecisionCards = (session: OrchestrationSession, includeAll: boolean) =>
+  relevantCards(session, includeAll).filter(
+    (card) => card.type === "decision" && card.status === "review-requested",
+  );
+
+const madeDecisionCards = (session: OrchestrationSession, includeAll: boolean) =>
+  relevantCards(session, includeAll).filter(
+    (card) => card.type === "decision" && card.status !== "review-requested",
+  );
+
 const compactSession = (session: OrchestrationSession) => ({
   id: session.id,
   title: session.title,
@@ -883,6 +911,10 @@ const cardContextCommand = Command.make("context", {
           source,
           session: compactSession(session),
           cards: relevantCards(session, flags.allCards).map(compactCard),
+          pendingDecisions: pendingDecisionCards(session, flags.allCards).map(
+            compactDecisionRecord,
+          ),
+          decisionsMade: madeDecisionCards(session, flags.allCards).map(compactDecisionRecord),
         };
       }),
     ),
@@ -1149,6 +1181,155 @@ export const cardCommand = Command.make("card").pipe(
     cardRequestReviewCommand,
     cardSupersedeCommand,
   ]),
+);
+
+const parseDecisionValues = (raw: Option.Option<string>) =>
+  Option.isSome(raw)
+    ? parseJsonValue(raw.value, "--values-json").pipe(
+        Effect.flatMap((value) =>
+          value !== null && typeof value === "object" && !Array.isArray(value)
+            ? Effect.succeed(value as Record<string, unknown>)
+            : Effect.fail(
+                new AgentCliError({ message: "Invalid --values-json: expected JSON object." }),
+              ),
+        ),
+      )
+    : Effect.succeed({});
+
+const decisionAskCommand = Command.make("ask", {
+  ...projectLocationFlags,
+  session: sessionFlag,
+  title: titleFlag,
+  previewJson: previewJsonFlag,
+  pretty: prettyFlag,
+}).pipe(
+  Command.withDescription("Propose a decision card with a structured preview."),
+  Command.withHandler((flags) =>
+    runWriteCommand(flags, (snapshot, dispatch) =>
+      Effect.gen(function* () {
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
+        const preview = yield* parsePreviewInput({
+          previewJson: flags.previewJson,
+          preview: Option.none(),
+          previewFile: Option.none(),
+        });
+        const now = DateTime.formatIso(yield* DateTime.now);
+        const card = yield* makeCard({
+          session,
+          title: flags.title,
+          type: "decision",
+          preview,
+          artifacts: [],
+          status: "review-requested",
+        });
+        yield* dispatch({
+          type: "session.research-card.propose",
+          commandId: CommandId.make(yield* agentCommandUuid),
+          sessionId: session.id,
+          researchCard: {
+            ...card,
+            review: {
+              prompt: card.title,
+              actions: [{ id: "record", label: "Record decision" }],
+            },
+            updatedAt: now,
+          },
+          createdAt: now,
+        });
+        return { action: "asked", card: minimalWriteCard(card) };
+      }),
+    ),
+  ),
+);
+
+const decisionFormCommand = Command.make("form", {
+  ...projectLocationFlags,
+  session: sessionFlag,
+  title: titleFlag,
+  previewJson: previewJsonFlag,
+  pretty: prettyFlag,
+}).pipe(
+  Command.withDescription("Alias for decision ask."),
+  Command.withHandler((flags) =>
+    runWriteCommand(flags, (snapshot, dispatch) =>
+      Effect.gen(function* () {
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
+        const preview = yield* parsePreviewInput({
+          previewJson: flags.previewJson,
+          preview: Option.none(),
+          previewFile: Option.none(),
+        });
+        const now = DateTime.formatIso(yield* DateTime.now);
+        const card = yield* makeCard({
+          session,
+          title: flags.title,
+          type: "decision",
+          preview,
+          artifacts: [],
+          status: "review-requested",
+        });
+        yield* dispatch({
+          type: "session.research-card.propose",
+          commandId: CommandId.make(yield* agentCommandUuid),
+          sessionId: session.id,
+          researchCard: {
+            ...card,
+            review: {
+              prompt: card.title,
+              actions: [{ id: "record", label: "Record decision" }],
+            },
+            updatedAt: now,
+          },
+          createdAt: now,
+        });
+        return { action: "asked", card: minimalWriteCard(card) };
+      }),
+    ),
+  ),
+);
+
+const decisionRecordCommand = Command.make("record", {
+  ...projectLocationFlags,
+  session: sessionFlag,
+  cardId: Argument.string("card-id").pipe(Argument.withSchema(ResearchCardId)),
+  action: actionFlag,
+  valuesJson: valuesJsonFlag,
+  note: noteFlag,
+  pretty: prettyFlag,
+}).pipe(
+  Command.withDescription("Record a decision response on an existing decision card."),
+  Command.withHandler((flags) =>
+    runWriteCommand(flags, (snapshot, dispatch) =>
+      Effect.gen(function* () {
+        const session = yield* resolveSessionTarget(snapshot, flags.session);
+        yield* findCardSummary(session, flags.cardId);
+        const values = yield* parseDecisionValues(flags.valuesJson);
+        const now = DateTime.formatIso(yield* DateTime.now);
+        yield* dispatch({
+          type: "session.research-card.review",
+          commandId: CommandId.make(yield* agentCommandUuid),
+          sessionId: session.id,
+          cardId: flags.cardId,
+          response: {
+            action: flags.action,
+            ...(Option.isSome(flags.note) ? { message: flags.note.value } : {}),
+            values,
+            timestamp: now,
+          },
+          createdAt: now,
+        });
+        return {
+          action: "recorded",
+          card: { id: flags.cardId, action: flags.action, timestamp: now },
+        };
+      }),
+    ),
+  ),
+);
+
+export const decisionCommand = Command.make("decision").pipe(
+  Command.withDescription("Thin decision-card wrappers."),
+  Command.withSubcommands([decisionAskCommand, decisionFormCommand, decisionRecordCommand]),
 );
 
 const contextSessionCommand = Command.make("session", {

@@ -28,9 +28,16 @@ describe("LinceiAgentInstructions", () => {
     assert.doesNotMatch(instructions, /dataset context --format/);
     assert.match(instructions, /lincei card context/);
     assert.doesNotMatch(instructions, /lincei card context --json/);
-    assert.match(instructions, /lincei card propose --title <title>/);
-    assert.match(instructions, /lincei <command> --help/);
-    assert.match(instructions, /ambiguous targets/);
+    assert.match(instructions, /decision cards/);
+    assert.match(instructions, /\$lincei-api/);
+    assert.match(instructions, /<lincei_effective_prompt>/);
+  });
+
+  it("injects the selected workflow and bundled skill prompt separately", () => {
+    const instructions = buildLinceiAgentInstructions(undefined, "structured-clinical-study");
+    assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
+    assert.match(instructions, /study description card first/);
+    assert.match(instructions, /<lincei_skill id="clinical-research-session"/);
   });
 
   it("appends trimmed custom instructions after the hidden baseline", () => {

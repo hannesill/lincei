@@ -47,6 +47,37 @@ class LinceiPythonTests(unittest.TestCase):
                 check=False,
             )
 
+    def test_study_context_and_decision_record_wrap_cli(self) -> None:
+        with patch("subprocess.run", return_value=completed('{"ok":true}')) as run:
+            self.assertEqual(lincei.study_context(), {"ok": True})
+            self.assertEqual(
+                lincei.decision.record("card-1", {"outcome": "mortality"}, note="Reviewed."),
+                {"ok": True},
+            )
+            run.assert_any_call(
+                ["lincei", "context", "current"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            run.assert_any_call(
+                [
+                    "lincei",
+                    "decision",
+                    "record",
+                    "card-1",
+                    "--action",
+                    "record",
+                    "--values-json",
+                    '{"outcome":"mortality"}',
+                    "--note",
+                    "Reviewed.",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
     def test_nonzero_cli_exit_raises_lincei_error(self) -> None:
         with patch("subprocess.run", return_value=completed("", returncode=2, stderr="bad")):
             with self.assertRaises(lincei.LinceiError) as raised:

@@ -83,6 +83,7 @@ interface OpenCodeSessionContext {
   activeTurnId: TurnId | undefined;
   activeAgent: string | undefined;
   activeVariant: string | undefined;
+  workflowId: string | undefined;
   linceiInstructionInjected: boolean;
   /**
    * One-shot guard flipped by `stopOpenCodeContext` / `emitUnexpectedExit`.
@@ -485,10 +486,10 @@ export function makeOpenCodeAdapter(
         })),
       );
 
-    const buildCurrentLinceiInstructionFallback = () =>
+    const buildCurrentLinceiInstructionFallback = (workflowId: string | undefined) =>
       serverSettings.getSettings.pipe(
         Effect.map((settings) =>
-          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions),
+          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions, workflowId),
         ),
         Effect.mapError(
           (cause) =>
@@ -1150,6 +1151,7 @@ export function makeOpenCodeAdapter(
           activeTurnId: undefined,
           activeAgent: undefined,
           activeVariant: undefined,
+          workflowId: input.workflowId,
           linceiInstructionInjected: false,
           stopped: yield* Ref.make(false),
           sessionScope: started.sessionScope,
@@ -1247,7 +1249,7 @@ export function makeOpenCodeAdapter(
         : [
             {
               type: "text" as const,
-              text: yield* buildCurrentLinceiInstructionFallback(),
+              text: yield* buildCurrentLinceiInstructionFallback(context.workflowId),
             },
           ];
       const promptParts = [

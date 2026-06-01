@@ -9,10 +9,12 @@ from typing import Any
 __all__ = [
     "LinceiError",
     "context",
+    "decision",
     "describe_table",
     "query",
     "schema",
     "status",
+    "study_context",
 ]
 
 
@@ -95,6 +97,29 @@ def context(dataset: str | None = None, backend: str | None = None) -> dict[str,
     return _run_json(
         ["dataset", "context", "--structured", *_dataset_backend_args(dataset, backend)]
     )
+
+
+def study_context() -> dict[str, Any]:
+    return _run_json(["context", "current"])
+
+
+class _DecisionApi:
+    def record(
+        self,
+        card_id: str,
+        values: dict[str, Any] | None = None,
+        action: str = "record",
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        args = ["decision", "record", card_id, "--action", action]
+        if values is not None:
+            args.extend(["--values-json", json.dumps(values, separators=(",", ":"))])
+        if note is not None:
+            args.extend(["--note", note])
+        return _run_json(args)
+
+
+decision = _DecisionApi()
 
 
 def query(sql: str, dataset: str | None = None, backend: str | None = None):

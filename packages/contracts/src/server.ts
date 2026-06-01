@@ -88,6 +88,10 @@ export const ServerProviderSkill = Schema.Struct({
   enabled: Schema.Boolean,
   displayName: Schema.optional(TrimmedNonEmptyString),
   shortDescription: Schema.optional(TrimmedNonEmptyString),
+  linceiSkillId: Schema.optional(TrimmedNonEmptyString),
+  linceiSource: Schema.optional(TrimmedNonEmptyString),
+  linceiSyncStatus: Schema.optional(TrimmedNonEmptyString),
+  linceiAvailability: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 

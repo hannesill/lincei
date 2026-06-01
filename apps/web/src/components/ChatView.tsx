@@ -2582,6 +2582,8 @@ export default function ChatView(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      workflowId: ctxWorkflowId,
+      workflowVersion: ctxWorkflowVersion,
     } = sendCtx;
     const promptForSend = promptRef.current;
     const {
@@ -2786,6 +2788,8 @@ export default function ChatView(props: ChatViewProps) {
                       modelSelection: sessionCreateModelSelection,
                       runtimeMode,
                       interactionMode,
+                      workflowId: ctxWorkflowId,
+                      workflowVersion: ctxWorkflowVersion,
                       branch: activeSessionBranch,
                       worktreePath: activeSession.worktreePath,
                       createdAt: activeSession.createdAt,
@@ -2819,6 +2823,8 @@ export default function ChatView(props: ChatViewProps) {
         titleSeed: title,
         runtimeMode,
         interactionMode,
+        workflowId: ctxWorkflowId,
+        workflowVersion: ctxWorkflowVersion,
         ...(bootstrap ? { bootstrap } : {}),
         createdAt: messageCreatedAt,
       });
@@ -3070,6 +3076,8 @@ export default function ChatView(props: ChatViewProps) {
         selectedProviderModels: ctxSelectedProviderModels,
         selectedPromptEffort: ctxSelectedPromptEffort,
         selectedModelSelection: ctxSelectedModelSelection,
+        workflowId: ctxWorkflowId,
+        workflowVersion: ctxWorkflowVersion,
       } = sendCtx;
 
       const sessionIdForSend = activeSession.id;
@@ -3134,6 +3142,8 @@ export default function ChatView(props: ChatViewProps) {
           titleSeed: activeSession.title,
           runtimeMode,
           interactionMode: nextInteractionMode,
+          workflowId: ctxWorkflowId,
+          workflowVersion: ctxWorkflowVersion,
           ...(nextInteractionMode === "default" && activeProposedPlan
             ? {
                 sourceProposedPlan: {
@@ -3207,6 +3217,8 @@ export default function ChatView(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      workflowId: ctxWorkflowId,
+      workflowVersion: ctxWorkflowVersion,
     } = sendCtx;
 
     const createdAt = new Date().toISOString();
@@ -3240,6 +3252,8 @@ export default function ChatView(props: ChatViewProps) {
         modelSelection: nextSessionModelSelection,
         runtimeMode,
         interactionMode: "default",
+        workflowId: ctxWorkflowId,
+        workflowVersion: ctxWorkflowVersion,
         branch: activeSessionBranch,
         worktreePath: activeSession.worktreePath,
         createdAt,
@@ -3259,6 +3273,8 @@ export default function ChatView(props: ChatViewProps) {
           titleSeed: nextSessionTitle,
           runtimeMode,
           interactionMode: "default",
+          workflowId: ctxWorkflowId,
+          workflowVersion: ctxWorkflowVersion,
           sourceProposedPlan: {
             sessionId: activeSession.id,
             planId: activeProposedPlan.id,

@@ -15,6 +15,7 @@ import { Route as HelpFeedbackRouteImport } from './routes/help-feedback'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
+import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsShortcutsRouteImport } from './routes/settings.shortcuts'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
@@ -52,6 +53,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
 const SettingsSourceControlRoute = SettingsSourceControlRouteImport.update({
   id: '/source-control',
   path: '/source-control',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSkillsRoute = SettingsSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsShortcutsRoute = SettingsShortcutsRouteImport.update({
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/$environmentId/$sessionId': typeof ChatEnvironmentIdSessionIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$sessionId': typeof ChatEnvironmentIdSessionIdRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$sessionId': typeof ChatEnvironmentIdSessionIdRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/providers'
     | '/settings/shortcuts'
+    | '/settings/skills'
     | '/settings/source-control'
     | '/$environmentId/$sessionId'
     | '/draft/$draftId'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/providers'
     | '/settings/shortcuts'
+    | '/settings/skills'
     | '/settings/source-control'
     | '/'
     | '/$environmentId/$sessionId'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/providers'
     | '/settings/shortcuts'
+    | '/settings/skills'
     | '/settings/source-control'
     | '/_chat/'
     | '/_chat/$environmentId/$sessionId'
@@ -252,6 +264,13 @@ declare module '@tanstack/react-router' {
       path: '/source-control'
       fullPath: '/settings/source-control'
       preLoaderRoute: typeof SettingsSourceControlRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/skills': {
+      id: '/settings/skills'
+      path: '/skills'
+      fullPath: '/settings/skills'
+      preLoaderRoute: typeof SettingsSkillsRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/shortcuts': {
@@ -342,6 +361,7 @@ interface SettingsRouteChildren {
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsShortcutsRoute: typeof SettingsShortcutsRoute
+  SettingsSkillsRoute: typeof SettingsSkillsRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
 }
 
@@ -353,6 +373,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsShortcutsRoute: SettingsShortcutsRoute,
+  SettingsSkillsRoute: SettingsSkillsRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
 }
 

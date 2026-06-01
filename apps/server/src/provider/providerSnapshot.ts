@@ -13,6 +13,7 @@ import * as Data from "effect/Data";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { normalizeModelSlug } from "@t3tools/shared/model";
+import { mergeLinceiSkillCatalog } from "@t3tools/shared/linceiSkills";
 import { isWindowsCommandNotFound } from "../processRunner.ts";
 import { createProviderVersionAdvisory } from "./providerMaintenance.ts";
 import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
@@ -208,6 +209,13 @@ export function buildServerProvider(input: {
         checkedAt: input.checkedAt,
       })
     : undefined;
+  const skills =
+    input.driver !== undefined
+      ? mergeLinceiSkillCatalog({
+          provider: input.driver,
+          providerNative: input.skills ?? [],
+        })
+      : (input.skills ?? []);
   return {
     displayName: input.presentation.displayName,
     ...(input.presentation.badgeLabel ? { badgeLabel: input.presentation.badgeLabel } : {}),
@@ -223,7 +231,7 @@ export function buildServerProvider(input: {
     ...(input.probe.message ? { message: input.probe.message } : {}),
     models: input.models,
     slashCommands: [...(input.slashCommands ?? [])],
-    skills: [...(input.skills ?? [])],
+    skills: [...skills],
     ...(versionAdvisory ? { versionAdvisory } : {}),
   };
 }

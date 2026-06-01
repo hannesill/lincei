@@ -19,6 +19,7 @@ import {
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
+import { LINCEI_WORKFLOWS, workflowById } from "@t3tools/shared/linceiSkills";
 import {
   memo,
   useCallback,
@@ -369,6 +370,8 @@ export interface ChatComposerHandle {
     selectedProvider: ProviderDriverKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
+    workflowId: string;
+    workflowVersion: string;
   };
 }
 
@@ -802,8 +805,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(
+    () => activeSession?.workflowId ?? "ad-hoc",
+  );
   const isMobileViewport = useMediaQuery("max-sm");
   const isComposerCollapsedMobile = isMobileViewport && !isComposerFocused;
+  const selectedWorkflow = workflowById(selectedWorkflowId);
+
+  useEffect(() => {
+    setSelectedWorkflowId(activeSession?.workflowId ?? "ad-hoc");
+  }, [activeSession?.id, activeSession?.workflowId]);
 
   // ------------------------------------------------------------------
   // Refs
@@ -1940,6 +1951,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         selectedProvider,
         selectedModel,
         selectedProviderModels,
+        workflowId: selectedWorkflow.id,
+        workflowVersion: selectedWorkflow.version,
       }),
     }),
     [
@@ -1959,6 +1972,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       selectedPromptEffort,
       selectedProvider,
       selectedProviderModels,
+      selectedWorkflow,
     ],
   );
 
@@ -2384,6 +2398,40 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         {providerTraitsPicker}
                       </>
                     ) : null}
+                    <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                    <Select
+                      value={selectedWorkflow.id}
+                      onValueChange={(value) => {
+                        if (value) setSelectedWorkflowId(value);
+                      }}
+                    >
+                      <SelectTrigger
+                        variant="ghost"
+                        size="sm"
+                        className="max-w-52 font-medium"
+                        aria-label="Workflow"
+                        title={selectedWorkflow.description}
+                      >
+                        <ListTodoIcon className="size-4" />
+                        <SelectValue>{selectedWorkflow.title}</SelectValue>
+                      </SelectTrigger>
+                      <SelectPopup alignItemWithTrigger={false}>
+                        {LINCEI_WORKFLOWS.map((workflow) => (
+                          <SelectItem
+                            key={workflow.id}
+                            value={workflow.id}
+                            className="min-w-72 py-2"
+                          >
+                            <div className="grid min-w-0 gap-0.5">
+                              <span className="font-medium text-foreground">{workflow.title}</span>
+                              <span className="text-muted-foreground text-xs leading-4">
+                                {workflow.description}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectPopup>
+                    </Select>
                     <ComposerFooterModeControls
                       showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
                       interactionMode={interactionMode}

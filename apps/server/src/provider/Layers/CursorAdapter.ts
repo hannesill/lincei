@@ -135,6 +135,7 @@ interface CursorSessionContext {
   readonly turns: Array<{ id: TurnId; items: Array<unknown> }>;
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
+  workflowId: string | undefined;
   linceiInstructionInjected: boolean;
   stopped: boolean;
 }
@@ -364,10 +365,10 @@ export function makeCursorAdapter(
     const offerRuntimeEvent = (event: ProviderRuntimeEvent) =>
       PubSub.publish(runtimeEventPubSub, event).pipe(Effect.asVoid);
 
-    const buildCurrentLinceiInstructionFallback = () =>
+    const buildCurrentLinceiInstructionFallback = (workflowId: string | undefined) =>
       serverSettings.getSettings.pipe(
         Effect.map((settings) =>
-          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions),
+          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions, workflowId),
         ),
         Effect.mapError(
           (cause) =>
@@ -780,6 +781,7 @@ export function makeCursorAdapter(
             turns: [],
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
+            workflowId: input.workflowId,
             linceiInstructionInjected: false,
             stopped: false,
           };
@@ -952,7 +954,7 @@ export function makeCursorAdapter(
         if (!ctx.linceiInstructionInjected) {
           promptParts.push({
             type: "text",
-            text: yield* buildCurrentLinceiInstructionFallback(),
+            text: yield* buildCurrentLinceiInstructionFallback(ctx.workflowId),
           });
         }
         if (input.input?.trim()) {

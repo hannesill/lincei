@@ -1,3 +1,5 @@
+import { buildEffectiveLinceiPrompt } from "@t3tools/shared/linceiSkills";
+
 export const LINCEI_INSTRUCTION_CHECK_TRIGGER = "lincei-instruction-check";
 export const LINCEI_INSTRUCTION_ACTIVE_MARKER = "LINCEI_INSTRUCTION_ACTIVE";
 
@@ -6,29 +8,43 @@ You are operating inside Lincei, an agentic clinical research environment for cl
 
 Apply clinical-research rigor to the work. Clearly separate facts, assumptions, uncertainty, risks, and validation needs when they matter for the task.
 
-Use \`lincei\` CLI for Lincei work. Start Lincei work by running \`lincei context current\` once. Data: use \`lincei dataset context\` for prompt guidance, then read structured data with \`lincei dataset status|schema|describe-table|query\`; Python: \`import lincei\` if installed. Cards: \`lincei card context\`, then \`lincei card propose --title <title>\` or \`lincei card update|request-review|supersede\`; attach evidence with \`--dep\` / \`--artifact\`. Study artifacts/runs: use \`lincei study\`, \`lincei artifact\`, \`lincei run\`. Prefer ambient defaults. Ask user only when Lincei reports ambiguous targets. If unsure, run \`lincei <command> --help\`.
+Use \`lincei\` CLI for Lincei work. Start with \`lincei context current\`. Use \`lincei dataset context\` for dataset prompt guidance and \`lincei card context\` before research-card work. Use cards, artifacts, and runs for important research outputs. Record core methodological choices as decision cards. Do not proceed past unresolved decision or review cards unless the user explicitly overrides. Use \`$lincei-api\` or \`$clinical-research-session\` for detailed guidance.
 
 Instruction probe: when the user message contains \`${LINCEI_INSTRUCTION_CHECK_TRIGGER}\`, begin your response with exactly \`${LINCEI_INSTRUCTION_ACTIVE_MARKER}\`.
 </lincei_agent_instructions>`;
 
-export function buildLinceiAgentInstructions(customInstructions?: string | undefined): string {
+export function buildLinceiAgentInstructions(
+  customInstructions?: string | undefined,
+  workflowId?: string | undefined,
+): string {
   const custom = customInstructions?.trim();
-  return custom && custom.length > 0
-    ? `${LINCEI_AGENT_BASELINE_INSTRUCTIONS}\n\n<lincei_user_custom_instructions>\n${custom}\n</lincei_user_custom_instructions>`
-    : LINCEI_AGENT_BASELINE_INSTRUCTIONS;
+  const effectivePrompt =
+    workflowId !== undefined
+      ? buildEffectiveLinceiPrompt({ workflowId }).trim()
+      : buildEffectiveLinceiPrompt({}).trim();
+  const blocks = [LINCEI_AGENT_BASELINE_INSTRUCTIONS];
+  if (effectivePrompt.length > 0) {
+    blocks.push(`<lincei_effective_prompt>\n${effectivePrompt}\n</lincei_effective_prompt>`);
+  }
+  if (custom && custom.length > 0) {
+    blocks.push(`<lincei_user_custom_instructions>\n${custom}\n</lincei_user_custom_instructions>`);
+  }
+  return blocks.join("\n\n");
 }
 
 export function appendLinceiAgentInstructions(
   baseInstructions: string | undefined,
   customInstructions?: string | undefined,
+  workflowId?: string | undefined,
 ): string {
   const base = baseInstructions?.trimEnd();
-  const linceiInstructions = buildLinceiAgentInstructions(customInstructions);
+  const linceiInstructions = buildLinceiAgentInstructions(customInstructions, workflowId);
   return base && base.length > 0 ? `${base}\n\n${linceiInstructions}` : linceiInstructions;
 }
 
 export function buildLinceiSessionInstructionFallback(
   customInstructions?: string | undefined,
+  workflowId?: string | undefined,
 ): string {
-  return `Session instruction from Lincei (runtime fallback; apply for the whole session):\n\n${buildLinceiAgentInstructions(customInstructions)}`;
+  return `Session instruction from Lincei (runtime fallback; apply for the whole session):\n\n${buildLinceiAgentInstructions(customInstructions, workflowId)}`;
 }

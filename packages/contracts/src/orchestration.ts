@@ -325,6 +325,30 @@ export const ResearchCardReviewAction = Schema.Struct({
 });
 export type ResearchCardReviewAction = typeof ResearchCardReviewAction.Type;
 
+export const ResearchCardDecisionOption = Schema.Struct({
+  label: TrimmedNonEmptyString,
+  description: Schema.optional(TrimmedNonEmptyString),
+});
+export type ResearchCardDecisionOption = typeof ResearchCardDecisionOption.Type;
+
+export const ResearchCardDecisionField = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  question: TrimmedNonEmptyString,
+  options: Schema.Array(ResearchCardDecisionOption).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  multiple: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  allowOther: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  default: Schema.optional(Schema.Unknown),
+  header: Schema.optional(TrimmedNonEmptyString),
+});
+export type ResearchCardDecisionField = typeof ResearchCardDecisionField.Type;
+
+export const ResearchCardDecisionPreview = Schema.Struct({
+  fields: Schema.Array(ResearchCardDecisionField),
+});
+export type ResearchCardDecisionPreview = typeof ResearchCardDecisionPreview.Type;
+
 export const ResearchCardReviewResponse = Schema.Struct({
   action: TrimmedNonEmptyString,
   message: Schema.optional(TrimmedNonEmptyString),
@@ -480,6 +504,8 @@ export const OrchestrationSession = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
@@ -529,6 +555,8 @@ export const OrchestrationSessionShell = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
@@ -634,6 +662,8 @@ const SessionCreateCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   createdAt: IsoDateTime,
@@ -689,6 +719,8 @@ const SessionTurnStartBootstrapCreateSession = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   createdAt: IsoDateTime,
@@ -724,6 +756,8 @@ export const SessionTurnStartCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   bootstrap: Schema.optional(SessionTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
@@ -743,6 +777,8 @@ const ClientSessionTurnStartCommand = Schema.Struct({
   titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   bootstrap: Schema.optional(SessionTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
@@ -1076,6 +1112,8 @@ export const SessionCreatedPayload = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   createdAt: IsoDateTime,
@@ -1142,6 +1180,8 @@ export const SessionTurnStartRequestedPayload = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  workflowId: Schema.optional(TrimmedNonEmptyString),
+  workflowVersion: Schema.optional(TrimmedNonEmptyString),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });

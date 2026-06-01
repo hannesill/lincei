@@ -427,6 +427,10 @@ const make = Effect.gen(function* () {
         ...(project?.workspaceRoot ? { workspaceRoot: project.workspaceRoot } : {}),
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
+        ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
+        ...(session.workflowVersion !== undefined
+          ? { workflowVersion: session.workflowVersion }
+          : {}),
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: desiredRuntimeMode,
       });
@@ -586,6 +590,10 @@ const make = Effect.gen(function* () {
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
+      ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
+      ...(session.workflowVersion !== undefined
+        ? { workflowVersion: session.workflowVersion }
+        : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
     };
   });

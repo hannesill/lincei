@@ -98,6 +98,10 @@
     "./shortcuts": {
       "types": "./src/shortcuts.ts",
       "import": "./src/shortcuts.ts"
+    },
+    "./linceiSkills": {
+      "types": "./src/linceiSkills.ts",
+      "import": "./src/linceiSkills.ts"
     }
   },
   "scripts": {

@@ -325,6 +325,10 @@ export function projectEvent(
             modelSelection: payload.modelSelection,
             runtimeMode: payload.runtimeMode,
             interactionMode: payload.interactionMode,
+            ...(payload.workflowId !== undefined ? { workflowId: payload.workflowId } : {}),
+            ...(payload.workflowVersion !== undefined
+              ? { workflowVersion: payload.workflowVersion }
+              : {}),
             branch: payload.branch,
             worktreePath: payload.worktreePath,
             latestTurn: null,

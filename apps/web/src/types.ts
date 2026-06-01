@@ -112,6 +112,8 @@ export interface Session {
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  workflowId?: string | undefined;
+  workflowVersion?: string | undefined;
   session: ProviderRuntime | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
@@ -137,6 +139,8 @@ export interface SessionShell {
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  workflowId?: string | undefined;
+  workflowVersion?: string | undefined;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
