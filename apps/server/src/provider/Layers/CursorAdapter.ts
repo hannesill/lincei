@@ -368,7 +368,11 @@ export function makeCursorAdapter(
     const buildCurrentLinceiInstructionFallback = (workflowId: string | undefined) =>
       serverSettings.getSettings.pipe(
         Effect.map((settings) =>
-          buildLinceiSessionInstructionFallback(settings.linceiAgentCustomInstructions, workflowId),
+          buildLinceiSessionInstructionFallback(
+            settings.linceiAgentCustomInstructions,
+            workflowId,
+            settings.linceiSkills,
+          ),
         ),
         Effect.mapError(
           (cause) =>

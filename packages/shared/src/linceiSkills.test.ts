@@ -6,6 +6,8 @@ import {
 } from "@t3tools/contracts";
 import {
   bundledLinceiSkills,
+  buildEffectiveLinceiPrompt,
+  configuredBundledLinceiSkills,
   evaluateManagedSkillSyncState,
   linceiContentHash,
   mergeLinceiSkillCatalog,
@@ -56,6 +58,23 @@ describe("linceiSkills", () => {
     ]);
     expect(merged[0]?.linceiAvailability).toBe("prompt fallback");
     expect(merged[2]?.linceiSyncStatus).toBe("unmanaged");
+  });
+
+  it("applies persisted skill settings to bundled skills and prompt injection", () => {
+    const configured = configuredBundledLinceiSkills({
+      "clinical-research-session": { enabled: false, deployNative: true },
+    });
+
+    expect(configured.find((skill) => skill.id === "clinical-research-session")?.enabled).toBe(
+      false,
+    );
+
+    const prompt = buildEffectiveLinceiPrompt({
+      workflowId: "structured-clinical-study",
+      skills: configured,
+    });
+    expect(prompt).not.toContain('<lincei_skill id="clinical-research-session"');
+    expect(prompt).toContain('<lincei_skill id="lincei-api"');
   });
 
   it.each([

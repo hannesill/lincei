@@ -40,6 +40,16 @@ describe("LinceiAgentInstructions", () => {
     assert.match(instructions, /<lincei_skill id="clinical-research-session"/);
   });
 
+  it("omits disabled Lincei skills from injected guidance", () => {
+    const instructions = buildLinceiAgentInstructions(undefined, "structured-clinical-study", {
+      "clinical-research-session": { enabled: false, deployNative: false },
+    });
+
+    assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
+    assert.doesNotMatch(instructions, /<lincei_skill id="clinical-research-session"/);
+    assert.match(instructions, /<lincei_skill id="lincei-api"/);
+  });
+
   it("appends trimmed custom instructions after the hidden baseline", () => {
     const baseline = buildLinceiAgentInstructions();
     const custom = buildLinceiAgentInstructions("  Prefer concise answers.  ");

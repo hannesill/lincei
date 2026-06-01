@@ -2957,6 +2957,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           append: buildLinceiAgentInstructions(
             serverSettingsSnapshot.linceiAgentCustomInstructions,
             input.workflowId,
+            serverSettingsSnapshot.linceiSkills,
           ),
         },
         settingSources: [...CLAUDE_SETTING_SOURCES],

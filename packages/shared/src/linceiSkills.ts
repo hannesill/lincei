@@ -5,6 +5,7 @@ import type {
   LinceiWorkflow,
   ProviderDriverKind,
   ServerProviderSkill,
+  LinceiSkillSettings,
 } from "@t3tools/contracts";
 
 const BUNDLED_SKILL_VERSION = "1.0.0";
@@ -95,6 +96,29 @@ export function bundledLinceiSkills(): ReadonlyArray<LinceiCanonicalSkill> {
     upstreamVersion: BUNDLED_SKILL_VERSION,
     deploymentTargets: [],
   }));
+}
+
+export type LinceiSkillSettingsMap = Readonly<Record<string, LinceiSkillSettings | undefined>>;
+
+export function applyLinceiSkillSettings(
+  skills: ReadonlyArray<LinceiCanonicalSkill>,
+  settings: LinceiSkillSettingsMap | undefined,
+): ReadonlyArray<LinceiCanonicalSkill> {
+  if (!settings) return skills;
+  return skills.map((skill) => {
+    const skillSettings = settings[skill.id];
+    if (!skillSettings) return skill;
+    return {
+      ...skill,
+      enabled: skillSettings.enabled,
+    };
+  });
+}
+
+export function configuredBundledLinceiSkills(
+  settings?: LinceiSkillSettingsMap | undefined,
+): ReadonlyArray<LinceiCanonicalSkill> {
+  return applyLinceiSkillSettings(bundledLinceiSkills(), settings);
 }
 
 const structuredClinicalStudyBody = `# Structured Clinical Study Workflow
@@ -190,6 +214,7 @@ export function mergeLinceiSkillCatalog(input: {
   readonly project?: ReadonlyArray<LinceiCanonicalSkill>;
   readonly providerNative?: ReadonlyArray<ServerProviderSkill>;
   readonly provider?: ProviderDriverKind;
+  readonly skillSettings?: LinceiSkillSettingsMap | undefined;
 }): ReadonlyArray<ServerProviderSkill> {
   const merged: ServerProviderSkill[] = [];
   const seen = new Set<string>();
@@ -212,10 +237,16 @@ export function mergeLinceiSkillCatalog(input: {
     });
   };
 
-  for (const skill of input.bundled ?? bundledLinceiSkills()) {
+  const bundled = applyLinceiSkillSettings(
+    input.bundled ?? bundledLinceiSkills(),
+    input.skillSettings,
+  );
+  const project = applyLinceiSkillSettings(input.project ?? [], input.skillSettings);
+
+  for (const skill of bundled) {
     addCanonical(skill, "prompt-fallback");
   }
-  for (const skill of input.project ?? []) {
+  for (const skill of project) {
     addCanonical(skill, "prompt-fallback");
   }
   for (const skill of input.providerNative ?? []) {
@@ -268,10 +299,13 @@ export function buildEffectiveLinceiPrompt(input: {
   readonly workflowId?: string;
   readonly skills?: ReadonlyArray<LinceiCanonicalSkill>;
   readonly selectedSkillIds?: ReadonlyArray<string>;
+  readonly skillSettings?: LinceiSkillSettingsMap | undefined;
 }): string {
   const workflow = workflowById(input.workflowId);
   const skillsById = new Map(
-    (input.skills ?? bundledLinceiSkills()).map((skill) => [skill.id, skill]),
+    applyLinceiSkillSettings(input.skills ?? bundledLinceiSkills(), input.skillSettings).map(
+      (skill) => [skill.id, skill],
+    ),
   );
   const selectedSkillIds =
     input.selectedSkillIds && input.selectedSkillIds.length > 0

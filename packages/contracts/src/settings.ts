@@ -338,6 +338,12 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+export const LinceiSkillSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  deployNative: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+});
+export type LinceiSkillSettings = typeof LinceiSkillSettings.Type;
+
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 
 export const ServerSettings = Schema.Struct({
@@ -383,6 +389,9 @@ export const ServerSettings = Schema.Struct({
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   datasets: DatasetSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  linceiSkills: Schema.Record(TrimmedNonEmptyString, LinceiSkillSettings).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -463,6 +472,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   datasets: Schema.optionalKey(DatasetSettingsPatch),
+  linceiSkills: Schema.optionalKey(Schema.Record(TrimmedNonEmptyString, LinceiSkillSettings)),
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),

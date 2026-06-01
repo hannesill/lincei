@@ -1,3 +1,4 @@
+import type { LinceiSkillSettings } from "@t3tools/contracts";
 import { buildEffectiveLinceiPrompt } from "@t3tools/shared/linceiSkills";
 
 export const LINCEI_INSTRUCTION_CHECK_TRIGGER = "lincei-instruction-check";
@@ -16,12 +17,13 @@ Instruction probe: when the user message contains \`${LINCEI_INSTRUCTION_CHECK_T
 export function buildLinceiAgentInstructions(
   customInstructions?: string | undefined,
   workflowId?: string | undefined,
+  skillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>,
 ): string {
   const custom = customInstructions?.trim();
   const effectivePrompt =
     workflowId !== undefined
-      ? buildEffectiveLinceiPrompt({ workflowId }).trim()
-      : buildEffectiveLinceiPrompt({}).trim();
+      ? buildEffectiveLinceiPrompt({ workflowId, skillSettings }).trim()
+      : buildEffectiveLinceiPrompt({ skillSettings }).trim();
   const blocks = [LINCEI_AGENT_BASELINE_INSTRUCTIONS];
   if (effectivePrompt.length > 0) {
     blocks.push(`<lincei_effective_prompt>\n${effectivePrompt}\n</lincei_effective_prompt>`);
@@ -36,15 +38,21 @@ export function appendLinceiAgentInstructions(
   baseInstructions: string | undefined,
   customInstructions?: string | undefined,
   workflowId?: string | undefined,
+  skillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>,
 ): string {
   const base = baseInstructions?.trimEnd();
-  const linceiInstructions = buildLinceiAgentInstructions(customInstructions, workflowId);
+  const linceiInstructions = buildLinceiAgentInstructions(
+    customInstructions,
+    workflowId,
+    skillSettings,
+  );
   return base && base.length > 0 ? `${base}\n\n${linceiInstructions}` : linceiInstructions;
 }
 
 export function buildLinceiSessionInstructionFallback(
   customInstructions?: string | undefined,
   workflowId?: string | undefined,
+  skillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>,
 ): string {
-  return `Session instruction from Lincei (runtime fallback; apply for the whole session):\n\n${buildLinceiAgentInstructions(customInstructions, workflowId)}`;
+  return `Session instruction from Lincei (runtime fallback; apply for the whole session):\n\n${buildLinceiAgentInstructions(customInstructions, workflowId, skillSettings)}`;
 }

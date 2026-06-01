@@ -8,6 +8,7 @@ import {
   type ProviderApprovalDecision,
   type ProviderEvent,
   type ProviderInteractionMode,
+  type LinceiSkillSettings,
   type ProviderRequestKind,
   type ProviderSession,
   type ProviderTurnStartResult,
@@ -106,6 +107,7 @@ export interface CodexSessionRuntimeOptions {
   readonly developerInstructions?: string | undefined;
   readonly linceiAgentCustomInstructions?: string | undefined;
   readonly linceiWorkflowId?: string | undefined;
+  readonly linceiSkillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>;
   readonly resumeCursor?: CodexResumeCursor;
 }
 
@@ -330,6 +332,7 @@ function buildCodexCollaborationMode(input: {
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly linceiAgentCustomInstructions?: string | undefined;
   readonly linceiWorkflowId?: string | undefined;
+  readonly linceiSkillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
   if (input.interactionMode === undefined) {
     return undefined;
@@ -346,11 +349,13 @@ function buildCodexCollaborationMode(input: {
               CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
               input.linceiAgentCustomInstructions,
               input.linceiWorkflowId,
+              input.linceiSkillSettings,
             )
           : appendLinceiAgentInstructions(
               CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
               input.linceiAgentCustomInstructions,
               input.linceiWorkflowId,
+              input.linceiSkillSettings,
             ),
     },
   };
@@ -370,6 +375,7 @@ export function buildTurnStartParams(input: {
   readonly interactionMode?: ProviderInteractionMode;
   readonly linceiAgentCustomInstructions?: string | undefined;
   readonly linceiWorkflowId?: string | undefined;
+  readonly linceiSkillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -394,6 +400,9 @@ export function buildTurnStartParams(input: {
       ? { linceiAgentCustomInstructions: input.linceiAgentCustomInstructions }
       : {}),
     ...(input.linceiWorkflowId !== undefined ? { linceiWorkflowId: input.linceiWorkflowId } : {}),
+    ...(input.linceiSkillSettings !== undefined
+      ? { linceiSkillSettings: input.linceiSkillSettings }
+      : {}),
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
@@ -1300,6 +1309,9 @@ export const makeCodexSessionRuntime = (
               : {}),
             ...(options.linceiWorkflowId !== undefined
               ? { linceiWorkflowId: options.linceiWorkflowId }
+              : {}),
+            ...(options.linceiSkillSettings !== undefined
+              ? { linceiSkillSettings: options.linceiSkillSettings }
               : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);

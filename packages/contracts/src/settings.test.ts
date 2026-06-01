@@ -11,6 +11,7 @@ const encodeServerSettings = Schema.encodeSync(ServerSettings);
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
     expect(DEFAULT_SERVER_SETTINGS.providerInstances).toEqual({});
+    expect(DEFAULT_SERVER_SETTINGS.linceiSkills).toEqual({});
     expect(DEFAULT_SERVER_SETTINGS.datasets).toEqual({
       workspacePath: "",
       preferredBackendId: "duckdb",
@@ -67,6 +68,40 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
         providerInstances: { "1bad": { driver: "codex" } },
       }),
     ).toThrow();
+  });
+});
+
+describe("ServerSettings.linceiSkills", () => {
+  it("decodes persisted skill preferences", () => {
+    const decoded = decodeServerSettings({
+      linceiSkills: {
+        "clinical-research-session": {
+          enabled: false,
+          deployNative: true,
+        },
+      },
+    });
+
+    expect(decoded.linceiSkills["clinical-research-session"]).toEqual({
+      enabled: false,
+      deployNative: true,
+    });
+  });
+
+  it("accepts lincei skill preference patches", () => {
+    const patch = decodeServerSettingsPatch({
+      linceiSkills: {
+        "lincei-api": {
+          enabled: true,
+          deployNative: false,
+        },
+      },
+    });
+
+    expect(patch.linceiSkills?.["lincei-api"]).toEqual({
+      enabled: true,
+      deployNative: false,
+    });
   });
 });
 
