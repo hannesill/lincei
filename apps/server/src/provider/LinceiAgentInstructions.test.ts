@@ -22,7 +22,12 @@ describe("LinceiAgentInstructions", () => {
 
   it("describes the Lincei card CLI workflow", () => {
     const instructions = buildLinceiAgentInstructions();
-    assert.match(instructions, /lincei context current --json/);
+    assert.match(instructions, /lincei context current/);
+    assert.doesNotMatch(instructions, /lincei context current --json/);
+    assert.match(instructions, /lincei dataset context/);
+    assert.doesNotMatch(instructions, /dataset context --format/);
+    assert.match(instructions, /lincei card context/);
+    assert.doesNotMatch(instructions, /lincei card context --json/);
     assert.match(instructions, /lincei card propose --title <title>/);
     assert.match(instructions, /lincei <command> --help/);
     assert.match(instructions, /ambiguous targets/);
@@ -31,7 +36,7 @@ describe("LinceiAgentInstructions", () => {
   it("appends trimmed custom instructions after the hidden baseline", () => {
     const baseline = buildLinceiAgentInstructions();
     const custom = buildLinceiAgentInstructions("  Prefer concise answers.  ");
-    assert.match(custom, /lincei context current --json/);
+    assert.match(custom, /lincei context current/);
     assert.match(
       custom,
       /<lincei_user_custom_instructions>\nPrefer concise answers\.\n<\/lincei_user_custom_instructions>/,

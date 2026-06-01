@@ -72,9 +72,9 @@ const backendFlag = Flag.choice("backend", DATASET_BACKEND_IDS).pipe(
   Flag.optional,
 );
 
-const contextFormatFlag = Flag.choice("format", ["markdown", "json"] as const).pipe(
-  Flag.withDescription("Output format for dataset context."),
-  Flag.withDefault("markdown"),
+const structuredFlag = Flag.boolean("structured").pipe(
+  Flag.withDescription("Emit structured JSON for dataset context instead of prompt text."),
+  Flag.withDefault(false),
 );
 
 const sqlFlag = Flag.string("sql").pipe(Flag.withDescription("SQL query to execute."));
@@ -110,7 +110,7 @@ const selectionFromRequiredDatasetFlags = (
   ...(Option.isSome(flags.backendId) ? { backendId: flags.backendId.value } : {}),
 });
 
-const toJson = (value: unknown) => JSON.stringify(value, null, 2);
+const toJson = (value: unknown) => JSON.stringify(value);
 
 const DATASET_CLI_LIVE_SERVER_TIMEOUT = Duration.seconds(1);
 
@@ -446,7 +446,7 @@ const contextCommand = Command.make("context", {
   ...authLocationFlags,
   datasetId: datasetFlag,
   backendId: backendFlag,
-  format: contextFormatFlag,
+  structured: structuredFlag,
 }).pipe(
   Command.withDescription("Emit dataset context suitable for agent prompts."),
   Command.withHandler((flags) =>
@@ -455,9 +455,7 @@ const contextCommand = Command.make("context", {
         .context(selectionFromFlags(flags))
         .pipe(
           Effect.flatMap((context) =>
-            Console.log(
-              flags.format === "json" ? toJson(context) : formatDatasetContextMarkdown(context),
-            ),
+            Console.log(flags.structured ? toJson(context) : formatDatasetContextMarkdown(context)),
           ),
         ),
     ),

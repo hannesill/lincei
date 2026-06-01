@@ -40,6 +40,12 @@ class LinceiPythonTests(unittest.TestCase):
             self.assertEqual(lincei.schema(dataset="mimic-iv-demo"), {"ok": True})
             self.assertEqual(lincei.describe_table("patients", backend="duckdb"), {"ok": True})
             self.assertEqual(lincei.context(), {"ok": True})
+            subprocess.run.assert_any_call(
+                ["lincei", "dataset", "context", "--structured"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
 
     def test_nonzero_cli_exit_raises_lincei_error(self) -> None:
         with patch("subprocess.run", return_value=completed("", returncode=2, stderr="bad")):

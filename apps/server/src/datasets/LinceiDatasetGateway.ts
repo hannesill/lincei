@@ -433,7 +433,7 @@ export const makeLinceiDatasetGateway = (
             "lincei dataset schema --dataset mimic-iv-demo --backend duckdb",
             "lincei dataset describe-table admissions --dataset mimic-iv-demo --backend duckdb",
             'lincei dataset query --dataset mimic-iv-demo --backend duckdb --sql "select ... limit 10"',
-            "lincei dataset context --dataset mimic-iv-demo --backend duckdb --format markdown",
+            "lincei dataset context --dataset mimic-iv-demo --backend duckdb",
           ],
           status: statusResult,
         };

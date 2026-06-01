@@ -93,7 +93,7 @@ def describe_table(
 
 def context(dataset: str | None = None, backend: str | None = None) -> dict[str, Any]:
     return _run_json(
-        ["dataset", "context", "--format", "json", *_dataset_backend_args(dataset, backend)]
+        ["dataset", "context", "--structured", *_dataset_backend_args(dataset, backend)]
     )
 
 

@@ -90,12 +90,17 @@ const AgentOfflineReadLayer = Layer.mergeAll(
   ),
 );
 
-const jsonFlag = Flag.boolean("json").pipe(
-  Flag.withDescription("Emit JSON instead of human-readable output."),
+const prettyFlag = Flag.boolean("pretty").pipe(
+  Flag.withDescription("Pretty-print JSON output."),
   Flag.withDefault(false),
 );
 
-const allFlag = Flag.boolean("all").pipe(
+const diagnosticsFlag = Flag.boolean("diagnostics").pipe(
+  Flag.withDescription("Include resolution diagnostics and otherwise suppressed details."),
+  Flag.withDefault(false),
+);
+
+const allCardsFlag = Flag.boolean("all-cards").pipe(
   Flag.withDescription("Include inactive research cards."),
   Flag.withDefault(false),
 );
@@ -528,6 +533,12 @@ const readProcessEnv = (name: string) =>
     return value && value.length > 0 ? value : undefined;
   });
 
+const readAmbientEnvSync = () => ({
+  sessionId: process.env[LINCEI_SESSION_ID_ENV]?.trim() || null,
+  projectId: process.env[LINCEI_PROJECT_ID_ENV]?.trim() || null,
+  projectDir: process.env[LINCEI_PROJECT_DIR_ENV]?.trim() || null,
+});
+
 const formatCandidateSessions = (sessions: ReadonlyArray<OrchestrationSession>) =>
   sessions
     .slice(0, 8)
@@ -667,11 +678,6 @@ const compactSession = (session: OrchestrationSession) => ({
         state: session.latestTurn.state,
       }
     : null,
-  lifecycle: {
-    archived: session.archivedAt !== null,
-    deleted: session.deletedAt !== null,
-    runtimeStatus: session.session?.status ?? null,
-  },
 });
 
 const compactProject = (
@@ -682,26 +688,71 @@ const compactProject = (
   title: project.title,
   workspaceRoot: project.workspaceRoot,
   repositoryIdentity: project.repositoryIdentity ?? null,
-  activeSessionIds: sessions.map((session) => session.id),
   activeSessionCount: sessions.length,
 });
 
-const makeSessionContext = (session: OrchestrationSession, includeAll: boolean) => {
-  const cards = relevantCards(session, includeAll);
+const compactProjectDiagnostics = (sessions: ReadonlyArray<OrchestrationSession>) => ({
+  activeSessionIds: sessions.map((session) => session.id),
+  activeSessions: sessions.map(compactSession),
+});
+
+const compactSessionDiagnostics = (session: OrchestrationSession) => ({
+  activeCardIds: session.researchCards.filter(isActiveResearchCard).map((card) => card.id),
+  activeCardCount: session.researchCards.filter(isActiveResearchCard).length,
+  allCardCount: session.researchCards.length,
+  lifecycle: {
+    archived: session.archivedAt !== null,
+    deleted: session.deletedAt !== null,
+    runtimeStatus: session.session?.status ?? null,
+  },
+});
+
+const findProjectForSession = (snapshot: OrchestrationReadModel, session: OrchestrationSession) =>
+  activeProjects(snapshot).find((project) => project.id === session.projectId);
+
+const projectActiveSessions = (snapshot: OrchestrationReadModel, projectId: string) =>
+  activeSessions(snapshot).filter((session) => session.projectId === projectId);
+
+const makeCurrentContext = (input: {
+  readonly snapshot: OrchestrationReadModel;
+  readonly source: SnapshotSource;
+  readonly session: OrchestrationSession;
+  readonly project: OrchestrationProject | undefined;
+  readonly includeAllCards: boolean;
+  readonly diagnostics: boolean;
+}) => {
+  const sessions =
+    input.project !== undefined ? projectActiveSessions(input.snapshot, input.project.id) : [];
   return {
-    ...compactSession(session),
-    activeCardIds: session.researchCards.filter(isActiveResearchCard).map((card) => card.id),
-    activeCardCount: session.researchCards.filter(isActiveResearchCard).length,
-    cards: cards.map(compactCard),
+    source: input.source,
+    workspace:
+      input.project !== undefined
+        ? compactProject(input.project, sessions)
+        : { error: "not_found" },
+    session: compactSession(input.session),
+    cards: relevantCards(input.session, input.includeAllCards).map(compactCard),
+    ...(input.diagnostics
+      ? {
+          diagnostics: {
+            cwd: process.cwd(),
+            env: readAmbientEnvSync(),
+            workspace:
+              input.project !== undefined ? compactProjectDiagnostics(sessions) : undefined,
+            session: compactSessionDiagnostics(input.session),
+          },
+        }
+      : {}),
   };
 };
 
-const formatOutput = (value: unknown, json: boolean) => {
-  if (json) {
-    return JSON.stringify(value);
-  }
-  return JSON.stringify(value, null, 2);
-};
+const minimalWriteCard = (card: OrchestrationResearchCard | ResearchCardSummary) => ({
+  id: card.id,
+  title: card.title,
+  status: card.status,
+});
+
+const formatOutput = (value: unknown, pretty: boolean) =>
+  pretty ? JSON.stringify(value, null, 2) : JSON.stringify(value);
 
 const makeCard = Effect.fn("makeAgentResearchCard")(function* (input: {
   readonly session: OrchestrationSession;
@@ -754,7 +805,7 @@ const updateCard = Effect.fn("updateAgentResearchCard")(function* (input: {
 });
 
 const runReadCommand = (
-  flags: CliAuthLocationFlags,
+  flags: CliAuthLocationFlags & { readonly pretty?: boolean },
   run: (
     snapshot: OrchestrationReadModel,
     source: SnapshotSource,
@@ -763,11 +814,11 @@ const runReadCommand = (
   Effect.gen(function* () {
     const resolved = yield* resolveReadSnapshot(flags);
     const output = yield* run(resolved.snapshot, resolved.source);
-    yield* Console.log(formatOutput(output, "json" in flags && flags.json === true));
+    yield* Console.log(formatOutput(output, flags.pretty === true));
   });
 
 const runWriteCommand = (
-  flags: CliAuthLocationFlags & { readonly json: boolean },
+  flags: CliAuthLocationFlags & { readonly pretty?: boolean },
   run: (
     snapshot: OrchestrationReadModel,
     dispatch: (
@@ -785,7 +836,7 @@ const runWriteCommand = (
 ) =>
   Effect.gen(function* () {
     const output = yield* runLiveWrite(flags, run);
-    yield* Console.log(formatOutput(output, flags.json));
+    yield* Console.log(formatOutput(output, flags.pretty === true));
   });
 
 const makeStudyRecordMetadata = (input: {
@@ -803,15 +854,15 @@ const makeStudyRecordMetadata = (input: {
 const cardListCommand = Command.make("list", {
   ...projectLocationFlags,
   session: sessionFlag,
-  all: allFlag,
-  json: jsonFlag,
+  allCards: allCardsFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("List research cards for a session."),
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot) =>
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
-        return relevantCards(session, flags.all).map(compactCard);
+        return relevantCards(session, flags.allCards).map(compactCard);
       }),
     ),
   ),
@@ -820,8 +871,8 @@ const cardListCommand = Command.make("list", {
 const cardContextCommand = Command.make("context", {
   ...projectLocationFlags,
   session: sessionFlag,
-  all: allFlag,
-  json: jsonFlag,
+  allCards: allCardsFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Show compact research-card context for a session."),
   Command.withHandler((flags) =>
@@ -830,7 +881,8 @@ const cardContextCommand = Command.make("context", {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
         return {
           source,
-          session: makeSessionContext(session, flags.all),
+          session: compactSession(session),
+          cards: relevantCards(session, flags.allCards).map(compactCard),
         };
       }),
     ),
@@ -850,7 +902,7 @@ const cardProposeCommand = Command.make("propose", {
   dep: depFlag,
   artifact: artifactFlag,
   runId: runIdFlag,
-  json: jsonFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Propose a research card."),
   Command.withHandler((flags) =>
@@ -879,7 +931,7 @@ const cardProposeCommand = Command.make("propose", {
           }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
-        return { card: compactCard(card) };
+        return { action: "proposed", card: minimalWriteCard(card) };
       }),
     ),
   ),
@@ -899,7 +951,7 @@ const cardUpdateCommand = Command.make("update", {
   dep: depFlag,
   artifact: artifactFlag,
   runId: runIdFlag,
-  json: jsonFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Update a research card."),
   Command.withHandler((flags) =>
@@ -944,7 +996,7 @@ const cardUpdateCommand = Command.make("update", {
           }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
-        return { card: compactCard(card) };
+        return { action: "updated", card: minimalWriteCard(card) };
       }),
     ),
   ),
@@ -958,7 +1010,7 @@ const cardRequestReviewCommand = Command.make("request-review", {
   dep: depFlag,
   artifact: artifactFlag,
   runId: runIdFlag,
-  json: jsonFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Attach a review request to a research card."),
   Command.withHandler((flags) =>
@@ -1019,7 +1071,8 @@ const cardRequestReviewCommand = Command.make("request-review", {
           });
         }
         return {
-          card: compactCard({
+          action: "review_requested",
+          card: minimalWriteCard({
             ...existing,
             status: "review-requested",
             updatedAt: now,
@@ -1044,7 +1097,7 @@ const cardSupersedeCommand = Command.make("supersede", {
   dep: depFlag,
   artifact: artifactFlag,
   runId: runIdFlag,
-  json: jsonFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Supersede a research card with a new proposal."),
   Command.withHandler((flags) =>
@@ -1076,7 +1129,11 @@ const cardSupersedeCommand = Command.make("supersede", {
           }),
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
-        return { supersededCardId: flags.oldCardId, card: compactCard(newCard) };
+        return {
+          action: "superseded",
+          supersededCardId: flags.oldCardId,
+          card: minimalWriteCard(newCard),
+        };
       }),
     ),
   ),
@@ -1097,14 +1154,23 @@ export const cardCommand = Command.make("card").pipe(
 const contextSessionCommand = Command.make("session", {
   ...projectLocationFlags,
   session: sessionFlag,
-  json: jsonFlag,
+  allCards: allCardsFlag,
+  diagnostics: diagnosticsFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Show compact context for a session."),
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot, source) =>
       Effect.gen(function* () {
         const session = yield* resolveSessionTarget(snapshot, flags.session);
-        return { source, session: makeSessionContext(session, true) };
+        return makeCurrentContext({
+          snapshot,
+          source,
+          session,
+          project: findProjectForSession(snapshot, session),
+          includeAllCards: flags.allCards,
+          diagnostics: flags.diagnostics,
+        });
       }),
     ),
   ),
@@ -1117,7 +1183,8 @@ const contextProjectCommand = Command.make("project", {
     Flag.withAlias("workspace-root"),
     Flag.optional,
   ),
-  json: jsonFlag,
+  diagnostics: diagnosticsFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Show compact context for a project."),
   Command.withHandler((flags) =>
@@ -1130,7 +1197,13 @@ const contextProjectCommand = Command.make("project", {
             session.archivedAt === null &&
             session.deletedAt === null,
         );
-        return { source, project: compactProject(project, sessions) };
+        return {
+          source,
+          workspace: compactProject(project, sessions),
+          ...(flags.diagnostics
+            ? { diagnostics: { workspace: compactProjectDiagnostics(sessions) } }
+            : {}),
+        };
       }),
     ),
   ),
@@ -1138,36 +1211,47 @@ const contextProjectCommand = Command.make("project", {
 
 const contextCurrentCommand = Command.make("current", {
   ...projectLocationFlags,
-  json: jsonFlag,
+  allCards: allCardsFlag,
+  diagnostics: diagnosticsFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Show inferred current Lincei session and project context."),
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot, source) =>
       Effect.gen(function* () {
-        const envSessionId = yield* readProcessEnv(LINCEI_SESSION_ID_ENV);
-        const envProjectId = yield* readProcessEnv(LINCEI_PROJECT_ID_ENV);
-        const envProjectDir = yield* readProcessEnv(LINCEI_PROJECT_DIR_ENV);
         const projectExit = yield* Effect.exit(resolveProjectTarget(snapshot, Option.none()));
         const sessionExit = yield* Effect.exit(resolveSessionTarget(snapshot, Option.none()));
+        const project = Exit.isSuccess(projectExit) ? projectExit.value : undefined;
+        const session = Exit.isSuccess(sessionExit) ? sessionExit.value : undefined;
+        if (session !== undefined) {
+          return makeCurrentContext({
+            snapshot,
+            source,
+            session,
+            project: project ?? findProjectForSession(snapshot, session),
+            includeAllCards: flags.allCards,
+            diagnostics: flags.diagnostics,
+          });
+        }
         return {
           source,
-          cwd: process.cwd(),
-          env: {
-            sessionId: envSessionId ?? null,
-            projectId: envProjectId ?? null,
-            projectDir: envProjectDir ?? null,
-          },
-          project: Exit.isSuccess(projectExit)
-            ? compactProject(
-                projectExit.value,
-                activeSessions(snapshot).filter(
-                  (session) => session.projectId === projectExit.value.id,
-                ),
-              )
-            : { error: "Could not infer current project." },
-          session: Exit.isSuccess(sessionExit)
-            ? makeSessionContext(sessionExit.value, true)
-            : { error: "Could not infer current session." },
+          workspace:
+            project !== undefined
+              ? compactProject(project, projectActiveSessions(snapshot, project.id))
+              : { error: "not_inferred" },
+          session: { error: "not_inferred" },
+          cards: [],
+          ...(flags.diagnostics
+            ? {
+                diagnostics: {
+                  cwd: process.cwd(),
+                  env: readAmbientEnvSync(),
+                  activeSessionIds: activeSessions(snapshot).map((candidate) => candidate.id),
+                  projectError: Exit.isFailure(projectExit) ? projectExit.cause.toString() : null,
+                  sessionError: Exit.isFailure(sessionExit) ? sessionExit.cause.toString() : null,
+                },
+              }
+            : {}),
         };
       }),
     ),
@@ -1176,29 +1260,31 @@ const contextCurrentCommand = Command.make("current", {
 
 const contextSummaryCommand = Command.make("summary", {
   ...projectLocationFlags,
-  json: jsonFlag,
+  diagnostics: diagnosticsFlag,
+  pretty: prettyFlag,
 }).pipe(
   Command.withDescription("Show compact project and session context."),
   Command.withHandler((flags) =>
     runReadCommand(flags, (snapshot, source) =>
-      Effect.succeed({
-        source,
-        activeProjectCount: snapshot.projects.filter((project) => project.deletedAt === null)
-          .length,
-        activeSessionCount: snapshot.sessions.filter(
-          (session) => session.archivedAt === null && session.deletedAt === null,
-        ).length,
-        projects: snapshot.projects
-          .filter((project) => project.deletedAt === null)
-          .map((project) => {
-            const sessions = snapshot.sessions.filter(
-              (session) =>
-                session.projectId === project.id &&
-                session.archivedAt === null &&
-                session.deletedAt === null,
-            );
-            return compactProject(project, sessions);
-          }),
+      Effect.sync(() => {
+        const projects = activeProjects(snapshot);
+        const sessions = activeSessions(snapshot);
+        return {
+          source,
+          activeProjectCount: projects.length,
+          activeSessionCount: sessions.length,
+          ...(flags.diagnostics
+            ? {
+                projects: projects.map((project) => {
+                  const projectSessions = sessions.filter(
+                    (session) => session.projectId === project.id,
+                  );
+                  return compactProject(project, projectSessions);
+                }),
+                sessions: sessions.map(compactSession),
+              }
+            : {}),
+        };
       }),
     ),
   ),
