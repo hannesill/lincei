@@ -13,7 +13,7 @@ import {
   RightPanelInlineSidebar,
 } from "../components/RightPanelRouteShell";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import { RIGHT_PANEL_SHEET_MEDIA_QUERY } from "../rightPanelLayout";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 
 export interface DraftCardsRouteSearch {
@@ -27,7 +27,7 @@ function DraftChatSessionRouteView() {
   const draftId = DraftId.make(rawDraftId);
   const draftSession = useComposerDraftStore((store) => store.getDraftSession(draftId));
   const cardsOpen = search.cards === "1";
-  const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_SHEET_MEDIA_QUERY);
   const [hasOpenedCards, setHasOpenedCards] = useState(cardsOpen);
   const serverSession = useStore(
     useMemo(

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, type ReactNode } from "react";
 
 import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 import {
@@ -16,6 +16,7 @@ const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(24rem,34vw,36rem)";
 const DIFF_INLINE_SIDEBAR_MIN_WIDTH = 22 * 16;
 const DIFF_INLINE_SIDEBAR_MAX_WIDTH = 256 * 16;
+const DIFF_INLINE_CHAT_MIN_WIDTH = 22.5 * 16;
 const COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX = 208;
 
 const DiffLoadingFallback = (props: { mode: DiffPanelMode }) => {
@@ -51,6 +52,7 @@ export const RightPanelInlineSidebar = (props: {
   children: ReactNode;
 }) => {
   const { open, onClose, onOpen, children } = props;
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const onOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
@@ -63,6 +65,17 @@ export const RightPanelInlineSidebar = (props: {
   );
   const shouldAcceptInlineSidebarWidth = useCallback(
     ({ nextWidth, wrapper }: { nextWidth: number; wrapper: HTMLElement }) => {
+      const layoutContainer = wrapper.parentElement;
+      const maxSidebarWidth = layoutContainer
+        ? Math.max(
+            DIFF_INLINE_SIDEBAR_MIN_WIDTH,
+            layoutContainer.clientWidth - DIFF_INLINE_CHAT_MIN_WIDTH,
+          )
+        : DIFF_INLINE_SIDEBAR_MAX_WIDTH;
+      if (nextWidth > maxSidebarWidth) {
+        return false;
+      }
+
       const composerForm = document.querySelector<HTMLElement>("[data-chat-composer-form='true']");
       if (!composerForm) return true;
       const composerViewport = composerForm.parentElement;
@@ -107,12 +120,50 @@ export const RightPanelInlineSidebar = (props: {
     [],
   );
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+
+    const clampSidebarWidth = () => {
+      const layoutContainer = wrapper.parentElement;
+      const sidebarContainer = wrapper.querySelector<HTMLElement>(
+        "[data-slot='sidebar-container']",
+      );
+      if (!layoutContainer || !sidebarContainer) {
+        return;
+      }
+
+      const maxSidebarWidth = Math.max(
+        DIFF_INLINE_SIDEBAR_MIN_WIDTH,
+        layoutContainer.clientWidth - DIFF_INLINE_CHAT_MIN_WIDTH,
+      );
+      const currentWidth = sidebarContainer.getBoundingClientRect().width;
+      const nextWidth = Math.min(currentWidth, maxSidebarWidth, DIFF_INLINE_SIDEBAR_MAX_WIDTH);
+      if (currentWidth > nextWidth + 0.5) {
+        wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+      }
+    };
+
+    clampSidebarWidth();
+    window.addEventListener("resize", clampSidebarWidth);
+    return () => {
+      window.removeEventListener("resize", clampSidebarWidth);
+    };
+  }, [open]);
+
   return (
     <SidebarProvider
       defaultOpen={false}
       open={open}
       onOpenChange={onOpenChange}
       className="w-auto min-h-0 flex-none bg-transparent"
+      ref={wrapperRef}
       style={{ "--sidebar-width": DIFF_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
     >
       <Sidebar

@@ -10,7 +10,7 @@ import {
   stripDiffSearchParams,
 } from "../diffRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import { RIGHT_PANEL_SHEET_MEDIA_QUERY } from "../rightPanelLayout";
 import { selectEnvironmentState, selectSessionExistsByRef, useStore } from "../store";
 import { createSessionSelectorByRef } from "../storeSelectors";
 import { resolveSessionRouteRef, buildSessionRouteParams } from "../sessionRoutes";
@@ -57,7 +57,7 @@ function ChatSessionRouteView() {
   const diffOpen = search.diff === "1";
   const cardsOpen = search.cards === "1";
   const rightPanelOpen = diffOpen || cardsOpen;
-  const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_SHEET_MEDIA_QUERY);
   const currentSessionKey = sessionRef
     ? `${sessionRef.environmentId}:${sessionRef.sessionId}`
     : null;
