@@ -39,13 +39,29 @@ import {
   type ScopedResearchCard,
 } from "./researchCards/researchCardLists";
 import { Badge } from "./ui/badge";
-import { Toggle, ToggleGroup } from "./ui/toggle-group";
 
 interface ResearchCardsPanelProps {
   mode?: DiffPanelMode;
 }
 
 type ResearchCardScope = "session" | "study";
+
+const RESEARCH_CARD_SCOPE_OPTIONS = [
+  {
+    value: "session",
+    label: "Session",
+    ariaLabel: "Show cards for this session",
+  },
+  {
+    value: "study",
+    label: "Study",
+    ariaLabel: "Show cards for this study",
+  },
+] satisfies ReadonlyArray<{
+  value: ResearchCardScope;
+  label: string;
+  ariaLabel: string;
+}>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -654,6 +670,45 @@ function ProvenanceSummary(props: { provenance: ResearchCardDetail["provenance"]
   );
 }
 
+function ResearchCardScopeSwitch(props: {
+  scope: ResearchCardScope;
+  onScopeChange: (scope: ResearchCardScope) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Research card scope"
+      className="relative isolate grid w-40 shrink-0 grid-cols-2 rounded-[5px] border border-border/65 bg-muted/35 p-0.5 shadow-xs"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute top-0.5 bottom-0.5 left-0.5 z-0 w-[calc(50%-0.125rem)] rounded-[5px] bg-background shadow-sm ring-1 ring-border/65 transition-transform duration-200 ease-out dark:bg-input/80",
+          props.scope === "study" && "translate-x-full",
+        )}
+      />
+      {RESEARCH_CARD_SCOPE_OPTIONS.map((option) => {
+        const active = props.scope === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-label={option.ariaLabel}
+            aria-pressed={active}
+            className={cn(
+              "relative z-10 inline-flex h-5 items-center justify-center rounded-[5px] px-2 text-[11px] font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none",
+              active ? "text-foreground" : "text-muted-foreground/75 hover:text-foreground/85",
+            )}
+            onClick={() => props.onScopeChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ResearchCardItem(props: {
   item: ScopedResearchCard;
   manifest: ResearchCardManifest | undefined;
@@ -862,26 +917,8 @@ export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPan
           </div>
         </div>
       </div>
-      <div className="min-w-0">
-        <ToggleGroup
-          className="shrink-0"
-          variant="outline"
-          size="xs"
-          value={[scope]}
-          onValueChange={(value) => {
-            const nextScope = value[0];
-            if (nextScope === "session" || nextScope === "study") {
-              setScope(nextScope);
-            }
-          }}
-        >
-          <Toggle value="session" aria-label="Show cards for this session">
-            Session
-          </Toggle>
-          <Toggle value="study" aria-label="Show cards for this study">
-            Study
-          </Toggle>
-        </ToggleGroup>
+      <div className="shrink-0">
+        <ResearchCardScopeSwitch scope={scope} onScopeChange={setScope} />
       </div>
     </div>
   );
