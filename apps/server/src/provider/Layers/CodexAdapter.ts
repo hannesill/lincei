@@ -1414,9 +1414,11 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             serverSettingsSnapshot.linceiAgentCustomInstructions,
             input.workflowId,
             serverSettingsSnapshot.linceiSkills,
+            serverSettingsSnapshot.linceiWorkflows,
           ),
           linceiAgentCustomInstructions: serverSettingsSnapshot.linceiAgentCustomInstructions,
           linceiSkillSettings: serverSettingsSnapshot.linceiSkills,
+          linceiWorkflowSettings: serverSettingsSnapshot.linceiWorkflows,
           ...(input.workflowId !== undefined ? { linceiWorkflowId: input.workflowId } : {}),
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }

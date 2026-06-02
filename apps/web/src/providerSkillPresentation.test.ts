@@ -40,7 +40,7 @@ describe("formatProviderSkillInstallSource", () => {
         path: "/Users/julius/.agents/skills/agent-browser/SKILL.md",
         scope: "user",
       }),
-    ).toBe("Personal");
+    ).toBe("Universal");
     expect(
       formatProviderSkillInstallSource({
         path: "/usr/local/share/codex/skills/imagegen/SKILL.md",

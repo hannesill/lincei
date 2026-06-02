@@ -12,6 +12,7 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
     expect(DEFAULT_SERVER_SETTINGS.providerInstances).toEqual({});
     expect(DEFAULT_SERVER_SETTINGS.linceiSkills).toEqual({});
+    expect(DEFAULT_SERVER_SETTINGS.linceiWorkflows).toEqual({});
     expect(DEFAULT_SERVER_SETTINGS.datasets).toEqual({
       workspacePath: "",
       preferredBackendId: "duckdb",
@@ -72,7 +73,7 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
 });
 
 describe("ServerSettings.linceiSkills", () => {
-  it("decodes persisted skill preferences", () => {
+  it("decodes legacy deployNative skill preferences without preserving native deployment", () => {
     const decoded = decodeServerSettings({
       linceiSkills: {
         "clinical-research-session": {
@@ -84,11 +85,22 @@ describe("ServerSettings.linceiSkills", () => {
 
     expect(decoded.linceiSkills["clinical-research-session"]).toEqual({
       enabled: false,
-      deployNative: true,
     });
+
+    const encoded = encodeServerSettings(decoded);
+    expect(encoded.linceiSkills?.["clinical-research-session"]).toEqual({
+      enabled: false,
+    });
+    expect(
+      (
+        encoded.linceiSkills?.["clinical-research-session"] as
+          | { deployNative?: unknown }
+          | undefined
+      )?.deployNative,
+    ).toBeUndefined();
   });
 
-  it("accepts lincei skill preference patches", () => {
+  it("accepts lincei skill preference patches without deployNative", () => {
     const patch = decodeServerSettingsPatch({
       linceiSkills: {
         "lincei-api": {
@@ -100,7 +112,34 @@ describe("ServerSettings.linceiSkills", () => {
 
     expect(patch.linceiSkills?.["lincei-api"]).toEqual({
       enabled: true,
-      deployNative: false,
+    });
+  });
+});
+
+describe("ServerSettings.linceiWorkflows", () => {
+  it("decodes and patches workflow enablement preferences", () => {
+    const decoded = decodeServerSettings({
+      linceiWorkflows: {
+        "structured-clinical-study": {
+          enabled: false,
+        },
+      },
+    });
+
+    expect(decoded.linceiWorkflows["structured-clinical-study"]).toEqual({
+      enabled: false,
+    });
+
+    const patch = decodeServerSettingsPatch({
+      linceiWorkflows: {
+        "structured-clinical-study": {
+          enabled: true,
+        },
+      },
+    });
+
+    expect(patch.linceiWorkflows?.["structured-clinical-study"]).toEqual({
+      enabled: true,
     });
   });
 });

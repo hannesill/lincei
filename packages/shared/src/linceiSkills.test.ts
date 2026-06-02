@@ -9,6 +9,9 @@ import {
   buildEffectiveLinceiPrompt,
   configuredBundledLinceiSkills,
   evaluateManagedSkillSyncState,
+  isExternalProviderSkill,
+  isLinceiOwnedProviderSkill,
+  isLinceiWorkflowEnabled,
   linceiContentHash,
   mergeLinceiSkillCatalog,
   projectSkillFromBody,
@@ -58,11 +61,37 @@ describe("linceiSkills", () => {
     ]);
     expect(merged[0]?.linceiAvailability).toBe("prompt fallback");
     expect(merged[2]?.linceiSyncStatus).toBe("unmanaged");
+    expect(merged[2]?.linceiSource).toBe("provider-native");
+    expect(merged[2]?.linceiAvailability).toBe("external provider skill");
+  });
+
+  it("classifies raw provider skills as external unless they are Lincei-owned", () => {
+    expect(
+      isExternalProviderSkill({
+        path: "/Users/test/.codex/skills/agent-browser/SKILL.md",
+      }),
+    ).toBe(true);
+    expect(
+      isExternalProviderSkill({
+        path: "/Users/test/.codex/skills/agent-browser/SKILL.md",
+        linceiSource: "provider-native",
+      }),
+    ).toBe(true);
+    expect(
+      isLinceiOwnedProviderSkill({
+        path: "lincei://bundled/lincei-api",
+      }),
+    ).toBe(true);
+    expect(
+      isExternalProviderSkill({
+        path: "lincei://bundled/lincei-api",
+      }),
+    ).toBe(false);
   });
 
   it("applies persisted skill settings to bundled skills and prompt injection", () => {
     const configured = configuredBundledLinceiSkills({
-      "clinical-research-session": { enabled: false, deployNative: true },
+      "clinical-research-session": { enabled: false },
     });
 
     expect(configured.find((skill) => skill.id === "clinical-research-session")?.enabled).toBe(
@@ -75,6 +104,25 @@ describe("linceiSkills", () => {
     });
     expect(prompt).not.toContain('<lincei_skill id="clinical-research-session"');
     expect(prompt).toContain('<lincei_skill id="lincei-api"');
+  });
+
+  it("omits disabled workflows and their default skill set from the effective prompt", () => {
+    expect(isLinceiWorkflowEnabled("structured-clinical-study", undefined)).toBe(true);
+    expect(
+      isLinceiWorkflowEnabled("structured-clinical-study", {
+        "structured-clinical-study": { enabled: false },
+      }),
+    ).toBe(false);
+
+    const prompt = buildEffectiveLinceiPrompt({
+      workflowId: "structured-clinical-study",
+      workflowSettings: {
+        "structured-clinical-study": { enabled: false },
+      },
+    });
+
+    expect(prompt).not.toContain('<lincei_workflow id="structured-clinical-study"');
+    expect(prompt).not.toContain('<lincei_skill id="lincei-api"');
   });
 
   it.each([

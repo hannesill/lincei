@@ -37,6 +37,7 @@ import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/ser
 import { useUiStateStore } from "../../uiStateStore";
 import { ConnectionsSettings } from "./ConnectionsSettings";
 import { DiagnosticsSettingsPanel } from "./DiagnosticsSettings";
+import { SkillsSettingsPanel } from "./SkillsSettings";
 import { GeneralSettingsPanel, ProviderSettingsPanel } from "./SettingsPanels";
 import { SourceControlSettingsPanel } from "./SourceControlSettings";
 
@@ -781,6 +782,113 @@ describe("GeneralSettingsPanel observability", () => {
       .toHaveValue("Prefer concise status updates.");
     await expect.element(page.getByText("lincei context current --json")).not.toBeInTheDocument();
     await expect.element(page.getByText("Effective prompt")).not.toBeInTheDocument();
+  });
+
+  it("separates Lincei-owned skills from read-only external provider skills", async () => {
+    window.nativeApi = {
+      persistence: {
+        getClientSettings: vi.fn().mockResolvedValue(null),
+        setClientSettings: vi.fn().mockResolvedValue(undefined),
+      },
+      server: {
+        updateSettings: vi.fn().mockResolvedValue(undefined),
+      },
+    } as unknown as LocalApi;
+
+    setServerConfigSnapshot({
+      ...createBaseServerConfig(),
+      providers: [
+        {
+          ...createOutdatedProvider("codex"),
+          displayName: "Codex Work",
+          skills: [
+            {
+              name: "agent-browser",
+              displayName: "Agent Browser",
+              shortDescription: "Browser automation from the provider.",
+              path: "/Users/test/.codex/skills/agent-browser/SKILL.md",
+              scope: "user",
+              enabled: false,
+            },
+            {
+              name: "daily-loop",
+              displayName: "Daily Loop",
+              shortDescription: "Shared daily learning routine.",
+              path: "/Users/test/.agents/skills/daily-loop/SKILL.md",
+              scope: "user",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    });
+
+    mounted = await renderWithTestRouter(
+      <AppAtomRegistryProvider>
+        <SkillsSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect
+      .element(page.getByRole("heading", { name: "Lincei Skills", exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("switch", { name: "Lincei API enabled" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Review Lincei API prompt" }))
+      .toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Review Lincei API prompt" }).click();
+    await expect
+      .element(page.getByRole("button", { name: "Hide Lincei API prompt" }))
+      .toHaveAttribute("aria-expanded", "true");
+    await expect.element(page.getByText("bundled", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText("Enabled", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText("Prompt injection")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Native deployment")).not.toBeInTheDocument();
+
+    await expect
+      .element(page.getByRole("heading", { name: "External Provider Skills", exact: true }))
+      .toBeInTheDocument();
+    await expect.element(page.getByText("Agent Browser")).toBeInTheDocument();
+    await expect.element(page.getByText("Daily Loop")).toBeInTheDocument();
+    await expect.element(page.getByText("Codex", { exact: true })).toBeInTheDocument();
+    await expect.element(page.getByText("Personal", { exact: true })).toBeInTheDocument();
+    await expect.element(page.getByText("Universal", { exact: true })).toBeInTheDocument();
+    await expect.element(page.getByText("Codex Work")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("/Users/test/.codex/skills/agent-browser/SKILL.md"))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByText("/Users/test/.agents/skills/daily-loop/SKILL.md"))
+      .toBeInTheDocument();
+    await expect.element(page.getByText("external", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText("disabled by provider")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("switch", { name: "Agent Browser enabled" }))
+      .not.toBeInTheDocument();
+
+    await expect
+      .element(page.getByRole("button", { name: "Review Structured clinical study prompt" }))
+      .toHaveAttribute("aria-expanded", "false");
+    await expect
+      .element(page.getByRole("switch", { name: "Structured clinical study enabled" }))
+      .toBeChecked();
+    await expect
+      .element(page.getByText("Create a study description card first."))
+      .not.toBeInTheDocument();
+    await page.getByRole("button", { name: "Review Structured clinical study prompt" }).click();
+    await expect
+      .element(page.getByRole("button", { name: "Hide Structured clinical study prompt" }))
+      .toHaveAttribute("aria-expanded", "true");
+    await expect
+      .element(page.getByText("Create a study description card first."))
+      .toBeInTheDocument();
+    await page.getByRole("switch", { name: "Structured clinical study enabled" }).click();
+    await expect
+      .element(page.getByText("Create a study description card first."))
+      .not.toBeInTheDocument();
+    await expect.element(page.getByText("Baseline only.")).toBeInTheDocument();
   });
 
   it("creates and shows a pairing link when network access is enabled", async () => {

@@ -372,6 +372,7 @@ export function makeCursorAdapter(
             settings.linceiAgentCustomInstructions,
             workflowId,
             settings.linceiSkills,
+            settings.linceiWorkflows,
           ),
         ),
         Effect.mapError(

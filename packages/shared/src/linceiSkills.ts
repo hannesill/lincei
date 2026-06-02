@@ -3,6 +3,7 @@ import type {
   LinceiSkillSyncSidecar,
   LinceiSkillSyncState,
   LinceiWorkflow,
+  LinceiWorkflowSettings,
   ProviderDriverKind,
   ServerProviderSkill,
   LinceiSkillSettings,
@@ -99,6 +100,16 @@ export function bundledLinceiSkills(): ReadonlyArray<LinceiCanonicalSkill> {
 }
 
 export type LinceiSkillSettingsMap = Readonly<Record<string, LinceiSkillSettings | undefined>>;
+export type LinceiWorkflowSettingsMap = Readonly<
+  Record<string, LinceiWorkflowSettings | undefined>
+>;
+
+export function isLinceiWorkflowEnabled(
+  workflowId: string,
+  settings: LinceiWorkflowSettingsMap | undefined,
+): boolean {
+  return settings?.[workflowId]?.enabled ?? true;
+}
 
 export function applyLinceiSkillSettings(
   skills: ReadonlyArray<LinceiCanonicalSkill>,
@@ -233,7 +244,7 @@ export function mergeLinceiSkillCatalog(input: {
       linceiSkillId: skill.id,
       linceiSource: skill.source,
       linceiSyncStatus: status,
-      linceiAvailability: status === "current" ? "native current" : "prompt fallback",
+      linceiAvailability: status === "current" ? "provider-managed" : "prompt fallback",
     });
   };
 
@@ -256,11 +267,28 @@ export function mergeLinceiSkillCatalog(input: {
       ...skill,
       linceiSource: "provider-native",
       linceiSyncStatus: "unmanaged",
-      linceiAvailability: "native current",
+      linceiAvailability: "external provider skill",
     });
   }
 
   return merged;
+}
+
+export function isLinceiOwnedProviderSkill(
+  skill: Pick<ServerProviderSkill, "linceiSkillId" | "linceiSource" | "path">,
+): boolean {
+  return (
+    skill.linceiSkillId !== undefined ||
+    skill.linceiSource === "bundled" ||
+    skill.linceiSource === "project" ||
+    skill.path.startsWith("lincei://")
+  );
+}
+
+export function isExternalProviderSkill(
+  skill: Pick<ServerProviderSkill, "linceiSkillId" | "linceiSource" | "path">,
+): boolean {
+  return skill.linceiSource === "provider-native" || !isLinceiOwnedProviderSkill(skill);
 }
 
 export function evaluateManagedSkillSyncState(input: {
@@ -300,15 +328,18 @@ export function buildEffectiveLinceiPrompt(input: {
   readonly skills?: ReadonlyArray<LinceiCanonicalSkill>;
   readonly selectedSkillIds?: ReadonlyArray<string>;
   readonly skillSettings?: LinceiSkillSettingsMap | undefined;
+  readonly workflowSettings?: LinceiWorkflowSettingsMap | undefined;
 }): string {
   const workflow = workflowById(input.workflowId);
+  const workflowEnabled = isLinceiWorkflowEnabled(workflow.id, input.workflowSettings);
   const skillsById = new Map(
     applyLinceiSkillSettings(input.skills ?? bundledLinceiSkills(), input.skillSettings).map(
       (skill) => [skill.id, skill],
     ),
   );
-  const selectedSkillIds =
-    input.selectedSkillIds && input.selectedSkillIds.length > 0
+  const selectedSkillIds = !workflowEnabled
+    ? []
+    : input.selectedSkillIds && input.selectedSkillIds.length > 0
       ? input.selectedSkillIds
       : workflow.skillIds;
   const selectedBodies = selectedSkillIds
@@ -319,13 +350,14 @@ export function buildEffectiveLinceiPrompt(input: {
         `<lincei_skill id="${skill.id}" version="${skill.version}">\n${skill.body}\n</lincei_skill>`,
     );
 
-  const workflowBlock = workflow.body.trim()
-    ? [
-        `<lincei_workflow id="${workflow.id}" version="${workflow.version}">`,
-        workflow.body,
-        "</lincei_workflow>",
-      ]
-    : [];
+  const workflowBlock =
+    workflowEnabled && workflow.body.trim()
+      ? [
+          `<lincei_workflow id="${workflow.id}" version="${workflow.version}">`,
+          workflow.body,
+          "</lincei_workflow>",
+        ]
+      : [];
 
   return [...workflowBlock, ...selectedBodies].join("\n\n");
 }

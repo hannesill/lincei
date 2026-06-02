@@ -30,6 +30,9 @@ export function formatProviderSkillInstallSource(
   if (normalizedPath.includes("/.codex/plugins/") || normalizedPath.includes("/.agents/plugins/")) {
     return "App";
   }
+  if (normalizedPath.includes("/.agents/skills/")) {
+    return "Universal";
+  }
 
   const normalizedScope = skill.scope?.trim().toLowerCase();
   if (normalizedScope === "system") {

@@ -493,6 +493,7 @@ export function makeOpenCodeAdapter(
             settings.linceiAgentCustomInstructions,
             workflowId,
             settings.linceiSkills,
+            settings.linceiWorkflows,
           ),
         ),
         Effect.mapError(

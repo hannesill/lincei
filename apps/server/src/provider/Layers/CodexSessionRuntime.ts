@@ -9,6 +9,7 @@ import {
   type ProviderEvent,
   type ProviderInteractionMode,
   type LinceiSkillSettings,
+  type LinceiWorkflowSettings,
   type ProviderRequestKind,
   type ProviderSession,
   type ProviderTurnStartResult,
@@ -108,6 +109,7 @@ export interface CodexSessionRuntimeOptions {
   readonly linceiAgentCustomInstructions?: string | undefined;
   readonly linceiWorkflowId?: string | undefined;
   readonly linceiSkillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>;
+  readonly linceiWorkflowSettings?: Readonly<Record<string, LinceiWorkflowSettings | undefined>>;
   readonly resumeCursor?: CodexResumeCursor;
 }
 
@@ -333,6 +335,7 @@ function buildCodexCollaborationMode(input: {
   readonly linceiAgentCustomInstructions?: string | undefined;
   readonly linceiWorkflowId?: string | undefined;
   readonly linceiSkillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>;
+  readonly linceiWorkflowSettings?: Readonly<Record<string, LinceiWorkflowSettings | undefined>>;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
   if (input.interactionMode === undefined) {
     return undefined;
@@ -350,12 +353,14 @@ function buildCodexCollaborationMode(input: {
               input.linceiAgentCustomInstructions,
               input.linceiWorkflowId,
               input.linceiSkillSettings,
+              input.linceiWorkflowSettings,
             )
           : appendLinceiAgentInstructions(
               CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
               input.linceiAgentCustomInstructions,
               input.linceiWorkflowId,
               input.linceiSkillSettings,
+              input.linceiWorkflowSettings,
             ),
     },
   };
@@ -376,6 +381,7 @@ export function buildTurnStartParams(input: {
   readonly linceiAgentCustomInstructions?: string | undefined;
   readonly linceiWorkflowId?: string | undefined;
   readonly linceiSkillSettings?: Readonly<Record<string, LinceiSkillSettings | undefined>>;
+  readonly linceiWorkflowSettings?: Readonly<Record<string, LinceiWorkflowSettings | undefined>>;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -402,6 +408,9 @@ export function buildTurnStartParams(input: {
     ...(input.linceiWorkflowId !== undefined ? { linceiWorkflowId: input.linceiWorkflowId } : {}),
     ...(input.linceiSkillSettings !== undefined
       ? { linceiSkillSettings: input.linceiSkillSettings }
+      : {}),
+    ...(input.linceiWorkflowSettings !== undefined
+      ? { linceiWorkflowSettings: input.linceiWorkflowSettings }
       : {}),
   });
 
@@ -1312,6 +1321,9 @@ export const makeCodexSessionRuntime = (
               : {}),
             ...(options.linceiSkillSettings !== undefined
               ? { linceiSkillSettings: options.linceiSkillSettings }
+              : {}),
+            ...(options.linceiWorkflowSettings !== undefined
+              ? { linceiWorkflowSettings: options.linceiWorkflowSettings }
               : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
