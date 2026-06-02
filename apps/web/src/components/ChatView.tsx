@@ -1626,18 +1626,40 @@ export default function ChatView(props: ChatViewProps) {
     });
   }, [diffOpen, environmentId, isServerSession, navigate, onDiffPanelOpen, sessionId]);
   const onToggleResearchCards = useCallback(() => {
-    if (!isServerSession) {
-      return;
-    }
     if (!cardsOpen) {
       onResearchCardsPanelOpen?.();
     }
+    if (isServerSession) {
+      void navigate({
+        to: "/$environmentId/$sessionId",
+        params: {
+          environmentId,
+          sessionId,
+        },
+        replace: true,
+        search: (previous) => {
+          const rest = cardsOpen
+            ? stripCardSearchParams(previous)
+            : stripDiffSearchParams(previous);
+          return cardsOpen
+            ? { ...rest, cards: undefined }
+            : {
+                ...rest,
+                diff: undefined,
+                diffTurnId: undefined,
+                diffFilePath: undefined,
+                cards: "1",
+              };
+        },
+      });
+      return;
+    }
+    if (!draftId) {
+      return;
+    }
     void navigate({
-      to: "/$environmentId/$sessionId",
-      params: {
-        environmentId,
-        sessionId,
-      },
+      to: "/draft/$draftId",
+      params: { draftId },
       replace: true,
       search: (previous) => {
         const rest = cardsOpen ? stripCardSearchParams(previous) : stripDiffSearchParams(previous);
@@ -1652,7 +1674,15 @@ export default function ChatView(props: ChatViewProps) {
             };
       },
     });
-  }, [cardsOpen, environmentId, isServerSession, navigate, onResearchCardsPanelOpen, sessionId]);
+  }, [
+    cardsOpen,
+    draftId,
+    environmentId,
+    isServerSession,
+    navigate,
+    onResearchCardsPanelOpen,
+    sessionId,
+  ]);
 
   const envLocked = Boolean(
     activeSession &&

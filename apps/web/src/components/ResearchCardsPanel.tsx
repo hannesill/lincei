@@ -1,5 +1,6 @@
 import { useParams } from "@tanstack/react-router";
 import { scopeProjectRef } from "@t3tools/client-runtime";
+import { DEFAULT_MODEL, ProviderInstanceId } from "@t3tools/contracts";
 import {
   isActiveResearchCard,
   normalizeResearchCardMarkdownPreviewText,
@@ -41,6 +42,8 @@ import { selectProjectByRef, selectSessionsAcrossEnvironments, useStore } from "
 import { createSessionSelectorByRef } from "../storeSelectors";
 import { formatShortTimestamp } from "../timestampFormat";
 import type { ResearchCardDetail, Session } from "../types";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
+import { buildLocalDraftSession } from "./ChatView.logic";
 import { useSettings } from "../hooks/useSettings";
 import { cn, newCommandId } from "../lib/utils";
 import ChatMarkdown from "./ChatMarkdown";
@@ -1459,24 +1462,47 @@ function ResearchCardItem(props: {
 
 export default function ResearchCardsPanel({ mode = "inline" }: ResearchCardsPanelProps) {
   const settings = useSettings();
-  const [scope, setScope] = useState<ResearchCardScope>("session");
-  const [studyCardManifests, setStudyCardManifests] = useState<
-    Record<string, ResearchCardManifest>
-  >({});
   const routeSessionRef = useParams({
     strict: false,
     select: (params) => resolveSessionRouteRef(params),
   });
-  const activeSession = useStore(
+  const routeDraftId = useParams({
+    strict: false,
+    select: (params) => (typeof params.draftId === "string" ? DraftId.make(params.draftId) : null),
+  });
+  const [scope, setScope] = useState<ResearchCardScope>(() => (routeDraftId ? "study" : "session"));
+  const [studyCardManifests, setStudyCardManifests] = useState<
+    Record<string, ResearchCardManifest>
+  >({});
+  const draftSession = useComposerDraftStore((store) =>
+    routeDraftId ? store.getDraftSession(routeDraftId) : null,
+  );
+  const serverActiveSession = useStore(
     useMemo(() => createSessionSelectorByRef(routeSessionRef), [routeSessionRef]),
   );
+  const activeProjectRef = serverActiveSession
+    ? scopeProjectRef(serverActiveSession.environmentId, serverActiveSession.projectId)
+    : draftSession
+      ? scopeProjectRef(draftSession.environmentId, draftSession.projectId)
+      : null;
   const activeProject = useStore((store) =>
-    activeSession
-      ? selectProjectByRef(
-          store,
-          scopeProjectRef(activeSession.environmentId, activeSession.projectId),
-        )
-      : undefined,
+    activeProjectRef ? selectProjectByRef(store, activeProjectRef) : undefined,
+  );
+  const activeSession = useMemo(
+    () =>
+      serverActiveSession ??
+      (draftSession
+        ? buildLocalDraftSession(
+            draftSession.sessionId,
+            draftSession,
+            activeProject?.defaultModelSelection ?? {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: DEFAULT_MODEL,
+            },
+            null,
+          )
+        : undefined),
+    [activeProject?.defaultModelSelection, draftSession, serverActiveSession],
   );
   const sessions = useStore(useShallow(selectSessionsAcrossEnvironments));
   useEffect(() => {

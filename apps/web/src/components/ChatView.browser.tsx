@@ -452,6 +452,35 @@ function createSnapshotWithResearchCards(): OrchestrationReadModel {
   };
 }
 
+function createSnapshotWithStudyResearchCardsForDraft(): OrchestrationReadModel {
+  const snapshot = createSnapshotWithResearchCards();
+  const sourceSessionId = "session-study-card-source" as SessionId;
+  const sessions = snapshot.sessions.slice();
+  const sourceSessionIndex = sessions.findIndex((session) => session.id === THREAD_ID);
+  const sourceSession = sourceSessionIndex >= 0 ? sessions[sourceSessionIndex] : undefined;
+  if (sourceSession) {
+    sessions[sourceSessionIndex] = Object.assign({}, sourceSession, {
+      id: sourceSessionId,
+      title: "Prior cohort review",
+      session: sourceSession.session
+        ? Object.assign({}, sourceSession.session, {
+            sessionId: sourceSessionId,
+          })
+        : null,
+      researchCards: sourceSession.researchCards.map((card) =>
+        Object.assign({}, card, {
+          sessionId: sourceSessionId,
+        }),
+      ),
+    });
+  }
+
+  return {
+    ...snapshot,
+    sessions,
+  };
+}
+
 function createResearchCardDetailForTest(input: {
   readonly sessionId: SessionId;
   readonly cardId: ResearchCardId;
@@ -1984,6 +2013,71 @@ describe("ChatView timeline estimator parity (full app)", () => {
           (mounted.router.state.location.search as Record<string, unknown>).cards,
         ).toBeUndefined();
       });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("opens study research cards from draft sessions before the first turn", async () => {
+    const draftId = DraftId.make("draft-study-cards");
+    useComposerDraftStore.setState({
+      draftSessionsBySessionKey: {
+        [draftId]: {
+          sessionId: THREAD_ID,
+          environmentId: LOCAL_ENVIRONMENT_ID,
+          projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
+          createdAt: NOW_ISO,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          envMode: "local",
+        },
+      },
+      logicalProjectDraftSessionKeyByLogicalProjectKey: {
+        [PROJECT_DRAFT_KEY]: draftId,
+      },
+    });
+    const environmentApi = createMockEnvironmentApi({
+      browse: (async () => ({
+        parentPath: "/repo/project",
+        entries: [],
+      })) as EnvironmentApi["filesystem"]["browse"],
+      dispatchCommand: (async () => ({
+        sequence: 1,
+      })) as EnvironmentApi["orchestration"]["dispatchCommand"],
+    });
+    environmentApi.orchestration.getResearchCardDetail = (async (input) =>
+      createResearchCardDetailForTest({
+        sessionId: input.sessionId,
+        cardId: input.cardId,
+      }) ?? {}) as EnvironmentApi["orchestration"]["getResearchCardDetail"];
+    environmentApi.study.getStatus = (async () =>
+      createResearchCardStatusForTest() as unknown as Awaited<
+        ReturnType<EnvironmentApi["study"]["getStatus"]>
+      >) as EnvironmentApi["study"]["getStatus"];
+    __setEnvironmentApiOverrideForTests(LOCAL_ENVIRONMENT_ID, environmentApi);
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotWithStudyResearchCardsForDraft(),
+      initialPath: `/draft/${draftId}`,
+    });
+
+    try {
+      const toggle = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
+        "Unable to find research cards toggle.",
+      );
+      toggle.click();
+
+      await vi.waitFor(() => {
+        expect((mounted.router.state.location.search as Record<string, unknown>).cards).toBe("1");
+      });
+      await expect.element(page.getByText("Cohort definition")).toBeInTheDocument();
+      await expect.element(page.getByText("Baseline balance")).toBeInTheDocument();
     } finally {
       await mounted.cleanup();
     }
@@ -6243,6 +6337,80 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
           expect(footer?.dataset.chatComposerFooterCompact).toBe("true");
           expect(actions?.dataset.chatComposerPrimaryActionsCompact).toBe("true");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps the Plan sidebar control reachable in a constrained footer layout", async () => {
+    localStorage.setItem(
+      "lincei:client-settings:v1",
+      JSON.stringify({
+        ...DEFAULT_CLIENT_SETTINGS,
+        autoOpenPlanSidebar: false,
+      }),
+    );
+
+    const mounted = await mountChatView({
+      viewport: WIDE_FOOTER_VIEWPORT,
+      snapshot: createSnapshotWithPlanFollowUpPrompt({
+        planMarkdown:
+          "# Plan drawer regression\n\n- Keep the Plan drawer reachable while composer controls wrap.",
+      }),
+    });
+
+    try {
+      await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-composer-footer="true"]'),
+        "Unable to find composer footer.",
+      );
+
+      await mounted.setContainerSize({
+        width: 700,
+        height: WIDE_FOOTER_VIEWPORT.height,
+      });
+
+      const footer = await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-composer-footer="true"]'),
+        "Unable to find composer footer after resize.",
+      );
+      const reachableControl = await waitForElement(
+        () =>
+          Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+            (button) => button.title === "Show plan sidebar",
+          ) ??
+          document.querySelector<HTMLButtonElement>('button[aria-label="More composer controls"]'),
+        "Unable to find a reachable Plan sidebar control.",
+      );
+
+      await vi.waitFor(
+        () => {
+          const controlRect = reachableControl.getBoundingClientRect();
+          const footerRect = footer.getBoundingClientRect();
+          expect(controlRect.width).toBeGreaterThan(0);
+          expect(controlRect.height).toBeGreaterThan(0);
+          expect(controlRect.left).toBeGreaterThanOrEqual(footerRect.left - 0.5);
+          expect(controlRect.right).toBeLessThanOrEqual(footerRect.right + 0.5);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      const directPlanButton = Array.from(
+        document.querySelectorAll<HTMLButtonElement>("button"),
+      ).find((button) => button.title === "Show plan sidebar");
+      if (directPlanButton) {
+        directPlanButton.click();
+      } else {
+        await page.getByLabelText("More composer controls").click();
+        await page.getByText("Show plan sidebar").click();
+      }
+
+      await vi.waitFor(
+        () => {
+          expect(document.body.textContent).toContain("Keep the Plan drawer reachable");
         },
         { timeout: 8_000, interval: 16 },
       );

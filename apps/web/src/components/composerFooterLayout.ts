@@ -7,10 +7,25 @@ export function shouldUseCompactComposerFooter(
   width: number | null,
   options?: { hasWideActions?: boolean },
 ): boolean {
-  const breakpoint = options?.hasWideActions
+  return shouldUseCompactComposerFooterForMeasuredLayout({
+    formWidth: width,
+    hasWideActions: options?.hasWideActions ?? false,
+    hasOverflow: false,
+  });
+}
+
+export function shouldUseCompactComposerFooterForMeasuredLayout(input: {
+  formWidth: number | null;
+  hasWideActions?: boolean;
+  hasOverflow?: boolean;
+}): boolean {
+  const breakpoint = input.hasWideActions
     ? COMPOSER_FOOTER_WIDE_ACTIONS_COMPACT_BREAKPOINT_PX
     : COMPOSER_FOOTER_COMPACT_BREAKPOINT_PX;
-  return width !== null && width < breakpoint;
+  if (input.hasOverflow) {
+    return true;
+  }
+  return input.formWidth !== null && input.formWidth < breakpoint;
 }
 
 export function shouldUseCompactComposerPrimaryActions(

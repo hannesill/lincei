@@ -58,7 +58,7 @@ import {
 } from "../../lib/terminalContext";
 import {
   shouldUseCompactComposerPrimaryActions,
-  shouldUseCompactComposerFooter,
+  shouldUseCompactComposerFooterForMeasuredLayout,
 } from "../composerFooterLayout";
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import { ProviderModelPicker } from "./ProviderModelPicker";
@@ -821,6 +821,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // ------------------------------------------------------------------
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
+  const composerFooterLeftControlsRef = useRef<HTMLDivElement>(null);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const composerFormHeightRef = useRef(0);
   const composerSelectLockRef = useRef(false);
@@ -1238,10 +1239,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     const composerForm = composerFormRef.current;
     if (!composerForm) return;
     const measureComposerFormWidth = () => composerForm.clientWidth;
+    const measureFooterLeftControlsOverflow = () => {
+      const footerLeftControls = composerFooterLeftControlsRef.current;
+      if (!footerLeftControls) return false;
+      return footerLeftControls.scrollWidth - footerLeftControls.clientWidth > 1;
+    };
     const measureFooterCompactness = () => {
       const composerFormWidth = measureComposerFormWidth();
-      const footerCompact = shouldUseCompactComposerFooter(composerFormWidth, {
+      const footerCompact = shouldUseCompactComposerFooterForMeasuredLayout({
+        formWidth: composerFormWidth,
         hasWideActions: composerFooterHasWideActions,
+        hasOverflow: measureFooterLeftControlsOverflow(),
       });
       const primaryActionsCompact =
         footerCompact &&
@@ -2354,7 +2362,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 showMobilePendingAnswerActions && "hidden sm:flex",
               )}
             >
-              <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div
+                ref={composerFooterLeftControlsRef}
+                className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
                 <ProviderModelPicker
                   compact={isComposerFooterCompact}
                   activeInstanceId={selectedInstanceId}
