@@ -2,6 +2,7 @@ import {
   ArchiveIcon,
   ArrowUpDownIcon,
   ChevronRightIcon,
+  CircleHelpIcon,
   CloudIcon,
   FolderPlusIcon,
   SearchIcon,
@@ -2452,13 +2453,22 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
 
 const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
+  const handleHelpFeedbackClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void navigate({ to: "/help-feedback" });
+  }, [isMobile, navigate, setOpenMobile]);
   const handleSettingsClick = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
     }
     void navigate({ to: "/settings" });
   }, [isMobile, navigate, setOpenMobile]);
+  const isHelpFeedbackActive = pathname === "/help-feedback";
+  const isSettingsActive = pathname.startsWith("/settings");
 
   return (
     <SidebarFooter className="p-2">
@@ -2468,7 +2478,27 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"
-            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            isActive={isHelpFeedbackActive}
+            className={
+              isHelpFeedbackActive
+                ? "gap-2 px-2 py-1.5 text-sidebar-accent-foreground"
+                : "gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }
+            onClick={handleHelpFeedbackClick}
+          >
+            <CircleHelpIcon className="size-3.5" />
+            <span className="text-xs">Help & Feedback</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="sm"
+            isActive={isSettingsActive}
+            className={
+              isSettingsActive
+                ? "gap-2 px-2 py-1.5 text-sidebar-accent-foreground"
+                : "gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }
             onClick={handleSettingsClick}
           >
             <SettingsIcon className="size-3.5" />
