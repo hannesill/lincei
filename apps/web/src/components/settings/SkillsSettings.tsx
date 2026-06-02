@@ -163,50 +163,6 @@ export function SkillsSettingsPanel() {
         })}
       </SettingsSection>
 
-      <SettingsSection title="External Provider Skills">
-        {externalProviderSkills.length > 0 ? (
-          externalProviderSkills.map(({ providerName, skill }) => {
-            const providerLabel = externalSkillProviderLabel(providerName, skill.path);
-            const installSourceLabel = formatProviderSkillInstallSource(skill);
-            return (
-              <SettingsRow
-                key={`${providerName}:${skill.name}:${skill.path}`}
-                title={skill.displayName ?? skill.name}
-                description={
-                  skill.shortDescription ??
-                  skill.description ??
-                  "External instructions discovered from the provider."
-                }
-                status={
-                  <div className="flex min-w-0 flex-col gap-1.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      {providerLabel ? (
-                        <Badge variant="outline" size="sm">
-                          {providerLabel}
-                        </Badge>
-                      ) : null}
-                      {installSourceLabel ? (
-                        <Badge variant="outline" size="sm">
-                          {installSourceLabel}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <code className="block truncate text-[11px] text-muted-foreground/70">
-                      {skill.path}
-                    </code>
-                  </div>
-                }
-              />
-            );
-          })
-        ) : (
-          <SettingsRow
-            title="No external provider skills"
-            description="No external provider skills were reported by the configured providers."
-          />
-        )}
-      </SettingsSection>
-
       <SettingsSection title="Workflow Prompt Preview">
         {LINCEI_WORKFLOWS.map((workflow) => {
           const expanded = expandedWorkflowIds.has(workflow.id);
@@ -267,6 +223,50 @@ export function SkillsSettingsPanel() {
             </SettingsRow>
           );
         })}
+      </SettingsSection>
+
+      <SettingsSection title="External Provider Skills">
+        {externalProviderSkills.length > 0 ? (
+          externalProviderSkills.map(({ providerName, skill }) => {
+            const providerLabel = externalSkillProviderLabel(providerName, skill.path);
+            const installSourceLabel = formatProviderSkillInstallSource(skill);
+            return (
+              <SettingsRow
+                key={`${providerName}:${skill.name}:${skill.path}`}
+                title={skill.displayName ?? skill.name}
+                description={
+                  skill.shortDescription ??
+                  skill.description ??
+                  "External instructions discovered from the provider."
+                }
+                status={
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {providerLabel ? (
+                        <Badge variant="outline" size="sm">
+                          {providerLabel}
+                        </Badge>
+                      ) : null}
+                      {installSourceLabel ? (
+                        <Badge variant="outline" size="sm">
+                          {installSourceLabel}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <code className="block truncate text-[11px] text-muted-foreground/70">
+                      {skill.path}
+                    </code>
+                  </div>
+                }
+              />
+            );
+          })
+        ) : (
+          <SettingsRow
+            title="No external provider skills"
+            description="No external provider skills were reported by the configured providers."
+          />
+        )}
       </SettingsSection>
     </SettingsPageContainer>
   );

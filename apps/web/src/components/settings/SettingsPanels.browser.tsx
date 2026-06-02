@@ -850,6 +850,17 @@ describe("GeneralSettingsPanel observability", () => {
     await expect
       .element(page.getByRole("heading", { name: "External Provider Skills", exact: true }))
       .toBeInTheDocument();
+    expect(
+      page
+        .getByRole("heading", { name: "Workflow Prompt Preview", exact: true })
+        .element()
+        .getBoundingClientRect().top,
+    ).toBeLessThan(
+      page
+        .getByRole("heading", { name: "External Provider Skills", exact: true })
+        .element()
+        .getBoundingClientRect().top,
+    );
     await expect.element(page.getByText("Agent Browser")).toBeInTheDocument();
     await expect.element(page.getByText("Daily Loop")).toBeInTheDocument();
     await expect.element(page.getByText("Codex", { exact: true })).toBeInTheDocument();
