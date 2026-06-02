@@ -164,6 +164,8 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         },
         interactionMode: "default",
         runtimeMode: "full-access",
+        workflowId: null,
+        workflowVersion: null,
         branch: "main",
         worktreePath: null,
         latestTurn: null,

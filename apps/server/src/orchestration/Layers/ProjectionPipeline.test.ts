@@ -175,6 +175,117 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 
+  it.effect("persists workflow metadata from creation and turn-start events", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const now = "2026-01-01T00:00:00.000Z";
+      const sessionId = SessionId.make("session-workflow");
+      const projectId = ProjectId.make("project-workflow");
+
+      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+        eventStore
+          .append(event)
+          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.make("evt-workflow-project"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-workflow-project"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-workflow-project"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Workflow Project",
+          workspaceRoot: "/tmp/workflow-project",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.created",
+        eventId: EventId.make("evt-workflow-session"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-workflow-session"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-workflow-session"),
+        metadata: {},
+        payload: {
+          sessionId,
+          projectId,
+          title: "Workflow Session",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          workflowId: "workflow-one",
+          workflowVersion: "1",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      let rows = yield* sql<{
+        readonly workflowId: string | null;
+        readonly workflowVersion: string | null;
+      }>`
+        SELECT
+          workflow_id AS "workflowId",
+          workflow_version AS "workflowVersion"
+        FROM projection_sessions
+        WHERE session_id = ${sessionId}
+      `;
+      assert.deepEqual(rows, [{ workflowId: "workflow-one", workflowVersion: "1" }]);
+
+      yield* appendAndProject({
+        type: "session.turn-start-requested",
+        eventId: EventId.make("evt-workflow-turn"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-01-01T00:00:01.000Z",
+        commandId: CommandId.make("cmd-workflow-turn"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-workflow-turn"),
+        metadata: {},
+        payload: {
+          sessionId,
+          messageId: MessageId.make("message-workflow"),
+          runtimeMode: "approval-required",
+          interactionMode: "plan",
+          workflowId: "workflow-two",
+          workflowVersion: "2",
+          createdAt: "2026-01-01T00:00:01.000Z",
+        },
+      });
+
+      rows = yield* sql<{
+        readonly workflowId: string | null;
+        readonly workflowVersion: string | null;
+      }>`
+        SELECT
+          workflow_id AS "workflowId",
+          workflow_version AS "workflowVersion"
+        FROM projection_sessions
+        WHERE session_id = ${sessionId}
+      `;
+      assert.deepEqual(rows, [{ workflowId: "workflow-two", workflowVersion: "2" }]);
+    }),
+  );
+
   it.effect("persists research cards, records reviews, and prunes reverted turns", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;

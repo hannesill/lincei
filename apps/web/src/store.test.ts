@@ -126,6 +126,8 @@ function makeServerSession(overrides: Partial<OrchestrationSession> = {}): Orche
     },
     runtimeMode: DEFAULT_RUNTIME_MODE,
     interactionMode: DEFAULT_INTERACTION_MODE,
+    workflowId: null,
+    workflowVersion: null,
     branch: null,
     worktreePath: null,
     latestTurn: null,

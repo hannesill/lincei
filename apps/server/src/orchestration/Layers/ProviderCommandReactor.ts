@@ -310,6 +310,8 @@ const make = Effect.gen(function* () {
     createdAt: string,
     options?: {
       readonly modelSelection?: ModelSelection;
+      readonly workflowId?: string;
+      readonly workflowVersion?: string;
     },
   ) {
     const session = yield* resolveSession(sessionId);
@@ -319,6 +321,8 @@ const make = Effect.gen(function* () {
 
     const desiredRuntimeMode = session.runtimeMode;
     const requestedModelSelection = options?.modelSelection;
+    const desiredWorkflowId = options?.workflowId ?? session.workflowId ?? undefined;
+    const desiredWorkflowVersion = options?.workflowVersion ?? session.workflowVersion ?? undefined;
     const resolveActiveSession = (sessionId: SessionId) =>
       providerService
         .listSessions()
@@ -427,12 +431,12 @@ const make = Effect.gen(function* () {
         ...(project?.workspaceRoot ? { workspaceRoot: project.workspaceRoot } : {}),
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
-        ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
-        ...(session.workflowVersion !== undefined
-          ? { workflowVersion: session.workflowVersion }
-          : {}),
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: desiredRuntimeMode,
+        ...(desiredWorkflowId !== undefined ? { workflowId: desiredWorkflowId } : {}),
+        ...(desiredWorkflowVersion !== undefined
+          ? { workflowVersion: desiredWorkflowVersion }
+          : {}),
       });
 
     const bindSessionToSession = (session: ProviderSession) =>
@@ -539,6 +543,8 @@ const make = Effect.gen(function* () {
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
+    readonly workflowId?: string;
+    readonly workflowVersion?: string;
     readonly createdAt: string;
   }) {
     const session = yield* resolveSession(input.sessionId);
@@ -547,11 +553,11 @@ const make = Effect.gen(function* () {
         new Error(`Session '${input.sessionId}' was not found in read model.`),
       );
     }
-    yield* ensureSessionForSession(
-      input.sessionId,
-      input.createdAt,
-      input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {},
-    );
+    yield* ensureSessionForSession(input.sessionId, input.createdAt, {
+      ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(input.workflowId !== undefined ? { workflowId: input.workflowId } : {}),
+      ...(input.workflowVersion !== undefined ? { workflowVersion: input.workflowVersion } : {}),
+    });
     if (input.modelSelection !== undefined) {
       sessionModelSelections.set(input.sessionId, input.modelSelection);
     }
@@ -584,17 +590,19 @@ const make = Effect.gen(function* () {
             }
           : requestedModelSelection
         : input.modelSelection;
+    const effectiveWorkflowId = input.workflowId ?? session.workflowId ?? undefined;
+    const effectiveWorkflowVersion = input.workflowVersion ?? session.workflowVersion ?? undefined;
 
     return {
       sessionId: input.sessionId,
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
-      ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
-      ...(session.workflowVersion !== undefined
-        ? { workflowVersion: session.workflowVersion }
-        : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      ...(effectiveWorkflowId !== undefined ? { workflowId: effectiveWorkflowId } : {}),
+      ...(effectiveWorkflowVersion !== undefined
+        ? { workflowVersion: effectiveWorkflowVersion }
+        : {}),
     };
   });
 
@@ -799,6 +807,10 @@ const make = Effect.gen(function* () {
         ? { modelSelection: event.payload.modelSelection }
         : {}),
       interactionMode: event.payload.interactionMode,
+      ...(event.payload.workflowId != null ? { workflowId: event.payload.workflowId } : {}),
+      ...(event.payload.workflowVersion != null
+        ? { workflowVersion: event.payload.workflowVersion }
+        : {}),
       createdAt: event.payload.createdAt,
     }).pipe(
       Effect.map(Option.some),

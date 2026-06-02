@@ -34,6 +34,7 @@ import {
   SessionUnarchivedPayload,
   SessionRevertedPayload,
   ProviderRuntimeSetPayload,
+  SessionTurnStartRequestedPayload,
   SessionTurnDiffCompletedPayload,
 } from "./Schemas.ts";
 
@@ -325,10 +326,8 @@ export function projectEvent(
             modelSelection: payload.modelSelection,
             runtimeMode: payload.runtimeMode,
             interactionMode: payload.interactionMode,
-            ...(payload.workflowId !== undefined ? { workflowId: payload.workflowId } : {}),
-            ...(payload.workflowVersion !== undefined
-              ? { workflowVersion: payload.workflowVersion }
-              : {}),
+            workflowId: payload.workflowId ?? null,
+            workflowVersion: payload.workflowVersion ?? null,
             branch: payload.branch,
             worktreePath: payload.worktreePath,
             latestTurn: null,
@@ -750,6 +749,30 @@ export function projectEvent(
           }),
         };
       });
+
+    case "session.turn-start-requested":
+      return decodeForEvent(
+        SessionTurnStartRequestedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            ...(payload.modelSelection !== undefined
+              ? { modelSelection: payload.modelSelection }
+              : {}),
+            runtimeMode: payload.runtimeMode,
+            interactionMode: payload.interactionMode,
+            ...(payload.workflowId !== undefined ? { workflowId: payload.workflowId } : {}),
+            ...(payload.workflowVersion !== undefined
+              ? { workflowVersion: payload.workflowVersion }
+              : {}),
+            updatedAt: payload.createdAt,
+          }),
+        })),
+      );
 
     case "session.turn-diff-completed":
       return Effect.gen(function* () {

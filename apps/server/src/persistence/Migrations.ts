@@ -45,6 +45,7 @@ import Migration0029 from "./Migrations/029_ProjectionSessionDetailOrderingIndex
 import Migration0030 from "./Migrations/030_ProjectionSessionShellArchiveIndexes.ts";
 import Migration0031 from "./Migrations/031_SessionTerminologyCompatibility.ts";
 import Migration0032 from "./Migrations/032_ProjectionSessionResearchCards.ts";
+import Migration0033 from "./Migrations/033_ProjectionSessionWorkflowMetadata.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -89,6 +90,7 @@ export const migrationEntries = [
   [30, "ProjectionSessionShellArchiveIndexes", Migration0030],
   [31, "SessionTerminologyCompatibility", Migration0031],
   [32, "ProjectionSessionResearchCards", Migration0032],
+  [33, "ProjectionSessionWorkflowMetadata", Migration0033],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

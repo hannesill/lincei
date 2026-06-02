@@ -30,6 +30,8 @@ export const ProjectionSession = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  workflowId: Schema.NullOr(Schema.String),
+  workflowVersion: Schema.NullOr(Schema.String),
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   latestTurnId: Schema.NullOr(TurnId),

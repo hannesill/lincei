@@ -660,6 +660,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             modelSelection: event.payload.modelSelection,
             runtimeMode: event.payload.runtimeMode,
             interactionMode: event.payload.interactionMode,
+            workflowId: event.payload.workflowId ?? null,
+            workflowVersion: event.payload.workflowVersion ?? null,
             branch: event.payload.branch,
             worktreePath: event.payload.worktreePath,
             latestTurnId: null,
@@ -769,6 +771,27 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             deletedAt: event.payload.deletedAt,
             updatedAt: event.payload.deletedAt,
           });
+          return;
+        }
+
+        case "session.turn-start-requested": {
+          const existingRow = yield* projectionSessionRepository.getById({
+            sessionId: event.payload.sessionId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionSessionRepository.upsert({
+            ...existingRow.value,
+            ...(event.payload.workflowId !== undefined
+              ? { workflowId: event.payload.workflowId }
+              : {}),
+            ...(event.payload.workflowVersion !== undefined
+              ? { workflowVersion: event.payload.workflowVersion }
+              : {}),
+            updatedAt: event.occurredAt,
+          });
+          yield* refreshSessionShellSummary(event.payload.sessionId);
           return;
         }
 

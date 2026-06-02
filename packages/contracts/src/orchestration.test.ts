@@ -251,6 +251,27 @@ it.effect("preserves explicit provider and runtime mode in session.turn.start", 
   }),
 );
 
+it.effect("preserves workflow metadata in session.turn.start", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeSessionTurnStartCommand({
+      type: "session.turn.start",
+      commandId: "cmd-turn-workflow",
+      sessionId: "session-1",
+      message: {
+        messageId: "msg-workflow",
+        role: "user",
+        text: "hello",
+        attachments: [],
+      },
+      workflowId: "clinical-review",
+      workflowVersion: "2026-06-01",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.workflowId, "clinical-review");
+    assert.strictEqual(parsed.workflowVersion, "2026-06-01");
+  }),
+);
+
 it.effect("accepts bootstrap metadata in session.turn.start", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeSessionTurnStartCommand({
@@ -583,6 +604,20 @@ it.effect("decodes session.turn-start-requested title seed when present", () =>
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.titleSeed, "Investigate reconnect failures");
+  }),
+);
+
+it.effect("decodes session.turn-start-requested workflow metadata when present", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeSessionTurnStartRequestedPayload({
+      sessionId: "session-2",
+      messageId: "msg-2",
+      workflowId: "clinical-review",
+      workflowVersion: "2026-06-01",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.workflowId, "clinical-review");
+    assert.strictEqual(parsed.workflowVersion, "2026-06-01");
   }),
 );
 

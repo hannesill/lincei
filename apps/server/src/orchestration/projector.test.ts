@@ -83,6 +83,8 @@ describe("orchestration projector", () => {
         },
         runtimeMode: "full-access",
         interactionMode: "default",
+        workflowId: null,
+        workflowVersion: null,
         branch: null,
         worktreePath: null,
         latestTurn: null,

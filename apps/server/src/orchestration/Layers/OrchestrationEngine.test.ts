@@ -140,6 +140,8 @@ describe("OrchestrationEngine", () => {
           },
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "full-access" as const,
+          workflowId: null,
+          workflowVersion: null,
           branch: null,
           worktreePath: null,
           latestTurn: null,
@@ -285,6 +287,8 @@ describe("OrchestrationEngine", () => {
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
+        workflowId: "clinical-review",
+        workflowVersion: "2026-06-01",
         createdAt,
       }),
     );
@@ -292,6 +296,17 @@ describe("OrchestrationEngine", () => {
     const readModelA = await system.readModel();
     const readModelB = await system.readModel();
     expect(readModelB).toEqual(readModelA);
+    const events = await system.run(
+      Stream.runCollect(engine.readEvents(0)).pipe(
+        Effect.map((chunk): OrchestrationEvent[] => Array.from(chunk)),
+      ),
+    );
+    const turnStartEvent = events.find((event) => event.type === "session.turn-start-requested");
+    expect(turnStartEvent?.type).toBe("session.turn-start-requested");
+    if (turnStartEvent?.type === "session.turn-start-requested") {
+      expect(turnStartEvent.payload.workflowId).toBe("clinical-review");
+      expect(turnStartEvent.payload.workflowVersion).toBe("2026-06-01");
+    }
     await system.dispose();
   });
 

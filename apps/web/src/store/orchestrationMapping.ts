@@ -188,8 +188,8 @@ export function mapSession(session: OrchestrationSession, environmentId: Environ
     modelSelection: normalizeModelSelection(session.modelSelection),
     runtimeMode: session.runtimeMode,
     interactionMode: session.interactionMode,
-    ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
-    ...(session.workflowVersion !== undefined ? { workflowVersion: session.workflowVersion } : {}),
+    workflowId: session.workflowId ?? null,
+    workflowVersion: session.workflowVersion ?? null,
     session: session.session ? mapProviderRuntime(session.session) : null,
     messages: session.messages.map((message) => mapMessage(environmentId, message)),
     proposedPlans: session.proposedPlans.map(mapProposedPlan),
@@ -225,8 +225,8 @@ export function mapSessionShell(
     modelSelection: normalizeModelSelection(session.modelSelection),
     runtimeMode: session.runtimeMode,
     interactionMode: session.interactionMode,
-    ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
-    ...(session.workflowVersion !== undefined ? { workflowVersion: session.workflowVersion } : {}),
+    workflowId: session.workflowId ?? null,
+    workflowVersion: session.workflowVersion ?? null,
     error: sanitizeSessionErrorMessage(session.session?.lastError),
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
@@ -245,6 +245,8 @@ export function mapSessionShell(
     projectId: session.projectId,
     title: session.title,
     interactionMode: session.interactionMode,
+    workflowId: session.workflowId,
+    workflowVersion: session.workflowVersion,
     session: providerRuntime,
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
@@ -275,8 +277,8 @@ export function toSessionShell(session: Session): SessionShell {
     modelSelection: session.modelSelection,
     runtimeMode: session.runtimeMode,
     interactionMode: session.interactionMode,
-    ...(session.workflowId !== undefined ? { workflowId: session.workflowId } : {}),
-    ...(session.workflowVersion !== undefined ? { workflowVersion: session.workflowVersion } : {}),
+    workflowId: session.workflowId ?? null,
+    workflowVersion: session.workflowVersion ?? null,
     error: session.error,
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
@@ -348,6 +350,8 @@ export function sidebarSessionSummariesEqual(
     left.projectId === right.projectId &&
     left.title === right.title &&
     left.interactionMode === right.interactionMode &&
+    left.workflowId === right.workflowId &&
+    left.workflowVersion === right.workflowVersion &&
     providerRuntimesEqual(left.session, right.session) &&
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&
@@ -373,6 +377,8 @@ export function sessionShellsEqual(left: SessionShell | undefined, right: Sessio
     left.modelSelection === right.modelSelection &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
+    left.workflowId === right.workflowId &&
+    left.workflowVersion === right.workflowVersion &&
     left.error === right.error &&
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&

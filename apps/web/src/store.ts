@@ -1015,12 +1015,8 @@ function applyEnvironmentOrchestrationEvent(
           modelSelection: event.payload.modelSelection,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
-          ...(event.payload.workflowId !== undefined
-            ? { workflowId: event.payload.workflowId }
-            : {}),
-          ...(event.payload.workflowVersion !== undefined
-            ? { workflowVersion: event.payload.workflowVersion }
-            : {}),
+          workflowId: event.payload.workflowId ?? null,
+          workflowVersion: event.payload.workflowVersion ?? null,
           branch: event.payload.branch,
           worktreePath: event.payload.worktreePath,
           latestTurn: null,

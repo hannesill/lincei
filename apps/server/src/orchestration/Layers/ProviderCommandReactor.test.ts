@@ -431,6 +431,8 @@ describe("ProviderCommandReactor", () => {
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
+        workflowId: "clinical-review",
+        workflowVersion: "2026-06-01",
         createdAt: now,
       }),
     );
@@ -445,12 +447,82 @@ describe("ProviderCommandReactor", () => {
         model: "gpt-5-codex",
       },
       runtimeMode: "approval-required",
+      workflowId: "clinical-review",
+      workflowVersion: "2026-06-01",
+    });
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      sessionId: SessionId.make("session-1"),
+      workflowId: "clinical-review",
+      workflowVersion: "2026-06-01",
     });
 
     const readModel = await harness.readModel();
     const session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
     expect(session?.session?.sessionId).toBe("session-1");
     expect(session?.session?.runtimeMode).toBe("approval-required");
+    expect(session?.workflowId).toBe("clinical-review");
+    expect(session?.workflowVersion).toBe("2026-06-01");
+  });
+
+  it("forwards the selected workflow on existing-session turns", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-workflow-initial"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-workflow-initial"),
+          role: "user",
+          text: "start with workflow one",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        workflowId: "workflow-one",
+        workflowVersion: "1",
+        createdAt: now,
+      }),
+    );
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    harness.startSession.mockClear();
+    harness.sendTurn.mockClear();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-workflow-existing"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-workflow-existing"),
+          role: "user",
+          text: "switch to workflow two",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        workflowId: "workflow-two",
+        workflowVersion: "2",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.startSession).not.toHaveBeenCalled();
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      sessionId: SessionId.make("session-1"),
+      workflowId: "workflow-two",
+      workflowVersion: "2",
+    });
+
+    const readModel = await harness.readModel();
+    const session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+    expect(session?.workflowId).toBe("workflow-two");
+    expect(session?.workflowVersion).toBe("2");
   });
 
   it("generates a session title on the first turn", async () => {

@@ -112,8 +112,8 @@ export interface Session {
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
-  workflowId?: string | undefined;
-  workflowVersion?: string | undefined;
+  workflowId?: string | null;
+  workflowVersion?: string | null;
   session: ProviderRuntime | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
@@ -139,8 +139,8 @@ export interface SessionShell {
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
-  workflowId?: string | undefined;
-  workflowVersion?: string | undefined;
+  workflowId?: string | null;
+  workflowVersion?: string | null;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
@@ -160,6 +160,8 @@ export interface SidebarSessionSummary {
   projectId: ProjectId;
   title: string;
   interactionMode: ProviderInteractionMode;
+  workflowId?: string | null;
+  workflowVersion?: string | null;
   session: ProviderRuntime | null;
   createdAt: string;
   archivedAt: string | null;
