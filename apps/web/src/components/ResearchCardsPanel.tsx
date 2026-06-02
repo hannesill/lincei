@@ -4,6 +4,12 @@ import {
   isActiveResearchCard,
   normalizeResearchCardMarkdownPreviewText,
 } from "@t3tools/shared/researchCards";
+import type {
+  EnvironmentId,
+  OrchestrationCommand,
+  ResearchCardId,
+  SessionId,
+} from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import type {
   ResearchCardDependency,
@@ -11,7 +17,18 @@ import type {
   ResearchCardManifest,
   ResearchArtifactId,
 } from "@t3tools/contracts/researchStudy";
-import { BarChart3Icon, DatabaseIcon, ExternalLinkIcon, EyeIcon, LayersIcon } from "lucide-react";
+import {
+  BarChart3Icon,
+  CheckIcon,
+  DatabaseIcon,
+  Edit3Icon,
+  ExternalLinkIcon,
+  EyeIcon,
+  LayersIcon,
+  RefreshCwIcon,
+  XIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -24,7 +41,7 @@ import { createSessionSelectorByRef } from "../storeSelectors";
 import { formatShortTimestamp } from "../timestampFormat";
 import type { ResearchCardDetail, Session } from "../types";
 import { useSettings } from "../hooks/useSettings";
-import { cn } from "../lib/utils";
+import { cn, newCommandId } from "../lib/utils";
 import ChatMarkdown from "./ChatMarkdown";
 import { DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { loadResearchArtifactPreview } from "./ResearchCardsPanel.logic";
@@ -39,12 +56,18 @@ import {
   type ScopedResearchCard,
 } from "./researchCards/researchCardLists";
 import { Badge } from "./ui/badge";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 interface ResearchCardsPanelProps {
   mode?: DiffPanelMode;
 }
 
 type ResearchCardScope = "session" | "study";
+type ReviewUiAction = "accept" | "request_changes" | "reject";
+type ResearchCardReviewCommand = Extract<
+  OrchestrationCommand,
+  { type: "session.research-card.review" }
+>;
 
 const RESEARCH_CARD_SCOPE_OPTIONS = [
   {
@@ -62,6 +85,69 @@ const RESEARCH_CARD_SCOPE_OPTIONS = [
   label: string;
   ariaLabel: string;
 }>;
+
+const REVIEW_ACTIONS = [
+  { uiAction: "accept", label: "Accept", requiresNote: false, Icon: CheckIcon },
+  {
+    uiAction: "request_changes",
+    label: "Request changes",
+    requiresNote: true,
+    Icon: RefreshCwIcon,
+  },
+  { uiAction: "reject", label: "Reject", requiresNote: true, Icon: XIcon },
+] satisfies ReadonlyArray<{
+  uiAction: ReviewUiAction;
+  label: string;
+  requiresNote: boolean;
+  Icon: LucideIcon;
+}>;
+
+function reviewUiActionToResponseAction(action: ReviewUiAction): string {
+  return action;
+}
+
+function buildResearchCardReviewCommand(input: {
+  readonly sessionId: SessionId;
+  readonly cardId: ResearchCardId;
+  readonly action: ReviewUiAction;
+  readonly note: string;
+  readonly timestamp: string;
+}): ResearchCardReviewCommand {
+  const trimmedNote = input.note.trim();
+  return {
+    type: "session.research-card.review",
+    commandId: newCommandId(),
+    sessionId: input.sessionId,
+    cardId: input.cardId,
+    response: {
+      action: reviewUiActionToResponseAction(input.action),
+      ...(trimmedNote.length > 0 ? { message: trimmedNote } : {}),
+      timestamp: input.timestamp,
+    },
+    createdAt: input.timestamp,
+  };
+}
+
+function shouldShowReviewPrompt(prompt: string): boolean {
+  return prompt.trim().toLowerCase() !== "human review";
+}
+
+function mergeResearchCardReview(
+  detailReview: ResearchCardDetail["review"] | undefined,
+  summaryReview: ResearchCardDetail["review"] | undefined,
+): ResearchCardDetail["review"] | undefined {
+  if (!detailReview && !summaryReview) {
+    return undefined;
+  }
+
+  return {
+    prompt: detailReview?.prompt ?? summaryReview?.prompt ?? "Human review",
+    actions: detailReview?.actions ?? summaryReview?.actions ?? [],
+    ...((summaryReview?.response ?? detailReview?.response)
+      ? { response: summaryReview?.response ?? detailReview?.response }
+      : {}),
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -607,31 +693,149 @@ function DependencyReferences(props: {
   );
 }
 
-function ReviewMetadata(props: { review: ResearchCardDetail["review"] }) {
-  if (!props.review) {
-    return null;
-  }
-
+export function ResearchCardReviewSection(props: {
+  review: ResearchCardDetail["review"] | undefined;
+  environmentId: EnvironmentId;
+  sessionId: SessionId;
+  cardId: ResearchCardId;
+}) {
+  const [note, setNote] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<ReviewUiAction | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const responseText =
-    props.review.response?.summary ??
-    props.review.response?.message ??
-    props.review.response?.action ??
+    props.review?.response?.summary ??
+    props.review?.response?.message ??
+    props.review?.response?.action ??
     null;
+  const isSubmitting = submittingAction !== null;
+  const isCompletedReview = props.review?.response !== undefined;
+  const shouldShowControls = !isCompletedReview || isEditing;
+
+  const submitReview = async (action: ReviewUiAction) => {
+    const actionMeta = REVIEW_ACTIONS.find((candidate) => candidate.uiAction === action);
+    const trimmedNote = note.trim();
+    if (actionMeta?.requiresNote && trimmedNote.length === 0) {
+      setError(`Add a note to ${action === "reject" ? "reject" : "request changes"}.`);
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    setSubmittingAction(action);
+    setError(null);
+    try {
+      await ensureEnvironmentApi(props.environmentId).orchestration.dispatchCommand(
+        buildResearchCardReviewCommand({
+          sessionId: props.sessionId,
+          cardId: props.cardId,
+          action,
+          note: trimmedNote,
+          timestamp,
+        }),
+      );
+      setNote("");
+      setIsEditing(false);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Review submit failed.");
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
 
   return (
-    <div className="space-y-2 rounded-md border border-rose-200/70 bg-rose-50/55 px-3 py-2.5 shadow-xs dark:border-rose-400/15 dark:bg-rose-500/10">
-      <div>
-        <div className="text-[10px] font-semibold tracking-wide text-rose-700/70 uppercase dark:text-rose-200/70">
-          Review prompt
-        </div>
-        <p className="mt-1 text-xs leading-5 text-foreground/80">{props.review.prompt}</p>
-      </div>
-      {responseText ? (
-        <div>
-          <div className="text-[10px] font-semibold tracking-wide text-rose-700/70 uppercase dark:text-rose-200/70">
-            Review response
+    <div className="space-y-2 rounded-md border border-border/50 bg-background/55 px-2.5 py-2 shadow-xs">
+      {props.review ? (
+        <div className="space-y-1">
+          <div className="text-[10px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+            Human review
           </div>
-          <p className="mt-1 text-xs leading-5 text-foreground/80">{responseText}</p>
+          {shouldShowReviewPrompt(props.review.prompt) ? (
+            <p className="mt-1 text-xs leading-5 text-foreground/80">{props.review.prompt}</p>
+          ) : null}
+        </div>
+      ) : null}
+      {responseText ? (
+        <div className="flex min-w-0 items-center gap-2 rounded-sm bg-muted/35 px-2 py-1 text-xs leading-5 text-muted-foreground/85">
+          <p className="min-w-0 flex-1">
+            <span className="font-medium text-foreground/70">Latest response:</span> {responseText}
+          </p>
+          {!shouldShowControls ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Edit review"
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/75 text-muted-foreground shadow-xs transition-colors hover:border-foreground/25 hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none"
+                    onClick={() => {
+                      setIsEditing(true);
+                      setError(null);
+                      setNote(
+                        props.review?.response?.message ?? props.review?.response?.summary ?? "",
+                      );
+                    }}
+                  />
+                }
+              >
+                <Edit3Icon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">Edit review</TooltipPopup>
+            </Tooltip>
+          ) : null}
+        </div>
+      ) : null}
+      {shouldShowControls ? (
+        <div className="space-y-1.5">
+          <label className="grid min-w-0 gap-1">
+            <span className="sr-only">Reviewer note</span>
+            <textarea
+              value={note}
+              disabled={isSubmitting}
+              rows={1}
+              aria-label="Reviewer note"
+              placeholder="Add note. Required for changes or rejection."
+              className="min-h-9 resize-y rounded-md border border-border/65 bg-card/85 px-2.5 py-2 text-xs leading-5 text-foreground shadow-xs outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-ring disabled:cursor-not-allowed disabled:opacity-60"
+              onChange={(event) => {
+                setNote(event.currentTarget.value);
+                if (error) {
+                  setError(null);
+                }
+              }}
+            />
+          </label>
+          {error ? (
+            <p role="alert" className="text-xs leading-5 text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {REVIEW_ACTIONS.map((action) => (
+              <Tooltip key={action.uiAction}>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      aria-label={action.label}
+                      aria-busy={submittingAction === action.uiAction}
+                      className={cn(
+                        "inline-flex size-8 items-center justify-center rounded-md border bg-background/80 shadow-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-55",
+                        action.uiAction === "accept"
+                          ? "border-emerald-200/85 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400/20 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                          : action.uiAction === "request_changes"
+                            ? "border-amber-200/90 text-amber-800 hover:bg-amber-50 dark:border-amber-400/20 dark:text-amber-200 dark:hover:bg-amber-500/10"
+                            : "border-rose-200/85 text-rose-700 hover:bg-rose-50 dark:border-rose-400/20 dark:text-rose-200 dark:hover:bg-rose-500/10",
+                      )}
+                      onClick={() => void submitReview(action.uiAction)}
+                    />
+                  }
+                >
+                  <action.Icon className="size-4" />
+                </TooltipTrigger>
+                <TooltipPopup side="top">{action.label}</TooltipPopup>
+              </Tooltip>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
@@ -748,6 +952,8 @@ function ResearchCardItem(props: {
   const isActive = isActiveResearchCard(card);
   const statusLabel = formatResearchCardLabel(card.status);
   const Icon = presentation.Icon;
+  const review = mergeResearchCardReview(detail?.review, card.review);
+  const isReviewRequired = isActive && review?.response === undefined;
 
   return (
     <article
@@ -755,6 +961,9 @@ function ResearchCardItem(props: {
         "group/card relative overflow-hidden rounded-lg border bg-card text-card-foreground shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_6%,transparent),0_12px_28px_color-mix(in_srgb,var(--foreground)_5%,transparent)] transition-[border-color,box-shadow,transform] duration-200",
         "hover:-translate-y-0.5 hover:shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_8%,transparent),0_18px_36px_color-mix(in_srgb,var(--foreground)_8%,transparent)]",
         presentation.shellClassName,
+        isReviewRequired && presentation.reviewRequiredClassName,
+        isReviewRequired &&
+          "shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_16%,transparent),0_26px_64px_color-mix(in_srgb,var(--foreground)_20%,transparent)]",
         !isActive && "opacity-[0.82]",
       )}
     >
@@ -838,7 +1047,12 @@ function ResearchCardItem(props: {
           environmentId={props.item.environmentId}
           sessionId={props.item.sessionId}
         />
-        <ReviewMetadata review={detail?.review} />
+        <ResearchCardReviewSection
+          review={review}
+          environmentId={props.item.environmentId}
+          sessionId={props.item.sessionId}
+          cardId={card.id}
+        />
       </div>
       <ProvenanceSummary provenance={detail?.provenance ?? []} />
     </article>

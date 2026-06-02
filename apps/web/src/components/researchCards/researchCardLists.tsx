@@ -23,6 +23,7 @@ interface ResearchCardTypePresentation {
   label: string;
   Icon: LucideIcon;
   shellClassName: string;
+  reviewRequiredClassName: string;
   headerClassName: string;
   iconClassName: string;
 }
@@ -32,6 +33,7 @@ export const CARD_TYPE_PRESENTATION = {
     label: "Narrative",
     Icon: FileTextIcon,
     shellClassName: "border-sky-200/80 dark:border-sky-400/20",
+    reviewRequiredClassName: "border-2 border-sky-800/85 dark:border-sky-300/80",
     headerClassName: "bg-sky-50/80 dark:bg-sky-500/10",
     iconClassName:
       "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/12 dark:text-sky-200",
@@ -40,6 +42,7 @@ export const CARD_TYPE_PRESENTATION = {
     label: "Cohort table",
     Icon: Table2Icon,
     shellClassName: "border-teal-200/80 dark:border-teal-400/20",
+    reviewRequiredClassName: "border-2 border-teal-800/85 dark:border-teal-300/80",
     headerClassName: "bg-teal-50/80 dark:bg-teal-500/10",
     iconClassName:
       "border-teal-200 bg-teal-100 text-teal-700 dark:border-teal-400/20 dark:bg-teal-400/12 dark:text-teal-200",
@@ -48,6 +51,7 @@ export const CARD_TYPE_PRESENTATION = {
     label: "Measures",
     Icon: KeyRoundIcon,
     shellClassName: "border-amber-200/85 dark:border-amber-400/20",
+    reviewRequiredClassName: "border-2 border-amber-900/85 dark:border-amber-300/85",
     headerClassName: "bg-amber-50/85 dark:bg-amber-500/10",
     iconClassName:
       "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/12 dark:text-amber-200",
@@ -56,6 +60,7 @@ export const CARD_TYPE_PRESENTATION = {
     label: "Analysis view",
     Icon: BarChart3Icon,
     shellClassName: "border-indigo-200/80 dark:border-indigo-400/20",
+    reviewRequiredClassName: "border-2 border-indigo-800/85 dark:border-indigo-300/80",
     headerClassName: "bg-indigo-50/80 dark:bg-indigo-500/10",
     iconClassName:
       "border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-400/12 dark:text-indigo-200",
@@ -64,6 +69,7 @@ export const CARD_TYPE_PRESENTATION = {
     label: "Figure",
     Icon: ImageIcon,
     shellClassName: "border-cyan-200/80 dark:border-cyan-400/20",
+    reviewRequiredClassName: "border-2 border-cyan-800/85 dark:border-cyan-300/80",
     headerClassName: "bg-cyan-50/80 dark:bg-cyan-500/10",
     iconClassName:
       "border-cyan-200 bg-cyan-100 text-cyan-700 dark:border-cyan-400/20 dark:bg-cyan-400/12 dark:text-cyan-200",
@@ -72,6 +78,7 @@ export const CARD_TYPE_PRESENTATION = {
     label: "Review gate",
     Icon: CheckSquareIcon,
     shellClassName: "border-rose-200/90 dark:border-rose-400/20",
+    reviewRequiredClassName: "border-2 border-rose-800/80 dark:border-rose-300/75",
     headerClassName: "bg-rose-50/85 dark:bg-rose-500/10",
     iconClassName:
       "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/12 dark:text-rose-200",
@@ -103,6 +110,7 @@ export function getStatusBadgeVariant(status: ResearchCard["status"]) {
     case "accepted":
       return "success" as const;
     case "rejected":
+      return "destructive" as const;
     case "withdrawn":
     case "superseded":
     case "dismissed":
