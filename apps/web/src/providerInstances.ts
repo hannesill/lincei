@@ -15,7 +15,7 @@
 import {
   defaultInstanceIdForDriver,
   PROVIDER_DISPLAY_NAMES,
-  type ProviderDriverKind,
+  ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
   type ServerProviderModel,
@@ -79,6 +79,16 @@ function humanizeInstanceId(instanceId: ProviderInstanceId): string {
 
 function driverKindLabel(driverKind: ProviderDriverKind): string {
   return PROVIDER_DISPLAY_NAMES[driverKind] ?? formatProviderDriverKindLabel(driverKind);
+}
+
+const MODEL_PICKER_DRIVER_ORDER = [
+  ProviderDriverKind.make("codex"),
+  ProviderDriverKind.make("claudeAgent"),
+] as const;
+
+function providerDriverSortRank(driverKind: ProviderDriverKind): number {
+  const index = MODEL_PICKER_DRIVER_ORDER.indexOf(driverKind);
+  return index >= 0 ? index : MODEL_PICKER_DRIVER_ORDER.length;
 }
 
 export function normalizeProviderAccentColor(value: string | undefined): string | undefined {
@@ -164,11 +174,9 @@ export function deriveProviderInstanceEntries(
 }
 
 /**
- * Sort instance entries so the default instance of each driver kind appears
- * before any custom instances of the same kind. Within a kind, custom
- * instances keep their settings-author order (which is how the server
- * emits them). Stable across kinds: entries retain the server's
- * cross-driver ordering.
+ * Sort instance entries so default built-in kinds are predictable in the
+ * model picker, while custom instances keep their settings-author order
+ * within each kind.
  */
 export function sortProviderInstanceEntries(
   entries: ReadonlyArray<ProviderInstanceEntry>,
@@ -177,19 +185,26 @@ export function sortProviderInstanceEntries(
   // default-first within each kind. Using a Map keeps the "first-seen"
   // semantics for kinds whose default instance is absent (unusual but
   // possible during the migration).
-  const byKind = new Map<ProviderDriverKind, ProviderInstanceEntry[]>();
-  for (const entry of entries) {
+  const byKind = new Map<
+    ProviderDriverKind,
+    { firstIndex: number; entries: ProviderInstanceEntry[] }
+  >();
+  for (const [index, entry] of entries.entries()) {
     const bucket = byKind.get(entry.driverKind);
     if (bucket) {
-      bucket.push(entry);
+      bucket.entries.push(entry);
     } else {
-      byKind.set(entry.driverKind, [entry]);
+      byKind.set(entry.driverKind, { firstIndex: index, entries: [entry] });
     }
   }
   const sorted: ProviderInstanceEntry[] = [];
-  for (const bucket of byKind.values()) {
-    const defaults = bucket.filter((entry) => entry.isDefault);
-    const customs = bucket.filter((entry) => !entry.isDefault);
+  const buckets = [...byKind.entries()].toSorted((a, b) => {
+    const rankDelta = providerDriverSortRank(a[0]) - providerDriverSortRank(b[0]);
+    return rankDelta !== 0 ? rankDelta : a[1].firstIndex - b[1].firstIndex;
+  });
+  for (const [, bucket] of buckets) {
+    const defaults = bucket.entries.filter((entry) => entry.isDefault);
+    const customs = bucket.entries.filter((entry) => !entry.isDefault);
     sorted.push(...defaults, ...customs);
   }
   return sorted;
