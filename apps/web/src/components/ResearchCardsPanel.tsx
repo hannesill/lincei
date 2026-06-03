@@ -346,6 +346,67 @@ function ImagePreview(props: { card: ResearchCardDetail; preview: Record<string,
   );
 }
 
+interface ChartSeriesPreview {
+  readonly name: string;
+  readonly x: string[];
+  readonly y: number[];
+  readonly type: "bar" | "line";
+}
+
+const CHART_SERIES_COLORS = ["#0f766e", "#4f46e5", "#dc2626", "#d97706", "#7c3aed"];
+
+function numberArray(value: unknown): number[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const numbers = value.map((entry) => (typeof entry === "number" ? entry : Number(entry)));
+  return numbers.every(Number.isFinite) ? numbers : null;
+}
+
+function stringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  return value.map(formatPreviewCell);
+}
+
+function normalizeChartSeries(spec: Record<string, unknown>): ChartSeriesPreview[] {
+  const data = Array.isArray(spec.data) ? spec.data : null;
+  if (!data) {
+    const x = stringArray(spec.x);
+    const series = Array.isArray(spec.series) ? spec.series : null;
+    if (!x || !series) return [];
+    return series.flatMap((entry) => {
+      if (!isRecord(entry)) return [];
+      const y = numberArray(entry.values ?? entry.y);
+      if (!y) return [];
+      return [
+        {
+          name: getStringValue(entry, ["name", "label"]) ?? "Series",
+          x,
+          y,
+          type: "line" as const,
+        },
+      ];
+    });
+  }
+
+  return data.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const x = stringArray(entry.x);
+    const y = numberArray(entry.y);
+    if (!x || !y) return [];
+    return [
+      {
+        name: getStringValue(entry, ["name", "label"]) ?? "Series",
+        x,
+        y,
+        type: entry.type === "bar" ? "bar" : "line",
+      },
+    ];
+  });
+}
+
 function ChartPreview(props: { preview: Record<string, unknown> }) {
   const spec = isRecord(props.preview.spec) ? props.preview.spec : props.preview;
   const traces = Array.isArray(spec.data) ? spec.data.length : null;
@@ -356,16 +417,186 @@ function ChartPreview(props: { preview: Record<string, unknown> }) {
       : isRecord(layout?.title) && typeof layout.title.text === "string"
         ? layout.title.text
         : "Chart specification";
+  const series = normalizeChartSeries(spec);
+  const categories = Array.from(new Set(series.flatMap((entry) => entry.x))).slice(0, 10);
+  const plottedSeries = series
+    .map((entry) => {
+      const nextEntry: ChartSeriesPreview = {
+        name: entry.name,
+        type: entry.type,
+        x: entry.x.slice(0, categories.length),
+        y: entry.y.slice(0, categories.length),
+      };
+      return nextEntry;
+    })
+    .filter((entry) => entry.y.length > 0)
+    .slice(0, 5);
+  const values = plottedSeries.flatMap((entry) => entry.y);
+  const maxValue = Math.max(...values, 1);
+  const minValue = Math.min(...values, 0);
+  const valueRange = Math.max(maxValue - minValue, 1);
+  const hasBars = plottedSeries.some((entry) => entry.type === "bar");
+  const width = 640;
+  const height = 280;
+  const padLeft = 56;
+  const padRight = 28;
+  const padTop = 32;
+  const padBottom = 58;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+  const xStep = categories.length > 1 ? plotWidth / (categories.length - 1) : plotWidth;
+  const barGroupWidth =
+    categories.length > 0 ? Math.min(46, plotWidth / categories.length / 1.45) : 0;
+  const barSeries = plottedSeries.filter((entry) => entry.type === "bar");
+
+  const xForIndex = (index: number) =>
+    padLeft + (categories.length > 1 ? index * xStep : plotWidth / 2);
+  const yForValue = (value: number) =>
+    padTop + plotHeight - ((value - minValue) / valueRange) * plotHeight;
+
+  if (plottedSeries.length === 0 || categories.length === 0) {
+    return (
+      <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2.5 shadow-xs">
+        <div className="flex items-center gap-2 text-xs font-medium text-foreground/85">
+          <BarChart3Icon className="size-4 text-indigo-600/80 dark:text-indigo-200/80" />
+          <span className="min-w-0 truncate">{title}</span>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground/70">
+          {traces === null ? "Chart preview payload" : `${traces} trace${traces === 1 ? "" : "s"}`}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2.5 shadow-xs">
+    <div className="overflow-hidden rounded-md border border-border/60 bg-background/75 shadow-xs">
       <div className="flex items-center gap-2 text-xs font-medium text-foreground/85">
-        <BarChart3Icon className="size-4 text-indigo-600/80 dark:text-indigo-200/80" />
+        <BarChart3Icon className="ml-3 mt-3 size-4 text-indigo-600/80 dark:text-indigo-200/80" />
         <span className="min-w-0 truncate">{title}</span>
       </div>
-      <p className="mt-1 text-[11px] text-muted-foreground/70">
-        {traces === null ? "Chart preview payload" : `${traces} trace${traces === 1 ? "" : "s"}`}
-      </p>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={title}
+        className="h-64 w-full text-muted-foreground"
+      >
+        <rect x="0" y="0" width={width} height={height} fill="transparent" />
+        {[0, 0.5, 1].map((tick) => {
+          const value = minValue + valueRange * tick;
+          const y = yForValue(value);
+          return (
+            <g key={tick}>
+              <line
+                x1={padLeft}
+                y1={y}
+                x2={width - padRight}
+                y2={y}
+                stroke="currentColor"
+                strokeOpacity="0.16"
+              />
+              <text
+                x={padLeft - 8}
+                y={y + 4}
+                textAnchor="end"
+                className="fill-muted-foreground text-[10px]"
+              >
+                {value.toFixed(maxValue <= 1 ? 2 : 1)}
+              </text>
+            </g>
+          );
+        })}
+        <line
+          x1={padLeft}
+          y1={padTop + plotHeight}
+          x2={width - padRight}
+          y2={padTop + plotHeight}
+          stroke="currentColor"
+          strokeOpacity="0.32"
+        />
+        <line
+          x1={padLeft}
+          y1={padTop}
+          x2={padLeft}
+          y2={padTop + plotHeight}
+          stroke="currentColor"
+          strokeOpacity="0.32"
+        />
+        {hasBars
+          ? barSeries.map((entry, seriesIndex) =>
+              entry.y.map((value, index) => {
+                const color = CHART_SERIES_COLORS[seriesIndex % CHART_SERIES_COLORS.length];
+                const x =
+                  xForIndex(index) -
+                  barGroupWidth / 2 +
+                  (barGroupWidth / Math.max(barSeries.length, 1)) * seriesIndex;
+                const barWidth = Math.max(barGroupWidth / Math.max(barSeries.length, 1) - 2, 4);
+                const y = yForValue(value);
+                return (
+                  <rect
+                    key={`${entry.name}:${categories[index] ?? "category"}:${value}`}
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={padTop + plotHeight - y}
+                    rx="2"
+                    fill={color}
+                    opacity="0.86"
+                  >
+                    <title>{`${entry.name}: ${categories[index]} ${value}`}</title>
+                  </rect>
+                );
+              }),
+            )
+          : null}
+        {plottedSeries
+          .filter((entry) => entry.type !== "bar")
+          .map((entry, seriesIndex) => {
+            const color = CHART_SERIES_COLORS[seriesIndex % CHART_SERIES_COLORS.length];
+            const points = entry.y
+              .map((value, index) => `${xForIndex(index)},${yForValue(value)}`)
+              .join(" ");
+            return (
+              <g key={entry.name}>
+                <polyline points={points} fill="none" stroke={color} strokeWidth="3" />
+                {entry.y.map((value, index) => (
+                  <circle
+                    key={`${entry.name}:${categories[index] ?? "category"}:${value}`}
+                    cx={xForIndex(index)}
+                    cy={yForValue(value)}
+                    r="4"
+                    fill={color}
+                  >
+                    <title>{`${entry.name}: ${categories[index]} ${value}`}</title>
+                  </circle>
+                ))}
+              </g>
+            );
+          })}
+        {categories.map((label, index) => (
+          <text
+            key={label}
+            x={xForIndex(index)}
+            y={height - 30}
+            textAnchor="middle"
+            className="fill-muted-foreground text-[10px]"
+          >
+            {label}
+          </text>
+        ))}
+        {plottedSeries.map((entry, index) => (
+          <g key={entry.name} transform={`translate(${padLeft + index * 120}, ${height - 12})`}>
+            <rect
+              width="9"
+              height="9"
+              rx="2"
+              fill={CHART_SERIES_COLORS[index % CHART_SERIES_COLORS.length]}
+            />
+            <text x="14" y="9" className="fill-muted-foreground text-[10px]">
+              {entry.name}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }

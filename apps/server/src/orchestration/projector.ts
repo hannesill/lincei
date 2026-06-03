@@ -17,6 +17,7 @@ import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
+  ProjectPurgedPayload,
   SessionActivityAppendedPayload,
   SessionArchivedPayload,
   SessionCreatedPayload,
@@ -295,6 +296,15 @@ export function projectEvent(
                 }
               : project,
           ),
+        })),
+      );
+
+    case "project.purged":
+      return decodeForEvent(ProjectPurgedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          projects: nextBase.projects.filter((project) => project.id !== payload.projectId),
+          sessions: nextBase.sessions.filter((session) => session.projectId !== payload.projectId),
         })),
       );
 

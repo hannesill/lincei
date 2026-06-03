@@ -9,6 +9,8 @@ const port = Number(process.env.PORT ?? 5733);
 const host = process.env.HOST?.trim() || "localhost";
 const configuredWsUrl = process.env.VITE_WS_URL?.trim();
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
+const configuredDemoBrowserBootstrapToken =
+  process.env.VITE_DEMO_BROWSER_BOOTSTRAP_TOKEN?.trim() || "";
 const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
 const configuredHostedAppUrl = (() => {
   const explicitHostedAppUrl = process.env.VITE_HOSTED_APP_URL?.trim();
@@ -85,6 +87,9 @@ export default defineConfig({
     "import.meta.env.VITE_WS_URL": JSON.stringify(configuredWsUrl ?? ""),
     "import.meta.env.VITE_HOSTED_APP_URL": JSON.stringify(configuredHostedAppUrl ?? ""),
     "import.meta.env.VITE_HOSTED_APP_CHANNEL": JSON.stringify(configuredHostedAppChannel),
+    "import.meta.env.VITE_DEMO_BROWSER_BOOTSTRAP_TOKEN": JSON.stringify(
+      configuredDemoBrowserBootstrapToken,
+    ),
     "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
   },
   resolve: {

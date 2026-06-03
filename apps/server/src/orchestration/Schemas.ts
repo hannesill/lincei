@@ -2,6 +2,7 @@ import {
   ProjectCreatedPayload as ContractsProjectCreatedPayloadSchema,
   ProjectMetaUpdatedPayload as ContractsProjectMetaUpdatedPayloadSchema,
   ProjectDeletedPayload as ContractsProjectDeletedPayloadSchema,
+  ProjectPurgedPayload as ContractsProjectPurgedPayloadSchema,
   SessionCreatedPayload as ContractsSessionCreatedPayloadSchema,
   SessionArchivedPayload as ContractsSessionArchivedPayloadSchema,
   SessionMetaUpdatedPayload as ContractsSessionMetaUpdatedPayloadSchema,
@@ -31,6 +32,7 @@ import {
 export const ProjectCreatedPayload = ContractsProjectCreatedPayloadSchema;
 export const ProjectMetaUpdatedPayload = ContractsProjectMetaUpdatedPayloadSchema;
 export const ProjectDeletedPayload = ContractsProjectDeletedPayloadSchema;
+export const ProjectPurgedPayload = ContractsProjectPurgedPayloadSchema;
 
 export const SessionCreatedPayload = ContractsSessionCreatedPayloadSchema;
 export const SessionArchivedPayload = ContractsSessionArchivedPayloadSchema;

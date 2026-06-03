@@ -39,12 +39,22 @@ type ConsumeResult =
 const DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = Duration.minutes(5);
 const PAIRING_TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const PAIRING_TOKEN_LENGTH = 12;
+const DEMO_BOOTSTRAP_TTL_HOURS = Duration.hours(12);
 
 const generatePairingToken = (): string => {
   const randomBytes = crypto.getRandomValues(new Uint8Array(PAIRING_TOKEN_LENGTH));
 
   return Array.from(randomBytes, (value) => PAIRING_TOKEN_ALPHABET[value & 31]).join("");
 };
+
+function resolveDemoBrowserBootstrapToken(): string | null {
+  if (process.env.LINCEI_DEMO_MODE !== "1" || process.env.NODE_ENV === "production") {
+    return null;
+  }
+
+  const token = process.env.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN?.trim();
+  return token && token.length > 0 ? token : null;
+}
 
 export const makeBootstrapCredentialService = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -95,6 +105,20 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
         milliseconds: Duration.toMillis(DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES),
       }),
       remainingUses: 1,
+    });
+  }
+
+  const demoBrowserBootstrapToken = resolveDemoBrowserBootstrapToken();
+  if (demoBrowserBootstrapToken) {
+    const now = yield* DateTime.now;
+    yield* seedGrant(demoBrowserBootstrapToken, {
+      method: "one-time-token",
+      role: "owner",
+      subject: "demo-browser-bootstrap",
+      expiresAt: DateTime.add(now, {
+        milliseconds: Duration.toMillis(DEMO_BOOTSTRAP_TTL_HOURS),
+      }),
+      remainingUses: "unbounded",
     });
   }
 

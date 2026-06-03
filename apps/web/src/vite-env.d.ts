@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_WS_URL: string;
   readonly VITE_HOSTED_APP_URL: string;
   readonly VITE_HOSTED_APP_CHANNEL: string;
+  readonly VITE_DEMO_BROWSER_BOOTSTRAP_TOKEN: string;
   readonly APP_VERSION: string;
 }
 

@@ -10,6 +10,7 @@ function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
 
 const injectedDesktopAppBranding = readInjectedDesktopAppBranding();
 const hostedAppChannel = import.meta.env.VITE_HOSTED_APP_CHANNEL?.trim().toLowerCase();
+const appStageLabelOverride = import.meta.env.VITE_APP_STAGE_LABEL?.trim();
 
 export const HOSTED_APP_CHANNEL =
   hostedAppChannel === "latest" || hostedAppChannel === "nightly" ? hostedAppChannel : null;
@@ -18,6 +19,7 @@ export const HOSTED_APP_CHANNEL_LABEL =
 export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "Lincei";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??
+  (appStageLabelOverride && appStageLabelOverride.length > 0 ? appStageLabelOverride : null) ??
   HOSTED_APP_CHANNEL_LABEL ??
   (import.meta.env.DEV ? "Dev" : "Alpha");
 export const APP_DISPLAY_NAME =

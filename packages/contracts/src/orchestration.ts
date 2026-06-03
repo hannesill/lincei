@@ -925,6 +925,19 @@ const SessionMessageAssistantCompleteCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const SessionMessageAppendCommand = Schema.Struct({
+  type: Schema.Literal("session.message.append"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  messageId: MessageId,
+  role: OrchestrationMessageRole,
+  text: Schema.String,
+  attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  turnId: Schema.NullOr(TurnId),
+  streaming: Schema.Boolean,
+  createdAt: IsoDateTime,
+});
+
 const SessionTurnDiffCompleteCommand = Schema.Struct({
   type: Schema.Literal("session.turn.diff.complete"),
   commandId: CommandId,
@@ -955,8 +968,17 @@ const SessionRevertCompleteCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ProjectPurgeCommand = Schema.Struct({
+  type: Schema.Literal("project.purge"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  createdAt: IsoDateTime,
+});
+
 const InternalOrchestrationCommand = Schema.Union([
+  ProjectPurgeCommand,
   ProviderRuntimeSetCommand,
+  SessionMessageAppendCommand,
   SessionMessageAssistantDeltaCommand,
   SessionMessageAssistantCompleteCommand,
   SessionProposedPlanUpsertCommand,
@@ -981,6 +1003,7 @@ export const OrchestrationEventType = Schema.Literals([
   "project.created",
   "project.meta-updated",
   "project.deleted",
+  "project.purged",
   "session.created",
   "session.deleted",
   "session.archived",
@@ -1036,6 +1059,12 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
 export const ProjectDeletedPayload = Schema.Struct({
   projectId: ProjectId,
   deletedAt: IsoDateTime,
+});
+
+export const ProjectPurgedPayload = Schema.Struct({
+  projectId: ProjectId,
+  sessionIds: Schema.Array(SessionId),
+  purgedAt: IsoDateTime,
 });
 
 export const SessionCreatedPayload = Schema.Struct({
@@ -1253,6 +1282,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("project.deleted"),
     payload: ProjectDeletedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.purged"),
+    payload: ProjectPurgedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

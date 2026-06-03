@@ -567,6 +567,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
+        case "project.purged":
+          yield* projectionProjectRepository.deleteById({
+            projectId: event.payload.projectId,
+          });
+          return;
+
         default:
           return;
       }
@@ -621,6 +627,31 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       "applySessionsProjection",
     )(function* (event, attachmentSideEffects) {
       switch (event.type) {
+        case "project.purged": {
+          for (const sessionId of event.payload.sessionIds) {
+            const pendingApprovals = yield* projectionPendingApprovalRepository.listBySessionId({
+              sessionId,
+            });
+            yield* Effect.forEach(
+              pendingApprovals,
+              (approval) =>
+                projectionPendingApprovalRepository.deleteByRequestId({
+                  requestId: approval.requestId,
+                }),
+              { concurrency: 1 },
+            );
+            yield* projectionSessionMessageRepository.deleteBySessionId({ sessionId });
+            yield* projectionSessionProposedPlanRepository.deleteBySessionId({ sessionId });
+            yield* projectionSessionResearchCardRepository.deleteBySessionId({ sessionId });
+            yield* projectionSessionActivityRepository.deleteBySessionId({ sessionId });
+            yield* projectionProviderRuntimeRepository.deleteBySessionId({ sessionId });
+            yield* projectionTurnRepository.deleteBySessionId({ sessionId });
+            yield* projectionSessionRepository.deleteById({ sessionId });
+            attachmentSideEffects.deletedSessionIds.add(sessionId);
+          }
+          return;
+        }
+
         case "session.created":
           yield* projectionSessionRepository.upsert({
             sessionId: event.payload.sessionId,

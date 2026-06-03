@@ -16,6 +16,7 @@ release-mock/
 .t3
 m4_data/
 .dev-home/
+.demo-home/
 .idea/
 apps/web/.playwright
 apps/web/playwright-report

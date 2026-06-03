@@ -94,6 +94,7 @@ import {
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
 import { datasetHttpRouteLayer } from "./datasets/http.ts";
+import { demoSeedRouteLayer } from "./demo/http.ts";
 import { layer as ProcessRunnerLive } from "./processRunner.ts";
 import * as NetService from "@t3tools/shared/Net";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
@@ -334,6 +335,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   authWebSocketTokenRouteLayer,
   attachmentsRouteLayer,
   datasetHttpRouteLayer,
+  demoSeedRouteLayer,
   orchestrationDispatchRouteLayer,
   orchestrationResearchCardDetailRouteLayer,
   orchestrationSnapshotRouteLayer,

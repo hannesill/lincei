@@ -54,4 +54,13 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBeNull();
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBeNull();
   });
+
+  it("uses explicit Alpha stage branding for demos", async () => {
+    vi.stubEnv("VITE_APP_STAGE_LABEL", "Alpha");
+
+    const branding = await import("./branding");
+
+    expect(branding.APP_STAGE_LABEL).toBe("Alpha");
+    expect(branding.APP_DISPLAY_NAME).toBe("Lincei (Alpha)");
+  });
 });

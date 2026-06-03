@@ -35,6 +35,39 @@ const makeBootstrapCredentialLayer = (
     Layer.provide(makeServerConfigLayer(overrides)),
   );
 
+const setDemoBootstrapEnv = Effect.acquireRelease(
+  Effect.sync(() => {
+    const previous = {
+      LINCEI_DEMO_MODE: process.env.LINCEI_DEMO_MODE,
+      LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN: process.env.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN,
+      NODE_ENV: process.env.NODE_ENV,
+    };
+    process.env.LINCEI_DEMO_MODE = "1";
+    process.env.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN = "demo-browser-token";
+    process.env.NODE_ENV = "test";
+    return previous;
+  }),
+  (previous) =>
+    Effect.sync(() => {
+      if (previous.LINCEI_DEMO_MODE === undefined) {
+        delete process.env.LINCEI_DEMO_MODE;
+      } else {
+        process.env.LINCEI_DEMO_MODE = previous.LINCEI_DEMO_MODE;
+      }
+      if (previous.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN === undefined) {
+        delete process.env.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN;
+      } else {
+        process.env.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN =
+          previous.LINCEI_DEMO_BROWSER_BOOTSTRAP_TOKEN;
+      }
+      if (previous.NODE_ENV === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previous.NODE_ENV;
+      }
+    }),
+);
+
 it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
   it.effect("issues pairing tokens in a short manual-entry format", () =>
     Effect.gen(function* () {
@@ -60,6 +93,23 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
       expect(second._tag).toBe("BootstrapCredentialError");
       expect(second.message).toContain("Unknown bootstrap credential");
     }).pipe(Effect.provide(makeBootstrapCredentialLayer())),
+  );
+
+  it.effect("accepts the demo browser bootstrap token while demo mode is active", () =>
+    Effect.gen(function* () {
+      yield* setDemoBootstrapEnv;
+      const { first, second } = yield* Effect.gen(function* () {
+        const bootstrapCredentials = yield* BootstrapCredentialService;
+        const first = yield* bootstrapCredentials.consume("demo-browser-token");
+        const second = yield* bootstrapCredentials.consume("demo-browser-token");
+        return { first, second };
+      }).pipe(Effect.provide(makeBootstrapCredentialLayer()));
+
+      expect(first.method).toBe("one-time-token");
+      expect(first.role).toBe("owner");
+      expect(first.subject).toBe("demo-browser-bootstrap");
+      expect(second.role).toBe("owner");
+    }).pipe(Effect.scoped),
   );
 
   it.effect("atomically consumes a one-time token when multiple requests race", () =>

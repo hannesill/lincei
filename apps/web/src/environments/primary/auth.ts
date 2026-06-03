@@ -91,6 +91,11 @@ function getDesktopBootstrapCredential(): string | null {
     : null;
 }
 
+function getDemoBrowserBootstrapCredential(): string | null {
+  const token = import.meta.env.VITE_DEMO_BROWSER_BOOTSTRAP_TOKEN?.trim();
+  return token && token.length > 0 ? token : null;
+}
+
 export async function fetchSessionState(): Promise<AuthSessionState> {
   return retryTransientBootstrap(async () => {
     const response = await fetch(resolvePrimaryEnvironmentHttpUrl("/api/auth/session"), {
@@ -228,7 +233,8 @@ function isTransientBootstrapError(error: unknown): boolean {
 }
 
 async function bootstrapServerAuth(): Promise<ServerAuthGateState> {
-  const bootstrapCredential = getDesktopBootstrapCredential();
+  const bootstrapCredential =
+    getDesktopBootstrapCredential() ?? getDemoBrowserBootstrapCredential();
   const currentSession = await fetchSessionState();
   if (currentSession.authenticated) {
     return { status: "authenticated" };

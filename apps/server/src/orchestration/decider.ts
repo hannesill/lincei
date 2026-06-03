@@ -234,6 +234,31 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "project.purge": {
+      yield* requireProject({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      const sessionIds = listSessionsByProjectId(readModel, command.projectId).map(
+        (session) => session.id,
+      );
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "project",
+          aggregateId: command.projectId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "project.purged" as const,
+        payload: {
+          projectId: command.projectId,
+          sessionIds,
+          purgedAt: command.createdAt,
+        },
+      };
+    }
+
     case "session.create": {
       yield* requireProject({
         readModel,
@@ -671,6 +696,34 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           text: "",
           turnId: command.turnId ?? null,
           streaming: false,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "session.message.append": {
+      yield* requireSession({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "session.message-sent",
+        payload: {
+          sessionId: command.sessionId,
+          messageId: command.messageId,
+          role: command.role,
+          text: command.text,
+          ...(command.attachments !== undefined ? { attachments: command.attachments } : {}),
+          turnId: command.turnId,
+          streaming: command.streaming,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },

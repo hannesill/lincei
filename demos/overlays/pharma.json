@@ -1,0 +1,15 @@
+{
+  "title": "Alpha Demo: Pharma Evidence Lab",
+  "organizationName": "Northstar Pharma Evidence Lab",
+  "therapeuticArea": "late-stage evidence generation and safety surveillance",
+  "studyTitles": {
+    "demo-study-cardio": "GLP-1 Persistence Evidence Package",
+    "demo-study-oncology": "Immuno-oncology Safety Signal Workbench"
+  },
+  "sessionTitles": {
+    "demo-session-cardio-approval": "Regulatory extraction awaiting approval"
+  },
+  "cardTitles": {
+    "demo-card-oncology-chart-irae": "Safety review board irAE incidence chart"
+  }
+}
