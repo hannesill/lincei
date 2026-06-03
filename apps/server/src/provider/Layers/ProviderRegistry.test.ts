@@ -642,7 +642,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             );
             assert.strictEqual(
               providers.every((provider) =>
-                providerSkillNames(provider).includes("clinical-research-session"),
+                providerSkillNames(provider).includes("clinical-research-pitfalls"),
               ),
               true,
             );
@@ -910,7 +910,6 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
 
             assert.deepStrictEqual(providerSkillNames(cachedProvider).slice(0, 3), [
               "lincei-api",
-              "clinical-research-session",
               "clinical-research-pitfalls",
             ]);
             assert.deepStrictEqual(cachedProvider && providerWithoutSkills(cachedProvider), {
@@ -990,7 +989,6 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             assert.deepStrictEqual(providers.map(providerWithoutSkills), [cachedProvider]);
             assert.deepStrictEqual(providerSkillNames(providers[0]).slice(0, 3), [
               "lincei-api",
-              "clinical-research-session",
               "clinical-research-pitfalls",
             ]);
             assert.deepStrictEqual(

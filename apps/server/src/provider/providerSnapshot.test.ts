@@ -69,8 +69,8 @@ describe("buildServerProvider", () => {
 
     expect(provider.skills.map((skill) => skill.name).slice(0, 3)).toEqual([
       "lincei-api",
-      "clinical-research-session",
       "clinical-research-pitfalls",
+      "native-review",
     ]);
     expect(provider.skills.at(-1)).toMatchObject({
       name: "native-review",

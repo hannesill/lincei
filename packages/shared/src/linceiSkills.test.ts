@@ -141,7 +141,7 @@ describe("linceiSkills", () => {
     const enriched = enrichServerProviderWithLinceiSkills({ provider });
     expect(enriched.skills.map((skill) => skill.name).slice(0, 2)).toEqual([
       "lincei-api",
-      "clinical-research-session",
+      "clinical-research-pitfalls",
     ]);
     expect(enriched.skills.at(-1)).toMatchObject({
       name: "provider-native",
@@ -190,10 +190,10 @@ describe("linceiSkills", () => {
 
   it("applies persisted skill settings to bundled skills and prompt injection", () => {
     const configured = configuredBundledLinceiSkills({
-      "clinical-research-session": { enabled: false },
+      "clinical-research-pitfalls": { enabled: false },
     });
 
-    expect(configured.find((skill) => skill.id === "clinical-research-session")?.enabled).toBe(
+    expect(configured.find((skill) => skill.id === "clinical-research-pitfalls")?.enabled).toBe(
       false,
     );
 
@@ -201,8 +201,9 @@ describe("linceiSkills", () => {
       workflowId: "structured-clinical-study",
       skills: configured,
     });
-    expect(prompt).not.toContain('<lincei_skill id="clinical-research-session"');
+    expect(prompt).not.toContain('<lincei_skill id="clinical-research-pitfalls"');
     expect(prompt).toContain('<lincei_skill id="lincei-api"');
+    expect(prompt).toContain('<lincei_workflow id="structured-clinical-study"');
   });
 
   it("omits disabled workflows and their default skill set from the effective prompt", () => {

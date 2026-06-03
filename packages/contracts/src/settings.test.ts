@@ -76,24 +76,24 @@ describe("ServerSettings.linceiSkills", () => {
   it("decodes legacy deployNative skill preferences without preserving native deployment", () => {
     const decoded = decodeServerSettings({
       linceiSkills: {
-        "clinical-research-session": {
+        "clinical-research-pitfalls": {
           enabled: false,
           deployNative: true,
         },
       },
     });
 
-    expect(decoded.linceiSkills["clinical-research-session"]).toEqual({
+    expect(decoded.linceiSkills["clinical-research-pitfalls"]).toEqual({
       enabled: false,
     });
 
     const encoded = encodeServerSettings(decoded);
-    expect(encoded.linceiSkills?.["clinical-research-session"]).toEqual({
+    expect(encoded.linceiSkills?.["clinical-research-pitfalls"]).toEqual({
       enabled: false,
     });
     expect(
       (
-        encoded.linceiSkills?.["clinical-research-session"] as
+        encoded.linceiSkills?.["clinical-research-pitfalls"] as
           | { deployNative?: unknown }
           | undefined
       )?.deployNative,

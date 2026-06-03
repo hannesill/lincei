@@ -36,18 +36,19 @@ describe("LinceiAgentInstructions", () => {
   it("injects the selected workflow and bundled skill prompt separately", () => {
     const instructions = buildLinceiAgentInstructions(undefined, "structured-clinical-study");
     assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
-    assert.match(instructions, /study description card first/);
-    assert.match(instructions, /<lincei_skill id="clinical-research-session"/);
+    assert.match(instructions, /Run clinical research as a controlled, reviewable workflow/);
+    assert.match(instructions, /Create a study description card before analysis/);
+    assert.match(instructions, /<lincei_skill id="clinical-research-pitfalls"/);
   });
 
   it("omits disabled Lincei skills from injected guidance", () => {
     const instructions = buildLinceiAgentInstructions(undefined, "structured-clinical-study", {
-      "clinical-research-session": { enabled: false },
+      "lincei-api": { enabled: false },
     });
 
     assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
-    assert.doesNotMatch(instructions, /<lincei_skill id="clinical-research-session"/);
-    assert.match(instructions, /<lincei_skill id="lincei-api"/);
+    assert.doesNotMatch(instructions, /<lincei_skill id="lincei-api"/);
+    assert.match(instructions, /<lincei_skill id="clinical-research-pitfalls"/);
   });
 
   it("omits disabled workflows from injected guidance", () => {

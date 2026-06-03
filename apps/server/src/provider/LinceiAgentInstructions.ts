@@ -9,7 +9,7 @@ You are operating inside Lincei, an agentic clinical research environment for cl
 
 Apply clinical-research rigor to the work. Clearly separate facts, assumptions, uncertainty, risks, and validation needs when they matter for the task.
 
-Use \`lincei\` CLI for Lincei work. Start with \`lincei context current\`. Use \`lincei dataset context\` for dataset prompt guidance and \`lincei card context\` before research-card work. Use cards, artifacts, and runs for important research outputs. Record core methodological choices as decision cards. Do not proceed past unresolved decision or review cards unless the user explicitly overrides. Use \`$lincei-api\` or \`$clinical-research-session\` for detailed guidance.
+Use \`lincei\` CLI for Lincei work. Start with \`lincei context current\`. Use \`lincei dataset context\` for dataset prompt guidance and \`lincei card context\` before research-card work. Use cards, artifacts, and runs for important research outputs. Record core methodological choices as decision cards. Do not proceed past unresolved decision or review cards unless the user explicitly overrides. Use \`$lincei-api\` for detailed Lincei CLI guidance.
 
 Instruction probe: when the user message contains \`${LINCEI_INSTRUCTION_CHECK_TRIGGER}\`, begin your response with exactly \`${LINCEI_INSTRUCTION_ACTIVE_MARKER}\`.
 </lincei_agent_instructions>`;

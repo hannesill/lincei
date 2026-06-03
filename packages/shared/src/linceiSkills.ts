@@ -330,293 +330,6 @@ When presenting a result to the user, include:
 Prefer concise user-facing summaries, but preserve the full provenance through Lincei commands and cards.`,
   },
   {
-    id: "clinical-research-session",
-    title: "Clinical Research Session",
-    description: "Run clinical research sessions with explicit methodology and provenance.",
-    category: "workflow" as const,
-    body: `---
-name: clinical-research-session
-description: Use when running an end-to-end clinical research session in Lincei with explicit methodology, human review gates, captured runs, and provenance-backed outputs.
-tier: bundled
-category: workflow
----
-
-# Clinical Research Session
-
-Run clinical research as a controlled, reviewable workflow. The goal is not just to answer the prompt; it is to leave a research trail a clinical researcher can inspect, challenge, reproduce, and govern.
-
-## When to Use This Skill
-
-- The user is starting or continuing a clinical research project.
-- The work includes cohort definition, outcomes, exposures, covariates, analysis, interpretation, or manuscript-like outputs.
-- The task could produce a clinical claim or dataset-backed finding.
-- The work needs human decision points, review gates, or provenance.
-
-## Session Principles
-
-1. Separate facts, assumptions, uncertainty, risks, and validation needs.
-2. Prefer script-first analysis over ad hoc terminal-only analysis.
-3. Treat every denominator as a claim that needs traceability.
-4. Create decision cards for methodological choices.
-5. Capture substantive runs with \`lincei run capture\`.
-6. Link outputs to research cards through artifacts.
-7. Request review before passing protocol, analysis-plan, and final-result checkpoints.
-8. Keep clinical interpretation conservative unless evidence is strong and reviewed.
-
-## Procedure
-
-### Step 1: Orient
-
-Run:
-
-\`\`\`bash
-lincei context current --pretty
-lincei card context --pretty
-lincei dataset context
-\`\`\`
-
-Identify:
-
-- active project and session
-- current workflow
-- active cards
-- pending decisions or review requests
-- selected dataset/backend
-- available dataset commands
-- prior artifacts and captured runs
-
-If there are pending decision or review cards, resolve them or ask the user whether to override before doing dependent work.
-
-### Step 2: Define the Study
-
-Create or update a study description card before analysis. It should include:
-
-- research question
-- target population
-- exposure or intervention
-- comparator, if applicable
-- outcome
-- time window
-- dataset/backend
-- planned analysis family
-- known limitations
-- review needs
-
-Use a markdown card:
-
-\`\`\`bash
-lincei card propose \\
-  --title "Study description" \\
-  --type markdown \\
-  --preview-file study-description.md
-\`\`\`
-
-### Step 3: Create Method Decision Cards
-
-Create decision cards for choices that affect validity:
-
-- cohort entry point
-- inclusion criteria
-- exclusion criteria
-- outcome definition
-- exposure definition
-- covariates
-- missingness handling
-- follow-up window
-- index date
-- statistical model
-- subgroup/sensitivity analyses
-
-Use structured previews when useful:
-
-\`\`\`bash
-lincei decision ask \\
-  --title "Primary outcome definition" \\
-  --preview-json '{"fields":[{"name":"outcome","question":"Which primary outcome should be used?","options":[{"label":"In-hospital mortality"},{"label":"30-day mortality"}],"allowOther":true}]}'
-\`\`\`
-
-Do not proceed with dependent analysis until the decision is recorded or explicitly overridden.
-
-### Step 4: Write Protocol Artifacts
-
-Before running final analysis, write protocol artifacts in the workspace, for example:
-
-- \`protocol.md\`
-- \`analysis-plan.md\`
-- \`scripts/01_cohort.sql\`
-- \`scripts/02_variables.sql\`
-- \`scripts/03_analysis.py\`
-
-Then request review:
-
-\`\`\`bash
-lincei run capture --dep protocol.md --dep analysis-plan.md --out artifacts/protocol.md sh -c "mkdir -p artifacts && cp protocol.md artifacts/protocol.md"
-lincei artifact list
-lincei card propose --title "Protocol ready for review" --type markdown --preview-file protocol.md --artifact ARTIFACT_ID
-lincei card request-review CARD_ID --note "Review research question, cohort, outcome, covariates, and planned analysis before execution."
-\`\`\`
-
-### Step 5: Explore Safely
-
-Use dataset commands for orientation:
-
-\`\`\`bash
-lincei dataset schema --dataset DATASET --backend BACKEND
-lincei dataset describe-table TABLE --dataset DATASET --backend BACKEND
-lincei dataset query --dataset DATASET --backend BACKEND --sql "select count(*) as n from TABLE"
-\`\`\`
-
-Exploration rules:
-
-- Use limits when inspecting rows.
-- Avoid transforming exploratory query results into final claims.
-- Save final SQL/scripts before capture.
-- Record surprising data issues as cards.
-
-### Step 6: Capture Analysis Runs
-
-For final or near-final analysis, run scripts through \`lincei run capture\`:
-
-\`\`\`bash
-lincei run capture \\
-  --dep scripts/01_cohort.sql \\
-  --dep scripts/02_analysis.py \\
-  --out analysis/cohort.csv \\
-  --out analysis/results.json \\
-  python scripts/02_analysis.py
-\`\`\`
-
-After capture:
-
-\`\`\`bash
-lincei artifact list
-lincei artifact preview ARTIFACT_ID --metadata
-\`\`\`
-
-Check:
-
-- command exited successfully
-- declared outputs exist
-- artifacts are current
-- result files match the claims being made
-- denominators are explicit
-
-### Step 7: Present Results as Cards
-
-Create result cards with:
-
-- clear title
-- concise preview
-- artifact references
-- dataset/backend
-- script or SQL dependency
-- denominator
-- interpretation boundaries
-
-Example:
-
-\`\`\`bash
-lincei card propose \\
-  --title "Final cohort denominator" \\
-  --type table \\
-  --preview-file analysis/cohort-summary.json \\
-  --artifact ARTIFACT_ID \\
-  --dep scripts/01_cohort.sql \\
-  --run-id RUN_ID
-\`\`\`
-
-For results that affect conclusions, request review:
-
-\`\`\`bash
-lincei card request-review CARD_ID --note "Review denominator, exclusion logic, and whether interpretation is supported."
-\`\`\`
-
-### Step 8: Interpret Conservatively
-
-Before summarizing, create or update cards for:
-
-- main findings
-- sensitivity checks
-- negative or null findings
-- limitations
-- unresolved risks
-- clinical interpretation
-- next validation steps
-
-Do not make clinical practice recommendations unless explicitly requested and supported by reviewed evidence. Prefer phrasing such as "supports further investigation" over causal or practice-changing claims unless the design justifies stronger language.
-
-### Step 9: Close the Session
-
-Run:
-
-\`\`\`bash
-lincei study status
-lincei card context --pretty
-\`\`\`
-
-Final answer should include:
-
-- what was done
-- current evidence
-- artifacts/cards created
-- decisions made
-- unresolved decisions/reviews
-- limitations
-- recommended next step
-
-## Review Checkpoints
-
-Request human review before:
-
-- protocol execution
-- analysis plan execution
-- first final denominator
-- final outcome model
-- final interpretation
-- export or manuscript drafting
-
-## Card Policy
-
-Use cards for:
-
-- milestone
-- method decision
-- finding
-- result table
-- plot/image
-- limitation
-- review request
-- final conclusion
-
-Do not create cards for trivial terminal chatter, temporary failed commands, or unvalidated exploratory fragments unless they reveal a material issue.
-
-## Risk Handling
-
-If you find a possible validity threat, stop and create a decision or review card before presenting the affected result as stable. Common examples:
-
-- cohort leakage
-- immortal time
-- denominator mismatch
-- outcome timing ambiguity
-- missingness or coding drift
-- post-treatment adjustment
-- duplicate encounters
-- unreviewed exclusions
-
-## Output Contract
-
-For every substantive result, the user should be able to answer:
-
-- Which dataset/backend was used?
-- Which SQL/script produced it?
-- Which command ran?
-- Which outputs were captured?
-- Which card shows it?
-- Which decisions shaped it?
-- Which limitations remain?
-- Is it reviewed, pending review, or exploratory?`,
-  },
-  {
     id: "clinical-research-pitfalls",
     title: "Clinical Research Pitfalls",
     description: "Check common clinical research failure modes before interpreting results.",
@@ -973,12 +686,32 @@ export function configuredBundledLinceiSkills(
 
 const structuredClinicalStudyBody = `# Structured Clinical Study Workflow
 
-1. Create a study description card first.
-2. Create decision cards for research question, outcome, population, exposure, exclusions, covariates, dataset, and analysis plan.
-3. Produce a protocol artifact and a protocol review card before analysis.
-4. Run script-first analysis with \`lincei run capture\`; record declared deps and outputs.
-5. Present results as cards with artifact references, code/query provenance, and denominator checks.
-6. Record final decisions, limitations, and unresolved risks before summarizing conclusions.`;
+Run clinical research as a controlled, reviewable workflow. Leave a research trail a clinical researcher can inspect, challenge, reproduce, and govern.
+
+## Session Principles
+
+1. Separate facts, assumptions, uncertainty, risks, and validation needs.
+2. Prefer script-first analysis over ad hoc terminal-only analysis.
+3. Treat every denominator as a claim that needs traceability.
+4. Create decision cards for methodological choices.
+5. Capture substantive runs with \`lincei run capture\`.
+6. Link outputs to research cards through artifacts.
+7. Request review before protocol, analysis-plan, final-denominator, final-model, and final-interpretation checkpoints.
+8. Keep clinical interpretation conservative unless evidence is strong and reviewed.
+
+## Procedure
+
+1. Orient first with \`lincei context current --pretty\`, \`lincei card context --pretty\`, and \`lincei dataset context\`.
+2. If pending decision or review cards exist, resolve them or ask whether to override before dependent work.
+3. Create a study description card before analysis covering question, population, exposure/comparator, outcome, time window, dataset/backend, planned analysis, limitations, and review needs.
+4. Create decision cards for cohort entry point, inclusion/exclusion criteria, outcome, exposure, covariates, missingness, follow-up window, index date, model, and sensitivity/subgroup analyses.
+5. Produce protocol artifacts before final analysis, for example \`protocol.md\`, \`analysis-plan.md\`, cohort SQL, variable SQL, and analysis scripts. Request protocol review.
+6. Explore safely with dataset commands and limits. Do not turn exploratory counts into final claims.
+7. Run final or near-final analysis through \`lincei run capture\` with declared dependencies and outputs.
+8. Present results as cards with artifact references, dataset/backend, script or SQL dependency, denominator, and interpretation boundaries.
+9. Record final decisions, limitations, unresolved risks, and review status before summarizing conclusions.
+
+For every substantive result, the user should be able to answer which dataset/backend was used, which SQL/script produced it, which command ran, which outputs were captured, which card shows it, which decisions shaped it, which limitations remain, and whether it is reviewed, pending review, or exploratory.`;
 
 export const LINCEI_WORKFLOWS: ReadonlyArray<LinceiWorkflow> = [
   {
@@ -994,7 +727,7 @@ export const LINCEI_WORKFLOWS: ReadonlyArray<LinceiWorkflow> = [
     title: "Structured clinical study",
     version: STRUCTURED_CLINICAL_STUDY_VERSION,
     description: "Decision-gated clinical study workflow with protocol review and captured runs.",
-    skillIds: ["lincei-api", "clinical-research-session", "clinical-research-pitfalls"],
+    skillIds: ["lincei-api", "clinical-research-pitfalls"],
     body: structuredClinicalStudyBody,
   },
   {
