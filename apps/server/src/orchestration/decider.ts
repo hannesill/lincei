@@ -285,10 +285,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           modelSelection: command.modelSelection,
           runtimeMode: command.runtimeMode,
           interactionMode: command.interactionMode,
-          ...(command.workflowId !== undefined ? { workflowId: command.workflowId } : {}),
-          ...(command.workflowVersion !== undefined
-            ? { workflowVersion: command.workflowVersion }
-            : {}),
+          ...(command.workflowId != null ? { workflowId: command.workflowId } : {}),
+          ...(command.workflowVersion != null ? { workflowVersion: command.workflowVersion } : {}),
           branch: command.branch,
           worktreePath: command.worktreePath,
           createdAt: command.createdAt,
@@ -506,14 +504,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
           runtimeMode: targetSession.runtimeMode,
           interactionMode: targetSession.interactionMode,
-          ...(command.workflowId !== undefined
+          ...(command.workflowId != null
             ? { workflowId: command.workflowId }
-            : targetSession.workflowId !== undefined
+            : targetSession.workflowId != null
               ? { workflowId: targetSession.workflowId }
               : {}),
-          ...(command.workflowVersion !== undefined
+          ...(command.workflowVersion != null
             ? { workflowVersion: command.workflowVersion }
-            : targetSession.workflowVersion !== undefined
+            : targetSession.workflowVersion != null
               ? { workflowVersion: targetSession.workflowVersion }
               : {}),
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),

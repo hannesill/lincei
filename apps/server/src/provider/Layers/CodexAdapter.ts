@@ -74,6 +74,10 @@ const isCodexResumeCursorSchema = Schema.is(CodexResumeCursorSchema);
 
 const PROVIDER = ProviderDriverKind.make("codex");
 
+function hasRecordEntries(record: Readonly<Record<string, unknown>>): boolean {
+  return Object.keys(record).length > 0;
+}
+
 export interface CodexAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
   readonly environment?: NodeJS.ProcessEnv;
@@ -1417,8 +1421,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             serverSettingsSnapshot.linceiWorkflows,
           ),
           linceiAgentCustomInstructions: serverSettingsSnapshot.linceiAgentCustomInstructions,
-          linceiSkillSettings: serverSettingsSnapshot.linceiSkills,
-          linceiWorkflowSettings: serverSettingsSnapshot.linceiWorkflows,
+          ...(hasRecordEntries(serverSettingsSnapshot.linceiSkills)
+            ? { linceiSkillSettings: serverSettingsSnapshot.linceiSkills }
+            : {}),
+          ...(hasRecordEntries(serverSettingsSnapshot.linceiWorkflows)
+            ? { linceiWorkflowSettings: serverSettingsSnapshot.linceiWorkflows }
+            : {}),
           ...(input.workflowId !== undefined ? { linceiWorkflowId: input.workflowId } : {}),
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }

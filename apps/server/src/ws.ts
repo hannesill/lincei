@@ -552,10 +552,10 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 modelSelection: bootstrap.createSession.modelSelection,
                 runtimeMode: bootstrap.createSession.runtimeMode,
                 interactionMode: bootstrap.createSession.interactionMode,
-                ...(bootstrap.createSession.workflowId !== undefined
+                ...(bootstrap.createSession.workflowId != null
                   ? { workflowId: bootstrap.createSession.workflowId }
                   : {}),
-                ...(bootstrap.createSession.workflowVersion !== undefined
+                ...(bootstrap.createSession.workflowVersion != null
                   ? { workflowVersion: bootstrap.createSession.workflowVersion }
                   : {}),
                 branch: bootstrap.createSession.branch,
