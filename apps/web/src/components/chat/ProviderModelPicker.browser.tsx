@@ -255,13 +255,18 @@ async function mountPicker(props: {
   providers?: ReadonlyArray<ServerProvider>;
   settings?: UnifiedSettings;
   triggerVariant?: "ghost" | "outline";
+  includeModelTraits?: boolean;
+  prompt?: string;
 }) {
   const host = document.createElement("div");
   document.body.append(host);
   const onInstanceModelChange = vi.fn();
+  const onModelOptionsChange = vi.fn();
+  const onPromptChange = vi.fn();
   const providers = props.providers ?? TEST_PROVIDERS;
   const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
   const activeInstanceId = props.activeInstanceId ?? CODEX_INSTANCE_ID;
+  const activeProvider = providers.find((provider) => provider.instanceId === activeInstanceId);
   const modelOptionsByInstance = getCustomModelOptionsByInstance(
     props.settings ?? DEFAULT_UNIFIED_SETTINGS,
     providers,
@@ -277,6 +282,19 @@ async function mountPicker(props: {
       instanceEntries={instanceEntries}
       modelOptionsByInstance={modelOptionsByInstance}
       triggerVariant={props.triggerVariant}
+      {...(props.includeModelTraits && activeProvider
+        ? {
+            modelTraits: {
+              provider: activeProvider.driver,
+              instanceId: activeInstanceId,
+              models: activeProvider.models,
+              model: props.model,
+              prompt: props.prompt ?? "",
+              onPromptChange,
+              onModelOptionsChange,
+            },
+          }
+        : {})}
       onInstanceModelChange={onInstanceModelChange}
     />,
     { container: host },
@@ -284,6 +302,8 @@ async function mountPicker(props: {
 
   return {
     onInstanceModelChange,
+    onModelOptionsChange,
+    onPromptChange,
     // Back-compat alias used by callers that still assert on the old callback
     // name. Delegates to the instance-aware mock so existing expectations work.
     get onProviderModelChange() {
@@ -344,6 +364,83 @@ describe("ProviderModelPicker", () => {
         expect(text).not.toContain("Codex");
         expect(text).toContain("Claude");
         expect(text).toContain("Claude Opus 4.6");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("does not show model settings when traits are omitted", async () => {
+    const mounted = await mountPicker({
+      activeInstanceId: CODEX_INSTANCE_ID,
+      model: "gpt-5-codex",
+      lockedProvider: null,
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(text).toContain("GPT-5 Codex");
+        expect(text).not.toContain("Model settings");
+        expect(text).not.toContain("Fast Mode");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows model settings after model selection and resets to picker after close", async () => {
+    const mounted = await mountPicker({
+      activeInstanceId: CODEX_INSTANCE_ID,
+      model: "gpt-5.3-codex",
+      lockedProvider: null,
+      includeModelTraits: true,
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(text).not.toContain("Model settings");
+        expect(text).toContain("GPT-5.3 Codex");
+        expect(text).not.toContain("Fast Mode");
+      });
+
+      await page.getByText("GPT-5.3 Codex").last().click();
+
+      expect(mounted.onInstanceModelChange).toHaveBeenCalledWith("codex", "gpt-5.3-codex");
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(document.querySelector('input[placeholder="Search models..."]')).toBeNull();
+        expect(text).not.toContain("Model settings");
+        expect(text).toContain("Reasoning");
+        expect(text).toContain("Fast Mode");
+        expect(text).toContain("medium (default)");
+      });
+
+      await page.getByText("high").click();
+
+      expect(mounted.onModelOptionsChange).toHaveBeenCalledWith(
+        expect.arrayContaining([{ id: "reasoningEffort", value: "high" }]),
+      );
+
+      await userEvent.click(document.body);
+
+      await vi.waitFor(() => {
+        expect(document.body.textContent ?? "").not.toContain("Reasoning");
+      });
+
+      await page.getByRole("button").click();
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(document.querySelector('input[placeholder="Search models..."]')).not.toBeNull();
+        expect(text).toContain("GPT-5.3 Codex");
+        expect(text).not.toContain("Fast Mode");
       });
     } finally {
       await mounted.cleanup();

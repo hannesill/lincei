@@ -5,6 +5,7 @@ import type {
   LinceiWorkflow,
   LinceiWorkflowSettings,
   ProviderDriverKind,
+  ServerProvider,
   ServerProviderSkill,
   LinceiSkillSettings,
 } from "@t3tools/contracts";
@@ -1107,6 +1108,28 @@ export function mergeLinceiSkillCatalog(input: {
   return merged;
 }
 
+export function enrichServerProviderWithLinceiSkills(input: {
+  readonly provider: ServerProvider;
+  readonly skillSettings?: LinceiSkillSettingsMap | undefined;
+}): ServerProvider {
+  const providerNative = input.provider.skills.filter(isExternalProviderSkill);
+  if (!input.provider.enabled || input.provider.availability === "unavailable") {
+    return {
+      ...input.provider,
+      skills: providerNative,
+    };
+  }
+
+  return {
+    ...input.provider,
+    skills: mergeLinceiSkillCatalog({
+      provider: input.provider.driver,
+      providerNative,
+      skillSettings: input.skillSettings,
+    }),
+  };
+}
+
 export function isLinceiOwnedProviderSkill(
   skill: Pick<ServerProviderSkill, "linceiSkillId" | "linceiSource" | "path">,
 ): boolean {
@@ -1122,6 +1145,97 @@ export function isExternalProviderSkill(
   skill: Pick<ServerProviderSkill, "linceiSkillId" | "linceiSource" | "path">,
 ): boolean {
   return skill.linceiSource === "provider-native" || !isLinceiOwnedProviderSkill(skill);
+}
+
+export function linceiSkillTokenPrefixForProvider(provider: ProviderDriverKind): "$" | "/" {
+  return provider === "codex" ? "$" : "/";
+}
+
+export function linceiSkillTokenPrefixForProviderSkill(input: {
+  readonly provider: ProviderDriverKind;
+  readonly skill: Pick<ServerProviderSkill, "linceiSkillId" | "linceiSource" | "path">;
+}): "$" | "/" {
+  return isLinceiOwnedProviderSkill(input.skill)
+    ? linceiSkillTokenPrefixForProvider(input.provider)
+    : "$";
+}
+
+export function parseSelectedLinceiSkillIds(input: {
+  readonly text: string | undefined;
+  readonly skills?: ReadonlyArray<LinceiCanonicalSkill>;
+  readonly skillSettings?: LinceiSkillSettingsMap | undefined;
+}): ReadonlyArray<string> {
+  if (!input.text) return [];
+
+  const skillsById = new Map(
+    applyLinceiSkillSettings(input.skills ?? bundledLinceiSkills(), input.skillSettings).map(
+      (skill) => [skill.id, skill],
+    ),
+  );
+  const selected: string[] = [];
+  const selectedSet = new Set<string>();
+  const tokenRegex = /(^|\s)[$/]([a-zA-Z][a-zA-Z0-9:_-]*)(?=\s|$)/g;
+
+  for (const match of input.text.matchAll(tokenRegex)) {
+    const id = match[2] ?? "";
+    const skill = skillsById.get(id);
+    if (!skill?.enabled || selectedSet.has(id)) {
+      continue;
+    }
+    selectedSet.add(id);
+    selected.push(id);
+  }
+
+  return selected;
+}
+
+function escapeLinceiSkillXmlText(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function escapeLinceiSkillXmlAttribute(value: string): string {
+  return escapeLinceiSkillXmlText(value).replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+}
+
+export function buildSelectedLinceiSkillsPrompt(input: {
+  readonly skillIds: ReadonlyArray<string>;
+  readonly skills?: ReadonlyArray<LinceiCanonicalSkill>;
+  readonly skillSettings?: LinceiSkillSettingsMap | undefined;
+}): string {
+  const skillsById = new Map(
+    applyLinceiSkillSettings(input.skills ?? bundledLinceiSkills(), input.skillSettings).map(
+      (skill) => [skill.id, skill],
+    ),
+  );
+  const selectedBodies = input.skillIds
+    .map((skillId) => skillsById.get(skillId))
+    .filter((skill): skill is LinceiCanonicalSkill => skill !== undefined && skill.enabled)
+    .map(
+      (skill) =>
+        `<lincei_skill id="${escapeLinceiSkillXmlAttribute(skill.id)}" version="${escapeLinceiSkillXmlAttribute(skill.version)}">\n${escapeLinceiSkillXmlText(skill.body)}\n</lincei_skill>`,
+    );
+
+  if (selectedBodies.length === 0) {
+    return "";
+  }
+  return `<lincei_selected_skills>\n${selectedBodies.join("\n")}\n</lincei_selected_skills>`;
+}
+
+export function appendSelectedLinceiSkillPrompts(input: {
+  readonly text: string | undefined;
+  readonly skills?: ReadonlyArray<LinceiCanonicalSkill>;
+  readonly skillSettings?: LinceiSkillSettingsMap | undefined;
+}): string | undefined {
+  const selectedSkillIds = parseSelectedLinceiSkillIds(input);
+  const prompt = buildSelectedLinceiSkillsPrompt({
+    skillIds: selectedSkillIds,
+    ...(input.skills !== undefined ? { skills: input.skills } : {}),
+    ...(input.skillSettings !== undefined ? { skillSettings: input.skillSettings } : {}),
+  });
+  if (!input.text || !prompt) {
+    return input.text;
+  }
+  return `${input.text.trimEnd()}\n\n${prompt}`;
 }
 
 export function evaluateManagedSkillSyncState(input: {

@@ -72,6 +72,37 @@ const TestHttpClientLive = Layer.succeed(
   ),
 );
 
+function providerWithoutSkills(provider: ServerProvider): ServerProvider {
+  return {
+    ...provider,
+    skills: [],
+  };
+}
+
+function providerSkillNames(provider: ServerProvider | undefined): ReadonlyArray<string> {
+  return provider?.skills.map((skill) => skill.name) ?? [];
+}
+
+function makeRegistryTestProvider(input: {
+  readonly instanceId: ProviderInstanceId;
+  readonly driver: ProviderDriverKind;
+  readonly checkedAt?: string;
+}): ServerProvider {
+  return {
+    instanceId: input.instanceId,
+    driver: input.driver,
+    status: "ready",
+    enabled: true,
+    installed: true,
+    auth: { status: "authenticated" },
+    checkedAt: input.checkedAt ?? "2026-04-29T10:00:00.000Z",
+    version: "1.0.0",
+    models: [],
+    slashCommands: [],
+    skills: [],
+  };
+}
+
 function selectDescriptor(
   id: string,
   label: string,
@@ -505,6 +536,120 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
         assert.strictEqual(haveProvidersChanged(providers, [...providers]), false);
       });
 
+      it.effect("enriches enabled provider snapshots with settings-aware Lincei skills", () =>
+        Effect.gen(function* () {
+          const codexDriver = ProviderDriverKind.make("codex");
+          const codexInstanceId = ProviderInstanceId.make("codex");
+          const claudeDriver = ProviderDriverKind.make("claudeAgent");
+          const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
+          const makeInstance = (provider: ServerProvider): ProviderInstance => ({
+            instanceId: provider.instanceId,
+            driverKind: provider.driver,
+            continuationIdentity: {
+              driverKind: provider.driver,
+              continuationKey: `${provider.driver}:instance:${provider.instanceId}`,
+            },
+            displayName: undefined,
+            enabled: true,
+            snapshot: {
+              maintenanceCapabilities: makeManualOnlyProviderMaintenanceCapabilities({
+                provider: provider.driver,
+                packageName: null,
+              }),
+              getSnapshot: Effect.succeed(provider),
+              refresh: Effect.succeed(provider),
+              streamChanges: Stream.empty,
+            },
+            adapter: {} as ProviderInstance["adapter"],
+            textGeneration: {} as ProviderInstance["textGeneration"],
+          });
+          const codexProvider = makeRegistryTestProvider({
+            instanceId: codexInstanceId,
+            driver: codexDriver,
+          });
+          const claudeProvider = makeRegistryTestProvider({
+            instanceId: claudeInstanceId,
+            driver: claudeDriver,
+          });
+          const settingsService = yield* makeMutableServerSettingsService();
+          const instanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
+            getInstance: (instanceId) =>
+              Effect.succeed(
+                instanceId === codexInstanceId
+                  ? makeInstance(codexProvider)
+                  : instanceId === claudeInstanceId
+                    ? makeInstance(claudeProvider)
+                    : undefined,
+              ),
+            listInstances: Effect.succeed([
+              makeInstance(codexProvider),
+              makeInstance(claudeProvider),
+            ]),
+            listUnavailable: Effect.succeed([]),
+            streamChanges: Stream.empty,
+            subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), (pubsub) =>
+              PubSub.subscribe(pubsub),
+            ),
+          });
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const runtimeServices = yield* Layer.build(
+            ProviderRegistryLive.pipe(
+              Layer.provideMerge(instanceRegistryLayer),
+              Layer.provideMerge(Layer.succeed(ServerSettingsService, settingsService)),
+              Layer.provideMerge(
+                ServerConfig.layerTest(process.cwd(), {
+                  prefix: "t3-provider-registry-lincei-skills-",
+                }),
+              ),
+              Layer.provideMerge(NodeServices.layer),
+            ),
+          ).pipe(Scope.provide(scope));
+
+          yield* Effect.gen(function* () {
+            const registry = yield* ProviderRegistry;
+            let providers = yield* registry.getProviders;
+            assert.deepStrictEqual(
+              providers.map((provider) => providerSkillNames(provider)[0]),
+              ["lincei-api", "lincei-api"],
+            );
+
+            yield* Effect.yieldNow;
+            yield* settingsService.updateSettings({
+              linceiSkills: {
+                "lincei-api": {
+                  enabled: false,
+                },
+              },
+            });
+            for (
+              let attempt = 0;
+              attempt < 50 &&
+              providers.some((provider) =>
+                provider.skills.some((skill) => skill.name === "lincei-api" && skill.enabled),
+              );
+              attempt += 1
+            ) {
+              yield* TestClock.adjust("10 millis");
+              yield* Effect.yieldNow;
+              providers = yield* registry.getProviders;
+            }
+            assert.strictEqual(
+              providers.some((provider) =>
+                provider.skills.some((skill) => skill.name === "lincei-api" && skill.enabled),
+              ),
+              false,
+            );
+            assert.strictEqual(
+              providers.every((provider) =>
+                providerSkillNames(provider).includes("clinical-research-session"),
+              ),
+              true,
+            );
+          }).pipe(Effect.provide(runtimeServices));
+        }),
+      );
+
       it("preserves previously discovered provider models when a refresh returns none", () => {
         const previousProvider = {
           instanceId: ProviderInstanceId.make("cursor"),
@@ -763,7 +908,12 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               cachedProvider = yield* readProviderStatusCache(filePath);
             }
 
-            assert.deepStrictEqual(cachedProvider, {
+            assert.deepStrictEqual(providerSkillNames(cachedProvider).slice(0, 3), [
+              "lincei-api",
+              "clinical-research-session",
+              "clinical-research-pitfalls",
+            ]);
+            assert.deepStrictEqual(cachedProvider && providerWithoutSkills(cachedProvider), {
               ...refreshedProvider,
               models: [...initialProvider.models],
             });
@@ -836,11 +986,21 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry;
 
-            assert.deepStrictEqual(yield* registry.getProviders, [cachedProvider]);
-            assert.deepStrictEqual(yield* registry.refresh(codexDriver), [cachedProvider]);
-            assert.deepStrictEqual(yield* registry.refreshInstance(codexInstanceId), [
-              cachedProvider,
+            const providers = yield* registry.getProviders;
+            assert.deepStrictEqual(providers.map(providerWithoutSkills), [cachedProvider]);
+            assert.deepStrictEqual(providerSkillNames(providers[0]).slice(0, 3), [
+              "lincei-api",
+              "clinical-research-session",
+              "clinical-research-pitfalls",
             ]);
+            assert.deepStrictEqual(
+              (yield* registry.refresh(codexDriver)).map(providerWithoutSkills),
+              [cachedProvider],
+            );
+            assert.deepStrictEqual(
+              (yield* registry.refreshInstance(codexInstanceId)).map(providerWithoutSkills),
+              [cachedProvider],
+            );
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
@@ -939,7 +1099,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
 
           yield* Effect.gen(function* () {
             const registry = yield* ProviderRegistry;
-            assert.deepStrictEqual(yield* registry.getProviders, [codexProvider]);
+            assert.deepStrictEqual((yield* registry.getProviders).map(providerWithoutSkills), [
+              codexProvider,
+            ]);
 
             yield* Ref.set(failNextList, true);
             yield* PubSub.publish(changes, undefined);

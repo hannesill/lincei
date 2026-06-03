@@ -1,4 +1,5 @@
 import type { ServerProviderSkill } from "@t3tools/contracts";
+import { isLinceiOwnedProviderSkill } from "@t3tools/shared/linceiSkills";
 
 function titleCaseWords(value: string): string {
   const words: string[] = [];
@@ -24,8 +25,12 @@ export function formatProviderSkillDisplayName(
 }
 
 export function formatProviderSkillInstallSource(
-  skill: Pick<ServerProviderSkill, "path" | "scope">,
+  skill: Pick<ServerProviderSkill, "linceiSkillId" | "linceiSource" | "path" | "scope">,
 ): string | null {
+  if (isLinceiOwnedProviderSkill(skill)) {
+    return "Lincei";
+  }
+
   const normalizedPath = normalizePathSeparators(skill.path);
   if (normalizedPath.includes("/.codex/plugins/") || normalizedPath.includes("/.agents/plugins/")) {
     return "App";

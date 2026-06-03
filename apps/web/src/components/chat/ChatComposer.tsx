@@ -1,6 +1,7 @@
 import type {
   ApprovalRequestId,
   EnvironmentId,
+  LinceiWorkflow,
   ModelSelection,
   ProjectEntry,
   ProviderApprovalDecision,
@@ -19,7 +20,12 @@ import {
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
-import { LINCEI_WORKFLOWS, workflowById } from "@t3tools/shared/linceiSkills";
+import {
+  isLinceiOwnedProviderSkill,
+  LINCEI_WORKFLOWS,
+  linceiSkillTokenPrefixForProviderSkill,
+  workflowById,
+} from "@t3tools/shared/linceiSkills";
 import {
   memo,
   useCallback,
@@ -72,11 +78,7 @@ import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./ComposerPlanFollowUpBanner";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { searchSlashCommandItems } from "./composerSlashCommandSearch";
-import {
-  getComposerProviderState,
-  renderProviderTraitsMenuContent,
-  renderProviderTraitsPicker,
-} from "./composerProviderState";
+import { getComposerProviderState } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../vscode-icons";
@@ -84,10 +86,18 @@ import { cn, randomUUID } from "~/lib/utils";
 import { Separator } from "../ui/separator";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator as MenuDivider,
+  MenuTrigger,
+} from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
-  BotIcon,
   CircleAlertIcon,
   ListTodoIcon,
   type LucideIcon,
@@ -181,108 +191,125 @@ function isInsideComposerFloatingLayer(element: Element): boolean {
 }
 
 const ComposerFooterModeControls = memo(function ComposerFooterModeControls(props: {
-  showInteractionModeToggle: boolean;
-  interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
-  showPlanToggle: boolean;
-  planSidebarLabel: string;
-  planSidebarOpen: boolean;
-  onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
-  onTogglePlanSidebar: () => void;
 }) {
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
   const RuntimeModeIcon = runtimeModeOption.icon;
 
   return (
-    <>
-      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-
-      {props.showInteractionModeToggle ? (
-        <>
-          <Button
-            variant="ghost"
-            className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
-            size="sm"
-            type="button"
-            onClick={props.onToggleInteractionMode}
-            title={
-              props.interactionMode === "plan"
-                ? "Plan mode — click to return to normal build mode"
-                : "Default mode — click to enter plan mode"
-            }
-          >
-            <BotIcon />
-            <span className="sr-only sm:not-sr-only">
-              {props.interactionMode === "plan" ? "Plan" : "Build"}
-            </span>
-          </Button>
-
-          <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-        </>
-      ) : null}
-
-      <Select
-        value={props.runtimeMode}
-        onValueChange={(value) => props.onRuntimeModeChange(value!)}
+    <Select value={props.runtimeMode} onValueChange={(value) => props.onRuntimeModeChange(value!)}>
+      <SelectTrigger
+        variant="ghost"
+        size="sm"
+        className="font-medium"
+        aria-label="Access"
+        title={runtimeModeOption.description}
       >
-        <SelectTrigger
-          variant="ghost"
-          size="sm"
-          className="font-medium"
-          aria-label="Runtime mode"
-          title={runtimeModeOption.description}
-        >
-          <RuntimeModeIcon className="size-4" />
-          <SelectValue>{runtimeModeOption.label}</SelectValue>
-        </SelectTrigger>
-        <SelectPopup alignItemWithTrigger={false}>
-          {runtimeModeOptions.map((mode) => {
-            const option = runtimeModeConfig[mode];
-            const OptionIcon = option.icon;
-            return (
-              <SelectItem key={mode} value={mode} className="min-w-64 py-2">
-                <div className="grid min-w-0 gap-0.5">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                    <OptionIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                    {option.label}
-                  </span>
-                  <span className="text-muted-foreground text-xs leading-4">
-                    {option.description}
-                  </span>
-                </div>
-              </SelectItem>
-            );
-          })}
-        </SelectPopup>
-      </Select>
+        <RuntimeModeIcon className="size-4" />
+        <SelectValue>{runtimeModeOption.label}</SelectValue>
+      </SelectTrigger>
+      <SelectPopup alignItemWithTrigger={false}>
+        {runtimeModeOptions.map((mode) => {
+          const option = runtimeModeConfig[mode];
+          const OptionIcon = option.icon;
+          return (
+            <SelectItem key={mode} value={mode} className="min-w-64 py-2">
+              <div className="grid min-w-0 gap-0.5">
+                <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                  <OptionIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                  {option.label}
+                </span>
+                <span className="text-muted-foreground text-xs leading-4">
+                  {option.description}
+                </span>
+              </div>
+            </SelectItem>
+          );
+        })}
+      </SelectPopup>
+    </Select>
+  );
+});
 
-      {props.showPlanToggle ? (
-        <>
-          <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+const ComposerWorkflowMenu = memo(function ComposerWorkflowMenu(props: {
+  activePlan: boolean;
+  interactionMode: ProviderInteractionMode;
+  planSidebarLabel: string;
+  planSidebarOpen: boolean;
+  selectedWorkflow: LinceiWorkflow;
+  showInteractionModeToggle: boolean;
+  workflows: ReadonlyArray<LinceiWorkflow>;
+  onToggleInteractionMode: () => void;
+  onTogglePlanSidebar: () => void;
+  onWorkflowChange: (workflowId: string) => void;
+}) {
+  return (
+    <Menu>
+      <MenuTrigger
+        render={
           <Button
             variant="ghost"
-            className={cn(
-              "shrink-0 whitespace-nowrap px-2 sm:px-3",
-              props.planSidebarOpen
-                ? "text-blue-400 hover:text-blue-300"
-                : "text-muted-foreground/70 hover:text-foreground/80",
-            )}
+            className="min-w-0 max-w-52 shrink justify-start overflow-hidden whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
             size="sm"
             type="button"
-            onClick={props.onTogglePlanSidebar}
-            title={
-              props.planSidebarOpen
+            aria-label="Workflow"
+            title={props.selectedWorkflow.description}
+          />
+        }
+      >
+        <ListTodoIcon />
+        <span className="min-w-0 truncate">{props.selectedWorkflow.title}</span>
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Workflow</div>
+        <MenuRadioGroup
+          value={props.selectedWorkflow.id}
+          onValueChange={(value) => {
+            if (!value || value === props.selectedWorkflow.id) return;
+            props.onWorkflowChange(value);
+          }}
+        >
+          {props.workflows.map((workflow) => (
+            <MenuRadioItem key={workflow.id} value={workflow.id} className="min-w-72 py-2">
+              <div className="grid min-w-0 gap-0.5">
+                <span className="font-medium text-foreground">{workflow.title}</span>
+                <span className="text-muted-foreground text-xs leading-4">
+                  {workflow.description}
+                </span>
+              </div>
+            </MenuRadioItem>
+          ))}
+        </MenuRadioGroup>
+        {props.showInteractionModeToggle || props.activePlan ? <MenuDivider /> : null}
+        {props.showInteractionModeToggle ? (
+          <>
+            <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Mode</div>
+            <MenuRadioGroup
+              value={props.interactionMode}
+              onValueChange={(value) => {
+                if (!value || value === props.interactionMode) return;
+                props.onToggleInteractionMode();
+              }}
+            >
+              <MenuRadioItem value="default">Chat</MenuRadioItem>
+              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+            </MenuRadioGroup>
+          </>
+        ) : null}
+        {props.activePlan ? (
+          <>
+            {props.showInteractionModeToggle ? <MenuDivider /> : null}
+            <MenuItem onClick={props.onTogglePlanSidebar}>
+              <ListTodoIcon className="size-4 shrink-0" />
+              {props.planSidebarOpen
                 ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
-                : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`
-            }
-          >
-            <ListTodoIcon />
-            <span className="sr-only sm:not-sr-only">{props.planSidebarLabel}</span>
-          </Button>
-        </>
-      ) : null}
-    </>
+                : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`}
+            </MenuItem>
+          </>
+        ) : null}
+      </MenuPopup>
+    </Menu>
   );
 });
 
@@ -916,27 +943,62 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           description: command.description ?? command.input?.hint ?? "Run provider command",
         }),
       );
+      const providerSlashSkillItems = searchProviderSkills(
+        (selectedProviderStatus?.skills ?? []).filter(
+          (skill) =>
+            linceiSkillTokenPrefixForProviderSkill({
+              provider: selectedProvider,
+              skill,
+            }) === "/",
+        ),
+        composerTrigger.query,
+      ).map((skill) => ({
+        id: `skill:${selectedProvider}:${skill.name}`,
+        type: "skill" as const,
+        provider: selectedProvider,
+        skill,
+        label: `/${skill.name}`,
+        description:
+          skill.shortDescription ??
+          skill.description ??
+          (skill.scope ? `${skill.scope} skill` : "Run provider skill"),
+      }));
       const query = composerTrigger.query.trim().toLowerCase();
       const slashCommandItems = [...builtInSlashCommandItems, ...providerSlashCommandItems];
       if (!query) {
-        return slashCommandItems;
+        return [...slashCommandItems, ...providerSlashSkillItems];
       }
-      return searchSlashCommandItems(slashCommandItems, query);
+      return [...searchSlashCommandItems(slashCommandItems, query), ...providerSlashSkillItems];
     }
     if (composerTrigger.kind === "skill") {
-      return searchProviderSkills(selectedProviderStatus?.skills ?? [], composerTrigger.query).map(
-        (skill) => ({
+      return searchProviderSkills(
+        (selectedProviderStatus?.skills ?? []).filter(
+          (skill) =>
+            linceiSkillTokenPrefixForProviderSkill({
+              provider: selectedProvider,
+              skill,
+            }) === "$",
+        ),
+        composerTrigger.query,
+      ).map((skill) => {
+        const prefix = linceiSkillTokenPrefixForProviderSkill({
+          provider: selectedProvider,
+          skill,
+        });
+        return {
           id: `skill:${selectedProvider}:${skill.name}`,
           type: "skill" as const,
           provider: selectedProvider,
           skill,
-          label: formatProviderSkillDisplayName(skill),
+          label: isLinceiOwnedProviderSkill(skill)
+            ? `${prefix}${skill.name}`
+            : formatProviderSkillDisplayName(skill),
           description:
             skill.shortDescription ??
             skill.description ??
             (skill.scope ? `${skill.scope} skill` : "Run provider skill"),
-        }),
-      );
+        };
+      });
     }
     return [];
   }, [composerTrigger, selectedProvider, selectedProviderStatus, workspaceEntries]);
@@ -1036,28 +1098,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [composerDraftTarget, promptRef, scheduleComposerFocus, setComposerDraftPrompt],
   );
 
-  const providerTraitsMenuContent = renderProviderTraitsMenuContent({
-    provider: selectedProvider,
-    instanceId: selectedInstanceId,
-    ...(routeKind === "server" ? { sessionRef: routeSessionRef } : {}),
-    ...(routeKind === "draft" && draftId ? { draftId } : {}),
-    model: selectedModel,
-    models: selectedProviderModels,
-    modelOptions: composerModelOptions?.[selectedInstanceId],
-    prompt,
-    onPromptChange: setPromptFromTraits,
-  });
-  const providerTraitsPicker = renderProviderTraitsPicker({
-    provider: selectedProvider,
-    instanceId: selectedInstanceId,
-    ...(routeKind === "server" ? { sessionRef: routeSessionRef } : {}),
-    ...(routeKind === "draft" && draftId ? { draftId } : {}),
-    model: selectedModel,
-    models: selectedProviderModels,
-    modelOptions: composerModelOptions?.[selectedInstanceId],
-    prompt,
-    onPromptChange: setPromptFromTraits,
-  });
+  const modelTraits =
+    routeKind === "server" || draftId
+      ? {
+          provider: selectedProvider,
+          instanceId: selectedInstanceId,
+          ...(routeKind === "server" ? { sessionRef: routeSessionRef } : {}),
+          ...(routeKind === "draft" && draftId ? { draftId } : {}),
+          model: selectedModel,
+          models: selectedProviderModels,
+          modelOptions: composerModelOptions?.[selectedInstanceId],
+          prompt,
+          onPromptChange: setPromptFromTraits,
+        }
+      : undefined;
   const pendingPrimaryAction = useMemo(
     () =>
       activePendingProgress
@@ -1580,7 +1634,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         return;
       }
       if (item.type === "skill") {
-        const replacement = `$${item.skill.name} `;
+        const replacement = `${linceiSkillTokenPrefixForProviderSkill({
+          provider: item.provider,
+          skill: item.skill,
+        })}${item.skill.name} `;
         const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
           snapshot.value,
           trigger.rangeEnd,
@@ -2375,6 +2432,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   instanceEntries={providerInstanceEntries}
                   shortcuts={shortcuts}
                   modelOptionsByInstance={modelOptionsByInstance}
+                  {...(modelTraits ? { modelTraits } : {})}
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
                   {...(composerProviderState.modelPickerIconClassName
@@ -2395,64 +2453,33 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     planSidebarLabel={planSidebarLabel}
                     planSidebarOpen={planSidebarOpen}
                     runtimeMode={runtimeMode}
+                    selectedWorkflow={selectedWorkflow}
+                    workflows={LINCEI_WORKFLOWS}
                     showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
-                    traitsMenuContent={providerTraitsMenuContent}
                     onToggleInteractionMode={toggleInteractionMode}
                     onTogglePlanSidebar={togglePlanSidebar}
                     onRuntimeModeChange={handleRuntimeModeChange}
+                    onWorkflowChange={setSelectedWorkflowId}
                   />
                 ) : (
                   <>
-                    {providerTraitsPicker ? (
-                      <>
-                        <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-                        {providerTraitsPicker}
-                      </>
-                    ) : null}
                     <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-                    <Select
-                      value={selectedWorkflow.id}
-                      onValueChange={(value) => {
-                        if (value) setSelectedWorkflowId(value);
-                      }}
-                    >
-                      <SelectTrigger
-                        variant="ghost"
-                        size="sm"
-                        className="max-w-52 font-medium"
-                        aria-label="Workflow"
-                        title={selectedWorkflow.description}
-                      >
-                        <ListTodoIcon className="size-4" />
-                        <SelectValue>{selectedWorkflow.title}</SelectValue>
-                      </SelectTrigger>
-                      <SelectPopup alignItemWithTrigger={false}>
-                        {LINCEI_WORKFLOWS.map((workflow) => (
-                          <SelectItem
-                            key={workflow.id}
-                            value={workflow.id}
-                            className="min-w-72 py-2"
-                          >
-                            <div className="grid min-w-0 gap-0.5">
-                              <span className="font-medium text-foreground">{workflow.title}</span>
-                              <span className="text-muted-foreground text-xs leading-4">
-                                {workflow.description}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectPopup>
-                    </Select>
-                    <ComposerFooterModeControls
-                      showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
+                    <ComposerWorkflowMenu
+                      activePlan={showPlanSidebarToggle}
                       interactionMode={interactionMode}
-                      runtimeMode={runtimeMode}
-                      showPlanToggle={showPlanSidebarToggle}
                       planSidebarLabel={planSidebarLabel}
                       planSidebarOpen={planSidebarOpen}
+                      selectedWorkflow={selectedWorkflow}
+                      showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
+                      workflows={LINCEI_WORKFLOWS}
                       onToggleInteractionMode={toggleInteractionMode}
-                      onRuntimeModeChange={handleRuntimeModeChange}
                       onTogglePlanSidebar={togglePlanSidebar}
+                      onWorkflowChange={setSelectedWorkflowId}
+                    />
+                    <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                    <ComposerFooterModeControls
+                      runtimeMode={runtimeMode}
+                      onRuntimeModeChange={handleRuntimeModeChange}
                     />
                   </>
                 )}

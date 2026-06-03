@@ -1,5 +1,5 @@
-import { ProviderInteractionMode, RuntimeMode } from "@t3tools/contracts";
-import { memo, type ReactNode } from "react";
+import { ProviderInteractionMode, RuntimeMode, type LinceiWorkflow } from "@t3tools/contracts";
+import { memo } from "react";
 import { EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -18,11 +18,13 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   planSidebarLabel: string;
   planSidebarOpen: boolean;
   runtimeMode: RuntimeMode;
+  selectedWorkflow: LinceiWorkflow;
+  workflows: ReadonlyArray<LinceiWorkflow>;
   showInteractionModeToggle: boolean;
-  traitsMenuContent?: ReactNode;
   onToggleInteractionMode: () => void;
   onTogglePlanSidebar: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
+  onWorkflowChange: (workflowId: string) => void;
 }) {
   return (
     <Menu>
@@ -39,12 +41,26 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         <EllipsisIcon aria-hidden="true" className="size-4" />
       </MenuTrigger>
       <MenuPopup align="start">
-        {props.traitsMenuContent ? (
-          <>
-            {props.traitsMenuContent}
-            <MenuDivider />
-          </>
-        ) : null}
+        <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Workflow</div>
+        <MenuRadioGroup
+          value={props.selectedWorkflow.id}
+          onValueChange={(value) => {
+            if (!value || value === props.selectedWorkflow.id) return;
+            props.onWorkflowChange(value);
+          }}
+        >
+          {props.workflows.map((workflow) => (
+            <MenuRadioItem key={workflow.id} value={workflow.id} className="min-w-72 py-2">
+              <div className="grid min-w-0 gap-0.5">
+                <span className="font-medium text-foreground">{workflow.title}</span>
+                <span className="text-muted-foreground text-xs leading-4">
+                  {workflow.description}
+                </span>
+              </div>
+            </MenuRadioItem>
+          ))}
+        </MenuRadioGroup>
+        <MenuDivider />
         {props.showInteractionModeToggle ? (
           <>
             <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Mode</div>

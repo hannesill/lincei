@@ -25,6 +25,15 @@ describe("formatProviderSkillDisplayName", () => {
 });
 
 describe("formatProviderSkillInstallSource", () => {
+  it("marks Lincei-owned skills as Lincei skills", () => {
+    expect(
+      formatProviderSkillInstallSource({
+        path: "lincei://bundled/lincei-api",
+        scope: "system",
+      }),
+    ).toBe("Lincei");
+  });
+
   it("marks plugin-backed skills as app installs", () => {
     expect(
       formatProviderSkillInstallSource({

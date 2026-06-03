@@ -29,6 +29,7 @@ import {
   type ServerProvider,
   type ServerProviderUpdateState,
 } from "@t3tools/contracts";
+import { enrichServerProviderWithLinceiSkills } from "@t3tools/shared/linceiSkills";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -41,6 +42,7 @@ import * as Stream from "effect/Stream";
 import * as Semaphore from "effect/Semaphore";
 
 import { ServerConfig } from "../../config.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry.ts";
 import {
@@ -189,8 +191,10 @@ export const ProviderRegistryLive = Layer.effect(
   Effect.gen(function* () {
     const instanceRegistry = yield* ProviderInstanceRegistry;
     const config = yield* ServerConfig;
+    const settingsService = yield* ServerSettingsService;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const settingsRef = yield* Ref.make(yield* settingsService.getSettings);
 
     // Aggregator PubSub — consumers (WS gateway, etc.) subscribe here for
     // coalesced updates across every instance.
@@ -322,6 +326,16 @@ export const ProviderRegistryLive = Layer.effect(
       };
     });
 
+    const enrichProviderSkills = Effect.fn("enrichProviderSkills")(function* (
+      provider: ServerProvider,
+    ) {
+      const settings = yield* Ref.get(settingsRef);
+      return enrichServerProviderWithLinceiSkills({
+        provider,
+        skillSettings: settings.linceiSkills,
+      });
+    });
+
     const upsertProviders = Effect.fn("upsertProviders")(function* (
       nextProviders: ReadonlyArray<ServerProvider>,
       options?: {
@@ -330,8 +344,11 @@ export const ProviderRegistryLive = Layer.effect(
         readonly replace?: boolean;
       },
     ) {
+      const nextProvidersWithSkills = yield* Effect.forEach(nextProviders, enrichProviderSkills, {
+        concurrency: "unbounded",
+      });
       const nextProvidersWithUpdateState = yield* Effect.forEach(
-        nextProviders,
+        nextProvidersWithSkills,
         applyProviderUpdateState,
         {
           concurrency: "unbounded",
@@ -625,6 +642,16 @@ export const ProviderRegistryLive = Layer.effect(
     // these via `upsertProviders` so on-disk state wins where present
     // and pending fallbacks fill the gaps.
     yield* upsertProviders(fallbackProviders, { publish: false });
+    yield* Stream.runForEach(settingsService.streamChanges, (settings) =>
+      Effect.gen(function* () {
+        yield* Ref.set(settingsRef, settings);
+        const providers = yield* Ref.get(providersRef);
+        yield* upsertProviders(providers, {
+          persist: false,
+          replace: true,
+        });
+      }),
+    ).pipe(Effect.forkScoped);
     // Subscribe to registry mutations BEFORE running the initial sync.
     // `subscribeChanges` acquires the dequeue synchronously in this
     // fibre; the subscription is active the instant this `yield*`

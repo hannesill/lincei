@@ -24,6 +24,7 @@ import {
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
+import { appendSelectedLinceiSkillPrompts } from "@t3tools/shared/linceiSkills";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -56,6 +57,7 @@ import {
 import { type EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 /**
@@ -210,6 +212,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   options?: ProviderServiceLiveOptions,
 ) {
   const analytics = yield* Effect.service(AnalyticsService);
+  const settingsService = yield* ServerSettingsService;
   const eventLoggers = yield* ProviderEventLoggers;
   // Options-provided logger wins (test overrides); otherwise we take whatever
   // the `ProviderEventLoggers` tag exposes — `undefined` means "no canonical
@@ -669,8 +672,25 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.kind": routed.adapter.provider,
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
+      const settings = yield* settingsService.getSettings.pipe(
+        Effect.mapError((error) =>
+          toValidationError(
+            "ProviderService.sendTurn",
+            "Failed to read Lincei skill settings.",
+            error,
+          ),
+        ),
+      );
+      const expandedInput = appendSelectedLinceiSkillPrompts({
+        text: input.input,
+        skillSettings: settings.linceiSkills,
+      });
+      const dispatchInput = {
+        ...input,
+        ...(expandedInput !== undefined ? { input: expandedInput } : {}),
+      };
       const sendVia = (adapter: ProviderAdapterShape<ProviderAdapterError>) =>
-        adapter.sendTurn(input).pipe(Effect.map((turn) => ({ adapter, turn })));
+        adapter.sendTurn(dispatchInput).pipe(Effect.map((turn) => ({ adapter, turn })));
       const sent = yield* sendVia(routed.adapter).pipe(
         Effect.catchIf(isProviderAdapterSessionNotFoundError, () =>
           recoverSessionForSession({

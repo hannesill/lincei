@@ -1,7 +1,10 @@
 import {
+  type ProviderOptionSelection,
   type ProviderInstanceId,
   type ProviderDriverKind,
   type ResolvedShortcutsConfig,
+  type ScopedSessionRef,
+  type ServerProviderModel,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
 import { memo, useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
@@ -23,6 +26,9 @@ import { cn } from "~/lib/utils";
 import { TooltipProvider } from "../ui/tooltip";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import type { DraftId } from "../../composerDraftStore";
+import { TraitsMenuContent } from "./TraitsPicker";
+import { Menu } from "../ui/menu";
 
 type ModelPickerItem = {
   slug: string;
@@ -37,6 +43,30 @@ type ModelPickerItem = {
 };
 
 const EMPTY_MODEL_JUMP_LABELS = new Map<string, string>();
+
+export type ModelPickerTraitsProps = {
+  provider: ProviderDriverKind;
+  instanceId?: ProviderInstanceId;
+  models: ReadonlyArray<ServerProviderModel>;
+  model: string | null | undefined;
+  modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
+  prompt: string;
+  onPromptChange: (prompt: string) => void;
+  allowPromptInjectedEffort?: boolean;
+} & (
+  | {
+      sessionRef?: ScopedSessionRef;
+      draftId?: DraftId;
+      onModelOptionsChange?: never;
+    }
+  | {
+      sessionRef?: undefined;
+      draftId?: never;
+      onModelOptionsChange: (
+        nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined,
+      ) => void;
+    }
+);
 
 // Split a `${instanceId}:${slug}` combobox key back into its pieces. Slugs
 // can contain colons (e.g. some vendor model ids), so we only split on the
@@ -79,6 +109,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * model set but are free to diverge via customModels).
    */
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
+  settingsModelTraits?: ModelPickerTraitsProps;
   terminalOpen: boolean;
   onRequestClose?: () => void;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
@@ -109,6 +140,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     [providedShortcuts],
   );
   const { updateSettings } = useUpdateSettings();
+  const settingsModelTraits = props.settingsModelTraits;
 
   const focusSearchInput = useCallback(() => {
     searchInputRef.current?.focus({ preventScroll: true });
@@ -447,6 +479,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (settingsModelTraits) {
+        return;
+      }
       if (event.defaultPrevented || event.repeat) {
         return;
       }
@@ -475,7 +510,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown, true);
     };
-  }, [handleModelSelect, shortcuts, modelJumpModelKeys, modelJumpShortcutContext]);
+  }, [
+    handleModelSelect,
+    shortcuts,
+    modelJumpModelKeys,
+    modelJumpShortcutContext,
+    settingsModelTraits,
+  ]);
 
   useLayoutEffect(() => {
     const listRegion = listRegionRef.current;
@@ -519,6 +560,27 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       window.clearTimeout(timeout);
     };
   }, [filteredModelKeys]);
+
+  if (settingsModelTraits) {
+    return (
+      <TooltipProvider delay={0}>
+        <div
+          className={cn(
+            "relative w-screen max-w-100 overflow-hidden rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+          )}
+          onKeyDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+        >
+          <div className="px-1 py-2">
+            <Menu>
+              <TraitsMenuContent {...settingsModelTraits} />
+            </Menu>
+          </div>
+        </div>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <TooltipProvider delay={0}>

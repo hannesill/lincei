@@ -300,6 +300,7 @@ function makeProviderServiceLayer() {
         Layer.provideMerge(AnalyticsService.layerTest),
         Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
       ),
+      defaultServerSettingsLayer,
       directoryLayer,
 
       runtimeRepositoryLayer,
@@ -863,6 +864,70 @@ routing.layer("ProviderServiceLive routing", (it) => {
         assert.equal(startPayload.sessionId, session.sessionId);
       }
       assert.equal(routing.codex.sendTurn.mock.calls.length, 1);
+    }),
+  );
+
+  it.effect("expands selected Lincei skills before provider dispatch", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+
+      const session = yield* provider.startSession(asSessionId("session-lincei-skill"), {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        sessionId: asSessionId("session-lincei-skill"),
+        runtimeMode: "full-access",
+      });
+      routing.codex.sendTurn.mockClear();
+
+      yield* provider.sendTurn({
+        sessionId: session.sessionId,
+        input: "Use /lincei-api and $lincei-api for schema work.",
+        attachments: [],
+      });
+
+      assert.equal(routing.codex.sendTurn.mock.calls.length, 1);
+      const dispatched = routing.codex.sendTurn.mock.calls[0]?.[0];
+      assert.equal(dispatched?.input?.startsWith("Use /lincei-api and $lincei-api"), true);
+      assert.include(dispatched?.input ?? "", "<lincei_selected_skills>");
+      assert.include(dispatched?.input ?? "", '<lincei_skill id="lincei-api"');
+      assert.equal((dispatched?.input?.match(/<lincei_skill /g) ?? []).length, 1);
+    }),
+  );
+
+  it.effect("does not expand disabled Lincei skills before provider dispatch", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const settings = yield* ServerSettingsService;
+      yield* settings.updateSettings({
+        linceiSkills: {
+          "lincei-api": {
+            enabled: false,
+          },
+        },
+      });
+
+      const session = yield* provider.startSession(asSessionId("session-lincei-skill-disabled"), {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        sessionId: asSessionId("session-lincei-skill-disabled"),
+        runtimeMode: "full-access",
+      });
+      routing.codex.sendTurn.mockClear();
+
+      yield* provider.sendTurn({
+        sessionId: session.sessionId,
+        input: "/lincei-api",
+        attachments: [],
+      });
+
+      assert.equal(routing.codex.sendTurn.mock.calls[0]?.[0].input, "/lincei-api");
+      yield* settings.updateSettings({
+        linceiSkills: {
+          "lincei-api": {
+            enabled: true,
+          },
+        },
+      });
     }),
   );
 

@@ -3,7 +3,7 @@ import {
   type ProviderDriverKind,
   type ResolvedShortcutsConfig,
 } from "@t3tools/contracts";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { ChevronDownIcon } from "lucide-react";
 import { Button, buttonVariants } from "../ui/button";
@@ -19,6 +19,8 @@ import {
 } from "./providerIconUtils";
 import { setModelPickerOpen } from "../../modelPickerOpenState";
 import type { ProviderInstanceEntry } from "../../providerInstances";
+import type { ModelPickerTraitsProps } from "./ModelPickerContent";
+import { shouldRenderTraitsControls } from "./TraitsPicker";
 
 export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   /**
@@ -40,10 +42,15 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   open?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
+  modelTraits?: ModelPickerTraitsProps;
   onOpenChange?: (open: boolean) => void;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
+  const [settingsSelection, setSettingsSelection] = useState<{
+    instanceId: ProviderInstanceId;
+    model: string;
+  } | null>(null);
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
 
   // Resolve the active instance entry by exact routing key. The composer
@@ -73,6 +80,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const showInstanceBadge = Boolean(activeEntry?.accentColor) || duplicateDriverCount > 1;
 
   const setIsMenuOpen = (open: boolean) => {
+    setSettingsSelection(null);
     props.onOpenChange?.(open);
     if (props.open === undefined) {
       setUncontrolledIsMenuOpen(open);
@@ -86,9 +94,62 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     };
   }, [isMenuOpen]);
 
+  useEffect(() => {
+    if (!isMenuOpen) {
+      setSettingsSelection(null);
+    }
+  }, [isMenuOpen]);
+
+  const buildModelTraitsForSelection = useCallback(
+    (instanceId: ProviderInstanceId, model: string): ModelPickerTraitsProps | null => {
+      const baseTraits = props.modelTraits;
+      if (!baseTraits) {
+        return null;
+      }
+      const entry = props.instanceEntries.find((candidate) => candidate.instanceId === instanceId);
+      if (!entry) {
+        return null;
+      }
+      const modelOptions =
+        baseTraits.instanceId === instanceId && baseTraits.model === model
+          ? baseTraits.modelOptions
+          : undefined;
+      const nextTraits: ModelPickerTraitsProps = {
+        ...baseTraits,
+        provider: entry.driverKind,
+        instanceId,
+        models: entry.models,
+        model,
+        modelOptions,
+      };
+      return shouldRenderTraitsControls({
+        provider: nextTraits.provider,
+        models: nextTraits.models,
+        model: nextTraits.model,
+        modelOptions: nextTraits.modelOptions,
+        prompt: nextTraits.prompt,
+        ...(nextTraits.allowPromptInjectedEffort !== undefined
+          ? { allowPromptInjectedEffort: nextTraits.allowPromptInjectedEffort }
+          : {}),
+      })
+        ? nextTraits
+        : null;
+    },
+    [props.instanceEntries, props.modelTraits],
+  );
+
+  const settingsModelTraits = settingsSelection
+    ? buildModelTraitsForSelection(settingsSelection.instanceId, settingsSelection.model)
+    : null;
+
   const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
     if (props.disabled) return;
+    const nextTraits = buildModelTraitsForSelection(instanceId, model);
     props.onInstanceModelChange(instanceId, model);
+    if (nextTraits) {
+      setSettingsSelection({ instanceId, model });
+      return;
+    }
     setIsMenuOpen(false);
   };
 
@@ -177,6 +238,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           instanceEntries={props.instanceEntries}
           {...(props.shortcuts ? { shortcuts: props.shortcuts } : {})}
           modelOptionsByInstance={props.modelOptionsByInstance}
+          {...(settingsModelTraits ? { settingsModelTraits } : {})}
           terminalOpen={props.terminalOpen ?? false}
           onRequestClose={() => setIsMenuOpen(false)}
           onInstanceModelChange={handleInstanceModelChange}

@@ -24,6 +24,7 @@ import {
 } from "@t3tools/contracts";
 import { scopedSessionKey, scopeSessionRef } from "@t3tools/client-runtime";
 import { WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
+import { mergeLinceiSkillCatalog } from "@t3tools/shared/linceiSkills";
 import { createModelCapabilities, createModelSelection } from "@t3tools/shared/model";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import * as Option from "effect/Option";
@@ -1679,15 +1680,17 @@ async function expectComposerActionsContained(): Promise<void> {
   );
 }
 
-async function waitForInteractionModeButton(
-  expectedLabel: "Build" | "Plan",
-): Promise<HTMLButtonElement> {
-  return waitForElement(
+async function openWorkflowMenu(): Promise<void> {
+  const trigger = await waitForElement(
     () =>
-      Array.from(document.querySelectorAll("button")).find(
-        (button) => button.textContent?.trim() === expectedLabel,
-      ) as HTMLButtonElement | null,
-    `Unable to find ${expectedLabel} interaction mode button.`,
+      document.querySelector<HTMLButtonElement>('button[aria-label="Workflow"]') ??
+      document.querySelector<HTMLButtonElement>('button[aria-label="More composer controls"]'),
+    "Unable to find workflow controls trigger.",
+  );
+  trigger.click();
+  await waitForElement(
+    () => document.querySelector<HTMLElement>('[data-slot="menu-popup"]'),
+    "Unable to find workflow controls menu.",
   );
 }
 
@@ -3505,8 +3508,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      const initialModeButton = await waitForInteractionModeButton("Build");
-      expect(initialModeButton.title).toContain("enter plan mode");
+      expect(
+        useComposerDraftStore.getState().getComposerDraft(THREAD_REF)?.interactionMode ?? null,
+      ).toBe(null);
 
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -3518,7 +3522,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       await waitForLayout();
 
-      expect((await waitForInteractionModeButton("Build")).title).toContain("enter plan mode");
+      expect(
+        useComposerDraftStore.getState().getComposerDraft(THREAD_REF)?.interactionMode ?? null,
+      ).toBe(null);
 
       const composerEditor = await waitForComposerEditor();
       composerEditor.focus();
@@ -3532,10 +3538,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await vi.waitFor(
-        async () => {
-          expect((await waitForInteractionModeButton("Plan")).title).toContain(
-            "return to normal build mode",
-          );
+        () => {
+          expect(
+            useComposerDraftStore.getState().getComposerDraft(THREAD_REF)?.interactionMode,
+          ).toBe("plan");
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -3550,8 +3556,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await vi.waitFor(
-        async () => {
-          expect((await waitForInteractionModeButton("Build")).title).toContain("enter plan mode");
+        () => {
+          expect(
+            useComposerDraftStore.getState().getComposerDraft(THREAD_REF)?.interactionMode,
+          ).toBe("default");
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -6387,9 +6395,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const reachableControl = await waitForElement(
         () =>
-          Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
-            (button) => button.title === "Show plan sidebar",
-          ) ??
+          document.querySelector<HTMLButtonElement>('button[aria-label="Workflow"]') ??
           document.querySelector<HTMLButtonElement>('button[aria-label="More composer controls"]'),
         "Unable to find a reachable Plan sidebar control.",
       );
@@ -6406,11 +6412,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
         { timeout: 8_000, interval: 16 },
       );
 
-      const directPlanButton = Array.from(
-        document.querySelectorAll<HTMLButtonElement>("button"),
-      ).find((button) => button.title === "Show plan sidebar");
-      if (directPlanButton) {
-        directPlanButton.click();
+      const workflowButton = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Workflow"]',
+      );
+      if (workflowButton) {
+        workflowButton.click();
+        await page.getByText("Show plan sidebar").click();
       } else {
         await page.getByLabelText("More composer controls").click();
         await page.getByText("Show plan sidebar").click();
@@ -6467,6 +6474,124 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
+  it("suggests Lincei skills with the Codex $ prefix", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-codex-lincei-skill-target" as MessageId,
+        targetText: "codex lincei skill session",
+      }),
+      configureFixture: (nextFixture) => {
+        const provider = nextFixture.serverConfig.providers[0];
+        if (!provider) {
+          throw new Error("Expected default provider in test fixture.");
+        }
+        (
+          provider as {
+            skills: ServerConfig["providers"][number]["skills"];
+          }
+        ).skills = mergeLinceiSkillCatalog({
+          provider: ProviderDriverKind.make("codex"),
+          providerNative: [],
+        });
+      },
+    });
+
+    try {
+      await waitForComposerEditor();
+      await page.getByTestId("composer-editor").fill("$");
+
+      const menuItem = await waitForComposerMenuItem("skill:codex:lincei-api");
+      expect(menuItem.textContent).toContain("$lincei-api");
+      await menuItem.click();
+
+      await waitForComposerText("$lincei-api ");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("suggests Lincei skills with the Claude slash prefix", async () => {
+    const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
+    const baseSnapshot = createSnapshotForTargetUser({
+      targetMessageId: "msg-user-claude-lincei-skill-target" as MessageId,
+      targetText: "claude lincei skill session",
+    });
+    const baseProject = baseSnapshot.projects[0]!;
+    const baseSession = baseSnapshot.sessions[0]!;
+    const baseServerSession = baseSession.session;
+    if (!baseServerSession) {
+      throw new Error("Expected server session in test snapshot.");
+    }
+    const snapshot = {
+      ...baseSnapshot,
+      projects: [
+        {
+          ...baseProject,
+          defaultModelSelection: {
+            instanceId: claudeInstanceId,
+            model: "claude-opus-4-6",
+          },
+        },
+      ],
+      sessions: [
+        {
+          ...baseSession,
+          modelSelection: {
+            instanceId: claudeInstanceId,
+            model: "claude-opus-4-6",
+          },
+          session: {
+            ...baseServerSession,
+            providerName: "claudeAgent",
+          },
+        },
+      ],
+    } satisfies OrchestrationReadModel;
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot,
+      configureFixture: (nextFixture) => {
+        const codexProvider = nextFixture.serverConfig.providers[0];
+        if (!codexProvider) {
+          throw new Error("Expected default provider in test fixture.");
+        }
+        (
+          nextFixture.serverConfig as {
+            providers: ServerConfig["providers"];
+          }
+        ).providers = [
+          codexProvider,
+          {
+            ...codexProvider,
+            driver: ProviderDriverKind.make("claudeAgent"),
+            instanceId: claudeInstanceId,
+            displayName: "Claude",
+            version: "2.1.154",
+            skills: mergeLinceiSkillCatalog({
+              provider: ProviderDriverKind.make("claudeAgent"),
+              providerNative: [],
+            }),
+          },
+        ];
+      },
+    });
+
+    try {
+      await waitForComposerEditor();
+      await page.getByTestId("composer-editor").fill("/");
+
+      const menuItem = await waitForComposerMenuItem("skill:claudeAgent:lincei-api");
+      expect(menuItem.textContent).toContain("/lincei-api");
+      await menuItem.click();
+
+      await waitForComposerText("/lincei-api ");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("opens the model picker when selecting /model", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -6501,6 +6626,127 @@ describe("ChatView timeline estimator parity (full app)", () => {
         expect(searchInput).not.toBeNull();
         expect(document.activeElement).toBe(searchInput);
       });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("exposes model settings inside the model picker instead of the composer footer", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-model-settings-target" as MessageId,
+        targetText: "model settings session",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          providers: [
+            {
+              ...nextFixture.serverConfig.providers[0]!,
+              models: [
+                {
+                  slug: "gpt-5",
+                  name: "GPT-5",
+                  isCustom: false,
+                  capabilities: createModelCapabilities({
+                    optionDescriptors: [
+                      {
+                        id: "reasoningEffort",
+                        label: "Reasoning",
+                        type: "select" as const,
+                        currentValue: "medium",
+                        options: [
+                          { id: "low", label: "low" },
+                          { id: "medium", label: "medium", isDefault: true },
+                          { id: "high", label: "high" },
+                        ],
+                      },
+                      { id: "fastMode", label: "Fast Mode", type: "boolean" as const },
+                    ],
+                  }),
+                },
+              ],
+            },
+          ],
+        };
+      },
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      const footer = await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-composer-footer="true"]'),
+        "Unable to find composer footer.",
+      );
+      expect(footer.textContent ?? "").not.toContain("Reasoning");
+      expect(footer.textContent ?? "").not.toContain("Fast Mode");
+
+      findComposerProviderModelPicker()?.click();
+
+      await vi.waitFor(() => {
+        expect(document.querySelector('input[placeholder="Search models..."]')).not.toBeNull();
+      });
+      await page.getByText("GPT-5").last().click();
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(text).toContain("Reasoning");
+        expect(text).toContain("Fast Mode");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("sends the selected workflow id and version", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-workflow-target" as MessageId,
+        targetText: "workflow session",
+      }),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await openWorkflowMenu();
+      await page.getByText("Structured clinical study").click();
+
+      useComposerDraftStore.getState().setPrompt(THREAD_REF, "Run the study workflow");
+      await waitForLayout();
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const turnStartRequest = wsRequests.find(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "session.turn.start",
+          ) as
+            | {
+                workflowId?: string;
+                workflowVersion?: string;
+              }
+            | undefined;
+
+          expect(turnStartRequest).toMatchObject({
+            workflowId: "structured-clinical-study",
+            workflowVersion: "1.0.0",
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
     } finally {
       await mounted.cleanup();
     }

@@ -1,19 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
   ProviderDriverKind,
+  ProviderInstanceId,
   type LinceiSkillSyncSidecar,
+  type ServerProvider,
   type ServerProviderSkill,
 } from "@t3tools/contracts";
 import {
+  appendSelectedLinceiSkillPrompts,
+  buildSelectedLinceiSkillsPrompt,
   bundledLinceiSkills,
   buildEffectiveLinceiPrompt,
   configuredBundledLinceiSkills,
+  enrichServerProviderWithLinceiSkills,
   evaluateManagedSkillSyncState,
   isExternalProviderSkill,
   isLinceiOwnedProviderSkill,
   isLinceiWorkflowEnabled,
   linceiContentHash,
+  linceiSkillTokenPrefixForProvider,
+  linceiSkillTokenPrefixForProviderSkill,
   mergeLinceiSkillCatalog,
+  parseSelectedLinceiSkillIds,
   projectSkillFromBody,
   shouldAutoSyncSkill,
 } from "./linceiSkills.ts";
@@ -87,6 +95,97 @@ describe("linceiSkills", () => {
         path: "lincei://bundled/lincei-api",
       }),
     ).toBe(false);
+  });
+
+  it("uses provider-default visible token prefixes for Lincei-owned skills", () => {
+    expect(linceiSkillTokenPrefixForProvider(ProviderDriverKind.make("codex"))).toBe("$");
+    expect(linceiSkillTokenPrefixForProvider(ProviderDriverKind.make("claudeAgent"))).toBe("/");
+    expect(linceiSkillTokenPrefixForProvider(ProviderDriverKind.make("cursor"))).toBe("/");
+    expect(linceiSkillTokenPrefixForProvider(ProviderDriverKind.make("opencode"))).toBe("/");
+
+    expect(
+      linceiSkillTokenPrefixForProviderSkill({
+        provider: ProviderDriverKind.make("claudeAgent"),
+        skill: { path: "lincei://bundled/lincei-api" },
+      }),
+    ).toBe("/");
+    expect(
+      linceiSkillTokenPrefixForProviderSkill({
+        provider: ProviderDriverKind.make("claudeAgent"),
+        skill: { path: "/Users/test/.agents/skills/provider-native/SKILL.md" },
+      }),
+    ).toBe("$");
+  });
+
+  it("enriches raw provider snapshots with settings-aware Lincei skills", () => {
+    const provider = {
+      instanceId: ProviderInstanceId.make("claudeAgent"),
+      driver: ProviderDriverKind.make("claudeAgent"),
+      enabled: true,
+      installed: true,
+      version: "1.0.0",
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-01-01T00:00:00.000Z",
+      models: [],
+      slashCommands: [],
+      skills: [
+        {
+          name: "provider-native",
+          path: "/Users/test/.agents/skills/provider-native/SKILL.md",
+          enabled: true,
+        },
+      ],
+    } satisfies ServerProvider;
+
+    const enriched = enrichServerProviderWithLinceiSkills({ provider });
+    expect(enriched.skills.map((skill) => skill.name).slice(0, 2)).toEqual([
+      "lincei-api",
+      "clinical-research-session",
+    ]);
+    expect(enriched.skills.at(-1)).toMatchObject({
+      name: "provider-native",
+      linceiSource: "provider-native",
+    });
+
+    const disabled = enrichServerProviderWithLinceiSkills({
+      provider: enriched,
+      skillSettings: {
+        "lincei-api": {
+          enabled: false,
+        },
+      },
+    });
+    expect(disabled.skills.find((skill) => skill.name === "lincei-api")?.enabled).toBe(false);
+    expect(disabled.skills.find((skill) => skill.name === "provider-native")).toBeDefined();
+  });
+
+  it("parses visible Lincei skill tokens and appends selected XML", () => {
+    expect(
+      parseSelectedLinceiSkillIds({
+        text: "/lincei-api $lincei-api $provider-native",
+      }),
+    ).toEqual(["lincei-api"]);
+    expect(
+      parseSelectedLinceiSkillIds({
+        text: "/lincei-api",
+        skillSettings: {
+          "lincei-api": {
+            enabled: false,
+          },
+        },
+      }),
+    ).toEqual([]);
+
+    const prompt = buildSelectedLinceiSkillsPrompt({ skillIds: ["lincei-api"] });
+    expect(prompt).toContain("<lincei_selected_skills>");
+    expect(prompt).toContain('<lincei_skill id="lincei-api"');
+
+    const expanded = appendSelectedLinceiSkillPrompts({
+      text: "Use /lincei-api for dataset context.",
+    });
+    expect(expanded).toContain("Use /lincei-api for dataset context.");
+    expect(expanded).toContain("<lincei_selected_skills>");
   });
 
   it("applies persisted skill settings to bundled skills and prompt injection", () => {

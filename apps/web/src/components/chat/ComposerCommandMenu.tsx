@@ -9,6 +9,7 @@ import { memo, useLayoutEffect, useMemo, useRef } from "react";
 
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
 import { formatProviderSkillInstallSource } from "~/providerSkillPresentation";
+import { isLinceiOwnedProviderSkill } from "@t3tools/shared/linceiSkills";
 import { cn } from "~/lib/utils";
 import {
   Command,
@@ -92,6 +93,9 @@ function groupCommandItems(
 
   const builtInItems = items.filter((item) => item.type === "slash-command");
   const providerItems = items.filter((item) => item.type === "provider-slash-command");
+  const linceiSkillItems = items.filter(
+    (item) => item.type === "skill" && isLinceiOwnedProviderSkill(item.skill),
+  );
 
   const groups: ComposerCommandGroup[] = [];
   if (builtInItems.length > 0) {
@@ -99,6 +103,9 @@ function groupCommandItems(
   }
   if (providerItems.length > 0) {
     groups.push({ id: "provider", label: "Provider", items: providerItems });
+  }
+  if (linceiSkillItems.length > 0) {
+    groups.push({ id: "lincei-skills", label: "Lincei Skills", items: linceiSkillItems });
   }
   return groups;
 }
