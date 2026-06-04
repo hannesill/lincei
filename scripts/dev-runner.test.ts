@@ -163,6 +163,52 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
+    it.effect("sets isolated Codex home for demo mode", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const env = yield* createDevRunnerEnv({
+          mode: "dev",
+          baseEnv: {
+            LINCEI_DEMO_MODE: "1",
+          },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: "/tmp/lincei-demo",
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.CODEX_HOME, path.resolve("/tmp/lincei-demo/codex"));
+      }),
+    );
+
+    it.effect("preserves explicit Codex home in demo mode", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev",
+          baseEnv: {
+            LINCEI_DEMO_MODE: "1",
+            CODEX_HOME: "/tmp/custom-codex",
+          },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: "/tmp/lincei-demo",
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.CODEX_HOME, "/tmp/custom-codex");
+      }),
+    );
+
     it.effect("pins desktop dev to a stable backend port and websocket url", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;

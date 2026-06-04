@@ -116,6 +116,7 @@ export interface DemoScenarioOverlay {
 export interface DemoSeedRequest {
   readonly scenario: DemoScenario;
   readonly force?: boolean | undefined;
+  readonly providerBacked?: boolean | undefined;
 }
 
 const demoIdPattern = /^demo-[a-z0-9-]+$/;
@@ -501,6 +502,9 @@ export function validateDemoSeedRequest(input: unknown): DemoSeedRequest {
   return {
     scenario: validateDemoScenario(input.scenario),
     ...(input.force !== undefined ? { force: input.force === true } : {}),
+    ...(input.providerBacked !== undefined
+      ? { providerBacked: input.providerBacked === true }
+      : {}),
   };
 }
 

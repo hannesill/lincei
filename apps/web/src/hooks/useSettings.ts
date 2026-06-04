@@ -27,7 +27,25 @@ const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
 const clientSettingsListeners = new Set<() => void>();
 const clientSettingsHydrationListeners = new Set<() => void>();
-let clientSettingsSnapshot = DEFAULT_CLIENT_SETTINGS;
+const DEMO_CLIENT_SETTINGS_OVERRIDES: Partial<ClientSettings> | null =
+  import.meta.env.VITE_DEMO_BROWSER_BOOTSTRAP_TOKEN?.trim()
+    ? {
+        sidebarProjectGroupingMode: "separate",
+        sidebarProjectGroupingOverrides: {},
+      }
+    : null;
+
+function withDemoClientSettingsOverrides(settings: ClientSettings): ClientSettings {
+  if (DEMO_CLIENT_SETTINGS_OVERRIDES === null) {
+    return settings;
+  }
+  return {
+    ...settings,
+    ...DEMO_CLIENT_SETTINGS_OVERRIDES,
+  };
+}
+
+let clientSettingsSnapshot = withDemoClientSettingsOverrides(DEFAULT_CLIENT_SETTINGS);
 let clientSettingsHydrated = false;
 let clientSettingsHydrationPromise: Promise<void> | null = null;
 
@@ -92,7 +110,11 @@ async function hydrateClientSettings(): Promise<void> {
     try {
       const persistedSettings = await ensureLocalApi().persistence.getClientSettings();
       if (persistedSettings) {
-        replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
+        replaceClientSettingsSnapshot(
+          withDemoClientSettingsOverrides({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings }),
+        );
+      } else {
+        replaceClientSettingsSnapshot(withDemoClientSettingsOverrides(DEFAULT_CLIENT_SETTINGS));
       }
     } catch (error) {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} hydrate failed`, error);
@@ -112,9 +134,9 @@ async function hydrateClientSettings(): Promise<void> {
 }
 
 function persistClientSettings(settings: ClientSettings): void {
-  replaceClientSettingsSnapshot(settings);
+  replaceClientSettingsSnapshot(withDemoClientSettingsOverrides(settings));
   void ensureLocalApi()
-    .persistence.setClientSettings(settings)
+    .persistence.setClientSettings(withDemoClientSettingsOverrides(settings))
     .catch((error) => {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} persist failed`, error);
     });

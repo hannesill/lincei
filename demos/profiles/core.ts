@@ -12,6 +12,8 @@ function messages(
   assistantOne: string,
   offset: number,
   turnTwo?: { readonly turnId: string; readonly user: string; readonly assistant: string },
+  turnThree?: { readonly turnId: string; readonly user: string; readonly assistant: string },
+  turnFour?: { readonly turnId: string; readonly user: string; readonly assistant: string },
 ): DemoMessage[] {
   const result: DemoMessage[] = [
     {
@@ -44,6 +46,42 @@ function messages(
         text: turnTwo.assistant,
         turnId: turnTwo.turnId,
         createdAtOffsetMinutes: offset + 11,
+      },
+    );
+  }
+  if (turnThree) {
+    result.push(
+      {
+        id: `demo-message-${prefix}-user-3`,
+        role: "user",
+        text: turnThree.user,
+        turnId: turnThree.turnId,
+        createdAtOffsetMinutes: offset + 14,
+      },
+      {
+        id: `demo-message-${prefix}-assistant-3`,
+        role: "assistant",
+        text: turnThree.assistant,
+        turnId: turnThree.turnId,
+        createdAtOffsetMinutes: offset + 18,
+      },
+    );
+  }
+  if (turnFour) {
+    result.push(
+      {
+        id: `demo-message-${prefix}-user-4`,
+        role: "user",
+        text: turnFour.user,
+        turnId: turnFour.turnId,
+        createdAtOffsetMinutes: offset + 21,
+      },
+      {
+        id: `demo-message-${prefix}-assistant-4`,
+        role: "assistant",
+        text: turnFour.assistant,
+        turnId: turnFour.turnId,
+        createdAtOffsetMinutes: offset + 25,
       },
     );
   }
@@ -173,6 +211,18 @@ Reporting: absolute risk difference and hazard ratio at 365 days.
               user: "Keep it continuation-ready. Add the minimum checks a cardiology reviewer would expect.",
               assistant:
                 "Added reviewer checks for grace-period justification, IPCW positivity, renal subgroup balance, and endpoint ascertainment consistency.",
+            },
+            {
+              turnId: "demo-turn-cardio-protocol-3",
+              user: "The kidney imbalance worries me. What sensitivity should be pre-specified before we run outcomes?",
+              assistant:
+                "Pre-specified a renal sensitivity set: eGFR-stratified estimates, overlap-weight truncation diagnostics, and a negative-control traumatic injury check by renal subgroup.",
+            },
+            {
+              turnId: "demo-turn-cardio-protocol-4",
+              user: "Good. Leave the next step ready for a live resume.",
+              assistant:
+                "The session is ready to resume at the renal sensitivity checkpoint. Next action is to approve the grace period and run the weighted outcome model.",
             },
           ),
           cards: [
@@ -559,6 +609,18 @@ Recommendation: do not use automated myocarditis labels as the primary endpoint.
             "Triage thyroiditis and myocarditis safety signals. I need visuals that separate incidence from surveillance intensity.",
             "Created the adjusted incidence view. Thyroiditis is stable after separating lab-only events; myocarditis remains sparse and needs chart review.",
             78,
+            {
+              turnId: "demo-turn-oncology-incidence-2",
+              user: "Split lab-only thyroiditis from treated thyroiditis and make the review concern obvious.",
+              assistant:
+                "Separated lab-only and treated thyroiditis in the incidence view. Treated thyroiditis is stable across lines; lab-only events track visit density and should stay out of the primary safety endpoint.",
+            },
+            {
+              turnId: "demo-turn-oncology-incidence-3",
+              user: "What is the live-demo continuation point?",
+              assistant:
+                "Resume by deciding whether myocarditis enters manual adjudication now or waits for the next data refresh. The chart and review queue are ready for that decision.",
+            },
           ),
           cards: [
             {
@@ -803,6 +865,18 @@ Lactate clearance remains sensitivity because it is downstream of initial treatm
             "Before you finalize subgroup labels, ask the clinician which framing should be primary.",
             "I prepared the subgroup decision point. Vasopressor timing is most interpretable; lactate clearance may be more physiologic but is downstream of initial treatment.",
             126,
+            {
+              turnId: "demo-turn-icu-input-2",
+              user: "Show me what changes if we choose lactate clearance instead.",
+              assistant:
+                "Lactate clearance sharpens clinical physiology but weakens causal interpretation because it can occur after early fluids. I kept it as a sensitivity frame and left vasopressor timing as the recommended primary option.",
+            },
+            {
+              turnId: "demo-turn-icu-input-3",
+              user: "Leave the choice pending so I can demonstrate human-in-the-loop control.",
+              assistant:
+                "The subgroup decision remains pending. The next resumed turn should accept vasopressor timing, choose lactate clearance, or request a heart-failure focused subgroup table.",
+            },
           ),
           cards: [
             {
@@ -1000,6 +1074,18 @@ Action: remove discharge disposition from baseline model and keep preventable re
             "The calibration plot got worse after adding imaging proxies. Investigate before changing the endpoint.",
             "I found missingness drift in the imaging proxy table and a likely leakage path through discharge disposition. I am isolating the feature group now.",
             162,
+            {
+              turnId: "demo-turn-neuro-calibration-2",
+              user: "Do not change the endpoint yet. Compare removing leakage features versus recalibrating.",
+              assistant:
+                "Removing discharge disposition improves leakage risk immediately; recalibration alone hides the problem. I recommend excluding leakage features first, then recalibrating on the recent validation window.",
+            },
+            {
+              turnId: "demo-turn-neuro-calibration-3",
+              user: "Make the next resume point a reviewer decision.",
+              assistant:
+                "The reviewer decision is staged: remove discharge disposition from baseline models, rerun calibration, and keep imaging proxy score only if temporal sensitivity remains stable.",
+            },
           ),
           cards: [
             {

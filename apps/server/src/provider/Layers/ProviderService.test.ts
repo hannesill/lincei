@@ -695,10 +695,7 @@ it.effect(
         Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
       );
       const updatedResumeCursor = {
-        sessionId: asSessionId("session-1"),
-        resume: "resume-session-1",
-        resumeSessionAt: "assistant-message-1",
-        turnCount: 1,
+        sessionId: "codex-thread-session-1",
       };
 
       const startedSession = yield* Effect.gen(function* () {

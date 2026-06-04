@@ -24,6 +24,7 @@ interface SeedArgs {
   readonly url: string;
   readonly token: string;
   readonly force: boolean;
+  readonly providerBacked: boolean;
 }
 
 interface ServerRuntimeState {
@@ -42,6 +43,7 @@ function parseArgs(args: ReadonlyArray<string>): SeedArgs {
     url: argValue(args, "--url") ?? process.env.LINCEI_DEMO_SEED_URL ?? "",
     token: argValue(args, "--token") ?? process.env.LINCEI_DEMO_SEED_TOKEN ?? DEFAULT_TOKEN,
     force: args.includes("--force"),
+    providerBacked: args.includes("--provider-backed"),
   };
 }
 
@@ -142,5 +144,6 @@ process.stdout.write(`Seeding ${seedUrl}\n`);
 const response = await postJson(seedUrl, args.token, {
   scenario,
   ...(args.force ? { force: true } : {}),
+  ...(args.providerBacked ? { providerBacked: true } : {}),
 });
 process.stdout.write(`${response}\n`);

@@ -21,6 +21,7 @@ import {
   ProviderInstanceId,
   ResolvedShortcutRule,
   SessionId,
+  TurnId,
   WS_METHODS,
   WsRpcGroup,
   EditorId,
@@ -81,6 +82,8 @@ import {
   ProviderRegistry,
   type ProviderRegistryShape,
 } from "./provider/Services/ProviderRegistry.ts";
+import { ProviderService } from "./provider/Services/ProviderService.ts";
+import { ProviderSessionDirectory } from "./provider/Services/ProviderSessionDirectory.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "./provider/providerMaintenance.ts";
 import { ServerLifecycleEvents, type ServerLifecycleEventsShape } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRuntimeStartup.ts";
@@ -530,6 +533,54 @@ const buildAppUnderTest = (options?: {
           ...options.layers.vcsStatusBroadcaster,
         })
       : VcsStatusBroadcaster.layer.pipe(Layer.provide(gitWorkflowLayer));
+    const providerRuntimeMocksLayer = Layer.mergeAll(
+      Layer.mock(ProviderService)({
+        startSession: (sessionId, input) =>
+          Effect.succeed({
+            provider: ProviderDriverKind.make("codex"),
+            providerInstanceId: ProviderInstanceId.make("codex"),
+            status: "ready" as const,
+            runtimeMode: input.runtimeMode,
+            sessionId,
+            resumeCursor: { sessionId: "codex-thread-test" },
+            ...(input.cwd ? { cwd: input.cwd } : {}),
+            createdAt: "1970-01-01T00:00:00.000Z",
+            updatedAt: "1970-01-01T00:00:00.000Z",
+          }),
+        sendTurn: (input) =>
+          Effect.succeed({
+            sessionId: input.sessionId,
+            turnId: TurnId.make("turn-test"),
+            resumeCursor: { sessionId: "codex-thread-test" },
+          }),
+        interruptTurn: () => Effect.void,
+        respondToRequest: () => Effect.void,
+        respondToUserInput: () => Effect.void,
+        stopSession: () => Effect.void,
+        listSessions: () => Effect.succeed([]),
+        getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" as const }),
+        getInstanceInfo: (instanceId) =>
+          Effect.succeed({
+            instanceId,
+            driverKind: ProviderDriverKind.make("codex"),
+            displayName: undefined,
+            continuationIdentity: {
+              driverKind: ProviderDriverKind.make("codex"),
+              continuationKey: `codex:instance:${instanceId}`,
+            },
+            enabled: true,
+          }),
+        rollbackConversation: () => Effect.void,
+        streamEvents: Stream.empty,
+      }),
+      Layer.mock(ProviderSessionDirectory)({
+        upsert: () => Effect.void,
+        getProvider: () => Effect.succeed(ProviderDriverKind.make("codex")),
+        getBinding: () => Effect.succeed(Option.none()),
+        listSessionIds: () => Effect.succeed([]),
+        listBindings: () => Effect.succeed([]),
+      }),
+    );
 
     const servedRoutesLayer = HttpRouter.serve(makeRoutesLayer, {
       disableListenLog: true,
@@ -559,6 +610,7 @@ const buildAppUnderTest = (options?: {
           ...options?.layers?.providerRegistry,
         }),
       ),
+      Layer.provide(providerRuntimeMocksLayer),
       Layer.provide(
         Layer.mock(ServerSettingsService)({
           start: Effect.void,

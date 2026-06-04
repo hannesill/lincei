@@ -19,6 +19,7 @@ import {
   buildTurnStartParams,
   isRecoverableSessionResumeError,
   openCodexSession,
+  readResumeCursorSessionId,
 } from "./CodexSessionRuntime.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
@@ -226,6 +227,11 @@ describe("isRecoverableSessionResumeError", () => {
 });
 
 describe("openCodexSession", () => {
+  it("reads only the canonical Codex sessionId resume cursor", () => {
+    assert.equal(readResumeCursorSessionId({ sessionId: "codex-thread-1" }), "codex-thread-1");
+    assert.equal(readResumeCursorSessionId({ threadId: "codex-thread-1" }), undefined);
+  });
+
   it("falls back to session/start when resume fails recoverably", async () => {
     const calls: Array<{ method: "thread/start" | "thread/resume"; payload: unknown }> = [];
     const started = makeSessionOpenResponse("fresh-session");

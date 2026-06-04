@@ -162,6 +162,7 @@ export function createDevRunnerEnv({
   devUrl,
 }: CreateDevRunnerEnvInput): Effect.Effect<NodeJS.ProcessEnv, never, Path.Path> {
   return Effect.gen(function* () {
+    const path = yield* Path.Path;
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home);
@@ -224,6 +225,10 @@ export function createDevRunnerEnv({
     if (isDesktopMode) {
       output.HOST = DESKTOP_DEV_LOOPBACK_HOST;
       delete output.LINCEI_DESKTOP_WS_URL;
+    }
+
+    if (output.LINCEI_DEMO_MODE === "1" && !output.CODEX_HOME?.trim()) {
+      output.CODEX_HOME = path.join(resolvedBaseDir, "codex");
     }
 
     return output;

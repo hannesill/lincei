@@ -255,7 +255,7 @@ function normalizeCodexModelSlug(
   return normalized;
 }
 
-function readResumeCursorSessionId(
+export function readResumeCursorSessionId(
   resumeCursor: ProviderSession["resumeCursor"],
 ): string | undefined {
   return isCodexResumeCursorSchema(resumeCursor) ? resumeCursor.sessionId : undefined;
@@ -1232,7 +1232,7 @@ export const makeCodexSessionRuntime = (
         status: "ready",
         cwd: opened.cwd,
         model: opened.model,
-        resumeCursor: { threadId: providerSessionId },
+        resumeCursor: { sessionId: providerSessionId },
         updatedAt: yield* nowIso,
       } satisfies ProviderSession;
       yield* Ref.set(sessionRef, session);

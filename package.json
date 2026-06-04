@@ -48,6 +48,7 @@
     "lint": "oxlint --report-unused-disable-directives",
     "test": "turbo run test",
     "demo:reset": "node scripts/demo-reset.ts",
+    "demo:codex-login": "LINCEI_HOME=.demo-home node scripts/demo-codex-login.ts",
     "demo:seed": "node scripts/demo-seed.ts",
     "test:desktop-smoke": "turbo run smoke-test --filter=@t3tools/desktop",
     "fmt": "oxfmt",

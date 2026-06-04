@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Demo seed writes local workspace fixtures.
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 import { CommandId, ProjectId, type OrchestrationCommand } from "@t3tools/contracts";
 import * as Data from "effect/Data";
@@ -8,9 +8,14 @@ import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { buildDemoScenarioCommands, demoProjectIds } from "../../../../demos/buildScenario.ts";
+import { normalizeDemoScenarioWorkspaceRoots } from "../../../../demos/paths.ts";
 import { validateDemoSeedRequest, type DemoScenario } from "../../../../demos/schema.ts";
+import { ServerConfig } from "../config.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { ProviderSessionDirectory } from "../provider/Services/ProviderSessionDirectory.ts";
+import { hydrateDemoProviderSessions } from "./providerHydration.ts";
 
 class DemoSeedHttpError extends Data.TaggedError("DemoSeedHttpError")<{
   readonly status: number;
@@ -34,6 +39,18 @@ function tokenFromRequest(request: HttpServerRequest.HttpServerRequest): string 
 
 function isDemoEndpointEnabled(): boolean {
   return process.env.LINCEI_DEMO_MODE === "1" && process.env.NODE_ENV !== "production";
+}
+
+function assertDemoCodexHomeReady(): void {
+  const codexHome = process.env.CODEX_HOME?.trim();
+  if (!codexHome) {
+    throw new Error(
+      "CODEX_HOME is required for provider-backed demo seeding. Restart with `bun run dev:demo`.",
+    );
+  }
+  if (!isAbsolute(codexHome)) {
+    throw new Error(`CODEX_HOME must be absolute for provider-backed demo seeding: ${codexHome}`);
+  }
 }
 
 function resolveWorkspaceFilePath(workspaceRoot: string, relativePath: string): string {
@@ -100,7 +117,17 @@ export const demoSeedRouteLayer = HttpRouter.add(
           cause,
         }),
     });
-    const projectIds = new Set(demoProjectIds(body.scenario));
+    const serverConfig = yield* ServerConfig;
+    const scenario = yield* Effect.try({
+      try: () => normalizeDemoScenarioWorkspaceRoots(body.scenario, serverConfig.baseDir),
+      catch: (cause) =>
+        new DemoSeedHttpError({
+          status: 400,
+          message: "Invalid demo workspace roots.",
+          cause,
+        }),
+    });
+    const projectIds = new Set(demoProjectIds(scenario));
     const snapshotQuery = yield* ProjectionSnapshotQuery;
     const snapshot = yield* snapshotQuery.getSnapshot().pipe(
       Effect.mapError(
@@ -123,7 +150,7 @@ export const demoSeedRouteLayer = HttpRouter.add(
     }
 
     yield* Effect.tryPromise({
-      try: () => writeDemoWorkspaceFiles(body.scenario),
+      try: () => writeDemoWorkspaceFiles(scenario),
       catch: (cause) =>
         new DemoSeedHttpError({
           status: 500,
@@ -140,17 +167,14 @@ export const demoSeedRouteLayer = HttpRouter.add(
           type: "project.purge",
           commandId: CommandId.make(`cmd-${commandIdSalt ?? "force"}-${project.id}-purge-existing`),
           projectId: ProjectId.make(project.id),
-          createdAt: body.scenario.baseTimestamp,
+          createdAt: scenario.baseTimestamp,
         });
       }
     }
 
     const buildOptions: { readonly commandIdSalt?: string } =
       commandIdSalt !== undefined ? { commandIdSalt } : {};
-    const commands = buildDemoScenarioCommands(
-      body.scenario,
-      buildOptions,
-    ) as OrchestrationCommand[];
+    const commands = buildDemoScenarioCommands(scenario, buildOptions) as OrchestrationCommand[];
     let lastSequence = snapshot.snapshotSequence;
     for (const command of commands) {
       const result = yield* engine.dispatch(command).pipe(
@@ -166,15 +190,55 @@ export const demoSeedRouteLayer = HttpRouter.add(
       lastSequence = result.sequence;
     }
 
+    const providerHydrationResults =
+      body.providerBacked === true
+        ? yield* Effect.gen(function* () {
+            yield* Effect.try({
+              try: assertDemoCodexHomeReady,
+              catch: (cause) =>
+                new DemoSeedHttpError({
+                  status: 500,
+                  message:
+                    "Provider-backed demo seed requires an isolated absolute Codex home. Run `bun run dev:demo`, then `bun run demo:codex-login` if Codex auth is missing.",
+                  cause,
+                }),
+            });
+            const providerService = yield* ProviderService;
+            const providerSessionDirectory = yield* ProviderSessionDirectory;
+            return yield* hydrateDemoProviderSessions({
+              scenario,
+              providerService,
+              providerSessionDirectory,
+            }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new DemoSeedHttpError({
+                    status: 500,
+                    message: "Failed to hydrate provider-backed demo sessions.",
+                    cause,
+                  }),
+              ),
+            );
+          })
+        : [];
+
     return HttpServerResponse.jsonUnsafe(
       {
         scenarioId: body.scenario.scenarioId,
-        projectCount: body.scenario.studies.length,
-        sessionCount: body.scenario.studies.reduce(
-          (count, study) => count + study.sessions.length,
+        projectCount: scenario.studies.length,
+        sessionCount: scenario.studies.reduce((count, study) => count + study.sessions.length, 0),
+        commandCount: commands.length,
+        providerBacked: body.providerBacked === true,
+        hydratedSessionCount: providerHydrationResults.length,
+        deepHydratedSessionCount: providerHydrationResults.filter(
+          (result) => result.hydrationMode === "deep",
+        ).length,
+        providerTurnCount: providerHydrationResults.reduce(
+          (count, result) => count + result.providerTurnCount,
           0,
         ),
-        commandCount: commands.length,
+        codexHome: process.env.CODEX_HOME ?? null,
+        workspaceRootBase: serverConfig.baseDir,
         sequence: lastSequence,
       },
       { status: 200 },
