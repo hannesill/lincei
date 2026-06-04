@@ -30,3 +30,5 @@ squashfs-root/
 dist-electron/
 .electron-runtime/
 assets/datasets/mimic-iv-demo/
+/.grasp.md
+/TODO.md
