@@ -12,6 +12,7 @@
 import {
   ModelSelection,
   NonNegativeInt,
+  ProjectId,
   SessionId,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
@@ -59,6 +60,12 @@ import { ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 const isModelSelection = Schema.is(ModelSelection);
+const isProjectId = Schema.is(ProjectId);
+
+interface PersistedProjectContext {
+  readonly projectId?: ProjectId;
+  readonly workspaceRoot?: string;
+}
 
 /**
  * Hook for tests that want to override the canonical event logger pulled
@@ -132,6 +139,7 @@ function toRuntimePayloadFromSession(
   session: ProviderSession,
   extra?: {
     readonly modelSelection?: unknown;
+    readonly projectContext?: PersistedProjectContext | null;
     readonly lastRuntimeEvent?: string;
     readonly lastRuntimeEventAt?: string;
   },
@@ -142,6 +150,7 @@ function toRuntimePayloadFromSession(
     activeTurnId: session.activeTurnId ?? null,
     lastError: session.lastError ?? null,
     ...(extra?.modelSelection !== undefined ? { modelSelection: extra.modelSelection } : {}),
+    ...(extra?.projectContext !== undefined ? { projectContext: extra.projectContext } : {}),
     ...(extra?.lastRuntimeEvent !== undefined ? { lastRuntimeEvent: extra.lastRuntimeEvent } : {}),
     ...(extra?.lastRuntimeEventAt !== undefined
       ? { lastRuntimeEventAt: extra.lastRuntimeEventAt }
@@ -169,6 +178,33 @@ function readPersistedCwd(
   if (typeof rawCwd !== "string") return undefined;
   const trimmed = rawCwd.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readPersistedProjectContext(
+  runtimePayload: ProviderRuntimeBinding["runtimePayload"],
+): PersistedProjectContext | undefined {
+  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
+    return undefined;
+  }
+  const raw = "projectContext" in runtimePayload ? runtimePayload.projectContext : undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const rawProjectId = "projectId" in raw ? raw.projectId : undefined;
+  const rawWorkspaceRoot = "workspaceRoot" in raw ? raw.workspaceRoot : undefined;
+  const projectId = isProjectId(rawProjectId) ? rawProjectId : undefined;
+  const workspaceRoot =
+    typeof rawWorkspaceRoot === "string" && rawWorkspaceRoot.trim().length > 0
+      ? rawWorkspaceRoot.trim()
+      : undefined;
+
+  return projectId !== undefined || workspaceRoot !== undefined
+    ? {
+        ...(projectId !== undefined ? { projectId } : {}),
+        ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
+      }
+    : undefined;
 }
 
 const dieOnMissingBindingInstanceId = (
@@ -259,6 +295,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     sessionId: SessionId,
     extra?: {
       readonly modelSelection?: unknown;
+      readonly projectContext?: PersistedProjectContext | null;
       readonly lastRuntimeEvent?: string;
       readonly lastRuntimeEventAt?: string;
     },
@@ -394,11 +431,18 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
       const persistedCwd = readPersistedCwd(input.binding.runtimePayload);
       const persistedModelSelection = readPersistedModelSelection(input.binding.runtimePayload);
+      const persistedProjectContext = readPersistedProjectContext(input.binding.runtimePayload);
 
       const resumed = yield* adapter.startSession({
         sessionId: input.binding.sessionId,
         provider: input.binding.provider,
         providerInstanceId: bindingInstanceId,
+        ...(persistedProjectContext?.projectId
+          ? { projectId: persistedProjectContext.projectId }
+          : {}),
+        ...(persistedProjectContext?.workspaceRoot
+          ? { workspaceRoot: persistedProjectContext.workspaceRoot }
+          : {}),
         ...(persistedCwd ? { cwd: persistedCwd } : {}),
         ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
         ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),
@@ -567,6 +611,22 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           (persistedBinding?.providerInstanceId === resolvedInstanceId
             ? readPersistedCwd(persistedBinding.runtimePayload)
             : undefined);
+        const persistedProjectContext =
+          persistedBinding?.providerInstanceId === resolvedInstanceId
+            ? readPersistedProjectContext(persistedBinding.runtimePayload)
+            : undefined;
+        const effectiveProjectId = input.projectId ?? persistedProjectContext?.projectId;
+        const effectiveWorkspaceRoot =
+          input.workspaceRoot ?? persistedProjectContext?.workspaceRoot;
+        const effectiveProjectContext: PersistedProjectContext | undefined =
+          effectiveProjectId !== undefined || effectiveWorkspaceRoot !== undefined
+            ? {
+                ...(effectiveProjectId !== undefined ? { projectId: effectiveProjectId } : {}),
+                ...(effectiveWorkspaceRoot !== undefined
+                  ? { workspaceRoot: effectiveWorkspaceRoot }
+                  : {}),
+              }
+            : undefined;
         yield* Effect.annotateCurrentSpan({
           "provider.kind": resolvedProvider,
           "provider.resume_cursor.source":
@@ -590,6 +650,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         const session = yield* adapter.startSession({
           ...input,
           providerInstanceId: resolvedInstanceId,
+          ...(effectiveProjectId !== undefined ? { projectId: effectiveProjectId } : {}),
+          ...(effectiveWorkspaceRoot !== undefined
+            ? { workspaceRoot: effectiveWorkspaceRoot }
+            : {}),
           ...(effectiveCwd !== undefined ? { cwd: effectiveCwd } : {}),
           ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
         });
@@ -611,6 +675,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         });
         yield* upsertSessionBinding(sessionWithInstance, sessionId, {
           modelSelection: input.modelSelection,
+          projectContext: effectiveProjectContext ?? null,
         });
         yield* analytics.record("provider.session.started", {
           provider: sessionWithInstance.provider,

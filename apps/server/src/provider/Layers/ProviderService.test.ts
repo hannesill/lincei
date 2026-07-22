@@ -16,6 +16,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionStartInput,
+  ProjectId,
   SessionId,
   TurnId,
 } from "@t3tools/contracts";
@@ -1182,7 +1183,9 @@ routing.layer("ProviderServiceLive routing", (it) => {
         provider: ProviderDriverKind.make("codex"),
         providerInstanceId: codexInstanceId,
         sessionId: asSessionId("session-1"),
-        cwd: "/tmp/project-send-turn",
+        projectId: ProjectId.make("project-send-turn"),
+        workspaceRoot: "/tmp/project-send-turn",
+        cwd: "/tmp/project-send-turn-worktree",
         runtimeMode: "full-access",
       });
 
@@ -1202,12 +1205,16 @@ routing.layer("ProviderServiceLive routing", (it) => {
       if (resumedStartInput && typeof resumedStartInput === "object") {
         const startPayload = resumedStartInput as {
           provider?: string;
+          projectId?: string;
+          workspaceRoot?: string;
           cwd?: string;
           resumeCursor?: unknown;
           sessionId?: string;
         };
         assert.equal(startPayload.provider, "codex");
-        assert.equal(startPayload.cwd, "/tmp/project-send-turn");
+        assert.equal(startPayload.projectId, "project-send-turn");
+        assert.equal(startPayload.workspaceRoot, "/tmp/project-send-turn");
+        assert.equal(startPayload.cwd, "/tmp/project-send-turn-worktree");
         assert.deepEqual(startPayload.resumeCursor, initial.resumeCursor);
         assert.equal(startPayload.sessionId, initial.sessionId);
       }
