@@ -89,6 +89,8 @@ import { ServerLifecycleEvents, type ServerLifecycleEventsShape } from "./server
 import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRuntimeStartup.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
+import { PreviewPortScanner } from "./preview/Services/PortScanner.ts";
+import { PreviewManagerLive } from "./preview/Layers/Manager.ts";
 import {
   BrowserTraceCollector,
   type BrowserTraceCollectorShape,
@@ -708,9 +710,17 @@ const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provide(
-        Layer.mock(TerminalManager)({
-          ...options?.layers?.terminalManager,
-        }),
+        Layer.mergeAll(
+          Layer.mock(TerminalManager)({
+            ...options?.layers?.terminalManager,
+          }),
+          PreviewManagerLive,
+          Layer.mock(PreviewPortScanner)({
+            scan: () => Effect.succeed([]),
+            subscribe: () => Effect.succeed(() => undefined),
+            retain: () => Effect.succeed(() => undefined),
+          }),
+        ),
       ),
       Layer.provide(
         Layer.mock(OrchestrationEngineService)({

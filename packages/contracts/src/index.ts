@@ -21,4 +21,5 @@ export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./filesystem.ts";
 export * from "./skills.ts";
+export * from "./preview.ts";
 export * from "./rpc.ts";

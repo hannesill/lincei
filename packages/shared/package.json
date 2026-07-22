@@ -94,6 +94,10 @@
     "./linceiSkills": {
       "types": "./src/linceiSkills.ts",
       "import": "./src/linceiSkills.ts"
+    },
+    "./preview": {
+      "types": "./src/preview.ts",
+      "import": "./src/preview.ts"
     }
   },
   "scripts": {

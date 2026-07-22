@@ -194,6 +194,10 @@ export const ProjectScript = Schema.Struct({
   command: TrimmedNonEmptyString,
   icon: ProjectScriptIcon,
   runOnWorktreeCreate: Schema.Boolean,
+  /** Optional URL associated with the script's local development server. */
+  previewUrl: Schema.optional(TrimmedNonEmptyString),
+  /** Desktop-only hint to open `previewUrl` when this script starts. */
+  autoOpenPreview: Schema.optional(Schema.Boolean),
 });
 export type ProjectScript = typeof ProjectScript.Type;
 

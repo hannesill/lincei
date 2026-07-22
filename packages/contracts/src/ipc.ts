@@ -52,6 +52,18 @@ import type {
 import type { ServerRemoveShortcutInput, ServerUpsertShortcutInput } from "./server.ts";
 import * as Schema from "effect/Schema";
 import type {
+  DiscoveredLocalServerList,
+  PreviewCloseInput,
+  PreviewEvent,
+  PreviewListInput,
+  PreviewListResult,
+  PreviewNavigateInput,
+  PreviewOpenInput,
+  PreviewRefreshInput,
+  PreviewReportStatusInput,
+  PreviewSessionSnapshot,
+} from "./preview.ts";
+import type {
   ClientOrchestrationCommand,
   OrchestrationGetFullSessionDiffInput,
   OrchestrationGetFullSessionDiffResult,
@@ -382,6 +394,47 @@ export const DesktopWindowChromeStateSchema = Schema.Struct({
 });
 export type DesktopWindowChromeState = typeof DesktopWindowChromeStateSchema.Type;
 
+export type DesktopPreviewNavStatus =
+  | { kind: "Idle" }
+  | { kind: "Loading"; url: string; title: string }
+  | { kind: "Success"; url: string; title: string }
+  | {
+      kind: "LoadFailed";
+      url: string;
+      title: string;
+      code: number;
+      description: string;
+    };
+
+export interface DesktopPreviewTabState {
+  tabId: string;
+  webContentsId: number | null;
+  navStatus: DesktopPreviewNavStatus;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  zoomFactor: number;
+  updatedAt: string;
+}
+
+export interface DesktopPreviewBridge {
+  createTab: (tabId: string, scope: string) => Promise<void>;
+  closeTab: (tabId: string) => Promise<void>;
+  registerWebview: (tabId: string, webContentsId: number) => Promise<void>;
+  navigate: (tabId: string, url: string) => Promise<void>;
+  goBack: (tabId: string) => Promise<void>;
+  goForward: (tabId: string) => Promise<void>;
+  refresh: (tabId: string) => Promise<void>;
+  zoomIn: (tabId: string) => Promise<void>;
+  zoomOut: (tabId: string) => Promise<void>;
+  resetZoom: (tabId: string) => Promise<void>;
+  hardReload: (tabId: string) => Promise<void>;
+  openDevTools: (tabId: string) => Promise<void>;
+  clearCookies: (scope: string) => Promise<void>;
+  clearCache: (scope: string) => Promise<void>;
+  getBrowserPartition: (scope: string) => Promise<string>;
+  onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
+}
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -436,6 +489,8 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  /** Electron-only embedded browser surface. */
+  preview?: DesktopPreviewBridge;
 }
 
 /**
@@ -593,6 +648,22 @@ export interface EnvironmentApi {
       options?: {
         onResubscribe?: () => void;
       },
+    ) => () => void;
+  };
+  preview: {
+    open: (input: typeof PreviewOpenInput.Encoded) => Promise<PreviewSessionSnapshot>;
+    navigate: (input: typeof PreviewNavigateInput.Encoded) => Promise<PreviewSessionSnapshot>;
+    refresh: (input: typeof PreviewRefreshInput.Encoded) => Promise<void>;
+    close: (input: typeof PreviewCloseInput.Encoded) => Promise<void>;
+    list: (input: typeof PreviewListInput.Encoded) => Promise<PreviewListResult>;
+    reportStatus: (input: typeof PreviewReportStatusInput.Encoded) => Promise<void>;
+    onEvent: (
+      callback: (event: PreviewEvent) => void,
+      options?: { onResubscribe?: () => void },
+    ) => () => void;
+    subscribePorts: (
+      callback: (servers: DiscoveredLocalServerList) => void,
+      options?: { onResubscribe?: () => void },
     ) => () => void;
   };
 }
