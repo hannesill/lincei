@@ -351,7 +351,10 @@ export const resolveServerConfig = (
         Option.fromUndefinedOr(env.host),
         Option.fromUndefinedOr(bootstrap?.host),
       ),
-      () => (mode === "desktop" ? "127.0.0.1" : undefined),
+      // Interactive browser and desktop launches are local by default.
+      // Headless mode remains explicitly network-reachable unless --host is
+      // provided, matching its remote pairing workflow.
+      () => (isHeadlessStartup ? undefined : "127.0.0.1"),
     );
     const logLevel = Option.getOrElse(cliLogLevel, () => env.logLevel);
 

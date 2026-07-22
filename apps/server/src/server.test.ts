@@ -26,6 +26,7 @@ import {
   WsRpcGroup,
   EditorId,
   type DatasetStatusResult,
+  type VitrineProjectState,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure, assertInclude, assertTrue } from "@effect/vitest/utils";
@@ -134,6 +135,23 @@ import { VitrineManager, type VitrineManagerShape } from "./vitrine/Services/Man
 const defaultProjectId = ProjectId.make("project-default");
 const defaultSessionId = SessionId.make("session-default");
 const defaultDesktopBootstrapToken = "test-desktop-bootstrap-token";
+const makeReadyVitrineProjectState = (
+  overrides: Partial<VitrineProjectState> = {},
+): VitrineProjectState => ({
+  projectId: defaultProjectId,
+  status: "ready",
+  dataDir: "/tmp/default-project/.vitrine",
+  url: "http://vitrine.localhost:7741/",
+  apiUrl: "http://127.0.0.1:7741/",
+  pid: 1234,
+  port: 7741,
+  sessionId: "vitrine-session",
+  version: "0.1.0",
+  issueCode: null,
+  message: null,
+  updatedAt: "2026-07-22T12:00:00.000Z",
+  ...overrides,
+});
 const defaultModelSelection = {
   instanceId: ProviderInstanceId.make("codex"),
   model: "gpt-5-codex",
@@ -2797,6 +2815,200 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         result.failure.message,
         "Workspace file path must stay within the project root.",
       );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("opens canonical project Vitrine state in the server host browser", () =>
+    Effect.gen(function* () {
+      const project = makeDefaultOrchestrationReadModel().projects[0]!;
+      let ensuredInput: { readonly projectId: ProjectId; readonly workspaceRoot: string } | null =
+        null;
+      let launchedTarget: string | null = null;
+      const readyState = makeReadyVitrineProjectState();
+      yield* buildAppUnderTest({
+        layers: {
+          projectionSnapshotQuery: {
+            getProjectShellById: (projectId) =>
+              Effect.succeed(projectId === project.id ? Option.some(project) : Option.none()),
+          },
+          vitrineManager: {
+            ensure: (input) =>
+              Effect.sync(() => {
+                ensuredInput = input;
+                return readyState;
+              }),
+          },
+          externalLauncher: {
+            launchBrowser: (target) =>
+              Effect.sync(() => {
+                launchedTarget = target;
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.vitrineOpen]({ projectId: defaultProjectId }),
+        ),
+      );
+
+      assert.deepEqual(response, readyState);
+      assert.deepEqual(ensuredInput, {
+        projectId: defaultProjectId,
+        workspaceRoot: project.workspaceRoot,
+      });
+      assert.equal(launchedTarget, readyState.url);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects remote Vitrine browser launch before resolving the project", () =>
+    Effect.gen(function* () {
+      let projectLookupCount = 0;
+      let ensureCount = 0;
+      let launchCount = 0;
+      yield* buildAppUnderTest({
+        config: { host: "0.0.0.0" },
+        layers: {
+          projectionSnapshotQuery: {
+            getProjectShellById: () =>
+              Effect.sync(() => {
+                projectLookupCount += 1;
+                return Option.none();
+              }),
+          },
+          vitrineManager: {
+            ensure: () =>
+              Effect.sync(() => {
+                ensureCount += 1;
+                return makeReadyVitrineProjectState();
+              }),
+          },
+          externalLauncher: {
+            launchBrowser: () =>
+              Effect.sync(() => {
+                launchCount += 1;
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const result = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.vitrineOpen]({ projectId: defaultProjectId }),
+        ).pipe(Effect.result),
+      );
+
+      assertTrue(result._tag === "Failure");
+      assertTrue(result.failure._tag === "VitrineLifecycleError");
+      assert.equal(result.failure.code, "browser_policy_unsupported");
+      assert.equal(projectLookupCount, 0);
+      assert.equal(ensureCount, 0);
+      assert.equal(launchCount, 0);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("does not launch non-ready or unsafe Vitrine states", () =>
+    Effect.gen(function* () {
+      const baseProject = makeDefaultOrchestrationReadModel().projects[0]!;
+      const stoppedProjectId = ProjectId.make("project-vitrine-stopped");
+      const unsafeProjectId = ProjectId.make("project-vitrine-unsafe");
+      const projects = new Map([
+        [stoppedProjectId, { ...baseProject, id: stoppedProjectId, title: "Stopped Vitrine" }],
+        [unsafeProjectId, { ...baseProject, id: unsafeProjectId, title: "Unsafe Vitrine" }],
+      ]);
+      let launchCount = 0;
+      yield* buildAppUnderTest({
+        layers: {
+          projectionSnapshotQuery: {
+            getProjectShellById: (projectId) =>
+              Effect.succeed(Option.fromNullishOr(projects.get(projectId))),
+          },
+          vitrineManager: {
+            ensure: (input) =>
+              input.projectId === stoppedProjectId
+                ? Effect.succeed(
+                    makeReadyVitrineProjectState({
+                      projectId: stoppedProjectId,
+                      status: "stopped",
+                      url: null,
+                      apiUrl: null,
+                      pid: null,
+                      port: null,
+                      sessionId: null,
+                    }),
+                  )
+                : Effect.succeed(
+                    makeReadyVitrineProjectState({
+                      projectId: unsafeProjectId,
+                      url: "https://example.com/",
+                      apiUrl: "https://example.com/",
+                      port: 443,
+                    }),
+                  ),
+          },
+          externalLauncher: {
+            launchBrowser: () =>
+              Effect.sync(() => {
+                launchCount += 1;
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const stopped = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.vitrineOpen]({ projectId: stoppedProjectId }),
+        ),
+      );
+      const unsafe = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.vitrineOpen]({ projectId: unsafeProjectId }),
+        ).pipe(Effect.result),
+      );
+
+      assert.equal(stopped.status, "stopped");
+      assertTrue(unsafe._tag === "Failure");
+      assertTrue(unsafe.failure._tag === "VitrineLifecycleError");
+      assert.equal(unsafe.failure.code, "browser_url_invalid");
+      assert.equal(launchCount, 0);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("maps Vitrine browser launch failures to lifecycle errors", () =>
+    Effect.gen(function* () {
+      const project = makeDefaultOrchestrationReadModel().projects[0]!;
+      const launcherError = new ExternalLauncherError({ message: "Browser auto-open failed" });
+      yield* buildAppUnderTest({
+        layers: {
+          projectionSnapshotQuery: {
+            getProjectShellById: (projectId) =>
+              Effect.succeed(projectId === project.id ? Option.some(project) : Option.none()),
+          },
+          vitrineManager: {
+            ensure: () => Effect.succeed(makeReadyVitrineProjectState()),
+          },
+          externalLauncher: {
+            launchBrowser: () => Effect.fail(launcherError),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const result = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.vitrineOpen]({ projectId: defaultProjectId }),
+        ).pipe(Effect.result),
+      );
+
+      assertTrue(result._tag === "Failure");
+      assertTrue(result.failure._tag === "VitrineLifecycleError");
+      assert.equal(result.failure.projectId, defaultProjectId);
+      assert.equal(result.failure.code, "browser_launch_failed");
+      assertInclude(result.failure.message, "could not open it in the system browser");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

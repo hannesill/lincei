@@ -3,6 +3,7 @@ import { EnvironmentId } from "@t3tools/contracts";
 
 import {
   getPrimaryKnownEnvironment,
+  isPrimaryEnvironmentTargetLoopback,
   resolveInitialPrimaryEnvironmentDescriptor,
   resetPrimaryEnvironmentDescriptorForTests,
   writePrimaryEnvironmentDescriptor,
@@ -143,6 +144,27 @@ describe("environmentBootstrap", () => {
 
     await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:5735/.well-known/t3/environment");
+  });
+
+  it("classifies only loopback primary transport targets as loopback", () => {
+    expect(
+      isPrimaryEnvironmentTargetLoopback({
+        source: "window-origin",
+        target: {
+          httpBaseUrl: "http://127.0.0.1:3773/",
+          wsBaseUrl: "ws://localhost:3773/",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPrimaryEnvironmentTargetLoopback({
+        source: "configured",
+        target: {
+          httpBaseUrl: "https://lincei.example.com/",
+          wsBaseUrl: "wss://lincei.example.com/",
+        },
+      }),
+    ).toBe(false);
   });
 
   it("uses the vite proxy for desktop-managed loopback descriptor requests during local dev", async () => {

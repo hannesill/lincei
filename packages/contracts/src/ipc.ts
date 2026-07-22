@@ -595,6 +595,7 @@ export interface EnvironmentApi {
   };
   vitrine: {
     ensure: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
+    open: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
     status: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
     stop: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
   };

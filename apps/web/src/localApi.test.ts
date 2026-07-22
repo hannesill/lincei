@@ -54,6 +54,7 @@ const rpcClientMock = {
     writeFile: vi.fn(),
   },
   vitrine: {
+    open: vi.fn(),
     ensure: vi.fn(),
     status: vi.fn(),
     stop: vi.fn(),

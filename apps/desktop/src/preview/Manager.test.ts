@@ -175,6 +175,7 @@ describe("PreviewViewManager", () => {
     }).guest;
     fromId.mockReturnValueOnce(valid);
     expect(() => manager.registerWebview("tab-1", valid.id)).not.toThrow();
+    expect(valid.setWindowOpenHandler).toHaveBeenCalledOnce();
   });
 
   it("accepts preview IPC only from the current main renderer", () => {

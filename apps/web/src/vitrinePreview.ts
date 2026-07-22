@@ -1,10 +1,12 @@
 import type {
   EnvironmentId,
   ProjectId,
+  ServerAuthPolicy,
   VitrineProjectInput,
   VitrineProjectState,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { isAllowedVitrineBrowserUrl } from "@t3tools/shared/vitrine";
 
 import {
   getLocalStorageItem,
@@ -13,14 +15,27 @@ import {
 } from "~/hooks/useLocalStorage";
 
 const VITRINE_AUTO_OPEN_STORAGE_PREFIX = "lincei:vitrine:auto-open";
-const ALLOWED_VITRINE_HOSTS = new Set(["vitrine.localhost", "localhost", "127.0.0.1", "[::1]"]);
-
 export type VitrinePresentation = "cancelled" | "embedded" | "external" | "not-ready";
 
 export interface OpenManagedVitrineResult {
   readonly state: VitrineProjectState;
   readonly presentation: VitrinePresentation;
   readonly embeddedError?: unknown;
+}
+
+export function isVitrineResearchAvailable(input: {
+  readonly projectEnvironmentId: EnvironmentId;
+  readonly primaryEnvironmentId: EnvironmentId | null;
+  readonly primaryTargetLoopback: boolean;
+  readonly primaryAuthPolicy: ServerAuthPolicy | null;
+}): boolean {
+  return (
+    input.primaryEnvironmentId !== null &&
+    input.projectEnvironmentId === input.primaryEnvironmentId &&
+    input.primaryTargetLoopback &&
+    (input.primaryAuthPolicy === "desktop-managed-local" ||
+      input.primaryAuthPolicy === "loopback-browser")
+  );
 }
 
 export function vitrineAutoOpenStorageKey(
@@ -68,27 +83,6 @@ export function forgetVitrineAutoOpenIntent(
   }
 }
 
-export function isAllowedManagedVitrineUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    const port = Number(url.port);
-    return (
-      url.protocol === "http:" &&
-      ALLOWED_VITRINE_HOSTS.has(url.hostname) &&
-      Number.isInteger(port) &&
-      port > 0 &&
-      port < 65_536 &&
-      url.username.length === 0 &&
-      url.password.length === 0 &&
-      url.pathname === "/" &&
-      url.search.length === 0 &&
-      url.hash.length === 0
-    );
-  } catch {
-    return false;
-  }
-}
-
 export async function openManagedVitrine(input: {
   readonly projectId: ProjectId;
   readonly ensure: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
@@ -108,12 +102,7 @@ export async function openManagedVitrine(input: {
   if (state.status !== "ready") {
     return { state, presentation: "not-ready" };
   }
-  if (
-    !state.url ||
-    !state.port ||
-    !isAllowedManagedVitrineUrl(state.url) ||
-    Number(new URL(state.url).port) !== state.port
-  ) {
+  if (!state.url || !state.port || !isAllowedVitrineBrowserUrl(state.url, state.port)) {
     throw new Error("Vitrine returned an unsafe or malformed browser URL.");
   }
 

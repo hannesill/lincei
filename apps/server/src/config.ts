@@ -181,7 +181,7 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           tailscaleServeEnabled: false,
           tailscaleServePort: 443,
           port: 0,
-          host: undefined,
+          host: "127.0.0.1",
           desktopBootstrapToken: undefined,
           bundledDatasetsDir: undefined,
           staticDir: undefined,

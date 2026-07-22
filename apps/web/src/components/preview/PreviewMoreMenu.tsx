@@ -4,7 +4,7 @@ import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
-import { previewBridge } from "./previewBridge";
+import { readPreviewBridge } from "./previewBridge";
 
 export function PreviewMoreMenu(props: {
   tabId: string | null;
@@ -13,8 +13,8 @@ export function PreviewMoreMenu(props: {
   zoomFactor: number;
   onCloseTab: () => void;
 }) {
-  if (!previewBridge) return null;
-  const bridge = previewBridge;
+  const bridge = readPreviewBridge();
+  if (!bridge) return null;
   const tabDisabled = !props.tabId || !props.hasWebContents;
   const callTab = (operation: (tabId: string) => Promise<void>) => () => {
     if (props.tabId) void operation(props.tabId).catch(() => undefined);

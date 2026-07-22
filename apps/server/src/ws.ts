@@ -29,6 +29,7 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   VitrineLifecycleError,
+  type VitrineProjectState,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
   SessionId,
@@ -40,6 +41,7 @@ import {
 import { clamp } from "effect/Number";
 import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { isAllowedVitrineBrowserUrl } from "@t3tools/shared/vitrine";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
 import { ServerConfig } from "./config.ts";
@@ -69,6 +71,7 @@ import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths.ts";
 import { VitrineManager } from "./vitrine/Services/Manager.ts";
+import { isVitrineBrowserLaunchPolicyAllowed } from "./vitrine/browserLaunchPolicy.ts";
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
@@ -167,6 +170,11 @@ function toAuthAccessStreamEvent(
         payload: { sessionId: change.sessionId },
       };
   }
+}
+
+function resolveVitrineBrowserTarget(state: VitrineProjectState): string | null {
+  if (state.status !== "ready" || state.url === null || state.port === null) return null;
+  return isAllowedVitrineBrowserUrl(state.url, state.port) ? state.url : null;
 }
 
 const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
@@ -1079,6 +1087,53 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(
             WS_METHODS.vitrineEnsure,
             resolveVitrineProject(input.projectId).pipe(Effect.flatMap(vitrineManager.ensure)),
+            { "rpc.aggregate": "vitrine" },
+          ),
+        [WS_METHODS.vitrineOpen]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vitrineOpen,
+            serverAuth.getDescriptor().pipe(
+              Effect.flatMap((auth) =>
+                isVitrineBrowserLaunchPolicyAllowed(auth.policy)
+                  ? Effect.void
+                  : Effect.fail(
+                      new VitrineLifecycleError({
+                        projectId: input.projectId,
+                        code: "browser_policy_unsupported",
+                        message:
+                          "Research browser launch is unavailable for this server access policy.",
+                      }),
+                    ),
+              ),
+              Effect.andThen(resolveVitrineProject(input.projectId)),
+              Effect.flatMap(vitrineManager.ensure),
+              Effect.flatMap((state) => {
+                if (state.status !== "ready") return Effect.succeed(state);
+                const target = resolveVitrineBrowserTarget(state);
+                if (target === null) {
+                  return Effect.fail(
+                    new VitrineLifecycleError({
+                      projectId: input.projectId,
+                      code: "browser_url_invalid",
+                      message: "Vitrine returned an unsafe or malformed browser URL.",
+                    }),
+                  );
+                }
+                return externalLauncher.launchBrowser(target).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new VitrineLifecycleError({
+                        projectId: input.projectId,
+                        code: "browser_launch_failed",
+                        message:
+                          "Vitrine is ready, but Lincei could not open it in the system browser.",
+                        cause,
+                      }),
+                  ),
+                  Effect.as(state),
+                );
+              }),
+            ),
             { "rpc.aggregate": "vitrine" },
           ),
         [WS_METHODS.vitrineStatus]: (input) =>

@@ -10,7 +10,7 @@ import { readLocalApi } from "~/localApi";
 import { selectSessionPreviewState, usePreviewStateStore } from "~/previewStateStore";
 
 import { openPreviewSession } from "./openPreviewSession";
-import { previewBridge } from "./previewBridge";
+import { readPreviewBridge } from "./previewBridge";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 import { PreviewEmptyState } from "./PreviewEmptyState";
 import { PreviewMoreMenu } from "./PreviewMoreMenu";
@@ -31,6 +31,7 @@ export function PreviewView(props: {
   );
   const rememberUrl = usePreviewStateStore((state) => state.rememberUrl);
   const removeSession = usePreviewStateStore((state) => state.removeSession);
+  const bridge = readPreviewBridge();
   usePreviewSession(sessionRef);
 
   const { snapshot, desktopOverlay } = previewState;
@@ -45,8 +46,8 @@ export function PreviewView(props: {
       const api = ensureEnvironmentApi(sessionRef.environmentId);
       try {
         const nextUrl = normalizePreviewUrl(rawUrl);
-        if (tabId && previewBridge) {
-          await previewBridge.navigate(tabId, nextUrl);
+        if (tabId && bridge) {
+          await bridge.navigate(tabId, nextUrl);
           rememberUrl(sessionRef, nextUrl);
           return;
         }
@@ -59,19 +60,27 @@ export function PreviewView(props: {
         // Chromium load failures are projected through the desktop state stream.
       }
     },
-    [rememberUrl, sessionRef, tabId],
+    [bridge, rememberUrl, sessionRef, tabId],
   );
   const handleRefresh = useCallback(() => {
-    if (!tabId || !previewBridge) return;
+    if (!tabId || !bridge) return;
     const api = ensureEnvironmentApi(sessionRef.environmentId);
-    const bridge = previewBridge;
     void api.preview
       .refresh({ sessionId: sessionRef.sessionId, tabId })
       .then(() => bridge.refresh(tabId))
       .catch(() => undefined);
-  }, [sessionRef, tabId]);
+  }, [bridge, sessionRef, tabId]);
   const handleCloseTab = useCallback(() => {
     if (!tabId) return;
+    const current = selectSessionPreviewState(
+      usePreviewStateStore.getState().bySessionKey,
+      sessionRef,
+    );
+    if (current.managedResearch?.tabId === tabId) {
+      // Capture explicit user intent before the async close can race with a
+      // reconnect hydration that removes or replaces the tab.
+      usePreviewStateStore.getState().clearManagedResearch(sessionRef);
+    }
     const api = ensureEnvironmentApi(sessionRef.environmentId);
     void api.preview
       .close({ sessionId: sessionRef.sessionId, tabId })
@@ -102,16 +111,16 @@ export function PreviewView(props: {
         canGoForward={desktopOverlay?.canGoForward ?? snapshot?.canGoForward ?? false}
         refreshDisabled={navStatus._tag === "Idle"}
         onBack={() => {
-          if (tabId && previewBridge) void previewBridge.goBack(tabId).catch(() => undefined);
+          if (tabId && bridge) void bridge.goBack(tabId).catch(() => undefined);
         }}
         onForward={() => {
-          if (tabId && previewBridge) void previewBridge.goForward(tabId).catch(() => undefined);
+          if (tabId && bridge) void bridge.goForward(tabId).catch(() => undefined);
         }}
         onRefresh={handleRefresh}
         onSubmit={(next) => void handleSubmitUrl(next)}
         onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
         trailingActions={
-          previewBridge ? (
+          bridge ? (
             <PreviewMoreMenu
               tabId={tabId}
               scope={sessionRef.environmentId}

@@ -3,9 +3,7 @@
 import type { ScopedSessionRef } from "@t3tools/contracts";
 import { useEffect, useRef } from "react";
 
-import { isElectron } from "~/env";
-
-import { previewBridge } from "./previewBridge";
+import { readPreviewBridge } from "./previewBridge";
 import { usePreviewBridge } from "./usePreviewBridge";
 
 interface ElectronWebview extends HTMLElement {
@@ -20,6 +18,12 @@ declare global {
   }
 }
 
+// React's Electron typings model this as boolean, while React requires a
+// string for unknown custom-element attributes in browser tests.
+const ALLOW_POPUPS_ATTRIBUTE = { allowpopups: "true" } as unknown as {
+  readonly allowpopups: boolean;
+};
+
 export function PreviewWebview(props: {
   sessionRef: ScopedSessionRef;
   tabId: string;
@@ -27,36 +31,55 @@ export function PreviewWebview(props: {
   className?: string;
 }) {
   const webviewRef = useRef<ElectronWebview | null>(null);
-  const initialSrcRef = useRef(props.initialUrl ?? "about:blank");
-  const bridge = previewBridge;
+  const initialUrlRef = useRef(props.initialUrl);
+  const bridge = readPreviewBridge();
   const partition = usePreviewBridge({ sessionRef: props.sessionRef, tabId: props.tabId });
 
   useEffect(() => {
     if (!bridge || !partition) return;
     const webview = webviewRef.current;
     if (!webview) return;
-    const register = () => {
+    let cancelled = false;
+    let registrationInFlight = false;
+    let initialized = false;
+    const initialize = () => {
+      if (cancelled || registrationInFlight || initialized) return;
+      let id: number;
       try {
-        const id = webview.getWebContentsId();
-        if (Number.isInteger(id) && id > 0) {
-          void bridge.registerWebview(props.tabId, id).catch(() => undefined);
-        }
+        id = webview.getWebContentsId();
       } catch {
         // A subsequent dom-ready retries registration.
+        return;
       }
+      if (!Number.isInteger(id) || id <= 0) return;
+
+      registrationInFlight = true;
+      void (async () => {
+        await bridge.registerWebview(props.tabId, id);
+        if (cancelled) return;
+        initialized = true;
+        if (initialUrlRef.current) {
+          await bridge.navigate(props.tabId, initialUrlRef.current);
+        }
+      })().catch(() => {
+        if (!cancelled && !initialized) registrationInFlight = false;
+      });
     };
-    webview.addEventListener("dom-ready", register);
-    register();
-    return () => webview.removeEventListener("dom-ready", register);
+    webview.addEventListener("dom-ready", initialize);
+    initialize();
+    return () => {
+      cancelled = true;
+      webview.removeEventListener("dom-ready", initialize);
+    };
   }, [bridge, partition, props.tabId]);
 
-  if (!isElectron || !bridge || !partition) return null;
+  if (!bridge || !partition) return null;
   return (
     <webview
       ref={webviewRef}
-      src={initialSrcRef.current}
+      src="about:blank"
       partition={partition}
-      allowpopups
+      {...ALLOW_POPUPS_ATTRIBUTE}
       data-preview-tab={props.tabId}
       className={props.className}
     />

@@ -59,7 +59,7 @@ import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
 import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
-import { usePreviewStateStore } from "../previewStateStore";
+import { selectSessionPreviewState, usePreviewStateStore } from "../previewStateStore";
 import { readVitrineAutoOpenIntent, rememberVitrineAutoOpenIntent } from "../vitrinePreview";
 import { createAuthenticatedSessionHandlers } from "../../test/authHttpHandlers";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
@@ -1066,6 +1066,9 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
   }
   if (tag === WS_METHODS.shellOpenInEditor) {
     return null;
+  }
+  if (tag === WS_METHODS.previewClose) {
+    return undefined;
   }
   if (tag === WS_METHODS.terminalOpen) {
     return {
@@ -6560,26 +6563,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("opens project Research at the Vitrine URL discovered by the server", async () => {
+  it("asks the backend host to open project Research without navigating client loopback", async () => {
     const discoveredUrl = "http://vitrine.localhost:8812/";
-    const replacePopupLocation = vi.fn();
-    const popup = {
-      closed: false,
-      opener: window,
-      location: { replace: replacePopupLocation },
-      close: vi.fn(),
-      document: {
-        title: "",
-        createElement: vi.fn(() => ({ name: "", content: "", textContent: "" })),
-        head: { append: vi.fn() },
-        body: { replaceChildren: vi.fn() },
-      },
-    } as unknown as Window;
-    let popupReserved = false;
-    const openWindow = vi.spyOn(window, "open").mockImplementation(() => {
-      popupReserved = true;
-      return popup;
-    });
+    const openWindow = vi.spyOn(window, "open");
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -6587,8 +6573,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         targetText: "open project research",
       }),
       resolveRpc: (body) => {
-        if (body._tag === WS_METHODS.vitrineEnsure) {
-          expect(popupReserved).toBe(true);
+        if (body._tag === WS_METHODS.vitrineOpen) {
           return {
             projectId: PROJECT_ID,
             status: "ready",
@@ -6614,12 +6599,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          expect(openWindow).toHaveBeenCalledWith("about:blank", "_blank");
-          expect(popup.opener).toBeNull();
-          expect(replacePopupLocation).toHaveBeenCalledWith(discoveredUrl);
           expect(
-            wsRequests.find((request) => request._tag === WS_METHODS.vitrineEnsure),
+            wsRequests.find((request) => request._tag === WS_METHODS.vitrineOpen),
           ).toMatchObject({ projectId: PROJECT_ID });
+          expect(wsRequests.some((request) => request._tag === WS_METHODS.vitrineEnsure)).toBe(
+            false,
+          );
+          expect(openWindow).not.toHaveBeenCalled();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -6629,31 +6615,70 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("does not start Vitrine when the browser blocks the Research popup", async () => {
-    const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("disables Research for a remote-reachable primary environment", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-vitrine-popup-blocked" as MessageId,
-        targetText: "open blocked project research",
+        targetMessageId: "msg-user-vitrine-remote-primary" as MessageId,
+        targetText: "remote project research",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          auth: {
+            ...nextFixture.serverConfig.auth,
+            policy: "remote-reachable",
+          },
+        };
+      },
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      const researchButton = await page
+        .getByRole("button", { name: "Open project research in Vitrine" })
+        .element();
+      expect((researchButton as HTMLButtonElement).disabled).toBe(true);
+      expect(wsRequests.some((request) => request._tag === WS_METHODS.vitrineOpen)).toBe(false);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("disables Research when the primary transport target is not loopback", async () => {
+    vi.stubEnv("VITE_HTTP_URL", "https://lincei.example.com/");
+    vi.stubEnv("VITE_WS_URL", "wss://lincei.example.com/");
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-vitrine-remote-target" as MessageId,
+        targetText: "remote target project research",
       }),
     });
 
     try {
       await waitForServerConfigToApply();
-      await page.getByRole("button", { name: "Open project research in Vitrine" }).click();
-      await expect
-        .element(page.getByText(/Allow pop-ups for Lincei and try again/))
-        .toBeInTheDocument();
-      expect(wsRequests.some((request) => request._tag === WS_METHODS.vitrineEnsure)).toBe(false);
+      const researchButton = await page
+        .getByRole("button", { name: "Open project research in Vitrine" })
+        .element();
+      expect((researchButton as HTMLButtonElement).disabled).toBe(true);
+      expect(wsRequests.some((request) => request._tag === WS_METHODS.vitrineOpen)).toBe(false);
     } finally {
-      openWindow.mockRestore();
       await mounted.cleanup();
+      vi.unstubAllEnvs();
     }
   });
 
-  it("restores persisted project Research intent into the embedded preview", async () => {
+  it("restores embedded Research and forgets intent when its exact tab closes", async () => {
     const discoveredUrl = "http://vitrine.localhost:8813/";
+    const createPreviewTab = vi.fn().mockResolvedValue(undefined);
+    const previewInitializationOrder: string[] = [];
+    const registerPreviewWebview = vi.fn(async () => {
+      previewInitializationOrder.push("register");
+    });
+    const navigatePreview = vi.fn(async () => {
+      previewInitializationOrder.push("navigate");
+    });
     const previewSnapshot = {
       sessionId: THREAD_ID,
       tabId: "vitrine-tab",
@@ -6661,6 +6686,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
       canGoBack: false,
       canGoForward: false,
       updatedAt: NOW_ISO,
+    };
+    const otherPreviewUrl = "http://localhost:5173/";
+    const otherPreviewSnapshot = {
+      sessionId: THREAD_ID,
+      tabId: "other-tab",
+      navStatus: { _tag: "Success" as const, url: otherPreviewUrl, title: "Project preview" },
+      canGoBack: false,
+      canGoForward: false,
+      updatedAt: "2026-03-04T12:00:00.500Z",
     };
     window.desktopBridge = {
       getAppBranding: vi.fn().mockReturnValue(null),
@@ -6678,10 +6712,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       setSavedEnvironmentSecret: vi.fn().mockResolvedValue(true),
       removeSavedEnvironmentSecret: vi.fn().mockResolvedValue(undefined),
       preview: {
-        createTab: vi.fn().mockResolvedValue(undefined),
+        createTab: createPreviewTab,
         closeTab: vi.fn().mockResolvedValue(undefined),
-        registerWebview: vi.fn().mockResolvedValue(undefined),
-        navigate: vi.fn().mockResolvedValue(undefined),
+        registerWebview: registerPreviewWebview,
+        navigate: navigatePreview,
         goBack: vi.fn().mockResolvedValue(undefined),
         goForward: vi.fn().mockResolvedValue(undefined),
         refresh: vi.fn().mockResolvedValue(undefined),
@@ -6726,7 +6760,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           return previewSnapshot;
         }
         if (body._tag === WS_METHODS.previewList) {
-          return { sessions: [previewSnapshot] };
+          return { sessions: [previewSnapshot, otherPreviewSnapshot] };
         }
         return undefined;
       },
@@ -6743,14 +6777,68 @@ describe("ChatView timeline estimator parity (full app)", () => {
           ).toMatchObject({ sessionId: THREAD_ID, url: discoveredUrl });
           expect(mounted.router.state.location.search).toMatchObject({ preview: "1" });
           expect(document.querySelector("[data-preview-panel-mode]")).not.toBeNull();
+          expect(createPreviewTab).toHaveBeenCalledWith("vitrine-tab", LOCAL_ENVIRONMENT_ID);
+          const webview = document.querySelector('[data-preview-tab="vitrine-tab"]');
+          expect(webview).not.toBeNull();
+          expect(webview?.getAttribute("src")).toBe("about:blank");
+          expect(webview?.hasAttribute("allowpopups")).toBe(true);
         },
         { timeout: 8_000, interval: 16 },
       );
 
-      await page.getByRole("button", { name: "Close project research in Vitrine" }).click();
+      const webview = document.querySelector('[data-preview-tab="vitrine-tab"]');
+      expect(webview).not.toBeNull();
+      Object.assign(webview!, { getWebContentsId: () => 91 });
+      webview!.dispatchEvent(new Event("dom-ready"));
+      await vi.waitFor(() => {
+        expect(registerPreviewWebview).toHaveBeenCalledWith("vitrine-tab", 91);
+        expect(navigatePreview).toHaveBeenCalledWith("vitrine-tab", discoveredUrl);
+        expect(previewInitializationOrder).toEqual(["register", "navigate"]);
+      });
+      webview!.dispatchEvent(new Event("dom-ready"));
+      await Promise.resolve();
+      expect(registerPreviewWebview).toHaveBeenCalledOnce();
+      expect(navigatePreview).toHaveBeenCalledOnce();
+
+      usePreviewStateStore
+        .getState()
+        .replaceServerSnapshots(THREAD_REF, [previewSnapshot, otherPreviewSnapshot]);
+      expect(
+        selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, THREAD_REF)
+          .sessions["other-tab"]?.navStatus,
+      ).toMatchObject({ _tag: "Success", url: otherPreviewUrl });
+
+      expect(
+        selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, THREAD_REF)
+          .managedResearch?.tabId,
+      ).toBe("vitrine-tab");
+      await page.getByRole("button", { name: "Preview menu" }).click();
+      await page.getByText("Close preview tab", { exact: true }).click();
+      await vi.waitFor(() => {
+        expect(
+          wsRequests.find((request) => request._tag === WS_METHODS.previewClose),
+        ).toMatchObject({ sessionId: THREAD_ID, tabId: "vitrine-tab" });
+      });
+      usePreviewStateStore.getState().applyServerEvent(THREAD_REF, {
+        type: "closed",
+        sessionId: THREAD_ID,
+        tabId: "vitrine-tab",
+        createdAt: "2026-03-04T12:00:01.000Z",
+      });
       await vi.waitFor(() => {
         expect(readVitrineAutoOpenIntent(LOCAL_ENVIRONMENT_ID, PROJECT_ID)).toBe(false);
-        expect(mounted.router.state.location.search.preview).toBeUndefined();
+        expect(
+          selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, THREAD_REF)
+            .managedResearch,
+        ).toBeNull();
+        expect(
+          selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, THREAD_REF)
+            .snapshot?.tabId,
+        ).toBe("other-tab");
+        expect(mounted.router.state.location.search).toMatchObject({ preview: "1" });
+        expect(document.querySelector<HTMLInputElement>("[data-preview-url-input]")?.value).toBe(
+          otherPreviewUrl,
+        );
       });
     } finally {
       await mounted.cleanup();

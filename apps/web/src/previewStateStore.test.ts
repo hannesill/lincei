@@ -130,9 +130,11 @@ describe("previewStateStore", () => {
 
   it("keeps managed Research identity across preview hydration until explicitly cleared", () => {
     const store = usePreviewStateStore.getState();
+    store.replaceServerSnapshots(ref, [makeSnapshot()]);
     store.markManagedResearch(ref, {
       environmentId: ref.environmentId,
       projectId: ProjectId.make("project-a"),
+      tabId: "tab-a",
       url: "http://vitrine.localhost:8812/",
     });
     store.replaceServerSnapshots(ref, [makeSnapshot()]);
@@ -142,9 +144,159 @@ describe("previewStateStore", () => {
     ).toMatchObject({
       environmentId: ref.environmentId,
       projectId: "project-a",
+      tabId: "tab-a",
     });
 
     usePreviewStateStore.getState().clearManagedResearch(ref);
+    expect(
+      selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref).managedResearch,
+    ).toBeNull();
+  });
+
+  it("identifies the exact managed Research tab when same-URL tabs coexist", () => {
+    const store = usePreviewStateStore.getState();
+    const researchStatus = {
+      _tag: "Success" as const,
+      url: "http://vitrine.localhost:8812/",
+      title: "Research",
+    };
+    store.replaceServerSnapshots(ref, [
+      makeSnapshot({ navStatus: researchStatus }),
+      makeSnapshot({
+        tabId: "tab-b",
+        navStatus: researchStatus,
+        updatedAt: "2026-01-01T00:00:01.000Z",
+      }),
+    ]);
+    store.markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      tabId: "tab-a",
+      url: "http://vitrine.localhost:8812/",
+    });
+
+    store.removeSession(ref, "tab-b");
+    expect(
+      selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref).managedResearch
+        ?.tabId,
+    ).toBe("tab-a");
+
+    usePreviewStateStore.getState().clearManagedResearch(ref);
+    usePreviewStateStore.getState().removeSession(ref, "tab-a");
+    const state = selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref);
+    expect(state.managedResearch).toBeNull();
+    expect(state.managedResearchDismissal).toEqual({
+      environmentId: ref.environmentId,
+      projectId: "project-a",
+    });
+  });
+
+  it("rebinds managed Research when restart hydration replaces its tab id", () => {
+    const store = usePreviewStateStore.getState();
+    const researchStatus = {
+      _tag: "Success" as const,
+      url: "http://vitrine.localhost:8812/",
+      title: "Research",
+    };
+    store.replaceServerSnapshots(ref, [makeSnapshot({ navStatus: researchStatus })]);
+    store.markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      tabId: "tab-a",
+      url: researchStatus.url,
+    });
+
+    store.replaceServerSnapshots(ref, [
+      makeSnapshot({
+        tabId: "tab-recovered",
+        navStatus: researchStatus,
+        updatedAt: "2026-01-01T00:00:01.000Z",
+      }),
+    ]);
+
+    const hydrated = selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref);
+    expect(Object.keys(hydrated.sessions)).toEqual(["tab-recovered"]);
+    expect(hydrated.managedResearch?.tabId).toBe("tab-recovered");
+  });
+
+  it("clears managed Research identity when hydration no longer contains its tab", () => {
+    const store = usePreviewStateStore.getState();
+    store.replaceServerSnapshots(ref, [makeSnapshot()]);
+    store.markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      tabId: "tab-a",
+      url: "http://vitrine.localhost:8812/",
+    });
+    const researchRevision = selectSessionPreviewState(
+      usePreviewStateStore.getState().bySessionKey,
+      ref,
+    ).managedResearchRevision;
+
+    store.replaceServerSnapshots(ref, [makeSnapshot({ tabId: "tab-b" })]);
+
+    const hydrated = selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref);
+    expect(hydrated.managedResearch).toBeNull();
+    expect(hydrated.managedResearchDismissal).toBeNull();
+    expect(hydrated.managedResearchRevision).toBe(researchRevision);
+  });
+
+  it("records an explicit panel dismissal after hydration removed the managed tab", () => {
+    const store = usePreviewStateStore.getState();
+    store.replaceServerSnapshots(ref, [makeSnapshot()]);
+    store.markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      tabId: "tab-a",
+      url: "http://vitrine.localhost:8812/",
+    });
+    const researchRevision = selectSessionPreviewState(
+      usePreviewStateStore.getState().bySessionKey,
+      ref,
+    ).managedResearchRevision;
+    store.replaceServerSnapshots(ref, []);
+
+    store.clearManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+    });
+
+    expect(
+      selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref),
+    ).toMatchObject({
+      managedResearchDismissal: {
+        environmentId: ref.environmentId,
+        projectId: "project-a",
+      },
+      managedResearchRevision: researchRevision + 1,
+    });
+  });
+
+  it("does not treat an unsolicited server close as an explicit Research dismissal", () => {
+    const store = usePreviewStateStore.getState();
+    store.replaceServerSnapshots(ref, [makeSnapshot()]);
+    store.markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      tabId: "tab-a",
+      url: "http://vitrine.localhost:8812/",
+    });
+
+    store.removeSession(ref, "tab-a");
+
+    const state = selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref);
+    expect(state.managedResearch).toBeNull();
+    expect(state.managedResearchDismissal).toBeNull();
+  });
+
+  it("does not mark a managed Research tab that already closed", () => {
+    usePreviewStateStore.getState().markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      tabId: "tab-closed",
+      url: "http://vitrine.localhost:8812/",
+    });
+
     expect(
       selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref).managedResearch,
     ).toBeNull();

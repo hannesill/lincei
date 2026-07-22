@@ -36,6 +36,25 @@ export function isLoopbackHostname(hostname: string): boolean {
   return LOOPBACK_HOSTNAMES.has(normalizeHostname(hostname));
 }
 
+/**
+ * Classify only the transport endpoints. Loopback is necessary for Research
+ * presentation, but it is not proof that the backend shares the client host
+ * because a tunnel can also expose a loopback URL.
+ */
+export function isPrimaryEnvironmentTargetLoopback(
+  primaryTarget: PrimaryEnvironmentTarget | null = readPrimaryEnvironmentTarget(),
+): boolean {
+  if (!primaryTarget) return false;
+  try {
+    return (
+      isLoopbackHostname(new URL(primaryTarget.target.httpBaseUrl).hostname) &&
+      isLoopbackHostname(new URL(primaryTarget.target.wsBaseUrl).hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function resolveHttpRequestBaseUrl(httpBaseUrl: string): string {
   const configuredDevServerUrl = import.meta.env.VITE_DEV_SERVER_URL?.trim();
   if (!configuredDevServerUrl) {

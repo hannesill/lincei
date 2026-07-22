@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { ensureEnvironmentApi } from "~/environmentApi";
 import { type DesktopPreviewOverlay, usePreviewStateStore } from "~/previewStateStore";
 
-import { previewBridge } from "./previewBridge";
+import { readPreviewBridge } from "./previewBridge";
 
 /** Own the desktop tab lifecycle and reflect WebContents state to the server. */
 export function usePreviewBridge(input: {
@@ -20,9 +20,9 @@ export function usePreviewBridge(input: {
   const { sessionRef, tabId } = input;
   const [partition, setPartition] = useState<string | null>(null);
   const applyDesktopState = usePreviewStateStore((state) => state.applyDesktopState);
-  const bridge = previewBridge;
 
   useEffect(() => {
+    const bridge = readPreviewBridge();
     if (!bridge) return;
     let cancelled = false;
     void (async () => {
@@ -38,11 +38,12 @@ export function usePreviewBridge(input: {
       applyDesktopState(sessionRef, tabId, null);
       void bridge.closeTab(tabId).catch(() => undefined);
     };
-  }, [applyDesktopState, bridge, sessionRef, tabId]);
+  }, [applyDesktopState, sessionRef, tabId]);
 
   const lastReportedUrl = useRef<string | null>(null);
   const lastReportedKind = useRef<DesktopPreviewTabState["navStatus"]["kind"] | null>(null);
   useEffect(() => {
+    const bridge = readPreviewBridge();
     if (!bridge) return;
     const api = ensureEnvironmentApi(sessionRef.environmentId);
     lastReportedUrl.current = null;
@@ -62,7 +63,7 @@ export function usePreviewBridge(input: {
       lastReportedKind.current = reported.lastReportedKind;
       void api.preview.reportStatus(reported.input).catch(() => undefined);
     });
-  }, [applyDesktopState, bridge, sessionRef, tabId]);
+  }, [applyDesktopState, sessionRef, tabId]);
 
   return partition;
 }

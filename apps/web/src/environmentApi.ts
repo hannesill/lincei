@@ -31,6 +31,7 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       writeFile: rpcClient.projects.writeFile,
     },
     vitrine: {
+      open: rpcClient.vitrine.open,
       ensure: rpcClient.vitrine.ensure,
       status: rpcClient.vitrine.status,
       stop: rpcClient.vitrine.stop,

@@ -132,6 +132,7 @@ export const WS_METHODS = {
 
   // Project-scoped Vitrine lifecycle methods
   vitrineEnsure: "vitrine.ensure",
+  vitrineOpen: "vitrine.open",
   vitrineStatus: "vitrine.status",
   vitrineStop: "vitrine.stop",
 
@@ -358,6 +359,12 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 });
 
 export const WsVitrineEnsureRpc = Rpc.make(WS_METHODS.vitrineEnsure, {
+  payload: VitrineProjectInput,
+  success: VitrineProjectState,
+  error: VitrineLifecycleError,
+});
+
+export const WsVitrineOpenRpc = Rpc.make(WS_METHODS.vitrineOpen, {
   payload: VitrineProjectInput,
   success: VitrineProjectState,
   error: VitrineLifecycleError,
@@ -642,6 +649,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
   WsVitrineEnsureRpc,
+  WsVitrineOpenRpc,
   WsVitrineStatusRpc,
   WsVitrineStopRpc,
   WsShellOpenInEditorRpc,

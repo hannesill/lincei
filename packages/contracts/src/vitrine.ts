@@ -48,7 +48,13 @@ export class VitrineLifecycleError extends Schema.TaggedErrorClass<VitrineLifecy
   "VitrineLifecycleError",
   {
     projectId: ProjectId,
-    code: Schema.Literals(["project_not_found", "project_lookup_failed"]),
+    code: Schema.Literals([
+      "project_not_found",
+      "project_lookup_failed",
+      "browser_policy_unsupported",
+      "browser_url_invalid",
+      "browser_launch_failed",
+    ]),
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),
   },

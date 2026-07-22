@@ -112,4 +112,54 @@ it.layer(NodeServices.layer)("ServerAuthPolicyLive", (it) => {
       ),
     ),
   );
+
+  it.effect("treats an unspecified headless bind as remote-reachable", () =>
+    Effect.gen(function* () {
+      const policy = yield* ServerAuthPolicy;
+      const descriptor = yield* policy.getDescriptor();
+
+      expect(descriptor.policy).toBe("remote-reachable");
+    }).pipe(
+      Effect.provide(
+        makeServerAuthPolicyLayer({
+          mode: "web",
+          host: undefined,
+          startupPresentation: "headless",
+        }),
+      ),
+    ),
+  );
+
+  it.effect("treats an empty bind host as remote-reachable", () =>
+    Effect.gen(function* () {
+      const policy = yield* ServerAuthPolicy;
+      const descriptor = yield* policy.getDescriptor();
+
+      expect(descriptor.policy).toBe("remote-reachable");
+    }).pipe(
+      Effect.provide(
+        makeServerAuthPolicyLayer({
+          mode: "web",
+          host: "",
+        }),
+      ),
+    ),
+  );
+
+  it.effect("treats Tailscale Serve as remote-reachable despite a loopback bind", () =>
+    Effect.gen(function* () {
+      const policy = yield* ServerAuthPolicy;
+      const descriptor = yield* policy.getDescriptor();
+
+      expect(descriptor.policy).toBe("remote-reachable");
+    }).pipe(
+      Effect.provide(
+        makeServerAuthPolicyLayer({
+          mode: "web",
+          host: "127.0.0.1",
+          tailscaleServeEnabled: true,
+        }),
+      ),
+    ),
+  );
 });

@@ -10,7 +10,6 @@ import { readPreviewStateRevision, usePreviewStateStore } from "~/previewStateSt
 /** Subscribe to preview events and hydrate/recover state after reconnects. */
 export function usePreviewSession(sessionRef: ScopedSessionRef): void {
   const applyServerEvent = usePreviewStateStore((state) => state.applyServerEvent);
-  const applyServerSnapshot = usePreviewStateStore((state) => state.applyServerSnapshot);
   const replaceServerSnapshots = usePreviewStateStore((state) => state.replaceServerSnapshots);
 
   useEffect(() => {
@@ -21,9 +20,12 @@ export function usePreviewSession(sessionRef: ScopedSessionRef): void {
     const hydrate = async () => {
       const generation = ++hydrationGeneration;
       const revision = readPreviewStateRevision(sessionRef);
-      const localSnapshot =
-        usePreviewStateStore.getState().bySessionKey[scopedSessionKey(sessionRef)]?.snapshot ??
-        null;
+      const localState =
+        usePreviewStateStore.getState().bySessionKey[scopedSessionKey(sessionRef)] ?? null;
+      const localSnapshot = localState?.snapshot ?? null;
+      const managedResearch = localState?.managedResearch ?? null;
+      const managedResearchRevision = localState?.managedResearchRevision ?? 0;
+      const staleTabIds = new Set(Object.keys(localState?.sessions ?? {}));
       try {
         const result = await api.preview.list({ sessionId: sessionRef.sessionId });
         if (
@@ -38,9 +40,10 @@ export function usePreviewSession(sessionRef: ScopedSessionRef): void {
           return;
         }
         const recoverableUrl =
-          localSnapshot && localSnapshot.navStatus._tag !== "Idle"
+          managedResearch?.url ??
+          (localSnapshot && localSnapshot.navStatus._tag !== "Idle"
             ? localSnapshot.navStatus.url
-            : null;
+            : null);
         if (!recoverableUrl) {
           replaceServerSnapshots(sessionRef, []);
           return;
@@ -50,7 +53,24 @@ export function usePreviewSession(sessionRef: ScopedSessionRef): void {
           url: recoverableUrl,
         });
         if (cancelled || generation !== hydrationGeneration) return;
-        applyServerSnapshot(sessionRef, recovered);
+        const current =
+          usePreviewStateStore.getState().bySessionKey[scopedSessionKey(sessionRef)] ?? null;
+        const concurrentSnapshots = Object.values(current?.sessions ?? {}).filter(
+          (snapshot) => !staleTabIds.has(snapshot.tabId),
+        );
+        const shouldRestoreManagedResearch =
+          managedResearch !== null &&
+          (current?.managedResearchRevision ?? 0) === managedResearchRevision;
+        replaceServerSnapshots(sessionRef, [...concurrentSnapshots, recovered]);
+        const reconciled =
+          usePreviewStateStore.getState().bySessionKey[scopedSessionKey(sessionRef)] ?? null;
+        if (shouldRestoreManagedResearch && reconciled?.managedResearch === null) {
+          usePreviewStateStore.getState().markManagedResearch(sessionRef, {
+            ...managedResearch,
+            tabId: recovered.tabId,
+            url: recoverableUrl,
+          });
+        }
       } catch {
         // Preserve the last usable renderer snapshot while disconnected.
       }
@@ -70,5 +90,5 @@ export function usePreviewSession(sessionRef: ScopedSessionRef): void {
       hydrationGeneration += 1;
       unsubscribe();
     };
-  }, [applyServerEvent, applyServerSnapshot, replaceServerSnapshots, sessionRef]);
+  }, [applyServerEvent, replaceServerSnapshots, sessionRef]);
 }

@@ -31,11 +31,17 @@ export interface SessionPreviewState {
   desktopByTabId: Record<string, DesktopPreviewOverlay>;
   recentlySeenUrls: string[];
   managedResearch: ManagedResearchPresentation | null;
+  managedResearchRevision: number;
+  managedResearchDismissal: ManagedResearchProjectIdentity | null;
 }
 
-export interface ManagedResearchPresentation {
+export interface ManagedResearchProjectIdentity {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
+}
+
+export interface ManagedResearchPresentation extends ManagedResearchProjectIdentity {
+  readonly tabId: string;
   readonly url: string;
 }
 
@@ -47,6 +53,8 @@ const EMPTY_SESSION_PREVIEW_STATE: SessionPreviewState = Object.freeze({
   desktopByTabId: {},
   recentlySeenUrls: [] as string[],
   managedResearch: null,
+  managedResearchRevision: 0,
+  managedResearchDismissal: null,
 });
 
 const revisionBySessionKey = new Map<string, number>();
@@ -76,7 +84,11 @@ export interface PreviewStateStoreState {
   setActiveTab: (ref: ScopedSessionRef, tabId: string) => void;
   rememberUrl: (ref: ScopedSessionRef, url: string) => void;
   markManagedResearch: (ref: ScopedSessionRef, presentation: ManagedResearchPresentation) => void;
-  clearManagedResearch: (ref: ScopedSessionRef) => void;
+  clearManagedResearch: (
+    ref: ScopedSessionRef,
+    fallbackIdentity?: ManagedResearchProjectIdentity,
+  ) => void;
+  acknowledgeManagedResearchDismissal: (ref: ScopedSessionRef) => void;
   removeSessionState: (ref: ScopedSessionRef) => void;
 }
 
@@ -113,6 +125,23 @@ const freshestSnapshot = (
     .toSorted((left, right) => left.updatedAt.localeCompare(right.updatedAt))
     .at(-1) ?? null;
 
+const snapshotUrl = (snapshot: PreviewSessionSnapshot): string | null =>
+  snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
+
+const rebindManagedResearch = (
+  managedResearch: ManagedResearchPresentation | null,
+  sessions: Record<string, PreviewSessionSnapshot>,
+): ManagedResearchPresentation | null => {
+  if (!managedResearch) return null;
+  if (sessions[managedResearch.tabId]) return managedResearch;
+  const matchingTabs = Object.values(sessions).filter(
+    (snapshot) => snapshotUrl(snapshot) === managedResearch.url,
+  );
+  return matchingTabs.length === 1 && matchingTabs[0]
+    ? { ...managedResearch, tabId: matchingTabs[0].tabId }
+    : null;
+};
+
 const removePreviewSession = (current: SessionPreviewState, tabId: string): SessionPreviewState => {
   if (!current.sessions[tabId]) return current;
   const { [tabId]: _closed, ...sessions } = current.sessions;
@@ -127,6 +156,7 @@ const removePreviewSession = (current: SessionPreviewState, tabId: string): Sess
     activeTabId: snapshot?.tabId ?? null,
     snapshot,
     desktopOverlay: snapshot ? (desktopByTabId[snapshot.tabId] ?? null) : null,
+    managedResearch: current.managedResearch?.tabId === tabId ? null : current.managedResearch,
   };
 };
 
@@ -233,6 +263,7 @@ export const usePreviewStateStore = create<PreviewStateStoreState>()((set) => ({
             desktopByTabId,
             desktopOverlay: snapshot ? (desktopByTabId[snapshot.tabId] ?? null) : null,
             recentlySeenUrls,
+            managedResearch: rebindManagedResearch(current.managedResearch, sessions),
           };
         }),
       };
@@ -295,18 +326,47 @@ export const usePreviewStateStore = create<PreviewStateStoreState>()((set) => ({
     set((state) => {
       const sessionKey = scopedSessionKey(ref);
       return {
-        bySessionKey: updateSession(state, sessionKey, (current) => ({
-          ...current,
-          managedResearch,
-        })),
+        bySessionKey: updateSession(state, sessionKey, (current) =>
+          current.sessions[managedResearch.tabId]
+            ? {
+                ...current,
+                managedResearch,
+                managedResearchRevision: current.managedResearchRevision + 1,
+                managedResearchDismissal: null,
+              }
+            : current,
+        ),
       };
     }),
-  clearManagedResearch: (ref) =>
+  clearManagedResearch: (ref, fallbackIdentity) =>
+    set((state) => {
+      const sessionKey = scopedSessionKey(ref);
+      return {
+        bySessionKey: updateSession(state, sessionKey, (current) => {
+          const dismissalSource = current.managedResearch ?? fallbackIdentity ?? null;
+          if (current.managedResearch === null && dismissalSource === null) return current;
+          return {
+            ...current,
+            managedResearchDismissal: dismissalSource
+              ? {
+                  environmentId: dismissalSource.environmentId,
+                  projectId: dismissalSource.projectId,
+                }
+              : null,
+            managedResearch: null,
+            managedResearchRevision: current.managedResearchRevision + 1,
+          };
+        }),
+      };
+    }),
+  acknowledgeManagedResearchDismissal: (ref) =>
     set((state) => {
       const sessionKey = scopedSessionKey(ref);
       return {
         bySessionKey: updateSession(state, sessionKey, (current) =>
-          current.managedResearch === null ? current : { ...current, managedResearch: null },
+          current.managedResearchDismissal === null
+            ? current
+            : { ...current, managedResearchDismissal: null },
         ),
       };
     }),

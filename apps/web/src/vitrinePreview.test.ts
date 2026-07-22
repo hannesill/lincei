@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   forgetVitrineAutoOpenIntent,
-  isAllowedManagedVitrineUrl,
+  isVitrineResearchAvailable,
   openManagedVitrine,
   readVitrineAutoOpenIntent,
   rememberVitrineAutoOpenIntent,
@@ -32,6 +32,40 @@ function readyState(overrides: Partial<VitrineProjectState> = {}): VitrineProjec
 }
 
 describe("managed Vitrine preview", () => {
+  it("allows only a primary project on an approved loopback transport", () => {
+    expect(
+      isVitrineResearchAvailable({
+        projectEnvironmentId: environmentId,
+        primaryEnvironmentId: environmentId,
+        primaryTargetLoopback: true,
+        primaryAuthPolicy: "loopback-browser",
+      }),
+    ).toBe(true);
+
+    for (const unavailable of [
+      {
+        projectEnvironmentId: EnvironmentId.make("saved-remote"),
+        primaryEnvironmentId: environmentId,
+        primaryTargetLoopback: true,
+        primaryAuthPolicy: "loopback-browser" as const,
+      },
+      {
+        projectEnvironmentId: environmentId,
+        primaryEnvironmentId: environmentId,
+        primaryTargetLoopback: false,
+        primaryAuthPolicy: "loopback-browser" as const,
+      },
+      {
+        projectEnvironmentId: environmentId,
+        primaryEnvironmentId: environmentId,
+        primaryTargetLoopback: true,
+        primaryAuthPolicy: "remote-reachable" as const,
+      },
+    ]) {
+      expect(isVitrineResearchAvailable(unavailable)).toBe(false);
+    }
+  });
+
   it("opens the actual discovered port in the embedded browser", async () => {
     const ensure = vi.fn(async () => readyState());
     const openEmbedded = vi.fn(async () => undefined);
@@ -175,14 +209,6 @@ describe("managed Vitrine preview", () => {
 
     expect(result.presentation).toBe("cancelled");
     expect(openExternal).not.toHaveBeenCalled();
-  });
-
-  it("accepts only explicit loopback display URLs", () => {
-    expect(isAllowedManagedVitrineUrl("http://vitrine.localhost:7749/")).toBe(true);
-    expect(isAllowedManagedVitrineUrl("http://localhost:7749/")).toBe(true);
-    expect(isAllowedManagedVitrineUrl("http://127.0.0.1:7749/")).toBe(true);
-    expect(isAllowedManagedVitrineUrl("http://[::1]:7749/")).toBe(true);
-    expect(isAllowedManagedVitrineUrl("http://127.0.0.1/")).toBe(false);
   });
 
   it("persists restart intent separately per environment and project", () => {

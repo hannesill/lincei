@@ -32,4 +32,8 @@ export {
   __resetServerAuthBootstrapForTests,
 } from "./auth";
 
-export { resolvePrimaryEnvironmentHttpUrl, isLoopbackHostname } from "./target";
+export {
+  isLoopbackHostname,
+  isPrimaryEnvironmentTargetLoopback,
+  resolvePrimaryEnvironmentHttpUrl,
+} from "./target";

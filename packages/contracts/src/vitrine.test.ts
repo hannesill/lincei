@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as Schema from "effect/Schema";
 
-import { ProjectId, VitrineProjectState } from "./index.ts";
+import { ProjectId, VitrineLifecycleError, VitrineProjectState } from "./index.ts";
 
 const decode = Schema.decodeUnknownSync(VitrineProjectState);
+const decodeLifecycleError = Schema.decodeUnknownSync(VitrineLifecycleError);
 
 describe("VitrineProjectState", () => {
   it("decodes a ready project server", () => {
@@ -44,4 +45,20 @@ describe("VitrineProjectState", () => {
 
     expect(state.status).toBe("unavailable");
   });
+});
+
+describe("VitrineLifecycleError", () => {
+  it.each(["browser_policy_unsupported", "browser_url_invalid", "browser_launch_failed"] as const)(
+    "decodes the %s browser error",
+    (code) => {
+      const error = decodeLifecycleError({
+        _tag: "VitrineLifecycleError",
+        projectId: ProjectId.make("project-1"),
+        code,
+        message: "Vitrine could not be opened in the system browser.",
+      });
+
+      expect(error.code).toBe(code);
+    },
+  );
 });
