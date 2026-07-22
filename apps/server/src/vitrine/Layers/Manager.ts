@@ -1,6 +1,7 @@
 import type { VitrineLifecycleIssueCode, VitrineProjectState } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -109,12 +110,18 @@ function errorState(
 }
 
 export const makeVitrineManager = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const cli = yield* VitrineCli;
   const statesRef = yield* SynchronizedRef.make(new Map<string, VitrineProjectState>());
   const locksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
 
   const stateKey = (input: VitrineManagerInput): string => path.resolve(input.workspaceRoot);
+  const normalizeInput = (input: VitrineManagerInput) =>
+    fileSystem.realPath(input.workspaceRoot).pipe(
+      Effect.catch(() => Effect.succeed(path.resolve(input.workspaceRoot))),
+      Effect.map((workspaceRoot) => ({ ...input, workspaceRoot })),
+    );
 
   const remember = (input: VitrineManagerInput, state: VitrineProjectState) =>
     SynchronizedRef.update(statesRef, (current) => {
@@ -158,34 +165,41 @@ export const makeVitrineManager = Effect.gen(function* () {
       Effect.flatMap((state) => remember(input, state)),
     );
 
-  const status: VitrineManagerShape["status"] = (input) =>
+  const statusNormalized = (input: VitrineManagerInput) =>
     Effect.gen(function* () {
       const cached = (yield* SynchronizedRef.get(statesRef)).get(stateKey(input));
       if (cached?.status === "starting") return cached;
       return yield* runAndRemember(input, "status");
     });
 
+  const status: VitrineManagerShape["status"] = (input) =>
+    Effect.flatMap(normalizeInput(input), statusNormalized);
+
   const ensure: VitrineManagerShape["ensure"] = (input) =>
-    withLock(
-      input,
-      Effect.gen(function* () {
-        const current = yield* runAndRemember(input, "status");
-        if (current.status === "ready" || current.status === "unavailable") return current;
-        if (current.status === "failed") return current;
-        const updatedAt = DateTime.formatIso(yield* DateTime.now);
-        yield* remember(input, emptyState(path, input, "starting", updatedAt));
-        return yield* runAndRemember(input, "start");
-      }),
+    Effect.flatMap(normalizeInput(input), (normalized) =>
+      withLock(
+        normalized,
+        Effect.gen(function* () {
+          const current = yield* runAndRemember(normalized, "status");
+          if (current.status === "ready" || current.status === "unavailable") return current;
+          if (current.status === "failed") return current;
+          const updatedAt = DateTime.formatIso(yield* DateTime.now);
+          yield* remember(normalized, emptyState(path, normalized, "starting", updatedAt));
+          return yield* runAndRemember(normalized, "start");
+        }),
+      ),
     );
 
   const stop: VitrineManagerShape["stop"] = (input) =>
-    withLock(
-      input,
-      Effect.gen(function* () {
-        const current = yield* runAndRemember(input, "status");
-        if (current.status !== "ready") return current;
-        return yield* runAndRemember(input, "stop");
-      }),
+    Effect.flatMap(normalizeInput(input), (normalized) =>
+      withLock(
+        normalized,
+        Effect.gen(function* () {
+          const current = yield* runAndRemember(normalized, "status");
+          if (current.status !== "ready") return current;
+          return yield* runAndRemember(normalized, "stop");
+        }),
+      ),
     );
 
   return VitrineManager.of({ ensure, status, stop });

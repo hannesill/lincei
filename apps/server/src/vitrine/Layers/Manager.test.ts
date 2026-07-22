@@ -2,6 +2,8 @@ import { ProjectId } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { vi } from "vitest";
 
 import { VitrineCli, type VitrineCliShape, type VitrineCliSnapshot } from "../Services/Cli.ts";
@@ -102,6 +104,30 @@ it.layer(NodeServices.layer)("VitrineManager", (it) => {
 
       expect(stoppedA.status).toBe("stopped");
       expect(readyB.status).toBe("ready");
+    }),
+  );
+
+  it.effect("canonicalizes symlinked project roots before lifecycle commands", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const base = yield* fileSystem.makeTempDirectoryScoped({ prefix: "vitrine-manager-" });
+      const realRoot = path.join(base, "real-project");
+      const linkedRoot = path.join(base, "linked-project");
+      yield* fileSystem.makeDirectory(realRoot);
+      yield* fileSystem.symlink(realRoot, linkedRoot);
+      const canonicalRoot = yield* fileSystem.realPath(realRoot);
+
+      const fake = statefulCli();
+      const manager = yield* makeVitrineManager.pipe(Effect.provideService(VitrineCli, fake.cli));
+
+      const state = yield* manager.ensure({
+        projectId: PROJECT_A,
+        workspaceRoot: linkedRoot,
+      });
+
+      expect(fake.starts).toEqual([canonicalRoot]);
+      expect(state.dataDir).toBe(path.join(canonicalRoot, ".vitrine"));
     }),
   );
 });
