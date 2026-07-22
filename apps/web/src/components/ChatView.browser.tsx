@@ -100,7 +100,7 @@ const PROJECT_LOGICAL_KEY = deriveLogicalProjectKeyFromSettings(
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
 const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
-const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/Studies/heart-failure)";
+const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/Projects/heart-failure)";
 
 interface TestFixture {
   snapshot: OrchestrationReadModel;
@@ -4498,7 +4498,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("settings");
+      await page.getByPlaceholder("Search commands, projects, and sessions...").fill("settings");
       await expect.element(palette.getByText("Open settings", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("New session in Project", { exact: true }))
@@ -4513,7 +4513,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-enter" as MessageId,
-        targetText: "command palette add study enter",
+        targetText: "command palette add project enter",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -4571,7 +4571,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add study", { exact: true }).click();
+      await palette.getByText("Add project", { exact: true }).click();
       await palette.getByText("Local folder", { exact: true }).click();
 
       const browseInput = await waitForCommandPaletteInput(ADD_PROJECT_SUBMENU_PLACEHOLDER);
@@ -4619,12 +4619,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("shows clone destination controls after resolving an add study repository", async () => {
+  it("shows clone destination controls after resolving an add project repository", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-remote" as MessageId,
-        targetText: "command palette add study remote",
+        targetText: "command palette add project remote",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -4689,7 +4689,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add study", { exact: true }).click();
+      await palette.getByText("Add project", { exact: true }).click();
       await palette.getByText("GitHub repository", { exact: true }).click();
 
       const repositoryInput = await waitForCommandPaletteInput(
@@ -4701,7 +4701,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         () => {
           const clonePathInput = document.querySelector<HTMLInputElement>(
-            'input[placeholder="Enter path (e.g. ~/Studies/heart-failure)"]',
+            'input[placeholder="Enter path (e.g. ~/Projects/heart-failure)"]',
           );
           expect(clonePathInput?.value).toBe("~/");
           expect(document.body.textContent).toContain("Repository");
@@ -4715,10 +4715,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       await page
-        .getByPlaceholder("Enter path (e.g. ~/Studies/heart-failure)")
+        .getByPlaceholder("Enter path (e.g. ~/Projects/heart-failure)")
         .fill("~/Development/t3env");
       const clonePathInput = await waitForCommandPaletteInput(
-        "Enter path (e.g. ~/Studies/heart-failure)",
+        "Enter path (e.g. ~/Projects/heart-failure)",
       );
       await dispatchInputKey(clonePathInput, { key: "Enter" });
 
@@ -4739,12 +4739,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("opens add study browse mode from the sidebar add button", async () => {
+  it("opens add project browse mode from the sidebar add button", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-sidebar-add-project-trigger" as MessageId,
-        targetText: "sidebar add study trigger",
+        targetText: "sidebar add project trigger",
       }),
       resolveRpc: (body) => {
         if (body._tag === WS_METHODS.filesystemBrowse) {
@@ -4786,12 +4786,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("starts add study browse mode from the configured base directory", async () => {
+  it("starts add project browse mode from the configured base directory", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-sidebar-add-project-custom-base-dir" as MessageId,
-        targetText: "sidebar add study custom base directory",
+        targetText: "sidebar add project custom base directory",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -5053,7 +5053,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-multi-env" as MessageId,
-        targetText: "command palette add study multi env",
+        targetText: "command palette add project multi env",
       }),
     });
 
@@ -5094,7 +5094,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add study", { exact: true }).click();
+      await palette.getByText("Add project", { exact: true }).click();
       await expect.element(palette.getByText("Environments", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("This device", { exact: true }).first())
@@ -5150,13 +5150,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("picks a local project from the native file manager", async () => {
-    const pickFolder = vi.fn().mockResolvedValue("/Users/julius/Studies/finder-picked");
+    const pickFolder = vi.fn().mockResolvedValue("/Users/julius/Projects/finder-picked");
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-file-manager" as MessageId,
-        targetText: "command palette add study file manager",
+        targetText: "command palette add project file manager",
       }),
       resolveRpc: (body) => {
         if (body._tag === WS_METHODS.filesystemBrowse) {
@@ -5230,7 +5230,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           expect(dispatchRequest).toMatchObject({
             _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
             type: "project.create",
-            workspaceRoot: "/Users/julius/Studies/finder-picked",
+            workspaceRoot: "/Users/julius/Projects/finder-picked",
             title: "finder-picked",
           });
         },
@@ -5252,7 +5252,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-command-palette-add-project-mod-enter" as MessageId,
-        targetText: "command palette add study mod enter",
+        targetText: "command palette add project mod enter",
       }),
       configureFixture: (nextFixture) => {
         nextFixture.serverConfig = {
@@ -5311,7 +5311,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await palette.getByText("Add study", { exact: true }).click();
+      await palette.getByText("Add project", { exact: true }).click();
       await palette.getByText("Local folder", { exact: true }).click();
 
       const browseInput = await waitForCommandPaletteInput(ADD_PROJECT_SUBMENU_PLACEHOLDER);
@@ -5410,7 +5410,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("docs");
+      await page.getByPlaceholder("Search commands, projects, and sessions...").fill("docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("Release checklist", { exact: true }))
@@ -5459,7 +5459,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("clients/docs");
+      await page
+        .getByPlaceholder("Search commands, projects, and sessions...")
+        .fill("clients/docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("/repo/clients/docs-portal", { exact: true }))
@@ -5482,7 +5484,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a new session from project search when no active study session exists", async () => {
+  it("creates a new session from project search when no active project session exists", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotWithSecondaryProject({ includeSecondarySession: false }),
@@ -5521,7 +5523,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("clients/docs");
+      await page
+        .getByPlaceholder("Search commands, projects, and sessions...")
+        .fill("clients/docs");
       await expect.element(palette.getByText("Docs Portal", { exact: true })).toBeInTheDocument();
       await expect
         .element(palette.getByText("/repo/clients/docs-portal", { exact: true }))
@@ -5577,7 +5581,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await openCommandPaletteFromTrigger();
 
       await expect.element(palette).toBeInTheDocument();
-      await page.getByPlaceholder("Search commands, studies, and sessions...").fill("docs-archive");
+      await page
+        .getByPlaceholder("Search commands, projects, and sessions...")
+        .fill("docs-archive");
       await expect
         .element(palette.getByText("Archived Docs Notes", { exact: true }))
         .not.toBeInTheDocument();

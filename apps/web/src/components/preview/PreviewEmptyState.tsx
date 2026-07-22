@@ -21,7 +21,7 @@ export function PreviewEmptyState(props: {
         </EmptyMedia>
         <EmptyTitle>No preview yet</EmptyTitle>
         <EmptyDescription>
-          Type a URL above, or run a study action. Listening localhost ports appear here
+          Type a URL above, or run a project action. Listening localhost ports appear here
           automatically.
         </EmptyDescription>
       </Empty>

@@ -227,7 +227,7 @@ export default function ProjectScriptsControl({
   return (
     <>
       {primaryScript ? (
-        <Group aria-label="Study actions">
+        <Group aria-label="Project actions">
           <Button
             size="xs"
             variant="outline"
@@ -331,7 +331,7 @@ export default function ProjectScriptsControl({
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Action" : "Add Action"}</DialogTitle>
             <DialogDescription>
-              Actions are study-scoped commands you can run from the top bar or shortcuts.
+              Actions are project-scoped commands you can run from the top bar or shortcuts.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>

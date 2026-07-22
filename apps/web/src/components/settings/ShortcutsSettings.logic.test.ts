@@ -120,7 +120,7 @@ describe("ShortcutsSettings.logic", () => {
     });
   });
 
-  it("formats static and study action command labels", () => {
+  it("formats static and project action command labels", () => {
     expect(commandLabel("commandPalette.toggle")).toBe("Command Palette: Toggle");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
   });
@@ -134,7 +134,7 @@ describe("ShortcutsSettings.logic", () => {
     expect(options).not.toContain("customModeActive");
   });
 
-  it("builds command options from defaults and resolved study bindings", () => {
+  it("builds command options from defaults and resolved project bindings", () => {
     const options = buildShortcutCommandOptions([
       {
         command: "script.setup-db.run",
@@ -150,6 +150,27 @@ describe("ShortcutsSettings.logic", () => {
     ] satisfies ResolvedShortcutsConfig);
 
     expect(options).toEqual(expect.arrayContaining(["chat.new", "script.setup-db.run"]));
+  });
+
+  it("labels project action bindings with their project source", () => {
+    const rows = buildShortcutRows(
+      [
+        {
+          command: "script.setup-db.run",
+          shortcut: {
+            key: "r",
+            modKey: true,
+            metaKey: false,
+            ctrlKey: false,
+            altKey: false,
+            shiftKey: false,
+          },
+        },
+      ] satisfies ResolvedShortcutsConfig,
+      "",
+    );
+
+    expect(rows).toEqual([expect.objectContaining({ source: "Project" })]);
   });
 
   it("reports unknown when variables without rejecting parseable expressions", () => {

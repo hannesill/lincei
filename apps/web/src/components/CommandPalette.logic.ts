@@ -240,7 +240,7 @@ export function filterCommandPaletteGroups(input: {
     if (input.projectSearchItems.length > 0) {
       searchableGroups.push({
         value: "studies-search",
-        label: "Studies",
+        label: "Projects",
         items: input.projectSearchItems,
       });
     }
@@ -350,12 +350,12 @@ export function buildRootGroups(input: {
 export function getCommandPaletteInputPlaceholder(mode: CommandPaletteMode): string {
   switch (mode) {
     case "root":
-      return "Search commands, studies, and sessions...";
+      return "Search commands, projects, and sessions...";
     case "root-browse":
-      return "Enter study path (e.g. ~/Studies/heart-failure)";
+      return "Enter project path (e.g. ~/Projects/heart-failure)";
     case "submenu":
       return "Search...";
     case "submenu-browse":
-      return "Enter path (e.g. ~/Studies/heart-failure)";
+      return "Enter path (e.g. ~/Projects/heart-failure)";
   }
 }

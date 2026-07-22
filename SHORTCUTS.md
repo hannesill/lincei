@@ -53,9 +53,9 @@ Invalid rules are ignored. Invalid config files are ignored. Warnings are logged
 - `terminal.close`: close/kill the focused terminal (in focused terminal context by default)
 - `commandPalette.toggle`: open or close the global command palette
 - `chat.new`: create a new chat session preserving the active session's branch/worktree state
-- `chat.newLocal`: create a new chat session for the active study in a new environment (local/worktree determined by app settings (default `local`))
-- `editor.openFavorite`: open current study/worktree in the last-used editor
-- `script.{id}.run`: run a study action by id (for example `script.test.run`)
+- `chat.newLocal`: create a new chat session for the active project in a new environment (local/worktree determined by app settings (default `local`))
+- `editor.openFavorite`: open the current project/worktree in the last-used editor
+- `script.{id}.run`: run a project action by id (for example `script.test.run`)
 
 ### Key Syntax
 

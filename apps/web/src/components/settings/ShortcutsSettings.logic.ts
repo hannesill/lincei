@@ -9,7 +9,7 @@ import { DEFAULT_RESOLVED_SHORTCUTS, parseShortcutWhenExpression } from "@t3tool
 
 import { isMacPlatform } from "../../lib/utils";
 
-export type ShortcutSource = "Default" | "Custom" | "Study";
+export type ShortcutSource = "Default" | "Custom" | "Project";
 
 export interface ShortcutRow {
   readonly id: string;
@@ -88,7 +88,7 @@ export function parseWhenExpressionDraft(
 
 function sourceForBinding(binding: ResolvedShortcutRule): ShortcutSource {
   if (String(binding.command).startsWith("script.")) {
-    return "Study";
+    return "Project";
   }
 
   const bindingKey = shortcutToInputValue(binding.shortcut);

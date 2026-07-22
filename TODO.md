@@ -12,7 +12,7 @@ Last checked: 2026-07-22 across:
 - [x] Submitting new messages scrolls to the bottom before optimistic message insert and keeps LegendList pinned.
 - [x] Sidebar session preview limits exist and keep the active session visible when a project list is collapsed.
 - [x] Session archiving exists across command dispatch, projections, sidebar actions, archived settings view, unarchive, and delete.
-- [x] Studies/projects can be sorted by latest session activity; session sorting uses latest user-message time when available.
+- [x] Projects can be sorted by latest session activity; session sorting uses latest user-message time when available.
 - [x] Help & Feedback route is linked from the sidebar.
 
 ## Active product work

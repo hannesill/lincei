@@ -420,7 +420,7 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["New session mode"]
         : []),
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
-        ? ["Add study base directory"]
+        ? ["Add project base directory"]
         : []),
       ...(settings.linceiAgentCustomInstructions !==
       DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions
@@ -792,13 +792,13 @@ export function GeneralSettingsPanel() {
         </SettingsRow>
 
         <SettingsRow
-          title="Add study starts in"
-          description='Leave empty to use "~/" when the Add Study browser opens.'
+          title="Add project starts in"
+          description='Leave empty to use "~/" when the Add Project browser opens.'
           resetAction={
             settings.addProjectBaseDirectory !==
             DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory ? (
               <SettingResetButton
-                label="add study base directory"
+                label="add project base directory"
                 onClick={() =>
                   updateSettings({
                     addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
@@ -814,7 +814,7 @@ export function GeneralSettingsPanel() {
               onCommit={(next) => updateSettings({ addProjectBaseDirectory: next })}
               placeholder="~/"
               spellCheck={false}
-              aria-label="Add study base directory"
+              aria-label="Add project base directory"
             />
           }
         />

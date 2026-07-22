@@ -54,11 +54,11 @@ export function formatProjectMemberActionLabel(
 export function projectGroupingModeDescription(mode: SidebarProjectGroupingMode): string {
   switch (mode) {
     case "repository":
-      return "Studies from the same repository share one sidebar row.";
+      return "Projects from the same repository share one sidebar row.";
     case "repository_path":
-      return "Studies group only when both the repository and repo-relative path match.";
+      return "Projects group only when both the repository and repo-relative path match.";
     case "separate":
-      return "Every study path gets its own sidebar row.";
+      return "Every project path gets its own sidebar row.";
   }
 }
 
