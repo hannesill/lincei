@@ -16,7 +16,11 @@ import { createSessionSelectorByRef } from "../storeSelectors";
 import { resolveSessionRouteRef, buildSessionRouteParams } from "../sessionRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
 import { AppMainSurface } from "../components/appShell";
-import { LazyDiffPanel, RightPanelInlineSidebar } from "../components/RightPanelRouteShell";
+import {
+  LazyDiffPanel,
+  LazyPreviewPanel,
+  RightPanelInlineSidebar,
+} from "../components/RightPanelRouteShell";
 
 function ChatSessionRouteView() {
   const navigate = useNavigate();
@@ -51,7 +55,8 @@ function ChatSessionRouteView() {
   const serverSessionStarted = sessionHasStarted(serverSession);
   const environmentHasAnySessions = environmentHasServerSessions || environmentHasDraftSessions;
   const diffOpen = search.diff === "1";
-  const rightPanelOpen = diffOpen;
+  const previewOpen = search.preview === "1";
+  const rightPanelOpen = diffOpen || previewOpen;
   const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_SHEET_MEDIA_QUERY);
   const currentSessionKey = sessionRef
     ? `${sessionRef.environmentId}:${sessionRef.sessionId}`
@@ -99,6 +104,27 @@ function ChatSessionRouteView() {
       },
     });
   }, [markDiffOpened, navigate, sessionRef]);
+  const closePreview = useCallback(() => {
+    if (!sessionRef) return;
+    void navigate({
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(sessionRef),
+      search: { preview: undefined },
+    });
+  }, [navigate, sessionRef]);
+  const openPreview = useCallback(() => {
+    if (!sessionRef) return;
+    void navigate({
+      to: "/$environmentId/$sessionId",
+      params: buildSessionRouteParams(sessionRef),
+      search: (previous) => ({
+        ...stripDiffSearchParams(previous),
+        preview: "1",
+      }),
+    });
+  }, [navigate, sessionRef]);
+  const closeRightPanel = diffOpen ? closeDiff : closePreview;
+  const openRightPanel = diffOpen ? openDiff : openPreview;
 
   useEffect(() => {
     if (!sessionRef || !bootstrapComplete) {
@@ -122,8 +148,16 @@ function ChatSessionRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
-  const rightPanelContent = shouldRenderDiffContent ? (
-    <LazyDiffPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
+  const rightPanelContent = previewOpen ? (
+    <LazyPreviewPanel
+      mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"}
+      sessionRef={sessionRef}
+      onClosePanel={closePreview}
+    />
+  ) : diffOpen ? (
+    shouldRenderDiffContent ? (
+      <LazyDiffPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
+    ) : null
   ) : null;
 
   if (!shouldUseRightPanelSheet) {
@@ -138,7 +172,11 @@ function ChatSessionRouteView() {
             routeKind="server"
           />
         </AppMainSurface>
-        <RightPanelInlineSidebar open={rightPanelOpen} onClose={closeDiff} onOpen={openDiff}>
+        <RightPanelInlineSidebar
+          open={rightPanelOpen}
+          onClose={closeRightPanel}
+          onOpen={openRightPanel}
+        >
           {rightPanelContent}
         </RightPanelInlineSidebar>
       </>
@@ -155,7 +193,7 @@ function ChatSessionRouteView() {
           routeKind="server"
         />
       </AppMainSurface>
-      <RightPanelSheet open={rightPanelOpen} onClose={closeDiff}>
+      <RightPanelSheet open={rightPanelOpen} onClose={closeRightPanel}>
         {rightPanelContent}
       </RightPanelSheet>
     </>
@@ -165,7 +203,7 @@ function ChatSessionRouteView() {
 export const Route = createFileRoute("/_chat/$environmentId/$sessionId")({
   validateSearch: (search) => parseDiffRouteSearch(search),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
+    middlewares: [retainSearchParams<DiffRouteSearch>(["diff", "preview"])],
   },
   component: ChatSessionRouteView,
 });

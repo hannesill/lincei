@@ -1,4 +1,5 @@
 import type { ProjectScript, ProjectScriptIcon, ResolvedShortcutsConfig } from "@t3tools/contracts";
+import { normalizePreviewUrl } from "@t3tools/shared/preview";
 import {
   BugIcon,
   ChevronDownIcon,
@@ -80,6 +81,8 @@ export interface NewProjectScriptInput {
   icon: ProjectScriptIcon;
   runOnWorktreeCreate: boolean;
   shortcut: string | null;
+  previewUrl: string | null;
+  autoOpenPreview: boolean;
 }
 
 interface ProjectScriptsControlProps {
@@ -110,6 +113,8 @@ export default function ProjectScriptsControl({
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [runOnWorktreeCreate, setRunOnWorktreeCreate] = useState(false);
   const [shortcut, setShortcut] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [autoOpenPreview, setAutoOpenPreview] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -161,12 +166,16 @@ export default function ProjectScriptsControl({
         shortcut,
         command: commandForProjectScript(scriptIdForValidation),
       });
+      const normalizedPreviewUrl =
+        previewUrl.trim().length > 0 ? normalizePreviewUrl(previewUrl) : null;
       const payload = {
         name: trimmedName,
         command: trimmedCommand,
         icon,
         runOnWorktreeCreate,
         shortcut: shortcutRule?.key ?? null,
+        previewUrl: normalizedPreviewUrl,
+        autoOpenPreview: normalizedPreviewUrl !== null && autoOpenPreview,
       } satisfies NewProjectScriptInput;
       if (editingScriptId) {
         await onUpdateScript(editingScriptId, payload);
@@ -188,6 +197,8 @@ export default function ProjectScriptsControl({
     setIconPickerOpen(false);
     setRunOnWorktreeCreate(false);
     setShortcut("");
+    setPreviewUrl("");
+    setAutoOpenPreview(false);
     setValidationError(null);
     setDialogOpen(true);
   };
@@ -200,6 +211,8 @@ export default function ProjectScriptsControl({
     setIconPickerOpen(false);
     setRunOnWorktreeCreate(script.runOnWorktreeCreate);
     setShortcut(shortcutValueForCommand(shortcuts, commandForProjectScript(script.id)) ?? "");
+    setPreviewUrl(script.previewUrl ?? "");
+    setAutoOpenPreview(Boolean(script.autoOpenPreview));
     setValidationError(null);
     setDialogOpen(true);
   };
@@ -308,6 +321,8 @@ export default function ProjectScriptsControl({
           setIcon("play");
           setRunOnWorktreeCreate(false);
           setShortcut("");
+          setPreviewUrl("");
+          setAutoOpenPreview(false);
           setValidationError(null);
         }}
         open={dialogOpen}
@@ -394,6 +409,27 @@ export default function ProjectScriptsControl({
                   onChange={(event) => setCommand(event.target.value)}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="script-preview-url">Preview URL</Label>
+                <Input
+                  id="script-preview-url"
+                  inputMode="url"
+                  placeholder="http://localhost:7741"
+                  value={previewUrl}
+                  onChange={(event) => setPreviewUrl(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional browser URL associated with this action.
+                </p>
+              </div>
+              <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
+                <span>Open preview after starting</span>
+                <Switch
+                  checked={autoOpenPreview}
+                  disabled={previewUrl.trim().length === 0}
+                  onCheckedChange={(checked) => setAutoOpenPreview(Boolean(checked))}
+                />
+              </label>
               <label className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm">
                 <span>Run automatically on worktree creation</span>
                 <Switch

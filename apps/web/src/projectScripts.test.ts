@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+import type { ProjectScript } from "@t3tools/contracts";
 import {
   projectScriptCwd,
   projectScriptRuntimeEnv,
   setupProjectScript,
 } from "@t3tools/shared/projectScripts";
+import { describe, expect, it } from "vitest";
 
 import {
+  buildProjectScript,
   commandForProjectScript,
   nextProjectScriptId,
   primaryProjectScript,
@@ -87,5 +89,50 @@ describe("projectScripts helpers", () => {
         worktreePath: null,
       }),
     ).toBe("/repo");
+  });
+});
+
+const existingPreviewScript: ProjectScript = {
+  id: "serve",
+  name: "Serve",
+  command: "bun dev",
+  icon: "play",
+  runOnWorktreeCreate: false,
+  previewUrl: "http://localhost:3000/",
+  autoOpenPreview: true,
+};
+
+describe("buildProjectScript", () => {
+  it("persists preview metadata", () => {
+    expect(
+      buildProjectScript("serve", {
+        name: "Serve",
+        command: "bun dev",
+        icon: "play",
+        runOnWorktreeCreate: false,
+        previewUrl: " http://localhost:5173/ ",
+        autoOpenPreview: true,
+      }),
+    ).toMatchObject({
+      previewUrl: "http://localhost:5173/",
+      autoOpenPreview: true,
+    });
+  });
+
+  it("removes stale preview metadata when the URL is cleared", () => {
+    const updated = buildProjectScript(
+      "serve",
+      {
+        name: "Serve",
+        command: "bun dev",
+        icon: "play",
+        runOnWorktreeCreate: false,
+        previewUrl: null,
+        autoOpenPreview: true,
+      },
+      existingPreviewScript,
+    );
+    expect(updated).not.toHaveProperty("previewUrl");
+    expect(updated).not.toHaveProperty("autoOpenPreview");
   });
 });

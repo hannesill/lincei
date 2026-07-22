@@ -72,12 +72,19 @@ describe("parseDiffRouteSearch", () => {
     });
   });
 
-  it("strips diff search params", () => {
+  it("gives preview precedence over other right panels", () => {
+    expect(parseDiffRouteSearch({ preview: true, diff: "1" })).toEqual({
+      preview: "1",
+    });
+  });
+
+  it("strips mutually exclusive right panel search params", () => {
     expect(
       stripDiffSearchParams({
         diff: "1",
         diffTurnId: "turn-1",
         diffFilePath: "src/app.ts",
+        preview: "1",
         q: "keep",
       }),
     ).toEqual({ q: "keep" });

@@ -110,10 +110,14 @@ import { stackedSessionToast, toastManager } from "./ui/toast";
 import { decodeProjectScriptShortcutRule } from "~/lib/projectScriptShortcuts";
 import { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
+  buildProjectScript,
   commandForProjectScript,
   nextProjectScriptId,
   projectScriptIdFromCommand,
 } from "~/projectScripts";
+import { isPreviewSupportedInRuntime } from "~/previewStateStore";
+import { openPreviewSession } from "./preview/openPreviewSession";
+import { subscribePreviewAction } from "./preview/previewActionBus";
 import { newCommandId, newDraftId, newMessageId, newSessionId } from "~/lib/utils";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
@@ -705,6 +709,7 @@ export default function ChatView(props: ChatViewProps) {
   const isLocalDraftSession = !isServerSession && localDraftSession !== undefined;
   const canCheckoutPullRequestIntoSession = isLocalDraftSession;
   const diffOpen = rawSearch.diff === "1";
+  const previewOpen = rawSearch.preview === "1";
   const activeSessionId = activeSession?.id ?? null;
   const activeSessionRef = useMemo(
     () => (activeSession ? scopeSessionRef(activeSession.environmentId, activeSession.id) : null),
@@ -1617,6 +1622,58 @@ export default function ChatView(props: ChatViewProps) {
       },
     });
   }, [diffOpen, environmentId, isServerSession, navigate, onDiffPanelOpen, sessionId]);
+  const openPreviewPanel = useCallback(() => {
+    if (!isPreviewSupportedInRuntime()) return;
+    setPlanSidebarOpen(false);
+    if (isServerSession) {
+      void navigate({
+        to: "/$environmentId/$sessionId",
+        params: { environmentId, sessionId },
+        replace: true,
+        search: (previous) => ({ ...stripDiffSearchParams(previous), preview: "1" }),
+      });
+      return;
+    }
+    if (!draftId) return;
+    void navigate({
+      to: "/draft/$draftId",
+      params: { draftId },
+      replace: true,
+      search: (previous) => ({ ...stripDiffSearchParams(previous), preview: "1" }),
+    });
+  }, [draftId, environmentId, isServerSession, navigate, sessionId]);
+  const closePreviewPanel = useCallback(() => {
+    if (isServerSession) {
+      void navigate({
+        to: "/$environmentId/$sessionId",
+        params: { environmentId, sessionId },
+        replace: true,
+        search: { preview: undefined },
+      });
+      return;
+    }
+    if (!draftId) return;
+    void navigate({
+      to: "/draft/$draftId",
+      params: { draftId },
+      replace: true,
+      search: { preview: undefined },
+    });
+  }, [draftId, environmentId, isServerSession, navigate, sessionId]);
+  const onTogglePreview = useCallback(() => {
+    if (previewOpen) closePreviewPanel();
+    else openPreviewPanel();
+  }, [closePreviewPanel, openPreviewPanel, previewOpen]);
+
+  useEffect(
+    () =>
+      subscribePreviewAction((action) => {
+        if (action === "open-panel") openPreviewPanel();
+        else onTogglePreview();
+      }),
+    [onTogglePreview, openPreviewPanel],
+  );
+
   const envLocked = Boolean(
     activeSession &&
     (activeSession.messages.length > 0 ||
@@ -1829,6 +1886,23 @@ export default function ChatView(props: ChatViewProps) {
           terminalId: targetTerminalId,
           data: `${script.command}\r`,
         });
+        if (script.autoOpenPreview && script.previewUrl && activeSessionRef) {
+          const localApi = readLocalApi();
+          if (isPreviewSupportedInRuntime()) {
+            try {
+              await openPreviewSession({
+                previewApi: api.preview,
+                sessionRef: activeSessionRef,
+                url: script.previewUrl,
+              });
+              openPreviewPanel();
+            } catch {
+              await localApi?.shell.openExternal(script.previewUrl).catch(() => undefined);
+            }
+          } else {
+            await localApi?.shell.openExternal(script.previewUrl).catch(() => undefined);
+          }
+        }
       } catch (error) {
         setSessionError(
           activeSessionId,
@@ -1851,6 +1925,7 @@ export default function ChatView(props: ChatViewProps) {
       terminalState.activeTerminalId,
       terminalState.runningTerminalIds,
       terminalState.terminalIds,
+      openPreviewPanel,
     ],
   );
 
@@ -1895,13 +1970,7 @@ export default function ChatView(props: ChatViewProps) {
         input.name,
         activeProject.scripts.map((script) => script.id),
       );
-      const nextScript: ProjectScript = {
-        id: nextId,
-        name: input.name,
-        command: input.command,
-        icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
-      };
+      const nextScript = buildProjectScript(nextId, input);
       const nextScripts = input.runOnWorktreeCreate
         ? [
             ...activeProject.scripts.map((script) =>
@@ -1930,13 +1999,7 @@ export default function ChatView(props: ChatViewProps) {
         throw new Error("Script not found.");
       }
 
-      const updatedScript: ProjectScript = {
-        ...existingScript,
-        name: input.name,
-        command: input.command,
-        icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
-      };
+      const updatedScript = buildProjectScript(scriptId, input, existingScript);
       const nextScripts = activeProject.scripts.map((script) =>
         script.id === scriptId
           ? updatedScript
@@ -2030,6 +2093,9 @@ export default function ChatView(props: ChatViewProps) {
     handleInteractionModeChange(interactionMode === "plan" ? "default" : "plan");
   }, [handleInteractionModeChange, interactionMode]);
   const togglePlanSidebar = useCallback(() => {
+    if (!planSidebarOpen && previewOpen) {
+      closePreviewPanel();
+    }
     setPlanSidebarOpen((open) => {
       if (open) {
         planSidebarDismissedForTurnRef.current =
@@ -2039,7 +2105,13 @@ export default function ChatView(props: ChatViewProps) {
       }
       return !open;
     });
-  }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+  }, [
+    activePlan?.turnId,
+    closePreviewPanel,
+    planSidebarOpen,
+    previewOpen,
+    sidebarProposedPlan?.turnId,
+  ]);
   const closePlanSidebar = useCallback(() => {
     setPlanSidebarOpen(false);
     planSidebarDismissedForTurnRef.current =
@@ -3451,12 +3523,15 @@ export default function ChatView(props: ChatViewProps) {
         diffToggleShortcutLabel={diffPanelShortcutLabel}
         gitCwd={gitCwd}
         diffOpen={diffOpen}
+        previewAvailable={isPreviewSupportedInRuntime()}
+        previewOpen={previewOpen}
         onRunProjectScript={runProjectScript}
         onAddProjectScript={saveProjectScript}
         onUpdateProjectScript={updateProjectScript}
         onDeleteProjectScript={deleteProjectScript}
         onToggleTerminal={toggleTerminalVisibility}
         onToggleDiff={onToggleDiff}
+        onTogglePreview={onTogglePreview}
         reserveTitleBarControlInset={reserveTitleBarControlInset}
       />
 

@@ -66,6 +66,16 @@ export interface WsRpcClient {
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
     readonly onEvent: RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>;
   };
+  readonly preview: {
+    readonly open: RpcUnaryMethod<typeof WS_METHODS.previewOpen>;
+    readonly navigate: RpcUnaryMethod<typeof WS_METHODS.previewNavigate>;
+    readonly refresh: RpcUnaryMethod<typeof WS_METHODS.previewRefresh>;
+    readonly close: RpcUnaryMethod<typeof WS_METHODS.previewClose>;
+    readonly list: RpcUnaryMethod<typeof WS_METHODS.previewList>;
+    readonly reportStatus: RpcUnaryMethod<typeof WS_METHODS.previewReportStatus>;
+    readonly onEvent: RpcStreamMethod<typeof WS_METHODS.subscribePreviewEvents>;
+    readonly subscribePorts: RpcStreamMethod<typeof WS_METHODS.subscribeDiscoveredLocalServers>;
+  };
   readonly projects: {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
@@ -195,6 +205,26 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
           ...options,
           tag: WS_METHODS.subscribeTerminalEvents,
         }),
+    },
+    preview: {
+      open: (input) => transport.request((client) => client[WS_METHODS.previewOpen](input)),
+      navigate: (input) => transport.request((client) => client[WS_METHODS.previewNavigate](input)),
+      refresh: (input) => transport.request((client) => client[WS_METHODS.previewRefresh](input)),
+      close: (input) => transport.request((client) => client[WS_METHODS.previewClose](input)),
+      list: (input) => transport.request((client) => client[WS_METHODS.previewList](input)),
+      reportStatus: (input) =>
+        transport.request((client) => client[WS_METHODS.previewReportStatus](input)),
+      onEvent: (listener, options) =>
+        transport.subscribe((client) => client[WS_METHODS.subscribePreviewEvents]({}), listener, {
+          ...options,
+          tag: WS_METHODS.subscribePreviewEvents,
+        }),
+      subscribePorts: (listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeDiscoveredLocalServers]({}),
+          listener,
+          { ...options, tag: WS_METHODS.subscribeDiscoveredLocalServers },
+        ),
     },
     projects: {
       searchEntries: (input) =>

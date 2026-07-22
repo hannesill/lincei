@@ -60,3 +60,38 @@ export function primaryProjectScript(scripts: ProjectScript[]): ProjectScript | 
   const regular = scripts.find((script) => !script.runOnWorktreeCreate);
   return regular ?? scripts[0] ?? null;
 }
+
+export interface ProjectScriptDefinitionInput {
+  name: string;
+  command: string;
+  icon: ProjectScript["icon"];
+  runOnWorktreeCreate: boolean;
+  previewUrl?: string | null;
+  autoOpenPreview?: boolean;
+}
+
+/** Build create/update payloads through one path so optional preview fields cannot go stale. */
+export function buildProjectScript(
+  id: string,
+  input: ProjectScriptDefinitionInput,
+  existing?: ProjectScript,
+): ProjectScript {
+  const {
+    previewUrl: _oldPreviewUrl,
+    autoOpenPreview: _oldAutoOpen,
+    ...base
+  } = existing ?? {
+    id,
+  };
+  const previewUrl = input.previewUrl?.trim() ?? "";
+  return {
+    ...base,
+    id,
+    name: input.name,
+    command: input.command,
+    icon: input.icon,
+    runOnWorktreeCreate: input.runOnWorktreeCreate,
+    ...(previewUrl.length > 0 ? { previewUrl } : {}),
+    ...(previewUrl.length > 0 && input.autoOpenPreview ? { autoOpenPreview: true } : {}),
+  };
+}

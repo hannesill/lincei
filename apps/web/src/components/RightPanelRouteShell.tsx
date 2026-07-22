@@ -1,3 +1,4 @@
+import type { ScopedSessionRef } from "@t3tools/contracts";
 import { Suspense, lazy, useCallback, useEffect, useRef, type ReactNode } from "react";
 
 import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
@@ -10,6 +11,9 @@ import {
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 
 const DiffPanel = lazy(() => import("./DiffPanel"));
+const PreviewPanel = lazy(() =>
+  import("./preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
+);
 
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(24rem,34vw,36rem)";
@@ -35,6 +39,17 @@ export const LazyDiffPanel = (props: { mode: DiffPanelMode }) => {
     </DiffWorkerPoolProvider>
   );
 };
+
+export const LazyPreviewPanel = (props: {
+  mode: "sidebar" | "sheet";
+  sessionRef: ScopedSessionRef;
+  configuredUrls?: ReadonlyArray<string> | undefined;
+  onClosePanel: () => void;
+}) => (
+  <Suspense fallback={<DiffLoadingFallback mode={props.mode} />}>
+    <PreviewPanel {...props} />
+  </Suspense>
+);
 
 export const RightPanelInlineSidebar = (props: {
   open: boolean;
