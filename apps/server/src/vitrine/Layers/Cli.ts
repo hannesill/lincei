@@ -159,7 +159,12 @@ function parseLoopbackUrl(
   if (
     url.protocol !== "http:" ||
     !allowedHosts.has(url.hostname) ||
-    Number.parseInt(url.port, 10) !== expectedPort
+    Number.parseInt(url.port, 10) !== expectedPort ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== ""
   ) {
     throw cliError({
       action,
@@ -188,7 +193,20 @@ function toSnapshot(input: {
   readonly stdout: string;
   readonly exitCode: number | null;
 }): VitrineCliSnapshot {
-  const payload = parseLifecyclePayload(input.action, input.stdout);
+  let payload: typeof LifecyclePayload.Type;
+  try {
+    payload = parseLifecyclePayload(input.action, input.stdout);
+  } catch (cause) {
+    if (input.action === "start" && input.exitCode !== 0) {
+      throw cliError({
+        action: input.action,
+        code: "process_exited",
+        detail: `Vitrine exited before reporting readiness (code ${input.exitCode ?? "unknown"}).`,
+        cause,
+      });
+    }
+    throw cause;
+  }
   if (payload.status === "failed") {
     throw cliError({
       action: input.action,
@@ -199,6 +217,13 @@ function toSnapshot(input: {
 
   const dataDir = validateDataDir(input.action, input.path, input.workspaceRoot, payload.data_dir);
   if (payload.status === "stopped") {
+    if (input.action === "start") {
+      throw cliError({
+        action: input.action,
+        code: "process_exited",
+        detail: "Vitrine start completed without a running server.",
+      });
+    }
     if (input.exitCode !== 0 && input.exitCode !== NOT_RUNNING_EXIT_CODE) {
       throw cliError({
         action: input.action,

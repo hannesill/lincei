@@ -168,6 +168,20 @@ it.layer(NodeServices.layer)("VitrineCli", (it) => {
     }),
   );
 
+  it.effect("rejects loopback URLs with unexpected credentials or paths", () =>
+    Effect.gen(function* () {
+      const run = vi.fn<ProcessRunnerShape["run"]>(() =>
+        Effect.succeed(output(runningPayload({ url: "http://user@vitrine.localhost:7741/other" }))),
+      );
+      const path = yield* Path.Path;
+      const cli = makeVitrineCli({ path, processRunner: ProcessRunner.of({ run }) });
+
+      const error = yield* cli.run("status", { workspaceRoot: WORKSPACE_ROOT }).pipe(Effect.flip);
+
+      expect(error.code).toBe("non_loopback_url");
+    }),
+  );
+
   it.effect("rejects incompatible versions", () =>
     Effect.gen(function* () {
       const run = vi.fn<ProcessRunnerShape["run"]>(() =>
@@ -231,6 +245,16 @@ it.layer(NodeServices.layer)("VitrineCli", (it) => {
         .run("start", { workspaceRoot: WORKSPACE_ROOT })
         .pipe(Effect.flip);
       expect(exited.code).toBe("process_exited");
+
+      const emptyExitRun = vi.fn<ProcessRunnerShape["run"]>(() => Effect.succeed(output("", 7)));
+      const emptyExitCli = makeVitrineCli({
+        path: yield* Path.Path,
+        processRunner: ProcessRunner.of({ run: emptyExitRun }),
+      });
+      const emptyExit = yield* emptyExitCli
+        .run("start", { workspaceRoot: WORKSPACE_ROOT })
+        .pipe(Effect.flip);
+      expect(emptyExit.code).toBe("process_exited");
     }),
   );
 });
