@@ -59,7 +59,8 @@ import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
 import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
-import { rememberVitrineAutoOpenIntent } from "../vitrinePreview";
+import { usePreviewStateStore } from "../previewStateStore";
+import { readVitrineAutoOpenIntent, rememberVitrineAutoOpenIntent } from "../vitrinePreview";
 import { createAuthenticatedSessionHandlers } from "../../test/authHttpHandlers";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 
@@ -1761,6 +1762,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
     });
+    usePreviewStateStore.setState({ bySessionKey: {} });
   });
 
   afterEach(() => {
@@ -6554,30 +6556,50 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("opens project Research at the Vitrine URL discovered by the server", async () => {
     const discoveredUrl = "http://vitrine.localhost:8812/";
-    const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+    const replacePopupLocation = vi.fn();
+    const popup = {
+      closed: false,
+      opener: window,
+      location: { replace: replacePopupLocation },
+      close: vi.fn(),
+      document: {
+        title: "",
+        createElement: vi.fn(() => ({ name: "", content: "", textContent: "" })),
+        head: { append: vi.fn() },
+        body: { replaceChildren: vi.fn() },
+      },
+    } as unknown as Window;
+    let popupReserved = false;
+    const openWindow = vi.spyOn(window, "open").mockImplementation(() => {
+      popupReserved = true;
+      return popup;
+    });
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
         targetMessageId: "msg-user-vitrine-web" as MessageId,
         targetText: "open project research",
       }),
-      resolveRpc: (body) =>
-        body._tag === WS_METHODS.vitrineEnsure
-          ? {
-              projectId: PROJECT_ID,
-              status: "ready",
-              dataDir: "/repo/project/.vitrine",
-              url: discoveredUrl,
-              apiUrl: "http://127.0.0.1:8812/",
-              pid: 12_345,
-              port: 8_812,
-              sessionId: "vitrine-session",
-              version: "0.1.0",
-              issueCode: null,
-              message: null,
-              updatedAt: NOW_ISO,
-            }
-          : undefined,
+      resolveRpc: (body) => {
+        if (body._tag === WS_METHODS.vitrineEnsure) {
+          expect(popupReserved).toBe(true);
+          return {
+            projectId: PROJECT_ID,
+            status: "ready",
+            dataDir: "/repo/project/.vitrine",
+            url: discoveredUrl,
+            apiUrl: "http://127.0.0.1:8812/",
+            pid: 12_345,
+            port: 8_812,
+            sessionId: "vitrine-session",
+            version: "0.1.0",
+            issueCode: null,
+            message: null,
+            updatedAt: NOW_ISO,
+          };
+        }
+        return undefined;
+      },
     });
 
     try {
@@ -6586,13 +6608,38 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          expect(openWindow).toHaveBeenCalledWith(discoveredUrl, "_blank", "noopener,noreferrer");
+          expect(openWindow).toHaveBeenCalledWith("about:blank", "_blank");
+          expect(popup.opener).toBeNull();
+          expect(replacePopupLocation).toHaveBeenCalledWith(discoveredUrl);
           expect(
             wsRequests.find((request) => request._tag === WS_METHODS.vitrineEnsure),
           ).toMatchObject({ projectId: PROJECT_ID });
         },
         { timeout: 8_000, interval: 16 },
       );
+    } finally {
+      openWindow.mockRestore();
+      await mounted.cleanup();
+    }
+  });
+
+  it("does not start Vitrine when the browser blocks the Research popup", async () => {
+    const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-vitrine-popup-blocked" as MessageId,
+        targetText: "open blocked project research",
+      }),
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      await page.getByRole("button", { name: "Open project research in Vitrine" }).click();
+      await expect
+        .element(page.getByText(/Allow pop-ups for Lincei and try again/))
+        .toBeInTheDocument();
+      expect(wsRequests.some((request) => request._tag === WS_METHODS.vitrineEnsure)).toBe(false);
     } finally {
       openWindow.mockRestore();
       await mounted.cleanup();
@@ -6693,6 +6740,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
         },
         { timeout: 8_000, interval: 16 },
       );
+
+      await page.getByRole("button", { name: "Close project research in Vitrine" }).click();
+      await vi.waitFor(() => {
+        expect(readVitrineAutoOpenIntent(LOCAL_ENVIRONMENT_ID, PROJECT_ID)).toBe(false);
+        expect(mounted.router.state.location.search.preview).toBeUndefined();
+      });
     } finally {
       await mounted.cleanup();
     }

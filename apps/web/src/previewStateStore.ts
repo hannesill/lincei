@@ -5,7 +5,13 @@
  * low-latency WebContents state that is never sent through the route layer.
  */
 import { scopedSessionKey } from "@t3tools/client-runtime";
-import type { PreviewEvent, PreviewSessionSnapshot, ScopedSessionRef } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PreviewEvent,
+  PreviewSessionSnapshot,
+  ProjectId,
+  ScopedSessionRef,
+} from "@t3tools/contracts";
 import { create } from "zustand";
 
 import { PREVIEW_RECENT_URL_LIMIT } from "./components/preview/previewConstants";
@@ -24,6 +30,13 @@ export interface SessionPreviewState {
   desktopOverlay: DesktopPreviewOverlay | null;
   desktopByTabId: Record<string, DesktopPreviewOverlay>;
   recentlySeenUrls: string[];
+  managedResearch: ManagedResearchPresentation | null;
+}
+
+export interface ManagedResearchPresentation {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly url: string;
 }
 
 const EMPTY_SESSION_PREVIEW_STATE: SessionPreviewState = Object.freeze({
@@ -33,6 +46,7 @@ const EMPTY_SESSION_PREVIEW_STATE: SessionPreviewState = Object.freeze({
   desktopOverlay: null,
   desktopByTabId: {},
   recentlySeenUrls: [] as string[],
+  managedResearch: null,
 });
 
 const revisionBySessionKey = new Map<string, number>();
@@ -61,6 +75,8 @@ export interface PreviewStateStoreState {
   removeSession: (ref: ScopedSessionRef, tabId: string) => void;
   setActiveTab: (ref: ScopedSessionRef, tabId: string) => void;
   rememberUrl: (ref: ScopedSessionRef, url: string) => void;
+  markManagedResearch: (ref: ScopedSessionRef, presentation: ManagedResearchPresentation) => void;
+  clearManagedResearch: (ref: ScopedSessionRef) => void;
   removeSessionState: (ref: ScopedSessionRef) => void;
 }
 
@@ -273,6 +289,25 @@ export const usePreviewStateStore = create<PreviewStateStoreState>()((set) => ({
           ...current,
           recentlySeenUrls: dedupeRecentUrls(current.recentlySeenUrls, normalized),
         })),
+      };
+    }),
+  markManagedResearch: (ref, managedResearch) =>
+    set((state) => {
+      const sessionKey = scopedSessionKey(ref);
+      return {
+        bySessionKey: updateSession(state, sessionKey, (current) => ({
+          ...current,
+          managedResearch,
+        })),
+      };
+    }),
+  clearManagedResearch: (ref) =>
+    set((state) => {
+      const sessionKey = scopedSessionKey(ref);
+      return {
+        bySessionKey: updateSession(state, sessionKey, (current) =>
+          current.managedResearch === null ? current : { ...current, managedResearch: null },
+        ),
       };
     }),
   removeSessionState: (ref) =>

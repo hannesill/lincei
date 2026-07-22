@@ -1,5 +1,10 @@
 import { scopeSessionRef } from "@t3tools/client-runtime";
-import { type EnvironmentId, type PreviewSessionSnapshot, SessionId } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  type PreviewSessionSnapshot,
+  ProjectId,
+  SessionId,
+} from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { __testing, selectSessionPreviewState, usePreviewStateStore } from "./previewStateStore";
@@ -121,5 +126,27 @@ describe("previewStateStore", () => {
     expect(state.recentlySeenUrls[0]).toBe(
       `http://localhost:${5000 + __testing.RECENT_URL_LIMIT + 4}/`,
     );
+  });
+
+  it("keeps managed Research identity across preview hydration until explicitly cleared", () => {
+    const store = usePreviewStateStore.getState();
+    store.markManagedResearch(ref, {
+      environmentId: ref.environmentId,
+      projectId: ProjectId.make("project-a"),
+      url: "http://vitrine.localhost:8812/",
+    });
+    store.replaceServerSnapshots(ref, [makeSnapshot()]);
+
+    expect(
+      selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref).managedResearch,
+    ).toMatchObject({
+      environmentId: ref.environmentId,
+      projectId: "project-a",
+    });
+
+    usePreviewStateStore.getState().clearManagedResearch(ref);
+    expect(
+      selectSessionPreviewState(usePreviewStateStore.getState().bySessionKey, ref).managedResearch,
+    ).toBeNull();
   });
 });

@@ -6,7 +6,11 @@ import type {
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
-import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import {
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  setLocalStorageItem,
+} from "~/hooks/useLocalStorage";
 
 const VITRINE_AUTO_OPEN_STORAGE_PREFIX = "lincei:vitrine:auto-open";
 const ALLOWED_VITRINE_HOSTS = new Set(["vitrine.localhost", "localhost", "127.0.0.1", "[::1]"]);
@@ -46,6 +50,18 @@ export function rememberVitrineAutoOpenIntent(
 ): boolean {
   try {
     setLocalStorageItem(vitrineAutoOpenStorageKey(environmentId, projectId), true, Schema.Boolean);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function forgetVitrineAutoOpenIntent(
+  environmentId: EnvironmentId,
+  projectId: ProjectId,
+): boolean {
+  try {
+    removeLocalStorageItem(vitrineAutoOpenStorageKey(environmentId, projectId));
     return true;
   } catch {
     return false;

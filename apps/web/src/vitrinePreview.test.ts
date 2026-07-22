@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, type VitrineProjectState } from "@t3tools/con
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  forgetVitrineAutoOpenIntent,
   isAllowedManagedVitrineUrl,
   openManagedVitrine,
   readVitrineAutoOpenIntent,
@@ -196,5 +197,13 @@ describe("managed Vitrine preview", () => {
     expect(vitrineAutoOpenStorageKey(environmentId, projectId)).not.toBe(
       vitrineAutoOpenStorageKey(otherEnvironmentId, projectId),
     );
+  });
+
+  it("uses the last deliberate open or close state for restart recovery", () => {
+    rememberVitrineAutoOpenIntent(environmentId, projectId);
+    expect(readVitrineAutoOpenIntent(environmentId, projectId)).toBe(true);
+
+    expect(forgetVitrineAutoOpenIntent(environmentId, projectId)).toBe(true);
+    expect(readVitrineAutoOpenIntent(environmentId, projectId)).toBe(false);
   });
 });

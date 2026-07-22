@@ -116,7 +116,11 @@ import {
   nextProjectScriptId,
   projectScriptIdFromCommand,
 } from "~/projectScripts";
-import { isPreviewSupportedInRuntime } from "~/previewStateStore";
+import {
+  isPreviewSupportedInRuntime,
+  selectSessionPreviewState,
+  usePreviewStateStore,
+} from "~/previewStateStore";
 import { openPreviewSession } from "./preview/openPreviewSession";
 import { subscribePreviewAction } from "./preview/previewActionBus";
 import { newCommandId, newDraftId, newMessageId, newSessionId } from "~/lib/utils";
@@ -196,10 +200,12 @@ import {
   resolveServerConfigVersionMismatch,
 } from "../versionSkew";
 import {
+  forgetVitrineAutoOpenIntent,
   openManagedVitrine,
   readVitrineAutoOpenIntent,
   rememberVitrineAutoOpenIntent,
 } from "../vitrinePreview";
+import { reserveVitrineBrowserPopup, type VitrineBrowserPopup } from "../vitrineBrowserPopup";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -651,6 +657,10 @@ export default function ChatView(props: ChatViewProps) {
   const vitrineActiveTargetRef = useRef<string | null>(null);
   const vitrineRestoreAttemptsRef = useRef(new Set<string>());
   const vitrineInFlightTargetsRef = useRef(new Set<string>());
+  const previousVitrinePanelRef = useRef<{ targetKey: string | null; open: boolean }>({
+    targetKey: null,
+    open: false,
+  });
   const [lastInvokedScriptByProjectId, setLastInvokedScriptByProjectId] = useLocalStorage(
     LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
     {},
@@ -665,6 +675,9 @@ export default function ChatView(props: ChatViewProps) {
 
   const terminalState = useTerminalStateStore((state) =>
     selectSessionTerminalState(state.terminalStateBySessionKey, routeSessionRef),
+  );
+  const managedResearch = usePreviewStateStore(
+    (state) => selectSessionPreviewState(state.bySessionKey, routeSessionRef).managedResearch,
   );
   const openTerminalSessionKeys = useTerminalStateStore(
     useShallow((state) =>
@@ -803,6 +816,37 @@ export default function ChatView(props: ChatViewProps) {
   vitrineActiveTargetRef.current = activeVitrineTarget;
   const currentVitrineUiState =
     vitrineUiState?.targetKey === activeVitrineTarget ? vitrineUiState : null;
+  const researchPresentationOpen = Boolean(
+    previewOpen &&
+    activeProject &&
+    managedResearch?.environmentId === activeProject.environmentId &&
+    managedResearch.projectId === activeProject.id,
+  );
+
+  useEffect(() => {
+    const previous = previousVitrinePanelRef.current;
+    previousVitrinePanelRef.current = { targetKey: activeVitrineTarget, open: previewOpen };
+    if (
+      previous.targetKey !== activeVitrineTarget ||
+      !previous.open ||
+      previewOpen ||
+      !activeProject ||
+      managedResearch?.environmentId !== activeProject.environmentId ||
+      managedResearch.projectId !== activeProject.id
+    ) {
+      return;
+    }
+
+    const saved = forgetVitrineAutoOpenIntent(activeProject.environmentId, activeProject.id);
+    usePreviewStateStore.getState().clearManagedResearch(routeSessionRef);
+    if (!saved) {
+      toastManager.add({
+        type: "warning",
+        title: "Research closed without updating restart recovery",
+        description: "Browser storage is unavailable, so Vitrine may reopen after restart.",
+      });
+    }
+  }, [activeProject, activeVitrineTarget, managedResearch, previewOpen, routeSessionRef]);
 
   useEffect(() => {
     vitrineMountedRef.current = true;
@@ -1765,6 +1809,25 @@ export default function ChatView(props: ChatViewProps) {
       if (vitrineInFlightTargetsRef.current.has(target)) {
         return;
       }
+      const embedded = isPreviewSupportedInRuntime();
+      let reservedPopup: VitrineBrowserPopup | null = null;
+      if (!options.automatic && !embedded) {
+        try {
+          reservedPopup = reserveVitrineBrowserPopup();
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Could not reserve a browser tab.";
+          setVitrineUiState({ targetKey: target, pending: false, state: null, error: message });
+          toastManager.add(
+            stackedSessionToast({
+              type: "error",
+              title: "Could not open Research",
+              description: message,
+            }),
+          );
+          return;
+        }
+      }
       vitrineInFlightTargetsRef.current.add(target);
       vitrineRestoreAttemptsRef.current.add(target);
 
@@ -1779,7 +1842,7 @@ export default function ChatView(props: ChatViewProps) {
         const result = await openManagedVitrine({
           projectId: activeProject.id,
           ensure: api.vitrine.ensure,
-          embedded: isPreviewSupportedInRuntime(),
+          embedded,
           fallbackExternal: !options.automatic,
           isCurrent,
           openEmbedded: async (url) => {
@@ -1788,8 +1851,17 @@ export default function ChatView(props: ChatViewProps) {
               sessionRef: routeSessionRef,
               url,
             });
+            usePreviewStateStore.getState().markManagedResearch(routeSessionRef, {
+              environmentId: activeProject.environmentId,
+              projectId: activeProject.id,
+              url,
+            });
           },
           openExternal: async (url) => {
+            if (reservedPopup) {
+              reservedPopup.navigate(url);
+              return;
+            }
             const localApi = readLocalApi();
             if (!localApi) {
               throw new Error("System browser access is unavailable.");
@@ -1818,8 +1890,9 @@ export default function ChatView(props: ChatViewProps) {
         }
 
         if (
-          !rememberVitrineAutoOpenIntent(activeProject.environmentId, activeProject.id) &&
-          !options.automatic
+          result.presentation === "embedded" &&
+          !options.automatic &&
+          !rememberVitrineAutoOpenIntent(activeProject.environmentId, activeProject.id)
         ) {
           toastManager.add({
             type: "warning",
@@ -1848,6 +1921,7 @@ export default function ChatView(props: ChatViewProps) {
           }),
         );
       } finally {
+        reservedPopup?.discard();
         vitrineInFlightTargetsRef.current.delete(target);
       }
     },
@@ -3754,6 +3828,7 @@ export default function ChatView(props: ChatViewProps) {
               ? "failed"
               : (currentVitrineUiState?.state?.status ?? null)
         }
+        researchOpen={researchPresentationOpen}
         researchMessage={
           activeProject &&
           primaryEnvironmentId !== null &&
@@ -3771,7 +3846,13 @@ export default function ChatView(props: ChatViewProps) {
         onToggleTerminal={toggleTerminalVisibility}
         onToggleDiff={onToggleDiff}
         onTogglePreview={onTogglePreview}
-        onOpenResearch={() => void openProjectResearch({ automatic: false })}
+        onOpenResearch={() => {
+          if (researchPresentationOpen) {
+            closePreviewPanel();
+            return;
+          }
+          void openProjectResearch({ automatic: false });
+        }}
         reserveTitleBarControlInset={reserveTitleBarControlInset}
       />
 

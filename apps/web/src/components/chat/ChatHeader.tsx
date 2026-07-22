@@ -23,7 +23,6 @@ import { Toggle } from "../ui/toggle";
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
 import { AppTopBar } from "../appShell";
-import { Button } from "../ui/button";
 
 interface ChatHeaderProps {
   activeSessionEnvironmentId: EnvironmentId;
@@ -46,6 +45,7 @@ interface ChatHeaderProps {
   previewAvailable: boolean;
   previewOpen: boolean;
   researchAvailable: boolean;
+  researchOpen: boolean;
   researchStatus: VitrineLifecycleStatus | null;
   researchMessage: string | null;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -92,6 +92,7 @@ export const ChatHeader = memo(function ChatHeader({
   previewAvailable,
   previewOpen,
   researchAvailable,
+  researchOpen,
   researchStatus,
   researchMessage,
   onRunProjectScript,
@@ -114,7 +115,9 @@ export const ChatHeader = memo(function ChatHeader({
     ? (researchMessage ?? "Reconnect this environment before opening project research.")
     : researchStatus === "starting"
       ? "Starting Vitrine..."
-      : (researchMessage ?? "Open project research in Vitrine");
+      : researchOpen
+        ? "Close project research. It will stay closed after restart until you open it again."
+        : (researchMessage ?? "Open project research in Vitrine");
 
   return (
     <AppTopBar
@@ -150,12 +153,17 @@ export const ChatHeader = memo(function ChatHeader({
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <Button
-                    aria-label="Open project research in Vitrine"
+                  <Toggle
+                    aria-label={
+                      researchOpen
+                        ? "Close project research in Vitrine"
+                        : "Open project research in Vitrine"
+                    }
                     className="shrink-0"
                     disabled={!researchAvailable || researchStatus === "starting"}
-                    onClick={onOpenResearch}
-                    size="icon-xs"
+                    onPressedChange={() => onOpenResearch()}
+                    pressed={researchOpen}
+                    size="xs"
                     variant="outline"
                   >
                     {researchStatus === "starting" ? (
@@ -171,7 +179,7 @@ export const ChatHeader = memo(function ChatHeader({
                         }
                       />
                     )}
-                  </Button>
+                  </Toggle>
                 }
               />
               <TooltipPopup side="bottom">{researchTooltip}</TooltipPopup>
