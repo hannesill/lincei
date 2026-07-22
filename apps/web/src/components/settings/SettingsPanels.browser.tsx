@@ -886,18 +886,16 @@ describe("GeneralSettingsPanel observability", () => {
       .element(page.getByRole("switch", { name: "Structured clinical study enabled" }))
       .toBeChecked();
     await expect
-      .element(page.getByText("Create a study description card first."))
+      .element(page.getByText(/Establish the Vitrine study context/))
       .not.toBeInTheDocument();
     await page.getByRole("button", { name: "Review Structured clinical study prompt" }).click();
     await expect
       .element(page.getByRole("button", { name: "Hide Structured clinical study prompt" }))
       .toHaveAttribute("aria-expanded", "true");
-    await expect
-      .element(page.getByText("Create a study description card first."))
-      .toBeInTheDocument();
+    await expect.element(page.getByText(/Establish the Vitrine study context/)).toBeInTheDocument();
     await page.getByRole("switch", { name: "Structured clinical study enabled" }).click();
     await expect
-      .element(page.getByText("Create a study description card first."))
+      .element(page.getByText(/Establish the Vitrine study context/))
       .not.toBeInTheDocument();
     await expect.element(page.getByText("Baseline only.")).toBeInTheDocument();
   });

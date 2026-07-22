@@ -1,4 +1,4 @@
-import type { DemoCard, DemoScenario } from "./schema.ts";
+import type { DemoScenario } from "./schema.ts";
 
 const modelSelection = {
   instanceId: "codex",
@@ -6,7 +6,6 @@ const modelSelection = {
 } as const;
 
 type DemoCommand = Record<string, unknown>;
-type DemoResearchCard = Record<string, unknown>;
 
 function timestamp(baseTimestamp: string, offsetMinutes: number): string {
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):00\.000Z$/.exec(baseTimestamp);
@@ -26,78 +25,6 @@ function commandId(id: string, salt: string | undefined): string {
 
 function turnId(id: string | null | undefined): string | null {
   return id ?? null;
-}
-
-function reviewActions() {
-  return [
-    { id: "accept", label: "Accept" },
-    { id: "request_changes", label: "Request changes" },
-    { id: "reject", label: "Reject" },
-  ];
-}
-
-function artifactKindForCardType(card: DemoCard): string {
-  return card.type === "chart" || card.type === "image"
-    ? "visual"
-    : card.type === "table"
-      ? "table"
-      : card.type === "markdown"
-        ? "markdown"
-        : "other";
-}
-
-function cardToResearchCard(
-  scenario: DemoScenario,
-  sessionId: string,
-  card: DemoCard,
-): DemoResearchCard {
-  const createdAt = timestamp(scenario.baseTimestamp, card.createdAtOffsetMinutes);
-  const artifacts = card.artifacts?.map((artifact, index) => ({
-    id: artifact.id ?? `${card.id}-artifact-${index + 1}`,
-    kind: artifact.kind,
-    path: artifact.path,
-    label: artifact.label ?? card.title,
-    ...(artifact.role ? { role: artifact.role } : {}),
-    ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
-    createdAt,
-  })) ?? [
-    {
-      id: `${card.id}-artifact`,
-      kind: artifactKindForCardType(card),
-      path: `studies/${sessionId}/${card.id}.json`,
-      label: card.title,
-      createdAt,
-    },
-  ];
-
-  return {
-    id: card.id,
-    type: card.type,
-    status: card.status === "superseded" ? "proposed" : card.status,
-    title: card.title,
-    ...(card.preview !== undefined ? { preview: card.preview } : {}),
-    artifacts,
-    provenance: [
-      {
-        sessionId,
-        turnId: card.turnId ?? undefined,
-        source: "demo-scenario",
-        dataset: "synthetic-clinical-demo",
-        timestamp: createdAt,
-      },
-    ],
-    ...(card.reviewPrompt
-      ? {
-          review: {
-            prompt: card.reviewPrompt,
-            actions: reviewActions(),
-          },
-        }
-      : {}),
-    turnId: turnId(card.turnId),
-    createdAt,
-    updatedAt: createdAt,
-  };
 }
 
 export function demoProjectIds(scenario: DemoScenario): string[] {
@@ -161,62 +88,6 @@ export function buildDemoScenarioCommands(
           streaming: false,
           createdAt: timestamp(scenario.baseTimestamp, message.createdAtOffsetMinutes),
         });
-      }
-
-      const replacementCardIds = new Set<string>();
-      for (let index = 0; index < session.cards.length; index += 1) {
-        const card = session.cards[index];
-        if (!card) continue;
-        if (replacementCardIds.has(card.id)) continue;
-        const researchCard = cardToResearchCard(scenario, session.id, card);
-        commands.push({
-          type: "session.research-card.propose",
-          commandId: commandId(`${card.id}-propose`, options.commandIdSalt),
-          sessionId,
-          researchCard,
-          createdAt: researchCard.createdAt,
-        });
-
-        if (card.status === "review-requested") {
-          commands.push({
-            type: "session.research-card.lifecycle",
-            commandId: commandId(`${card.id}-request-review`, options.commandIdSalt),
-            sessionId,
-            cardId: card.id,
-            action: "request_review",
-            createdAt: timestamp(scenario.baseTimestamp, card.createdAtOffsetMinutes + 1),
-          });
-        }
-
-        if (card.reviewResponseAction) {
-          commands.push({
-            type: "session.research-card.review",
-            commandId: commandId(`${card.id}-review`, options.commandIdSalt),
-            sessionId,
-            cardId: card.id,
-            response: {
-              action: card.reviewResponseAction,
-              ...(card.reviewResponseSummary ? { summary: card.reviewResponseSummary } : {}),
-              timestamp: timestamp(scenario.baseTimestamp, card.createdAtOffsetMinutes + 2),
-            },
-            createdAt: timestamp(scenario.baseTimestamp, card.createdAtOffsetMinutes + 2),
-          });
-        }
-
-        if (card.status === "superseded") {
-          const replacement = session.cards[index + 1];
-          if (replacement) {
-            replacementCardIds.add(replacement.id);
-            commands.push({
-              type: "session.research-card.supersede",
-              commandId: commandId(`${card.id}-supersede`, options.commandIdSalt),
-              sessionId,
-              cardId: card.id,
-              replacementCard: cardToResearchCard(scenario, session.id, replacement),
-              createdAt: timestamp(scenario.baseTimestamp, card.createdAtOffsetMinutes + 2),
-            });
-          }
-        }
       }
 
       for (const activity of session.activities) {

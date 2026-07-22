@@ -1,4 +1,4 @@
-import type { DemoCard, DemoScenario, DemoSession, DemoStudy } from "./schema.ts";
+import type { DemoScenario, DemoSession, DemoStudy } from "./schema.ts";
 
 export const DEMO_PROVIDER_DRIVER = "codex";
 export const DEMO_PROVIDER_INSTANCE_ID = "codex";
@@ -47,7 +47,6 @@ export interface DemoHydrationRequest {
     readonly visibleMessageCount: number;
     readonly visibleTurnCount: number;
     readonly providerTurnCount: number;
-    readonly cardCount: number;
   };
 }
 
@@ -90,29 +89,10 @@ function visibleTurnIds(session: DemoSession): ReadonlyArray<string> {
   return ids;
 }
 
-function cardStatusLine(card: DemoCard): string {
-  const artifacts = card.artifacts?.map((artifact) => artifact.path).join(", ");
-  const review = card.reviewResponseAction
-    ? ` review=${card.reviewResponseAction}${card.reviewResponseSummary ? ` (${card.reviewResponseSummary})` : ""}`
-    : card.reviewPrompt
-      ? " review=pending"
-      : "";
-  return `- ${card.title} [${card.type}/${card.status}]${review}${artifacts ? ` artifacts=${artifacts}` : ""}`;
-}
-
-function summarizeCards(session: DemoSession): string {
-  return session.cards.map(cardStatusLine).join("\n");
-}
-
 function summarizeArtifacts(study: DemoStudy, session: DemoSession): string {
   const filePaths = new Set<string>();
   for (const file of study.files ?? []) {
     filePaths.add(file.path);
-  }
-  for (const card of session.cards) {
-    for (const artifact of card.artifacts ?? []) {
-      filePaths.add(artifact.path);
-    }
   }
   for (const diff of session.diffs ?? []) {
     for (const file of diff.files) {
@@ -128,8 +108,8 @@ function summarizeArtifacts(study: DemoStudy, session: DemoSession): string {
 function artifactPaths(study: DemoStudy, session: DemoSession): ReadonlyArray<string> {
   const paths = new Set<string>();
   for (const file of study.files ?? []) paths.add(file.path);
-  for (const card of session.cards) {
-    for (const artifact of card.artifacts ?? []) paths.add(artifact.path);
+  for (const diff of session.diffs ?? []) {
+    for (const file of diff.files) paths.add(file.path);
   }
   return Array.from(paths).toSorted();
 }
@@ -152,9 +132,6 @@ export function buildDemoHydrationPrompt(
   const latestAssistant = session.messages
     .toReversed()
     .find((message) => message.role === "assistant");
-  const pendingCards = session.cards.filter(
-    (card) => card.status === "proposed" || card.status === "review-requested",
-  );
   const activities = session.activities
     .map((activity) => `- ${activity.kind}: ${activity.summary}`)
     .join("\n");
@@ -171,7 +148,7 @@ Visible Lincei turn id: ${options.visibleTurnId}`
 
   return `Internal Lincei demo hydration. Do not replay prior work to the user.
 
-You are continuing a clinical research session in Lincei. The visible UI transcript, cards, review gates, diffs, and artifacts have already been seeded by Lincei. Treat this message as hidden state hydration for the provider thread.
+You are continuing a clinical research session in Lincei. The visible UI transcript, activities, diffs, and project files have already been seeded by Lincei. Treat this message as hidden state hydration for the provider thread.
 
 ${turnHeader}
 Scenario: ${scenario.title}
@@ -186,23 +163,15 @@ ${visibleTranscript}
 
 Current clinical research state:
 - Latest assistant state: ${latestAssistant ? truncate(latestAssistant.text.replace(/\s+/g, " "), 1_000) : "No assistant message yet."}
-- Pending cards/review decisions: ${
-    pendingCards.length > 0
-      ? pendingCards.map((card) => `${card.title} (${card.status})`).join("; ")
-      : "none"
-  }
 - Runtime state: ${session.runtimeState?.status ?? "ready"}
-
-Research cards and decisions:
-${summarizeCards(session) || "- none"}
 
 Activity/checkpoint context:
 ${activities || "- none"}
 
-Artifact and workspace paths:
+Project and diff paths:
 ${summarizeArtifacts(study, session) || "- none"}
 
-On the next user turn, continue naturally from this exact study/session state. Use the files above as already-created artifacts. Do not mention this hydration step unless asked about provider/runtime internals. Reply to this hydration turn with a terse internal acknowledgement only.`;
+On the next user turn, continue naturally from this exact study/session state. Use the files above as already-created project evidence. Do not mention this hydration step unless asked about provider/runtime internals. Reply to this hydration turn with a terse internal acknowledgement only.`;
 }
 
 function buildHydrationTurns(
@@ -274,7 +243,6 @@ export function buildDemoHydrationRequests(
           visibleMessageCount: session.messages.length,
           visibleTurnCount,
           providerTurnCount: turns.length,
-          cardCount: session.cards.length,
         },
       };
     }),

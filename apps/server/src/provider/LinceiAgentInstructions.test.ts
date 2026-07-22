@@ -20,15 +20,17 @@ describe("LinceiAgentInstructions", () => {
     );
   });
 
-  it("describes the Lincei card CLI workflow", () => {
+  it("describes the Lincei, M4, and Vitrine workflow", () => {
     const instructions = buildLinceiAgentInstructions();
     assert.match(instructions, /lincei context current/);
     assert.doesNotMatch(instructions, /lincei context current --json/);
     assert.match(instructions, /lincei dataset context/);
     assert.doesNotMatch(instructions, /dataset context --format/);
-    assert.match(instructions, /lincei card context/);
-    assert.doesNotMatch(instructions, /lincei card context --json/);
-    assert.match(instructions, /decision cards/);
+    assert.match(instructions, /from vitrine import show, confirm, ask/);
+    assert.match(instructions, /M4-backed dataset work/);
+    assert.match(instructions, /show\(\.\.\., wait=True\)/);
+    assert.match(instructions, /trivial terminal output/);
+    assert.doesNotMatch(instructions, /lincei card/);
     assert.match(instructions, /\$lincei-api/);
     assert.match(instructions, /<lincei_effective_prompt>/);
   });
@@ -37,7 +39,7 @@ describe("LinceiAgentInstructions", () => {
     const instructions = buildLinceiAgentInstructions(undefined, "structured-clinical-study");
     assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
     assert.match(instructions, /Run clinical research as a controlled, reviewable workflow/);
-    assert.match(instructions, /Create a study description card before analysis/);
+    assert.match(instructions, /Vitrine owns the study record/);
     assert.match(instructions, /<lincei_skill id="clinical-research-pitfalls"/);
   });
 

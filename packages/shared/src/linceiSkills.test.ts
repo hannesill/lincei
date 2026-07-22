@@ -29,7 +29,7 @@ import {
 const sidecar = (contentHash: string, targetHash = contentHash): LinceiSkillSyncSidecar => ({
   skillId: "lincei-api",
   contentHash,
-  version: "1.0.0",
+  version: "2.0.0",
   targetProvider: ProviderDriverKind.make("codex"),
   targetPath: "/tmp/SKILL.md",
   syncedAt: "2026-01-01T00:00:00.000Z",
@@ -38,6 +38,15 @@ const sidecar = (contentHash: string, targetHash = contentHash): LinceiSkillSync
 });
 
 describe("linceiSkills", () => {
+  it("ships Vitrine guidance under bumped managed versions", () => {
+    const skills = bundledLinceiSkills();
+    expect(skills.every((skill) => skill.version === "2.0.0")).toBe(true);
+    expect(skills.find((skill) => skill.id === "lincei-api")?.body).toContain(
+      "from vitrine import show, confirm, ask",
+    );
+    expect(skills.find((skill) => skill.id === "lincei-api")?.body).not.toContain("lincei card");
+  });
+
   it("hashes content deterministically", () => {
     expect(linceiContentHash("abc")).toBe(linceiContentHash("abc"));
     expect(linceiContentHash("abc")).not.toBe(linceiContentHash("abcd"));

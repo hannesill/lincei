@@ -82,15 +82,8 @@ describe("demo scenario", () => {
     const commands = buildDemoScenarioCommands(scenario);
 
     expect(commands.some((command) => command.type === "project.create")).toBe(true);
-    expect(commands.some((command) => command.type === "session.research-card.propose")).toBe(true);
     expect(commands.some((command) => command.type === "session.activity.append")).toBe(true);
-    expect(
-      commands.some(
-        (command) =>
-          command.type === "session.research-card.propose" &&
-          JSON.stringify(command).includes("protocol/target_trial_protocol.md"),
-      ),
-    ).toBe(true);
+    expect(commands.some((command) => String(command.type).includes("research-card"))).toBe(false);
   });
 
   it("validates provider-backed seed requests", () => {

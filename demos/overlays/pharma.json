@@ -8,8 +8,5 @@
   },
   "sessionTitles": {
     "demo-session-cardio-approval": "Regulatory extraction awaiting approval"
-  },
-  "cardTitles": {
-    "demo-card-oncology-chart-irae": "Safety review board irAE incidence chart"
   }
 }

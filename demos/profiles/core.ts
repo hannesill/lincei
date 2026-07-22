@@ -1,9 +1,4 @@
-import type { DemoCard, DemoMessage, DemoScenario } from "../schema.ts";
-
-const dagSvgBase64 =
-  "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgMzYwIj48cmVjdCB3aWR0aD0iNjQwIiBoZWlnaHQ9IjM2MCIgZmlsbD0iI2Y4ZmFmYyIvPjxnIHN0cm9rZT0iIzBmNzY2ZSIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIj48cGF0aCBkPSJNMTIwIDkwIEMyMzAgODAgMjUwIDE1MCAzNDAgMTQ1IEM0NDAgMTQwIDQ2MCAyMjAgNTQwIDIxMCIvPjxwYXRoIGQ9Ik0xNTAgMjUwIEMyMzAgMjEwIDI4MCAyNDUgMzUwIDIxMCBDNDMwIDE3MCA0NzAgMTg1IDU0MCAxMzAiIHN0cm9rZT0iIzRmNDZlNSIvPjwvZz48ZyBmaWxsPSIjMGYxNzJhIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTgiPjx0ZXh0IHg9IjkyIiB5PSI1MCI+Q29uZm91bmRpbmcgREFHIHNrZXRjaDwvdGV4dD48dGV4dCB4PSI5NSIgeT0iMzE1Ij5zZXZlcml0eSAtPiBmbHVpZHMgLT4gdmFzb3ByZXNzb3JzIC0+IG1vcnRhbGl0eTwvdGV4dD48L2c+PC9zdmc+";
-const calibrationSvgBase64 =
-  "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgMzYwIj48cmVjdCB3aWR0aD0iNjQwIiBoZWlnaHQ9IjM2MCIgZmlsbD0iI2Y5ZmFmYiIvPjxnIGZpbGw9IiMxMTE4MjciIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxOCI+PHRleHQgeD0iODAiIHk9IjUwIj5DYWxpYnJhdGlvbiBkcmlmdDwvdGV4dD48L2c+PGcgc3Ryb2tlPSIjOWNhM2FmIiBzdHJva2Utd2lkdGg9IjEiPjxwYXRoIGQ9Ik05MCAyOTAgTDU2MCAyOTAgTTkwIDI5MCBMOTAgODAiLz48L2c+PHBhdGggZD0iTTEwMCAyODAgTDE4MCAyMzAgTDI2MCAxODggTDM0MCAxNTUgTDQyMCAxMjggTDU0MCAxMDUiIHN0cm9rZT0iIzBmNzY2ZSIgc3Ryb2tlLXdpZHRoPSI1IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTEwMCAyODAgTDE5MCAyNTAgTDI3MCAyNTAgTDM1MCAyMTAgTDQ0MCAyMDUgTDU0MCAxNzAiIHN0cm9rZT0iI2RjMjYyNiIgc3Ryb2tlLXdpZHRoPSI1IiBmaWxsPSJub25lIi8+PGxpbmUgeDE9IjEwMCIgeTE9IjI4MCIgeDI9IjU0MCIgeTI9IjEwMCIgc3Ryb2tlPSIjMTExODI3IiBzdHJva2UtZGFzaGFycmF5PSI3IDciLz48L3N2Zz4=";
+import type { DemoMessage, DemoScenario } from "../schema.ts";
 
 function messages(
   prefix: string,
@@ -86,37 +81,6 @@ function messages(
     );
   }
   return result;
-}
-
-function artifact(
-  id: string,
-  kind: string,
-  path: string,
-  label: string,
-  role?: string,
-  mimeType?: string,
-): NonNullable<DemoCard["artifacts"]>[number] {
-  return {
-    id,
-    kind,
-    path,
-    label,
-    ...(role ? { role } : {}),
-    ...(mimeType ? { mimeType } : {}),
-  };
-}
-
-function plotlyPreview(title: string, x: string[], series: ReadonlyArray<[string, number[]]>) {
-  return {
-    spec: {
-      data: series.map(([name, y]) => ({ type: "scatter", mode: "lines+markers", name, x, y })),
-      layout: {
-        title: { text: title },
-        xaxis: { title: "Analysis window" },
-        yaxis: { title: "Adjusted estimate" },
-      },
-    },
-  };
 }
 
 export const coreDemoScenario = {
@@ -225,63 +189,6 @@ Reporting: absolute risk difference and hazard ratio at 365 days.
                 "The session is ready to resume at the renal sensitivity checkpoint. Next action is to approve the grace period and run the weighted outcome model.",
             },
           ),
-          cards: [
-            {
-              id: "demo-card-cardio-markdown-protocol",
-              type: "markdown",
-              status: "review-requested",
-              title: "Target-trial emulation protocol",
-              preview: {
-                markdown:
-                  "Eligibility, time zero, comparator, MACE endpoint, persistence grace period, IPCW plan, and negative-control outcome are specified. Reviewer check: confirm the grace period before extraction.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-cardio-protocol",
-                  "markdown",
-                  "protocol/target_trial_protocol.md",
-                  "Protocol markdown",
-                  "primary protocol",
-                  "text/markdown",
-                ),
-              ],
-              turnId: "demo-turn-cardio-protocol-1",
-              createdAtOffsetMinutes: 5,
-              reviewPrompt:
-                "Confirm estimand, comparator, censoring, and negative-control outcome before analysis.",
-            },
-            {
-              id: "demo-card-cardio-table-balance",
-              type: "table",
-              status: "accepted",
-              title: "Baseline balance after weighting",
-              preview: {
-                columns: ["Covariate", "Weighted SMD", "Flag"],
-                rows: [
-                  ["Age", "0.03", "ok"],
-                  ["Prior MI", "0.05", "ok"],
-                  ["eGFR <60", "0.11", "review"],
-                  ["Heart failure", "0.07", "ok"],
-                ],
-                shape: [5, 3],
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-cardio-balance",
-                  "table",
-                  "artifacts/baseline_balance.csv",
-                  "Weighted baseline table",
-                  "diagnostic table",
-                  "text/csv",
-                ),
-              ],
-              turnId: "demo-turn-cardio-protocol-2",
-              createdAtOffsetMinutes: 12,
-              reviewPrompt: "Is residual kidney-disease imbalance acceptable?",
-              reviewResponseAction: "accept",
-              reviewResponseSummary: "Accept with renal subgroup sensitivity retained.",
-            },
-          ],
           activities: [
             {
               id: "demo-activity-cardio-plan",
@@ -336,33 +243,6 @@ Reporting: absolute risk difference and hazard ratio at 365 days.
                 "Inspect index-date density, comparator ratio by site, missing baseline eGFR, and whether the negative-control outcome table has the same enrollment window.",
             },
           ),
-          cards: [
-            {
-              id: "demo-card-cardio-counts",
-              type: "keyValue",
-              status: "proposed",
-              title: "Expected extraction checks",
-              preview: {
-                "New users": "48,218",
-                "GLP-1RA": "26,402",
-                SGLT2i: "21,816",
-                "Minimum follow-up": "365 days",
-                "Negative control": "ready",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-cardio-counts",
-                  "other",
-                  "artifacts/extraction_counts.json",
-                  "Extraction counts JSON",
-                  "audit summary",
-                  "application/json",
-                ),
-              ],
-              turnId: "demo-turn-cardio-extraction-2",
-              createdAtOffsetMinutes: 30,
-            },
-          ],
           activities: [
             {
               id: "demo-activity-cardio-approval-requested",
@@ -398,36 +278,6 @@ Reporting: absolute risk difference and hazard ratio at 365 days.
             "The persistence separation is clinically plausible and weights are stable through month 12. The SGLT2i arm has slightly better continuation, so persistence cannot be treated as random.",
             35,
           ),
-          cards: [
-            {
-              id: "demo-card-cardio-chart-persistence",
-              type: "chart",
-              status: "accepted",
-              title: "Persistence by treatment arm",
-              preview: plotlyPreview(
-                "Persistence by treatment arm",
-                ["30d", "90d", "180d", "365d"],
-                [
-                  ["GLP-1RA", [0.92, 0.81, 0.7, 0.58]],
-                  ["SGLT2i", [0.94, 0.85, 0.76, 0.66]],
-                ],
-              ),
-              artifacts: [
-                artifact(
-                  "demo-artifact-cardio-persistence-plot",
-                  "visual",
-                  "artifacts/persistence_curve.plotly.json",
-                  "Plotly persistence specification",
-                  "analysis figure",
-                  "application/json",
-                ),
-              ],
-              turnId: "demo-turn-cardio-persistence-1",
-              createdAtOffsetMinutes: 40,
-              reviewResponseAction: "accept",
-              reviewResponseSummary: "Use in methods review.",
-            },
-          ],
           activities: [
             {
               id: "demo-activity-cardio-tool-persistence",
@@ -454,30 +304,6 @@ Reporting: absolute risk difference and hazard ratio at 365 days.
             "The renal subgroup moves the risk difference but not direction. A 60-day grace period attenuates the effect; I would report it as sensitivity, not switch the primary grace period.",
             48,
           ),
-          cards: [
-            {
-              id: "demo-card-cardio-sap",
-              type: "markdown",
-              status: "accepted",
-              title: "Statistical analysis plan update",
-              preview: {
-                markdown:
-                  "Primary model remains weighted pooled logistic regression. Sensitivity analyses: renal subgroup, 30-day and 60-day grace periods, falsification endpoint.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-cardio-sap",
-                  "markdown",
-                  "reports/statistical_analysis_plan.md",
-                  "SAP markdown",
-                  "analysis plan",
-                  "text/markdown",
-                ),
-              ],
-              turnId: "demo-turn-cardio-sensitivity-1",
-              createdAtOffsetMinutes: 52,
-            },
-          ],
           activities: [],
         },
         {
@@ -487,36 +313,9 @@ Reporting: absolute risk difference and hazard ratio at 365 days.
             "cardio-package",
             "demo-turn-cardio-package-1",
             "Prepare the cardiology review package. Surface anything that should block screenshots or live demo continuation.",
-            "Packaged the protocol, balance table, persistence plot, and SAP. The only live-demo caveat is that Plotly specs are previewed as card metadata until the chart renderer is upgraded.",
+            "Packaged the protocol, balance table, persistence plot, and SAP. The Plotly specification remains available as project JSON for the live demo.",
             58,
           ),
-          cards: [
-            {
-              id: "demo-card-cardio-review-gate",
-              type: "decision",
-              status: "review-requested",
-              title: "Proceed to cardiology review",
-              preview: {
-                fields: [
-                  {
-                    name: "proceed",
-                    header: "Review gate",
-                    question: "Proceed with cardiology review package?",
-                    options: [
-                      {
-                        label: "Proceed",
-                        description: "Package is coherent for specialist review.",
-                      },
-                      { label: "Hold", description: "Resolve extraction or charting gaps first." },
-                    ],
-                  },
-                ],
-              },
-              turnId: "demo-turn-cardio-package-1",
-              createdAtOffsetMinutes: 62,
-              reviewPrompt: "Confirm whether the cardiology review package can be shown.",
-            },
-          ],
           activities: [],
         },
       ],
@@ -574,30 +373,6 @@ Recommendation: do not use automated myocarditis labels as the primary endpoint.
             "Defined the safety cohort, event taxonomy, surveillance adjustment, and endpoint hierarchy. Lab-only thyroiditis is explicitly separated from treated thyroiditis.",
             70,
           ),
-          cards: [
-            {
-              id: "demo-card-oncology-protocol",
-              type: "markdown",
-              status: "accepted",
-              title: "irAE safety protocol",
-              preview: {
-                markdown:
-                  "Primary endpoint uses treated thyroiditis and chart-confirmed myocarditis. Surveillance intensity is modeled by visit density and lab frequency.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-oncology-protocol",
-                  "markdown",
-                  "protocol/safety_signal_protocol.md",
-                  "Safety protocol",
-                  "protocol",
-                  "text/markdown",
-                ),
-              ],
-              turnId: "demo-turn-oncology-protocol-1",
-              createdAtOffsetMinutes: 74,
-            },
-          ],
           activities: [],
         },
         {
@@ -622,38 +397,6 @@ Recommendation: do not use automated myocarditis labels as the primary endpoint.
                 "Resume by deciding whether myocarditis enters manual adjudication now or waits for the next data refresh. The chart and review queue are ready for that decision.",
             },
           ),
-          cards: [
-            {
-              id: "demo-card-oncology-chart-irae",
-              type: "chart",
-              status: "changes-requested",
-              title: "Adjusted irAE incidence by treatment line",
-              preview: plotlyPreview(
-                "Surveillance-adjusted irAE incidence",
-                ["1L", "2L", "3L+"],
-                [
-                  ["Treated thyroiditis", [2.8, 3.1, 3.3]],
-                  ["Lab-only thyroiditis", [1.3, 1.4, 1.5]],
-                  ["Myocarditis", [0.2, 0.4, 0.5]],
-                ],
-              ),
-              artifacts: [
-                artifact(
-                  "demo-artifact-oncology-irae-chart",
-                  "visual",
-                  "artifacts/irae_incidence.plotly.json",
-                  "irAE incidence Plotly spec",
-                  "safety visualization",
-                  "application/json",
-                ),
-              ],
-              turnId: "demo-turn-oncology-incidence-1",
-              createdAtOffsetMinutes: 83,
-              reviewPrompt: "Should this chart separate lab-only thyroiditis from treated events?",
-              reviewResponseAction: "request_changes",
-              reviewResponseSummary: "Split lab-only thyroiditis from treated thyroiditis.",
-            },
-          ],
           activities: [
             {
               id: "demo-activity-oncology-tool",
@@ -680,36 +423,6 @@ Recommendation: do not use automated myocarditis labels as the primary endpoint.
             "Queued cases by troponin peak, echo change, and time from treatment start. The primary endpoint should use confirmed cases only.",
             88,
           ),
-          cards: [
-            {
-              id: "demo-card-oncology-adjudication-table",
-              type: "table",
-              status: "review-requested",
-              title: "Myocarditis adjudication queue",
-              preview: {
-                columns: ["case_id", "signal", "days_from_start", "priority"],
-                rows: [
-                  ["case-014", "myocarditis", 18, "high"],
-                  ["case-082", "myocarditis", 43, "medium"],
-                  ["case-117", "thyroiditis", 96, "low"],
-                ],
-                shape: [3, 6],
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-oncology-adjudication",
-                  "table",
-                  "artifacts/adjudication_queue.csv",
-                  "Adjudication queue",
-                  "review queue",
-                  "text/csv",
-                ),
-              ],
-              turnId: "demo-turn-oncology-adjudication-1",
-              createdAtOffsetMinutes: 93,
-              reviewPrompt: "Confirm which cases enter manual chart review.",
-            },
-          ],
           activities: [],
         },
         {
@@ -722,25 +435,6 @@ Recommendation: do not use automated myocarditis labels as the primary endpoint.
             "No. The PPV is too uncertain. Use chart-review-confirmed myocarditis for the primary endpoint and keep automated labels as sensitivity only.",
             98,
           ),
-          cards: [
-            {
-              id: "demo-card-oncology-decision-chartreview",
-              type: "decision",
-              status: "rejected",
-              title: "Automated myocarditis case classification",
-              preview: {
-                recommendation: "Reject for primary analysis",
-                rationale:
-                  "Positive predictive value is too uncertain without adjudicated chart review.",
-                alternatives: ["Manual adjudication sample", "Sensitivity-only automated label"],
-              },
-              turnId: "demo-turn-oncology-endpoint-1",
-              createdAtOffsetMinutes: 102,
-              reviewPrompt: "Use automated classification in the primary endpoint?",
-              reviewResponseAction: "reject",
-              reviewResponseSummary: "Use chart-review-confirmed myocarditis only.",
-            },
-          ],
           activities: [],
         },
         {
@@ -753,30 +447,6 @@ Recommendation: do not use automated myocarditis labels as the primary endpoint.
             "Prepared the board brief with separated thyroiditis definitions, chart-review requirements, and sparse-event caveats.",
             106,
           ),
-          cards: [
-            {
-              id: "demo-card-oncology-board-brief",
-              type: "markdown",
-              status: "accepted",
-              title: "Safety board summary",
-              preview: {
-                markdown:
-                  "Thyroiditis signal is stable after surveillance adjustment. Myocarditis remains chart-review-confirmed for primary endpoint.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-oncology-board-brief",
-                  "markdown",
-                  "reports/safety_board_brief.md",
-                  "Safety board brief",
-                  "clinical brief",
-                  "text/markdown",
-                ),
-              ],
-              turnId: "demo-turn-oncology-brief-1",
-              createdAtOffsetMinutes: 110,
-            },
-          ],
           activities: [],
         },
       ],
@@ -826,34 +496,6 @@ Lactate clearance remains sensitivity because it is downstream of initial treatm
             "The candidate subgroups are vasopressor timing, lactate clearance, and baseline heart failure. The DAG shows severity, clinician preference, fluids, vasopressor timing, renal failure, and mortality.",
             116,
           ),
-          cards: [
-            {
-              id: "demo-card-icu-image-dag",
-              type: "image",
-              status: "review-requested",
-              title: "Confounding DAG for fluid strategy",
-              preview: {
-                data: dagSvgBase64,
-                format: "svg",
-                imageAlt:
-                  "Directed graph linking sepsis severity, clinician preference, fluid volume, vasopressor timing, renal failure, and mortality.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-icu-dag",
-                  "visual",
-                  "figures/fluid_strategy_dag.svg",
-                  "DAG SVG",
-                  "causal diagram",
-                  "image/svg+xml",
-                ),
-              ],
-              turnId: "demo-turn-icu-protocol-1",
-              createdAtOffsetMinutes: 121,
-              reviewPrompt:
-                "Confirm whether clinician preference should be modeled as site-level random effect.",
-            },
-          ],
           activities: [],
         },
         {
@@ -878,40 +520,6 @@ Lactate clearance remains sensitivity because it is downstream of initial treatm
                 "The subgroup decision remains pending. The next resumed turn should accept vasopressor timing, choose lactate clearance, or request a heart-failure focused subgroup table.",
             },
           ),
-          cards: [
-            {
-              id: "demo-card-icu-subgroup-frame",
-              type: "decision",
-              status: "review-requested",
-              title: "Primary subgroup framing",
-              preview: {
-                fields: [
-                  {
-                    name: "subgroup-frame",
-                    header: "Subgroups",
-                    question: "Which subgroup frame should be primary?",
-                    options: [
-                      {
-                        label: "Vasopressor timing",
-                        description: "Best bedside interpretability.",
-                      },
-                      {
-                        label: "Lactate clearance",
-                        description: "Stronger physiologic signal, but downstream.",
-                      },
-                      {
-                        label: "Heart failure",
-                        description: "Clinically important effect modifier.",
-                      },
-                    ],
-                  },
-                ],
-              },
-              turnId: "demo-turn-icu-input-1",
-              createdAtOffsetMinutes: 130,
-              reviewPrompt: "Choose the primary subgroup frame.",
-            },
-          ],
           activities: [
             {
               id: "demo-activity-icu-user-input",
@@ -942,35 +550,6 @@ Lactate clearance remains sensitivity because it is downstream of initial treatm
             "Prepared the subgroup table. Vasopressor timing is primary, heart failure is secondary, and lactate clearance stays sensitivity-only.",
             136,
           ),
-          cards: [
-            {
-              id: "demo-card-icu-subgroup-table",
-              type: "table",
-              status: "accepted",
-              title: "Subgroup framing table",
-              preview: {
-                columns: ["subgroup", "clinical_value", "statistical_risk", "decision"],
-                rows: [
-                  ["vasopressor_timing", "high", "medium", "primary"],
-                  ["lactate_clearance", "medium", "high", "sensitivity"],
-                  ["baseline_heart_failure", "high", "medium", "secondary"],
-                ],
-                shape: [3, 4],
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-icu-subgroups",
-                  "table",
-                  "artifacts/subgroup_frame.csv",
-                  "Subgroup frame table",
-                  "analysis table",
-                  "text/csv",
-                ),
-              ],
-              turnId: "demo-turn-icu-subgroup-table-1",
-              createdAtOffsetMinutes: 140,
-            },
-          ],
           activities: [],
         },
         {
@@ -983,22 +562,6 @@ Lactate clearance remains sensitivity because it is downstream of initial treatm
             "Overlap is acceptable in early vasopressor and no-vasopressor strata. The late-vasopressor stratum is thin, so I marked it as sensitivity-only.",
             144,
           ),
-          cards: [
-            {
-              id: "demo-card-icu-positivity",
-              type: "keyValue",
-              status: "proposed",
-              title: "Treatment overlap diagnostics",
-              preview: {
-                "Early vasopressor": "acceptable",
-                "No vasopressor": "acceptable",
-                "Late vasopressor": "thin overlap",
-                Action: "sensitivity only",
-              },
-              turnId: "demo-turn-icu-positivity-1",
-              createdAtOffsetMinutes: 148,
-            },
-          ],
           activities: [],
         },
         {
@@ -1011,30 +574,6 @@ Lactate clearance remains sensitivity because it is downstream of initial treatm
             "Created a short clinician input log and linked the subgroup table. The report is ready for critical-care review.",
             152,
           ),
-          cards: [
-            {
-              id: "demo-card-icu-clinician-log",
-              type: "markdown",
-              status: "accepted",
-              title: "Clinician input log",
-              preview: {
-                markdown:
-                  "Primary subgroup: vasopressor timing. Lactate clearance remains sensitivity because it is downstream of initial treatment response.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-icu-clinician-log",
-                  "markdown",
-                  "reports/clinician_input.md",
-                  "Clinician input log",
-                  "review note",
-                  "text/markdown",
-                ),
-              ],
-              turnId: "demo-turn-icu-report-1",
-              createdAtOffsetMinutes: 156,
-            },
-          ],
           activities: [],
         },
       ],
@@ -1087,32 +626,6 @@ Action: remove discharge disposition from baseline model and keep preventable re
                 "The reviewer decision is staged: remove discharge disposition from baseline models, rerun calibration, and keep imaging proxy score only if temporal sensitivity remains stable.",
             },
           ),
-          cards: [
-            {
-              id: "demo-card-neuro-calibration-image",
-              type: "image",
-              status: "review-requested",
-              title: "Calibration drift after imaging proxies",
-              preview: {
-                data: calibrationSvgBase64,
-                format: "svg",
-                imageAlt: "Calibration drift plot with baseline and imaging proxy model lines.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-neuro-calibration",
-                  "visual",
-                  "figures/calibration_drift.svg",
-                  "Calibration drift SVG",
-                  "diagnostic figure",
-                  "image/svg+xml",
-                ),
-              ],
-              turnId: "demo-turn-neuro-calibration-1",
-              createdAtOffsetMinutes: 166,
-              reviewPrompt: "Confirm whether to remove the suspected leakage feature group.",
-            },
-          ],
           activities: [
             {
               id: "demo-activity-neuro-warning",
@@ -1139,44 +652,6 @@ Action: remove discharge disposition from baseline model and keep preventable re
             "Discharge disposition is high leakage risk and should be removed. Imaging proxy score has missingness drift and needs a temporal sensitivity check.",
             170,
           ),
-          cards: [
-            {
-              id: "demo-card-neuro-feature-audit",
-              type: "table",
-              status: "changes-requested",
-              title: "Feature audit and leakage risks",
-              preview: {
-                columns: [
-                  "feature",
-                  "missingness_train",
-                  "missingness_recent",
-                  "leakage_risk",
-                  "action",
-                ],
-                rows: [
-                  ["imaging_proxy_score", "0.08", "0.19", "medium", "review"],
-                  ["discharge_disposition", "0.01", "0.01", "high", "remove"],
-                  ["nihss_score", "0.12", "0.13", "low", "keep"],
-                ],
-                shape: [3, 5],
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-neuro-feature-audit",
-                  "table",
-                  "artifacts/feature_audit.csv",
-                  "Feature audit table",
-                  "audit table",
-                  "text/csv",
-                ),
-              ],
-              turnId: "demo-turn-neuro-feature-audit-1",
-              createdAtOffsetMinutes: 174,
-              reviewPrompt: "Should discharge disposition be excluded from all baseline models?",
-              reviewResponseAction: "request_changes",
-              reviewResponseSummary: "Remove discharge disposition and rerun calibration.",
-            },
-          ],
           activities: [],
         },
         {
@@ -1189,32 +664,6 @@ Action: remove discharge disposition from baseline model and keep preventable re
             "I kept 30-day all-cause readmission as primary and proposed preventable readmission as sensitivity only because it depends on claims-derived labels.",
             178,
           ),
-          cards: [
-            {
-              id: "demo-card-neuro-decision-endpoint",
-              type: "decision",
-              status: "superseded",
-              title: "30-day all-cause readmission endpoint",
-              preview: {
-                recommendation: "Keep as primary endpoint",
-                rationale: "Changing endpoint would conflate model debugging with study design.",
-              },
-              turnId: "demo-turn-neuro-endpoint-1",
-              createdAtOffsetMinutes: 182,
-            },
-            {
-              id: "demo-card-neuro-decision-endpoint-v2",
-              type: "decision",
-              status: "proposed",
-              title: "Preventable-readmission sensitivity endpoint",
-              preview: {
-                recommendation: "Use as sensitivity analysis only",
-                rationale: "More clinically specific but depends on claims-derived labels.",
-              },
-              turnId: "demo-turn-neuro-endpoint-1",
-              createdAtOffsetMinutes: 183,
-            },
-          ],
           activities: [],
         },
         {
@@ -1227,22 +676,6 @@ Action: remove discharge disposition from baseline model and keep preventable re
             "Calibration improves after removing discharge disposition, but imaging proxy drift still requires temporal validation and site-stratified reporting.",
             186,
           ),
-          cards: [
-            {
-              id: "demo-card-neuro-rerun-status",
-              type: "keyValue",
-              status: "proposed",
-              title: "Leakage-controlled rerun status",
-              preview: {
-                "Discharge disposition": "removed",
-                "Calibration slope": "0.94",
-                "Recent-window ECE": "0.031",
-                "Remaining risk": "imaging proxy drift",
-              },
-              turnId: "demo-turn-neuro-model-rerun-1",
-              createdAtOffsetMinutes: 190,
-            },
-          ],
           activities: [
             {
               id: "demo-activity-neuro-tool",
@@ -1269,30 +702,6 @@ Action: remove discharge disposition from baseline model and keep preventable re
             "Packaged the audit note, calibration figure, feature table, and endpoint decision. The package distinguishes design choices from model debugging.",
             194,
           ),
-          cards: [
-            {
-              id: "demo-card-neuro-model-audit",
-              type: "markdown",
-              status: "accepted",
-              title: "Model audit summary",
-              preview: {
-                markdown:
-                  "Calibration worsened after imaging proxies. Discharge disposition is leakage and removed; preventable readmission remains sensitivity only.",
-              },
-              artifacts: [
-                artifact(
-                  "demo-artifact-neuro-model-audit",
-                  "markdown",
-                  "reports/model_audit.md",
-                  "Model audit markdown",
-                  "audit note",
-                  "text/markdown",
-                ),
-              ],
-              turnId: "demo-turn-neuro-audit-package-1",
-              createdAtOffsetMinutes: 198,
-            },
-          ],
           activities: [],
           runtimeState: {
             status: "ready",

@@ -82,25 +82,6 @@ const scenario = validateDemoScenario({
               createdAtOffsetMinutes: 6,
             },
           ],
-          cards: [
-            {
-              id: "demo-card-test",
-              type: "markdown",
-              status: "review-requested",
-              title: "Protocol",
-              artifacts: [
-                {
-                  id: "demo-artifact-test",
-                  kind: "markdown",
-                  path: "protocol/test.md",
-                  label: "Protocol",
-                },
-              ],
-              turnId: "demo-turn-test",
-              createdAtOffsetMinutes: 3,
-              reviewPrompt: "Review protocol.",
-            },
-          ],
           activities: [],
         },
       ],

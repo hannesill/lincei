@@ -17,37 +17,6 @@ export interface DemoActivity {
   readonly createdAtOffsetMinutes: number;
 }
 
-export interface DemoCard {
-  readonly id: string;
-  readonly type: "markdown" | "table" | "keyValue" | "chart" | "image" | "decision";
-  readonly status:
-    | "proposed"
-    | "review-requested"
-    | "accepted"
-    | "changes-requested"
-    | "rejected"
-    | "withdrawn"
-    | "superseded"
-    | "dismissed";
-  readonly title: string;
-  readonly preview?: unknown | undefined;
-  readonly artifacts?: ReadonlyArray<DemoCardArtifact> | undefined;
-  readonly turnId?: string | null | undefined;
-  readonly createdAtOffsetMinutes: number;
-  readonly reviewPrompt?: string | undefined;
-  readonly reviewResponseAction?: "accept" | "request_changes" | "reject" | undefined;
-  readonly reviewResponseSummary?: string | undefined;
-}
-
-export interface DemoCardArtifact {
-  readonly id?: string | undefined;
-  readonly kind: string;
-  readonly path: string;
-  readonly label?: string | undefined;
-  readonly role?: string | undefined;
-  readonly mimeType?: string | undefined;
-}
-
 export interface DemoDiff {
   readonly turnId: string;
   readonly checkpointRef: string;
@@ -75,7 +44,6 @@ export interface DemoSession {
   readonly id: string;
   readonly title: string;
   readonly messages: ReadonlyArray<DemoMessage>;
-  readonly cards: ReadonlyArray<DemoCard>;
   readonly activities: ReadonlyArray<DemoActivity>;
   readonly diffs?: ReadonlyArray<DemoDiff> | undefined;
   readonly runtimeState?: DemoRuntimeState | undefined;
@@ -109,8 +77,6 @@ export interface DemoScenarioOverlay {
   readonly therapeuticArea?: string | undefined;
   readonly studyTitles?: Readonly<Record<string, string>> | undefined;
   readonly sessionTitles?: Readonly<Record<string, string>> | undefined;
-  readonly cardTitles?: Readonly<Record<string, string>> | undefined;
-  readonly cardPreviews?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export interface DemoSeedRequest {
@@ -121,17 +87,6 @@ export interface DemoSeedRequest {
 
 const demoIdPattern = /^demo-[a-z0-9-]+$/;
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/;
-const cardTypes = new Set(["markdown", "table", "keyValue", "chart", "image", "decision"]);
-const cardStatuses = new Set([
-  "proposed",
-  "review-requested",
-  "accepted",
-  "changes-requested",
-  "rejected",
-  "withdrawn",
-  "superseded",
-  "dismissed",
-]);
 const tones = new Set(["info", "tool", "approval", "error"]);
 const runtimeStatuses = new Set([
   "idle",
@@ -206,72 +161,6 @@ function validateMessages(value: unknown, path: string): DemoMessage[] {
         entry.createdAtOffsetMinutes,
         `${path}[${index}].createdAtOffsetMinutes`,
       ),
-    };
-  });
-}
-
-function validateCards(value: unknown, path: string): DemoCard[] {
-  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
-  return value.map((entry, index) => {
-    if (!isRecord(entry)) throw new Error(`${path}[${index}] must be an object.`);
-    const type = assertString(entry.type, `${path}[${index}].type`);
-    const status = assertString(entry.status, `${path}[${index}].status`);
-    if (!cardTypes.has(type)) throw new Error(`${path}[${index}].type is invalid.`);
-    if (!cardStatuses.has(status)) throw new Error(`${path}[${index}].status is invalid.`);
-    return {
-      id: assertDemoId(entry.id, `${path}[${index}].id`),
-      type: type as DemoCard["type"],
-      status: status as DemoCard["status"],
-      title: assertString(entry.title, `${path}[${index}].title`),
-      ...(entry.preview !== undefined ? { preview: entry.preview } : {}),
-      ...(entry.artifacts !== undefined
-        ? { artifacts: validateCardArtifacts(entry.artifacts, `${path}[${index}].artifacts`) }
-        : {}),
-      ...(entry.turnId !== undefined
-        ? {
-            turnId:
-              entry.turnId === null ? null : assertDemoId(entry.turnId, `${path}[${index}].turnId`),
-          }
-        : {}),
-      createdAtOffsetMinutes: assertNumber(
-        entry.createdAtOffsetMinutes,
-        `${path}[${index}].createdAtOffsetMinutes`,
-      ),
-      ...(entry.reviewPrompt !== undefined
-        ? { reviewPrompt: assertString(entry.reviewPrompt, `${path}[${index}].reviewPrompt`) }
-        : {}),
-      ...(entry.reviewResponseAction !== undefined
-        ? { reviewResponseAction: entry.reviewResponseAction as DemoCard["reviewResponseAction"] }
-        : {}),
-      ...(entry.reviewResponseSummary !== undefined
-        ? {
-            reviewResponseSummary: assertString(
-              entry.reviewResponseSummary,
-              `${path}[${index}].reviewResponseSummary`,
-            ),
-          }
-        : {}),
-    };
-  });
-}
-
-function validateCardArtifacts(value: unknown, path: string): DemoCardArtifact[] {
-  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
-  return value.map((entry, index) => {
-    if (!isRecord(entry)) throw new Error(`${path}[${index}] must be an object.`);
-    return {
-      ...(entry.id !== undefined ? { id: assertDemoId(entry.id, `${path}[${index}].id`) } : {}),
-      kind: assertString(entry.kind, `${path}[${index}].kind`),
-      path: assertString(entry.path, `${path}[${index}].path`),
-      ...(entry.label !== undefined
-        ? { label: assertString(entry.label, `${path}[${index}].label`) }
-        : {}),
-      ...(entry.role !== undefined
-        ? { role: assertString(entry.role, `${path}[${index}].role`) }
-        : {}),
-      ...(entry.mimeType !== undefined
-        ? { mimeType: assertString(entry.mimeType, `${path}[${index}].mimeType`) }
-        : {}),
     };
   });
 }
@@ -435,10 +324,6 @@ export function validateDemoScenario(input: unknown): DemoScenario {
               session.messages,
               `scenario.studies[${studyIndex}].sessions[${sessionIndex}].messages`,
             ),
-            cards: validateCards(
-              session.cards,
-              `scenario.studies[${studyIndex}].sessions[${sessionIndex}].cards`,
-            ),
             activities: validateActivities(
               session.activities,
               `scenario.studies[${studyIndex}].sessions[${sessionIndex}].activities`,
@@ -482,18 +367,6 @@ export function validateDemoScenarioOverlay(input: unknown): DemoScenarioOverlay
     ...(input.sessionTitles !== undefined
       ? { sessionTitles: assertOptionalStringMap(input.sessionTitles, "overlay.sessionTitles") }
       : {}),
-    ...(input.cardTitles !== undefined
-      ? { cardTitles: assertOptionalStringMap(input.cardTitles, "overlay.cardTitles") }
-      : {}),
-    ...(input.cardPreviews !== undefined
-      ? {
-          cardPreviews: isRecord(input.cardPreviews)
-            ? input.cardPreviews
-            : (() => {
-                throw new Error("overlay.cardPreviews must be an object.");
-              })(),
-        }
-      : {}),
   };
 }
 
@@ -514,8 +387,6 @@ export function applyDemoScenarioOverlay(
 ): DemoScenario {
   const studyTitles = overlay.studyTitles ?? {};
   const sessionTitles = overlay.sessionTitles ?? {};
-  const cardTitles = overlay.cardTitles ?? {};
-  const cardPreviews = overlay.cardPreviews ?? {};
 
   return {
     ...scenario,
@@ -528,11 +399,6 @@ export function applyDemoScenarioOverlay(
       sessions: study.sessions.map((session) => ({
         ...session,
         title: sessionTitles[session.id] ?? session.title,
-        cards: session.cards.map((card) => ({
-          ...card,
-          title: cardTitles[card.id] ?? card.title,
-          ...(Object.hasOwn(cardPreviews, card.id) ? { preview: cardPreviews[card.id] } : {}),
-        })),
       })),
     })),
   };
