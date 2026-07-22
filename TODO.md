@@ -50,7 +50,9 @@ The current local-alpha contract and the executable-versus-Python-environment qu
 
 ### Acceptance
 
-- [ ] Complete the two-project manual acceptance flow: separate project stores, a shared worktree store, M4 → `vitrine.show(...)`, blocking `confirm()`/`ask()`/`show(..., wait=True)`, daemon reuse, Lincei restart recovery, desktop auto-restore/close, and web popup behavior.
+- [ ] Complete the two-project manual acceptance flow: separate project stores, a shared worktree store, M4 → `vitrine.show(...)`, blocking `confirm()`/`ask()`/`show(..., wait=True)`, daemon reuse, both projects/studies reconnecting after Lincei restart, and desktop auto-restore/explicit close.
+- [ ] Complete the presentation-policy acceptance flow: standalone loopback opens on the backend host; a manually tunnelled loopback connection still opens only on the backend host; saved remote environments plus remote-reachable, Tailscale Serve, and unsafe policies remain denied.
+- [ ] Re-run normal chat, terminal, diff, and dataset/M4 flows after the Vitrine pivot to catch provider-environment or right-panel regressions.
 
 ## Worktree integration
 

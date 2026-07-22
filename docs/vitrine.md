@@ -4,9 +4,10 @@ Vitrine is Lincei's visual research surface. Lincei owns projects, sessions, cha
 diffs, and provider orchestration. Vitrine owns studies, research cards, artifacts, decisions,
 provenance, review, and export.
 
-This is a local-alpha integration. Research is available only for projects in Lincei's primary
-local environment. See [Deferred work](#deferred-work) before relying on it remotely or migrating
-legacy native-card data.
+This is a local-alpha integration. Research is available only for a project in Lincei's primary
+environment when both configured transport endpoints are loopback and the backend reports a
+desktop-managed-local or loopback-browser access policy. See [Deferred work](#deferred-work) before
+relying on it remotely or migrating legacy native-card data.
 
 ## Runtime requirements
 
@@ -52,21 +53,26 @@ store.
 - Opening Research discovers a compatible running daemon or starts one for the project.
 - Vitrine owns the persistent daemon lifetime. Closing Research or quitting Lincei does not stop it.
 - Closing the embedded desktop panel clears its automatic-restore intent; it does not stop Vitrine.
-- The desktop app embeds the loopback page. The web app opens a validated loopback URL in a reserved
-  external popup so browser popup blocking is reported before a daemon is started.
+- The desktop app embeds the loopback page. In a standalone loopback browser environment, Lincei
+  asks the backend host to open the validated page in its default browser; the web client never
+  navigates to a backend loopback URL.
 - Lincei validates the Vitrine version, data directory, process identity, and loopback URLs before
   attaching.
-- Remote Research is disabled. A Vitrine daemon exposes a separate loopback HTTP/WebSocket service
-  that the normal Lincei connection does not securely forward.
+- Research is disabled for remote-reachable and unsafe primary-server policies, and for saved remote
+  environments. A Vitrine daemon exposes a separate loopback HTTP/WebSocket service that the normal
+  Lincei connection does not securely forward. A manually tunnelled loopback-browser connection can
+  launch the page only on the backend host, not through the tunnel.
 
-If lifecycle startup fails, run `vitrine status --json` from the project root with the same
-`VITRINE_DATA_DIR` to inspect Vitrine's status directly.
+If lifecycle startup fails, invoke the executable configured by `LINCEI_VITRINE_EXECUTABLE` (or
+`vitrine` when it is unset) with `status --json` from the project root and the same
+`VITRINE_DATA_DIR`. This avoids accidentally inspecting a different Vitrine installation.
 
 ## Current limitations
 
 - Executable resolution is backend-wide, not project-scoped.
-- A configured external OpenCode `serverUrl` refers to a process Lincei does not own. Lincei cannot
-  inject `VITRINE_DATA_DIR` into that process, so agent-side Research calls are not guaranteed there.
+- Agent-side Research is unsupported with a configured external OpenCode `serverUrl`. That process
+  is not owned by Lincei, so Lincei cannot inject the project's `VITRINE_DATA_DIR`; use a
+  Lincei-managed provider when an agent needs to write Vitrine studies.
 - Raw process-launch APIs still need server-authoritative validation of the protected project
   environment; the normal managed UI paths use the canonical value.
 - Legacy Lincei native-card records are preserved and quarantined, but are not automatically
