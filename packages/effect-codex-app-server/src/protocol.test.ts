@@ -10,6 +10,7 @@ import { assert, it } from "@effect/vitest";
 
 import * as CodexError from "./errors.ts";
 import * as CodexProtocol from "./protocol.ts";
+import * as CodexSchema from "./schema.ts";
 import { makeInMemoryStdio } from "./_internal/stdio.ts";
 const encodeUnknownJsonString = Schema.encodeUnknownSync(Schema.UnknownFromJsonString);
 
@@ -18,6 +19,19 @@ const encoder = new TextEncoder();
 const encodeJsonl = (value: unknown) => encoder.encode(`${encodeUnknownJsonString(value)}\n`);
 
 const decodeJson = Schema.decodeEffect(Schema.UnknownFromJsonString);
+
+it("accepts provider-defined reasoning effort values", () => {
+  const decodeModelReasoningEffort = Schema.decodeUnknownSync(
+    CodexSchema.V2ModelListResponse__ReasoningEffort,
+  );
+  const encodeTurnReasoningEffort = Schema.encodeSync(
+    CodexSchema.V2TurnStartParams__ReasoningEffort,
+  );
+
+  assert.equal(decodeModelReasoningEffort("max"), "max");
+  assert.equal(decodeModelReasoningEffort("future-effort"), "future-effort");
+  assert.equal(encodeTurnReasoningEffort("ultra"), "ultra");
+});
 
 it.layer(NodeServices.layer)("effect-codex-app-server protocol", (it) => {
   it.effect(

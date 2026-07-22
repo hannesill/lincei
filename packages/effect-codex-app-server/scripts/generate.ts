@@ -281,6 +281,24 @@ function stripNullDefaults(value: Schema.Json): Schema.Json {
   ) as Schema.Json;
 }
 
+function makeReasoningEffortForwardCompatible(name: string, schema: Schema.Json): Schema.Json {
+  if (
+    !name.endsWith("__ReasoningEffort") ||
+    Array.isArray(schema) ||
+    schema === null ||
+    typeof schema !== "object"
+  ) {
+    return schema;
+  }
+
+  const descriptionValue = Object.entries(schema).find(([key]) => key === "description")?.[1];
+  const description = typeof descriptionValue === "string" ? descriptionValue : undefined;
+  return {
+    type: "string",
+    ...(description ? { description } : {}),
+  };
+}
+
 function toPascalCaseMethod(method: string) {
   return method
     .split("/")
@@ -588,6 +606,10 @@ const generateFiles = Effect.fn("generateFiles")(function* () {
     if (!(name in aggregateSchemas)) {
       aggregateSchemas[name] = stripNullDefaults(normalizeNullableTypes(schema));
     }
+  }
+
+  for (const [name, schema] of Object.entries(aggregateSchemas)) {
+    aggregateSchemas[name] = makeReasoningEffortForwardCompatible(name, schema);
   }
 
   const generator = makeJsonSchemaGenerator();
