@@ -15,6 +15,7 @@ import {
   type SessionId,
   type TurnId,
   type ShortcutCommand,
+  type VitrineProjectState,
   OrchestrationSessionActivity,
   ProviderInteractionMode,
   ProviderDriverKind,
@@ -194,6 +195,11 @@ import {
   isVersionMismatchDismissed,
   resolveServerConfigVersionMismatch,
 } from "../versionSkew";
+import {
+  openManagedVitrine,
+  readVitrineAutoOpenIntent,
+  rememberVitrineAutoOpenIntent,
+} from "../vitrinePreview";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -206,6 +212,30 @@ type EnvironmentUnavailableState = {
   readonly label: string;
   readonly connectionState: "connecting" | "disconnected" | "error";
 };
+type VitrineUiState = {
+  readonly targetKey: string;
+  readonly pending: boolean;
+  readonly state: VitrineProjectState | null;
+  readonly error: string | null;
+};
+
+function vitrineStateMessage(state: VitrineProjectState): string {
+  if (state.message) {
+    return state.message;
+  }
+  switch (state.status) {
+    case "ready":
+      return "Project research is ready in Vitrine.";
+    case "starting":
+      return "Vitrine is starting.";
+    case "stopped":
+      return "Vitrine is stopped. Try opening Research again.";
+    case "unavailable":
+      return "Vitrine is unavailable. Install a compatible `vitrine` executable and ensure it is on PATH.";
+    case "failed":
+      return "Vitrine failed to start. Check the server logs and try again.";
+  }
+}
 function formatOutgoingPrompt(params: {
   provider: ProviderDriverKind;
   model: string | null;
@@ -615,6 +645,12 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingServerSessionEnvMode, setPendingServerSessionEnvMode] =
     useState<DraftSessionEnvMode | null>(null);
   const [pendingServerSessionBranch, setPendingServerSessionBranch] = useState<string | null>();
+  const [vitrineUiState, setVitrineUiState] = useState<VitrineUiState | null>(null);
+  const vitrineRequestIdRef = useRef(0);
+  const vitrineMountedRef = useRef(true);
+  const vitrineActiveTargetRef = useRef<string | null>(null);
+  const vitrineRestoreAttemptsRef = useRef(new Set<string>());
+  const vitrineInFlightTargetsRef = useRef(new Set<string>());
   const [lastInvokedScriptByProjectId, setLastInvokedScriptByProjectId] = useLocalStorage(
     LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
     {},
@@ -758,6 +794,22 @@ export default function ChatView(props: ChatViewProps) {
   const activeProject = useStore(
     useMemo(() => createProjectSelectorByRef(activeProjectRef), [activeProjectRef]),
   );
+  const activeVitrineProjectKey = activeProject
+    ? `${activeProject.environmentId}:${activeProject.id}`
+    : null;
+  const activeVitrineTarget = activeVitrineProjectKey
+    ? `${activeVitrineProjectKey}:${routeSessionKey}`
+    : null;
+  vitrineActiveTargetRef.current = activeVitrineTarget;
+  const currentVitrineUiState =
+    vitrineUiState?.targetKey === activeVitrineTarget ? vitrineUiState : null;
+
+  useEffect(() => {
+    vitrineMountedRef.current = true;
+    return () => {
+      vitrineMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (routeKind !== "server") {
@@ -1664,6 +1716,171 @@ export default function ChatView(props: ChatViewProps) {
     if (previewOpen) closePreviewPanel();
     else openPreviewPanel();
   }, [closePreviewPanel, openPreviewPanel, previewOpen]);
+
+  const openProjectResearch = useCallback(
+    async (options: { automatic: boolean }) => {
+      if (!activeProject || !activeVitrineProjectKey || !activeVitrineTarget) {
+        return;
+      }
+      const target = activeVitrineTarget;
+      if (primaryEnvironmentId === null || activeProject.environmentId !== primaryEnvironmentId) {
+        if (!options.automatic) {
+          const message =
+            primaryEnvironmentId === null
+              ? "The local environment is not ready yet."
+              : "Remote Research preview requires secure loopback tunneling.";
+          setVitrineUiState({ targetKey: target, pending: false, state: null, error: message });
+          toastManager.add(
+            stackedSessionToast({
+              type: "error",
+              title: "Could not open Research",
+              description: message,
+            }),
+          );
+        }
+        return;
+      }
+      const api = readEnvironmentApi(activeProject.environmentId);
+      const requestId = ++vitrineRequestIdRef.current;
+      const isCurrent = () =>
+        vitrineMountedRef.current &&
+        vitrineRequestIdRef.current === requestId &&
+        vitrineActiveTargetRef.current === target;
+
+      if (!api) {
+        if (options.automatic) {
+          return;
+        }
+        const message = "Reconnect this environment before opening project research.";
+        setVitrineUiState({ targetKey: target, pending: false, state: null, error: message });
+        toastManager.add(
+          stackedSessionToast({
+            type: "error",
+            title: "Could not open Research",
+            description: message,
+          }),
+        );
+        return;
+      }
+      if (vitrineInFlightTargetsRef.current.has(target)) {
+        return;
+      }
+      vitrineInFlightTargetsRef.current.add(target);
+      vitrineRestoreAttemptsRef.current.add(target);
+
+      setVitrineUiState((previous) => ({
+        targetKey: target,
+        pending: true,
+        state: previous?.targetKey === target ? previous.state : null,
+        error: null,
+      }));
+
+      try {
+        const result = await openManagedVitrine({
+          projectId: activeProject.id,
+          ensure: api.vitrine.ensure,
+          embedded: isPreviewSupportedInRuntime(),
+          fallbackExternal: !options.automatic,
+          isCurrent,
+          openEmbedded: async (url) => {
+            await openPreviewSession({
+              previewApi: api.preview,
+              sessionRef: routeSessionRef,
+              url,
+            });
+          },
+          openExternal: async (url) => {
+            const localApi = readLocalApi();
+            if (!localApi) {
+              throw new Error("System browser access is unavailable.");
+            }
+            await localApi.shell.openExternal(url);
+          },
+        });
+        if (!isCurrent() || result.presentation === "cancelled") {
+          return;
+        }
+
+        setVitrineUiState({ targetKey: target, pending: false, state: result.state, error: null });
+        if (result.presentation === "not-ready") {
+          toastManager.add(
+            stackedSessionToast({
+              type: "error",
+              title: options.automatic ? "Could not restore Research" : "Could not open Research",
+              description: vitrineStateMessage(result.state),
+            }),
+          );
+          return;
+        }
+
+        if (result.presentation === "embedded") {
+          openPreviewPanel();
+        }
+
+        if (
+          !rememberVitrineAutoOpenIntent(activeProject.environmentId, activeProject.id) &&
+          !options.automatic
+        ) {
+          toastManager.add({
+            type: "warning",
+            title: "Research opened without restart recovery",
+            description: "Browser storage is unavailable, so Vitrine cannot reopen automatically.",
+          });
+        }
+        if (result.embeddedError && !options.automatic) {
+          toastManager.add({
+            type: "warning",
+            title: "Opened Research in the system browser",
+            description: "The embedded preview was unavailable.",
+          });
+        }
+      } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+        setVitrineUiState({ targetKey: target, pending: false, state: null, error: message });
+        toastManager.add(
+          stackedSessionToast({
+            type: "error",
+            title: options.automatic ? "Could not restore Research" : "Could not open Research",
+            description: message,
+          }),
+        );
+      } finally {
+        vitrineInFlightTargetsRef.current.delete(target);
+      }
+    },
+    [
+      activeProject,
+      activeVitrineProjectKey,
+      activeVitrineTarget,
+      openPreviewPanel,
+      primaryEnvironmentId,
+      routeSessionRef,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      !activeProject ||
+      !activeVitrineTarget ||
+      activeProject.environmentId !== primaryEnvironmentId ||
+      activeEnvironmentUnavailable ||
+      !isPreviewSupportedInRuntime() ||
+      !readVitrineAutoOpenIntent(activeProject.environmentId, activeProject.id) ||
+      vitrineRestoreAttemptsRef.current.has(activeVitrineTarget)
+    ) {
+      return;
+    }
+    void openProjectResearch({ automatic: true });
+  }, [
+    activeEnvironmentUnavailable,
+    activeProject,
+    activeVitrineTarget,
+    openProjectResearch,
+    primaryEnvironmentId,
+  ]);
 
   useEffect(
     () =>
@@ -3525,6 +3742,28 @@ export default function ChatView(props: ChatViewProps) {
         diffOpen={diffOpen}
         previewAvailable={isPreviewSupportedInRuntime()}
         previewOpen={previewOpen}
+        researchAvailable={
+          Boolean(activeProject) &&
+          activeProject?.environmentId === primaryEnvironmentId &&
+          !activeEnvironmentUnavailable
+        }
+        researchStatus={
+          currentVitrineUiState?.pending
+            ? "starting"
+            : currentVitrineUiState?.error
+              ? "failed"
+              : (currentVitrineUiState?.state?.status ?? null)
+        }
+        researchMessage={
+          activeProject &&
+          primaryEnvironmentId !== null &&
+          activeProject.environmentId !== primaryEnvironmentId
+            ? "Remote Research preview requires secure loopback tunneling."
+            : (currentVitrineUiState?.error ??
+              (currentVitrineUiState?.state
+                ? vitrineStateMessage(currentVitrineUiState.state)
+                : null))
+        }
         onRunProjectScript={runProjectScript}
         onAddProjectScript={saveProjectScript}
         onUpdateProjectScript={updateProjectScript}
@@ -3532,6 +3771,7 @@ export default function ChatView(props: ChatViewProps) {
         onToggleTerminal={toggleTerminalVisibility}
         onToggleDiff={onToggleDiff}
         onTogglePreview={onTogglePreview}
+        onOpenResearch={() => void openProjectResearch({ automatic: false })}
         reserveTitleBarControlInset={reserveTitleBarControlInset}
       />
 

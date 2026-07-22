@@ -4,18 +4,26 @@ import {
   type ProjectScript,
   type ResolvedShortcutsConfig,
   type SessionId,
+  type VitrineLifecycleStatus,
 } from "@t3tools/contracts";
 import { scopeSessionRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
-import { DiffIcon, GlobeIcon, TerminalSquareIcon } from "lucide-react";
+import {
+  DiffIcon,
+  GlobeIcon,
+  LoaderCircleIcon,
+  MicroscopeIcon,
+  TerminalSquareIcon,
+} from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { Toggle } from "../ui/toggle";
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
 import { AppTopBar } from "../appShell";
+import { Button } from "../ui/button";
 
 interface ChatHeaderProps {
   activeSessionEnvironmentId: EnvironmentId;
@@ -37,6 +45,9 @@ interface ChatHeaderProps {
   diffOpen: boolean;
   previewAvailable: boolean;
   previewOpen: boolean;
+  researchAvailable: boolean;
+  researchStatus: VitrineLifecycleStatus | null;
+  researchMessage: string | null;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -44,6 +55,7 @@ interface ChatHeaderProps {
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
   onTogglePreview: () => void;
+  onOpenResearch: () => void;
   reserveTitleBarControlInset?: boolean;
 }
 
@@ -79,6 +91,9 @@ export const ChatHeader = memo(function ChatHeader({
   diffOpen,
   previewAvailable,
   previewOpen,
+  researchAvailable,
+  researchStatus,
+  researchMessage,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -86,6 +101,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleTerminal,
   onToggleDiff,
   onTogglePreview,
+  onOpenResearch,
   reserveTitleBarControlInset,
 }: ChatHeaderProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -94,6 +110,11 @@ export const ChatHeader = memo(function ChatHeader({
     activeSessionEnvironmentId,
     primaryEnvironmentId,
   });
+  const researchTooltip = !researchAvailable
+    ? (researchMessage ?? "Reconnect this environment before opening project research.")
+    : researchStatus === "starting"
+      ? "Starting Vitrine..."
+      : (researchMessage ?? "Open project research in Vitrine");
 
   return (
     <AppTopBar
@@ -125,6 +146,37 @@ export const ChatHeader = memo(function ChatHeader({
               {...(draftId ? { draftId } : {})}
             />
           )}
+          {activeProjectName ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    aria-label="Open project research in Vitrine"
+                    className="shrink-0"
+                    disabled={!researchAvailable || researchStatus === "starting"}
+                    onClick={onOpenResearch}
+                    size="icon-xs"
+                    variant="outline"
+                  >
+                    {researchStatus === "starting" ? (
+                      <LoaderCircleIcon className="size-3 animate-spin" />
+                    ) : (
+                      <MicroscopeIcon
+                        className={
+                          researchStatus === "ready"
+                            ? "size-3 text-success"
+                            : researchStatus === "failed" || researchStatus === "unavailable"
+                              ? "size-3 text-destructive"
+                              : "size-3"
+                        }
+                      />
+                    )}
+                  </Button>
+                }
+              />
+              <TooltipPopup side="bottom">{researchTooltip}</TooltipPopup>
+            </Tooltip>
+          ) : null}
           <Tooltip>
             <TooltipTrigger
               render={

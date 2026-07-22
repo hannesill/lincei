@@ -15,7 +15,7 @@ import { buildDraftSessionRouteParams, buildSessionRouteParams } from "../sessio
 import { useStore } from "../store";
 import { createSessionSelectorAcrossEnvironments } from "../storeSelectors";
 
-interface DraftPreviewRouteSearch {
+export interface DraftPreviewRouteSearch {
   preview?: "1" | undefined;
 }
 
@@ -119,11 +119,7 @@ function DraftChatSessionRouteView() {
             routeKind="draft"
           />
         </AppMainSurface>
-        <RightPanelInlineSidebar
-          open={previewOpen}
-          onClose={closePreview}
-          onOpen={openPreview}
-        >
+        <RightPanelInlineSidebar open={previewOpen} onClose={closePreview} onOpen={openPreview}>
           {rightPanelContent}
         </RightPanelInlineSidebar>
       </>

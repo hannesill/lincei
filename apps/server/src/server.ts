@@ -272,6 +272,7 @@ const DatasetGatewayLayerLive = LinceiDatasetGatewayLayer.layer.pipe(
 
 const VitrineCliLayerLive = VitrineCliLive.pipe(Layer.provideMerge(ProcessRunnerLive));
 const VitrineLayerLive = VitrineManagerLive.pipe(Layer.provideMerge(VitrineCliLayerLive));
+const ClinicalToolsLayerLive = Layer.mergeAll(DatasetGatewayLayerLive, VitrineLayerLive);
 
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(ProviderLayerLive),
@@ -314,8 +315,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
-  Layer.provideMerge(DatasetGatewayLayerLive),
-  Layer.provideMerge(VitrineLayerLive),
+  Layer.provideMerge(ClinicalToolsLayerLive),
 );
 
 const RuntimeDependenciesLive = RuntimeCoreDependenciesLive.pipe(

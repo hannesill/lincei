@@ -59,6 +59,7 @@ import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
 import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
+import { rememberVitrineAutoOpenIntent } from "../vitrinePreview";
 import { createAuthenticatedSessionHandlers } from "../../test/authHttpHandlers";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 
@@ -6331,7 +6332,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
           expect(turnStartRequest).toMatchObject({
             workflowId: "structured-clinical-study",
-            workflowVersion: "1.0.0",
+            workflowVersion: "2.0.0",
           });
         },
         { timeout: 8_000, interval: 16 },
@@ -6543,6 +6544,152 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
           expect(tooltip).not.toBeNull();
           expect(tooltip?.textContent).toContain("Open pages, click around, and inspect web apps.");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("opens project Research at the Vitrine URL discovered by the server", async () => {
+    const discoveredUrl = "http://vitrine.localhost:8812/";
+    const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-vitrine-web" as MessageId,
+        targetText: "open project research",
+      }),
+      resolveRpc: (body) =>
+        body._tag === WS_METHODS.vitrineEnsure
+          ? {
+              projectId: PROJECT_ID,
+              status: "ready",
+              dataDir: "/repo/project/.vitrine",
+              url: discoveredUrl,
+              apiUrl: "http://127.0.0.1:8812/",
+              pid: 12_345,
+              port: 8_812,
+              sessionId: "vitrine-session",
+              version: "0.1.0",
+              issueCode: null,
+              message: null,
+              updatedAt: NOW_ISO,
+            }
+          : undefined,
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      await page.getByRole("button", { name: "Open project research in Vitrine" }).click();
+
+      await vi.waitFor(
+        () => {
+          expect(openWindow).toHaveBeenCalledWith(discoveredUrl, "_blank", "noopener,noreferrer");
+          expect(
+            wsRequests.find((request) => request._tag === WS_METHODS.vitrineEnsure),
+          ).toMatchObject({ projectId: PROJECT_ID });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      openWindow.mockRestore();
+      await mounted.cleanup();
+    }
+  });
+
+  it("restores persisted project Research intent into the embedded preview", async () => {
+    const discoveredUrl = "http://vitrine.localhost:8813/";
+    const previewSnapshot = {
+      sessionId: THREAD_ID,
+      tabId: "vitrine-tab",
+      navStatus: { _tag: "Loading" as const, url: discoveredUrl, title: "" },
+      canGoBack: false,
+      canGoForward: false,
+      updatedAt: NOW_ISO,
+    };
+    window.desktopBridge = {
+      getAppBranding: vi.fn().mockReturnValue(null),
+      getLocalEnvironmentBootstrap: () => ({
+        label: "Local environment",
+        httpBaseUrl: "http://127.0.0.1:3773",
+        wsBaseUrl: "ws://127.0.0.1:3773",
+        bootstrapToken: "desktop-bootstrap-token",
+      }),
+      getClientSettings: vi.fn().mockResolvedValue(null),
+      setClientSettings: vi.fn().mockResolvedValue(undefined),
+      getSavedEnvironmentRegistry: vi.fn().mockResolvedValue([]),
+      setSavedEnvironmentRegistry: vi.fn().mockResolvedValue(undefined),
+      getSavedEnvironmentSecret: vi.fn().mockResolvedValue(null),
+      setSavedEnvironmentSecret: vi.fn().mockResolvedValue(true),
+      removeSavedEnvironmentSecret: vi.fn().mockResolvedValue(undefined),
+      preview: {
+        createTab: vi.fn().mockResolvedValue(undefined),
+        closeTab: vi.fn().mockResolvedValue(undefined),
+        registerWebview: vi.fn().mockResolvedValue(undefined),
+        navigate: vi.fn().mockResolvedValue(undefined),
+        goBack: vi.fn().mockResolvedValue(undefined),
+        goForward: vi.fn().mockResolvedValue(undefined),
+        refresh: vi.fn().mockResolvedValue(undefined),
+        zoomIn: vi.fn().mockResolvedValue(undefined),
+        zoomOut: vi.fn().mockResolvedValue(undefined),
+        resetZoom: vi.fn().mockResolvedValue(undefined),
+        hardReload: vi.fn().mockResolvedValue(undefined),
+        openDevTools: vi.fn().mockResolvedValue(undefined),
+        clearCookies: vi.fn().mockResolvedValue(undefined),
+        clearCache: vi.fn().mockResolvedValue(undefined),
+        getBrowserPartition: vi.fn().mockResolvedValue("persist:lincei-preview-local"),
+        onStateChange: vi.fn(() => () => undefined),
+      },
+      setTheme: vi.fn().mockResolvedValue(undefined),
+    } as unknown as NonNullable<typeof window.desktopBridge>;
+    rememberVitrineAutoOpenIntent(LOCAL_ENVIRONMENT_ID, PROJECT_ID);
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-vitrine-restore" as MessageId,
+        targetText: "restore project research",
+      }),
+      resolveRpc: (body) => {
+        if (body._tag === WS_METHODS.vitrineEnsure) {
+          return {
+            projectId: PROJECT_ID,
+            status: "ready",
+            dataDir: "/repo/project/.vitrine",
+            url: discoveredUrl,
+            apiUrl: "http://127.0.0.1:8813/",
+            pid: 12_346,
+            port: 8_813,
+            sessionId: "vitrine-restored-session",
+            version: "0.1.0",
+            issueCode: null,
+            message: null,
+            updatedAt: NOW_ISO,
+          };
+        }
+        if (body._tag === WS_METHODS.previewOpen) {
+          return previewSnapshot;
+        }
+        if (body._tag === WS_METHODS.previewList) {
+          return { sessions: [previewSnapshot] };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(
+            wsRequests.find((request) => request._tag === WS_METHODS.vitrineEnsure),
+          ).toMatchObject({ projectId: PROJECT_ID });
+          expect(
+            wsRequests.find((request) => request._tag === WS_METHODS.previewOpen),
+          ).toMatchObject({ sessionId: THREAD_ID, url: discoveredUrl });
+          expect(mounted.router.state.location.search).toMatchObject({ preview: "1" });
+          expect(document.querySelector("[data-preview-panel-mode]")).not.toBeNull();
         },
         { timeout: 8_000, interval: 16 },
       );
