@@ -296,6 +296,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     extra?: {
       readonly modelSelection?: unknown;
       readonly projectContext?: PersistedProjectContext | null;
+      readonly clearMissingResumeCursor?: boolean;
       readonly lastRuntimeEvent?: string;
       readonly lastRuntimeEventAt?: string;
     },
@@ -311,7 +312,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         providerInstanceId,
         runtimeMode: session.runtimeMode,
         status: toRuntimeStatus(session),
-        ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
+        ...(session.resumeCursor !== undefined
+          ? { resumeCursor: session.resumeCursor }
+          : extra?.clearMissingResumeCursor
+            ? { resumeCursor: null }
+            : {}),
         runtimePayload: toRuntimePayloadFromSession(session, extra),
       });
     });
@@ -601,32 +606,51 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           );
         }
         const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(sessionId));
-        const effectiveResumeCursor =
-          input.resumeCursor ??
-          (persistedBinding?.providerInstanceId === resolvedInstanceId
-            ? persistedBinding.resumeCursor
-            : undefined);
-        const effectiveCwd =
-          input.cwd ??
-          (persistedBinding?.providerInstanceId === resolvedInstanceId
-            ? readPersistedCwd(persistedBinding.runtimePayload)
-            : undefined);
-        const persistedProjectContext =
-          persistedBinding?.providerInstanceId === resolvedInstanceId
-            ? readPersistedProjectContext(persistedBinding.runtimePayload)
-            : undefined;
-        const effectiveProjectId = input.projectId ?? persistedProjectContext?.projectId;
-        const effectiveWorkspaceRoot =
-          input.workspaceRoot ?? persistedProjectContext?.workspaceRoot;
-        const effectiveProjectContext: PersistedProjectContext | undefined =
-          effectiveProjectId !== undefined || effectiveWorkspaceRoot !== undefined
+        const bindingMatchesInstance = persistedBinding?.providerInstanceId === resolvedInstanceId;
+        const persistedProjectContext = bindingMatchesInstance
+          ? readPersistedProjectContext(persistedBinding.runtimePayload)
+          : undefined;
+        const requestedProjectContext: PersistedProjectContext | undefined =
+          input.projectId !== undefined || input.workspaceRoot !== undefined
             ? {
-                ...(effectiveProjectId !== undefined ? { projectId: effectiveProjectId } : {}),
-                ...(effectiveWorkspaceRoot !== undefined
-                  ? { workspaceRoot: effectiveWorkspaceRoot }
+                ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+                ...(input.workspaceRoot !== undefined
+                  ? { workspaceRoot: input.workspaceRoot }
                   : {}),
               }
             : undefined;
+        const requestedProjectContextMatchesPersisted = Boolean(
+          requestedProjectContext &&
+          persistedProjectContext &&
+          (requestedProjectContext.projectId === undefined ||
+            requestedProjectContext.projectId === persistedProjectContext.projectId) &&
+          (requestedProjectContext.workspaceRoot === undefined ||
+            requestedProjectContext.workspaceRoot === persistedProjectContext.workspaceRoot),
+        );
+        const restorePersistedSessionContext =
+          requestedProjectContext === undefined || requestedProjectContextMatchesPersisted;
+        // Project identity, cwd, and provider resume state form one persisted
+        // execution context. Compatible partial input may reuse it, but a
+        // replacement must not inherit any filesystem or resume state from
+        // the previous project.
+        const effectiveProjectContext =
+          requestedProjectContext === undefined
+            ? persistedProjectContext
+            : requestedProjectContextMatchesPersisted
+              ? { ...persistedProjectContext, ...requestedProjectContext }
+              : requestedProjectContext;
+        const effectiveResumeCursor =
+          input.resumeCursor ??
+          (bindingMatchesInstance && restorePersistedSessionContext
+            ? persistedBinding?.resumeCursor
+            : undefined);
+        const effectiveCwd =
+          input.cwd ??
+          (bindingMatchesInstance && restorePersistedSessionContext
+            ? readPersistedCwd(persistedBinding?.runtimePayload)
+            : undefined);
+        const effectiveProjectId = effectiveProjectContext?.projectId;
+        const effectiveWorkspaceRoot = effectiveProjectContext?.workspaceRoot;
         yield* Effect.annotateCurrentSpan({
           "provider.kind": resolvedProvider,
           "provider.resume_cursor.source":
@@ -676,6 +700,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* upsertSessionBinding(sessionWithInstance, sessionId, {
           modelSelection: input.modelSelection,
           projectContext: effectiveProjectContext ?? null,
+          clearMissingResumeCursor:
+            persistedBinding !== undefined &&
+            (!bindingMatchesInstance || !restorePersistedSessionContext),
         });
         yield* analytics.record("provider.session.started", {
           provider: sessionWithInstance.provider,

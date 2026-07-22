@@ -92,11 +92,12 @@ type LegacyProviderRuntimeEvent = {
 function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
   const sessions = new Map<SessionId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
+  let nextStartedSessionTransform: ((session: ProviderSession) => ProviderSession) | null = null;
 
   const startSession = vi.fn((input: ProviderSessionStartInput) =>
     Effect.sync(() => {
       const now = "2026-01-01T00:00:00.000Z";
-      const session: ProviderSession = {
+      const defaultSession: ProviderSession = {
         provider,
         ...(input.providerInstanceId !== undefined
           ? { providerInstanceId: input.providerInstanceId }
@@ -111,6 +112,9 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
         createdAt: now,
         updatedAt: now,
       };
+      const transform = nextStartedSessionTransform;
+      nextStartedSessionTransform = null;
+      const session = transform ? transform(defaultSession) : defaultSession;
       sessions.set(session.sessionId, session);
       return session;
     }),
@@ -242,12 +246,18 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
   const removeSession = (sessionId: SessionId): void => {
     sessions.delete(sessionId);
   };
+  const transformNextStartedSession = (
+    transform: (session: ProviderSession) => ProviderSession,
+  ): void => {
+    nextStartedSessionTransform = transform;
+  };
 
   return {
     adapter,
     emit,
     updateSession,
     removeSession,
+    transformNextStartedSession,
     startSession,
     sendTurn,
     interruptTurn,
@@ -1139,6 +1149,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
   it.effect("stops stale sessions in other providers after a successful replacement start", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
+      const directory = yield* ProviderSessionDirectory;
       const sessionId = asSessionId("session-provider-replacement");
 
       const codexSession = yield* provider.startSession(sessionId, {
@@ -1151,6 +1162,10 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
       routing.codex.stopSession.mockClear();
       routing.claude.stopSession.mockClear();
+      routing.claude.transformNextStartedSession((session) => {
+        const { resumeCursor: _resumeCursor, ...withoutResumeCursor } = session;
+        return withoutResumeCursor;
+      });
 
       const claudeSession = yield* provider.startSession(sessionId, {
         provider: ProviderDriverKind.make("claudeAgent"),
@@ -1164,6 +1179,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       assert.equal(claudeSession.provider, "claudeAgent");
       assert.deepEqual(routing.codex.stopSession.mock.calls, [[sessionId]]);
       assert.equal(routing.claude.stopSession.mock.calls.length, 0);
+      assert.equal(Option.getOrThrow(yield* directory.getBinding(sessionId)).resumeCursor, null);
 
       const sessions = yield* provider.listSessions();
       assert.deepEqual(
@@ -1219,6 +1235,76 @@ routing.layer("ProviderServiceLive routing", (it) => {
         assert.equal(startPayload.sessionId, initial.sessionId);
       }
       assert.equal(routing.codex.sendTurn.mock.calls.length, 1);
+    }),
+  );
+
+  it.effect("replaces persisted project context atomically for partial start input", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const directory = yield* ProviderSessionDirectory;
+      const sessionId = asSessionId("session-project-context-replacement");
+
+      yield* provider.startSession(sessionId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        sessionId,
+        projectId: ProjectId.make("project-a"),
+        workspaceRoot: "/tmp/project-a",
+        cwd: "/tmp/project-a-worktree",
+        resumeCursor: { opaque: "project-a-cursor" },
+        runtimeMode: "full-access",
+      });
+
+      routing.codex.startSession.mockClear();
+      routing.codex.startSession.mockImplementationOnce((input) =>
+        Effect.succeed({
+          provider: ProviderDriverKind.make("codex"),
+          providerInstanceId: codexInstanceId,
+          status: "ready",
+          runtimeMode: input.runtimeMode,
+          sessionId: input.sessionId,
+          createdAt: "2026-01-01T00:00:01.000Z",
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        }),
+      );
+      yield* provider.startSession(sessionId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        sessionId,
+        projectId: ProjectId.make("project-b"),
+        runtimeMode: "full-access",
+      });
+
+      assert.equal(routing.codex.startSession.mock.calls.length, 1);
+      const replacementInput = routing.codex.startSession.mock.calls[0]?.[0];
+      assert.equal(replacementInput?.projectId, "project-b");
+      assert.equal(replacementInput && "workspaceRoot" in replacementInput, false);
+      assert.equal(replacementInput && "cwd" in replacementInput, false);
+      assert.equal(replacementInput && "resumeCursor" in replacementInput, false);
+
+      const replacementBinding = Option.getOrThrow(yield* directory.getBinding(sessionId));
+      assert.equal(replacementBinding.resumeCursor, null);
+      assert.deepEqual(replacementBinding.runtimePayload, {
+        cwd: null,
+        model: null,
+        activeTurnId: null,
+        lastError: null,
+        projectContext: { projectId: "project-b" },
+      });
+
+      yield* routing.codex.stopAll();
+      routing.codex.startSession.mockClear();
+      const recoveryFailure = yield* Effect.flip(
+        provider.sendTurn({
+          sessionId,
+          input: "resume without the previous project root",
+          attachments: [],
+        }),
+      );
+
+      assert.instanceOf(recoveryFailure, ProviderValidationError);
+      assert.include(recoveryFailure.issue, "no provider resume state is persisted");
+      assert.equal(routing.codex.startSession.mock.calls.length, 0);
     }),
   );
 
