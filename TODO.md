@@ -25,10 +25,32 @@ Last checked: 2026-07-22 across:
 
 Vitrine is the sole owner of studies, research cards, artifacts, decisions, provenance, review, and export. Lincei owns projects, sessions, chat, terminals, diffs, provider integration, and the managed project-scoped Vitrine launch/preview path.
 
-- [ ] Introduce a pinned/bundled Vitrine distribution so users do not need to install a compatible `vitrine` executable separately.
-- [ ] Define secure loopback forwarding/tunneling before enabling embedded Vitrine for remote execution environments.
-- [ ] Define and approve an explicit export/migration strategy before deleting dormant native-card tables, events, or on-disk records from developer databases.
-- [ ] Complete the two-project manual acceptance flow, including M4 → `vitrine.show(...)`, blocking `confirm()`/`show(..., wait=True)`, and Lincei restart recovery.
+The current local-alpha contract and the executable-versus-Python-environment quirk are documented in [docs/vitrine.md](./docs/vitrine.md).
+
+### Runtime and environment
+
+- [ ] Resolve Vitrine per project, or ship a pinned distribution, so the lifecycle CLI and the agent's analysis Python use the same compatible Vitrine without a silent install.
+- [ ] Support project/session environment injection for configured external OpenCode servers; Lincei cannot mutate the environment of a server process it does not own.
+- [ ] Make `VITRINE_DATA_DIR` server-authoritative for every raw terminal and provider launch path, rejecting or overwriting conflicting client input. Normal managed UI paths already use the canonical project value.
+
+### Lifecycle and resilience
+
+- [ ] Add explicit Research status, Stop, and Restart controls. Keep panel close presentation-only and serialize lifecycle actions per project.
+- [ ] Add bounded readiness polling and retry plus generation-aware reconnect handling. Do not retry deterministic version, identity, data-directory, or URL validation failures.
+- [ ] Add a Vitrine metadata migration or `doctor` path for legacy PID/status records while keeping ordinary Lincei lifecycle attachment fail-closed.
+
+### Remote access
+
+- [ ] Define authenticated, project-scoped HTTP/WebSocket forwarding before enabling Vitrine for remote execution environments. The existing Lincei connection does not forward Vitrine's separate loopback service.
+
+### Migration and cleanup
+
+- [ ] Build and approve a native-card exporter/importer with record counts, checksums, backups, and provenance before deleting dormant tables, events, or on-disk records from developer databases.
+- [ ] Clean up the Vitrine `tests/test_dispatch.py` mocked-`create_task` `RuntimeWarning`; its mock currently discards the `_stream_monitor` coroutine.
+
+### Acceptance
+
+- [ ] Complete the two-project manual acceptance flow: separate project stores, a shared worktree store, M4 → `vitrine.show(...)`, blocking `confirm()`/`ask()`/`show(..., wait=True)`, daemon reuse, Lincei restart recovery, desktop auto-restore/close, and web popup behavior.
 
 ## Worktree integration
 

@@ -1,6 +1,8 @@
 # Lincei
 
-Lincei is a minimal web GUI for coding agents (currently Codex, Claude, and OpenCode, more coming soon).
+Lincei is an early agentic clinical-research environment. It helps researchers direct agents,
+inspect their work, and review rigorous, visual research outputs. Codex, Claude, and OpenCode are
+currently supported providers.
 
 Lincei is based on the MIT-licensed T3 Code project.
 
@@ -49,6 +51,8 @@ We are very very early in this project. Expect bugs.
 We are not accepting contributions yet.
 
 Observability guide: [docs/observability.md](./docs/observability.md)
+
+Vitrine integration and setup: [docs/vitrine.md](./docs/vitrine.md)
 
 ## If you REALLY want to contribute still.... read this first
 

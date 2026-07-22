@@ -113,6 +113,10 @@ Use this when you want the desktop app to start or reuse Lincei on another machi
 
 After setup, the renderer connects to a local forwarded HTTP/WebSocket endpoint. The remote host still owns the actual T3 server, projects, files, git state, terminals, and provider sessions.
 
+Research is intentionally unavailable for remote environments. Vitrine exposes a separate
+project-scoped loopback HTTP/WebSocket service; it needs authenticated forwarding and explicit
+project identity before Lincei can expose it remotely.
+
 SSH launch is a desktop feature because it needs local process and SSH access. Once the environment is paired and saved, it uses the same environment list and connection model as direct LAN, Tailscale, HTTPS, or future tunnel-backed environments.
 
 #### SSH Launch Troubleshooting
