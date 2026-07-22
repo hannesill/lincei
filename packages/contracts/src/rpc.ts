@@ -120,6 +120,7 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import { VitrineLifecycleError, VitrineProjectInput, VitrineProjectState } from "./vitrine.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -128,6 +129,11 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+
+  // Project-scoped Vitrine lifecycle methods
+  vitrineEnsure: "vitrine.ensure",
+  vitrineStatus: "vitrine.status",
+  vitrineStop: "vitrine.stop",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -349,6 +355,24 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   payload: ProjectWriteFileInput,
   success: ProjectWriteFileResult,
   error: ProjectWriteFileError,
+});
+
+export const WsVitrineEnsureRpc = Rpc.make(WS_METHODS.vitrineEnsure, {
+  payload: VitrineProjectInput,
+  success: VitrineProjectState,
+  error: VitrineLifecycleError,
+});
+
+export const WsVitrineStatusRpc = Rpc.make(WS_METHODS.vitrineStatus, {
+  payload: VitrineProjectInput,
+  success: VitrineProjectState,
+  error: VitrineLifecycleError,
+});
+
+export const WsVitrineStopRpc = Rpc.make(WS_METHODS.vitrineStop, {
+  payload: VitrineProjectInput,
+  success: VitrineProjectState,
+  error: VitrineLifecycleError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -617,6 +641,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsSourceControlPublishRepositoryRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsVitrineEnsureRpc,
+  WsVitrineStatusRpc,
+  WsVitrineStopRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeVcsStatusRpc,

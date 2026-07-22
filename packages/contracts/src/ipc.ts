@@ -97,6 +97,7 @@ import type {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
+import type { VitrineProjectInput, VitrineProjectState } from "./vitrine.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -591,6 +592,11 @@ export interface EnvironmentApi {
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+  };
+  vitrine: {
+    ensure: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
+    status: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
+    stop: (input: VitrineProjectInput) => Promise<VitrineProjectState>;
   };
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;

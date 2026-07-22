@@ -210,6 +210,7 @@ function createMockEnvironmentApi(input: {
   return {
     terminal: {} as EnvironmentApi["terminal"],
     projects: {} as EnvironmentApi["projects"],
+    vitrine: {} as EnvironmentApi["vitrine"],
     filesystem: {
       browse: input.browse,
     },

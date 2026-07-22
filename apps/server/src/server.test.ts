@@ -129,6 +129,7 @@ import {
   LinceiDatasetGateway,
   type LinceiDatasetGatewayShape,
 } from "./datasets/LinceiDatasetGateway.ts";
+import { VitrineManager, type VitrineManagerShape } from "./vitrine/Services/Manager.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
 const defaultSessionId = SessionId.make("session-default");
@@ -374,6 +375,7 @@ const buildAppUnderTest = (options?: {
     serverEnvironment?: Partial<ServerEnvironmentShape>;
     repositoryIdentityResolver?: Partial<RepositoryIdentityResolverShape>;
     datasetGateway?: Partial<LinceiDatasetGatewayShape>;
+    vitrineManager?: Partial<VitrineManagerShape>;
   };
 }) =>
   Effect.gen(function* () {
@@ -584,6 +586,54 @@ const buildAppUnderTest = (options?: {
         getBinding: () => Effect.succeed(Option.none()),
         listSessionIds: () => Effect.succeed([]),
         listBindings: () => Effect.succeed([]),
+      }),
+      Layer.mock(VitrineManager)({
+        ensure: (input) =>
+          Effect.succeed({
+            projectId: input.projectId,
+            status: "unavailable" as const,
+            dataDir: `${input.workspaceRoot}/.vitrine`,
+            url: null,
+            apiUrl: null,
+            pid: null,
+            port: null,
+            sessionId: null,
+            version: null,
+            issueCode: "executable_unavailable" as const,
+            message: "Vitrine is unavailable in this test.",
+            updatedAt: "1970-01-01T00:00:00.000Z",
+          }),
+        status: (input) =>
+          Effect.succeed({
+            projectId: input.projectId,
+            status: "stopped" as const,
+            dataDir: `${input.workspaceRoot}/.vitrine`,
+            url: null,
+            apiUrl: null,
+            pid: null,
+            port: null,
+            sessionId: null,
+            version: null,
+            issueCode: null,
+            message: null,
+            updatedAt: "1970-01-01T00:00:00.000Z",
+          }),
+        stop: (input) =>
+          Effect.succeed({
+            projectId: input.projectId,
+            status: "stopped" as const,
+            dataDir: `${input.workspaceRoot}/.vitrine`,
+            url: null,
+            apiUrl: null,
+            pid: null,
+            port: null,
+            sessionId: null,
+            version: null,
+            issueCode: null,
+            message: null,
+            updatedAt: "1970-01-01T00:00:00.000Z",
+          }),
+        ...options?.layers?.vitrineManager,
       }),
     );
 

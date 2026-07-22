@@ -20,6 +20,11 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
     },
+    vitrine: {
+      ensure: rpcClient.vitrine.ensure,
+      status: rpcClient.vitrine.status,
+      stop: rpcClient.vitrine.stop,
+    },
     filesystem: {
       browse: rpcClient.filesystem.browse,
     },

@@ -96,6 +96,8 @@ import {
 import { datasetHttpRouteLayer } from "./datasets/http.ts";
 import { demoSeedRouteLayer } from "./demo/http.ts";
 import { layer as ProcessRunnerLive } from "./processRunner.ts";
+import { VitrineCliLive } from "./vitrine/Layers/Cli.ts";
+import { VitrineManagerLive } from "./vitrine/Layers/Manager.ts";
 import * as NetService from "@t3tools/shared/Net";
 import { disableTailscaleServe, ensureTailscaleServe } from "@t3tools/tailscale";
 
@@ -268,6 +270,9 @@ const DatasetGatewayLayerLive = LinceiDatasetGatewayLayer.layer.pipe(
   Layer.provideMerge(DatasetBaseLayerLive),
 );
 
+const VitrineCliLayerLive = VitrineCliLive.pipe(Layer.provideMerge(ProcessRunnerLive));
+const VitrineLayerLive = VitrineManagerLive.pipe(Layer.provideMerge(VitrineCliLayerLive));
+
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
@@ -310,6 +315,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
   Layer.provideMerge(DatasetGatewayLayerLive),
+  Layer.provideMerge(VitrineLayerLive),
 );
 
 const RuntimeDependenciesLive = RuntimeCoreDependenciesLive.pipe(

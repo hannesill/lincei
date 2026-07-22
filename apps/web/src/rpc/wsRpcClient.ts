@@ -70,6 +70,11 @@ export interface WsRpcClient {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
   };
+  readonly vitrine: {
+    readonly ensure: RpcUnaryMethod<typeof WS_METHODS.vitrineEnsure>;
+    readonly status: RpcUnaryMethod<typeof WS_METHODS.vitrineStatus>;
+    readonly stop: RpcUnaryMethod<typeof WS_METHODS.vitrineStop>;
+  };
   readonly filesystem: {
     readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
   };
@@ -196,6 +201,11 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+    },
+    vitrine: {
+      ensure: (input) => transport.request((client) => client[WS_METHODS.vitrineEnsure](input)),
+      status: (input) => transport.request((client) => client[WS_METHODS.vitrineStatus](input)),
+      stop: (input) => transport.request((client) => client[WS_METHODS.vitrineStop](input)),
     },
     filesystem: {
       browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),

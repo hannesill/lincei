@@ -25,8 +25,10 @@ import {
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
+  type ProjectId,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  VitrineLifecycleError,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
   SessionId,
@@ -66,6 +68,7 @@ import { PreviewPortScanner } from "./preview/Services/PortScanner.ts";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths.ts";
+import { VitrineManager } from "./vitrine/Services/Manager.ts";
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
@@ -189,6 +192,37 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const startup = yield* ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem;
+      const vitrineManager = yield* VitrineManager;
+      const resolveVitrineProject = Effect.fn("ws.resolveVitrineProject")(function* (
+        projectId: ProjectId,
+      ) {
+        const project = yield* projectionSnapshotQuery.getProjectShellById(projectId).pipe(
+          Effect.mapError(
+            (cause) =>
+              new VitrineLifecycleError({
+                projectId,
+                code: "project_lookup_failed",
+                message: "Lincei could not resolve the Vitrine project.",
+                cause,
+              }),
+          ),
+        );
+        return yield* Option.match(project, {
+          onNone: () =>
+            Effect.fail(
+              new VitrineLifecycleError({
+                projectId,
+                code: "project_not_found",
+                message: "The project no longer exists.",
+              }),
+            ),
+          onSome: (value) =>
+            Effect.succeed({
+              projectId: value.id,
+              workspaceRoot: value.workspaceRoot,
+            }),
+        });
+      });
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
       const repositoryIdentityResolver = yield* RepositoryIdentityResolver;
       const serverEnvironment = yield* ServerEnvironment;
@@ -1040,6 +1074,24 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               }),
             ),
             { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.vitrineEnsure]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vitrineEnsure,
+            resolveVitrineProject(input.projectId).pipe(Effect.flatMap(vitrineManager.ensure)),
+            { "rpc.aggregate": "vitrine" },
+          ),
+        [WS_METHODS.vitrineStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vitrineStatus,
+            resolveVitrineProject(input.projectId).pipe(Effect.flatMap(vitrineManager.status)),
+            { "rpc.aggregate": "vitrine" },
+          ),
+        [WS_METHODS.vitrineStop]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.vitrineStop,
+            resolveVitrineProject(input.projectId).pipe(Effect.flatMap(vitrineManager.stop)),
+            { "rpc.aggregate": "vitrine" },
           ),
         [WS_METHODS.shellOpenInEditor]: (input) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, externalLauncher.launchEditor(input), {
