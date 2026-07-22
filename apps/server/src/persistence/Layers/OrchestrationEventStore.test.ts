@@ -1,4 +1,4 @@
-import { CommandId, EventId, ProjectId } from "@t3tools/contracts";
+import { CommandId, EventId, ProjectId, SessionId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +8,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { PersistenceDecodeError } from "../Errors.ts";
 import { OrchestrationEventStore } from "../Services/OrchestrationEventStore.ts";
+import { isLegacyNativeCardEvent } from "../LegacyNativeCardEvents.ts";
 import { OrchestrationEventStoreLive } from "./OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 const isPersistenceDecodeError = Schema.is(PersistenceDecodeError);
@@ -60,7 +61,15 @@ layer("OrchestrationEventStore", (it) => {
       assert.equal(typeof storedRows[0]?.payloadJson, "string");
       assert.equal(typeof storedRows[0]?.metadataJson, "string");
 
-      const replayed = yield* Stream.runCollect(eventStore.readFromSequence(0, 10)).pipe(
+      const sequenceRows = yield* sql<{ readonly sequence: number }>`
+        SELECT sequence
+        FROM orchestration_events
+        WHERE event_id = ${appended.eventId}
+      `;
+      const sequence = sequenceRows[0]?.sequence;
+      assert.ok(sequence !== undefined);
+
+      const replayed = yield* Stream.runCollect(eventStore.readFromSequence(sequence - 1, 1)).pipe(
         Effect.map((chunk) => Array.from(chunk)),
       );
       assert.equal(replayed.length, 1);
@@ -118,6 +127,63 @@ layer("OrchestrationEventStore", (it) => {
           ),
         );
       }
+    }),
+  );
+
+  it.effect("decodes legacy native-card events through the persistence-only schema", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const now = "2026-01-01T00:00:00.000Z";
+
+      yield* sql`
+        INSERT INTO orchestration_events (
+          event_id,
+          aggregate_kind,
+          stream_id,
+          stream_version,
+          event_type,
+          occurred_at,
+          command_id,
+          causation_event_id,
+          correlation_id,
+          actor_kind,
+          payload_json,
+          metadata_json
+        )
+        VALUES (
+          ${EventId.make("evt-legacy-card")},
+          ${"session"},
+          ${SessionId.make("session-legacy-card")},
+          ${0},
+          ${"session.research-card-proposed"},
+          ${now},
+          ${CommandId.make("cmd-legacy-card")},
+          ${null},
+          ${null},
+          ${"server"},
+          ${
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({ sessionId: "session-legacy-card", researchCard: { id: "card-1" } })
+          },
+          ${"{}"}
+        )
+      `;
+
+      const sequenceRows = yield* sql<{ readonly sequence: number }>`
+        SELECT sequence
+        FROM orchestration_events
+        WHERE event_id = ${EventId.make("evt-legacy-card")}
+      `;
+      const sequence = sequenceRows[0]?.sequence;
+      assert.ok(sequence !== undefined);
+
+      const replayed = yield* Stream.runCollect(eventStore.readFromSequence(sequence - 1, 1)).pipe(
+        Effect.map((chunk) => Array.from(chunk)),
+      );
+      assert.equal(replayed.length, 1);
+      assert.ok(replayed[0] !== undefined && isLegacyNativeCardEvent(replayed[0]));
+      assert.ok((replayed[0]?.sequence ?? 0) > 0);
     }),
   );
 });

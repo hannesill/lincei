@@ -151,7 +151,6 @@ describe("OrchestrationEngine", () => {
           deletedAt: null,
           messages: [],
           proposedPlans: [],
-          researchCards: [],
           activities: [],
           checkpoints: [],
           session: null,
@@ -164,7 +163,6 @@ describe("OrchestrationEngine", () => {
         ...session,
         messages: [],
         proposedPlans: [],
-        researchCards: [],
         activities: [],
         checkpoints: [],
       })),
@@ -204,7 +202,6 @@ describe("OrchestrationEngine", () => {
           getFullSessionDiffContext: () => Effect.succeed(Option.none()),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(

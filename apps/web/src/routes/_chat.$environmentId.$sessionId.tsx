@@ -16,11 +16,7 @@ import { createSessionSelectorByRef } from "../storeSelectors";
 import { resolveSessionRouteRef, buildSessionRouteParams } from "../sessionRoutes";
 import { RightPanelSheet } from "../components/RightPanelSheet";
 import { AppMainSurface } from "../components/appShell";
-import {
-  LazyDiffPanel,
-  LazyResearchCardsPanel,
-  RightPanelInlineSidebar,
-} from "../components/RightPanelRouteShell";
+import { LazyDiffPanel, RightPanelInlineSidebar } from "../components/RightPanelRouteShell";
 
 function ChatSessionRouteView() {
   const navigate = useNavigate();
@@ -55,8 +51,7 @@ function ChatSessionRouteView() {
   const serverSessionStarted = sessionHasStarted(serverSession);
   const environmentHasAnySessions = environmentHasServerSessions || environmentHasDraftSessions;
   const diffOpen = search.diff === "1";
-  const cardsOpen = search.cards === "1";
-  const rightPanelOpen = diffOpen || cardsOpen;
+  const rightPanelOpen = diffOpen;
   const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_SHEET_MEDIA_QUERY);
   const currentSessionKey = sessionRef
     ? `${sessionRef.environmentId}:${sessionRef.sessionId}`
@@ -64,16 +59,11 @@ function ChatSessionRouteView() {
   const [rightPanelMountState, setRightPanelMountState] = useState(() => ({
     sessionKey: currentSessionKey,
     hasOpenedDiff: diffOpen,
-    hasOpenedCards: cardsOpen,
   }));
   const hasOpenedDiff =
     rightPanelMountState.sessionKey === currentSessionKey
       ? rightPanelMountState.hasOpenedDiff
       : diffOpen;
-  const hasOpenedCards =
-    rightPanelMountState.sessionKey === currentSessionKey
-      ? rightPanelMountState.hasOpenedCards
-      : cardsOpen;
   const markDiffOpened = useCallback(() => {
     setRightPanelMountState((previous) => {
       if (previous.sessionKey === currentSessionKey && previous.hasOpenedDiff) {
@@ -82,24 +72,9 @@ function ChatSessionRouteView() {
       return {
         sessionKey: currentSessionKey,
         hasOpenedDiff: true,
-        hasOpenedCards:
-          previous.sessionKey === currentSessionKey ? previous.hasOpenedCards : cardsOpen,
       };
     });
-  }, [cardsOpen, currentSessionKey]);
-  const markCardsOpened = useCallback(() => {
-    setRightPanelMountState((previous) => {
-      if (previous.sessionKey === currentSessionKey && previous.hasOpenedCards) {
-        return previous;
-      }
-      return {
-        sessionKey: currentSessionKey,
-        hasOpenedDiff:
-          previous.sessionKey === currentSessionKey ? previous.hasOpenedDiff : diffOpen,
-        hasOpenedCards: true,
-      };
-    });
-  }, [currentSessionKey, diffOpen]);
+  }, [currentSessionKey]);
   const closeDiff = useCallback(() => {
     if (!sessionRef) {
       return;
@@ -120,42 +95,10 @@ function ChatSessionRouteView() {
       params: buildSessionRouteParams(sessionRef),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return { ...rest, cards: undefined, diff: "1" };
+        return { ...rest, diff: "1" };
       },
     });
   }, [markDiffOpened, navigate, sessionRef]);
-  const closeCards = useCallback(() => {
-    if (!sessionRef) {
-      return;
-    }
-    void navigate({
-      to: "/$environmentId/$sessionId",
-      params: buildSessionRouteParams(sessionRef),
-      search: { cards: undefined },
-    });
-  }, [navigate, sessionRef]);
-  const openCards = useCallback(() => {
-    if (!sessionRef) {
-      return;
-    }
-    markCardsOpened();
-    void navigate({
-      to: "/$environmentId/$sessionId",
-      params: buildSessionRouteParams(sessionRef),
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return {
-          ...rest,
-          diff: undefined,
-          diffTurnId: undefined,
-          diffFilePath: undefined,
-          cards: "1",
-        };
-      },
-    });
-  }, [markCardsOpened, navigate, sessionRef]);
-  const closeRightPanel = diffOpen ? closeDiff : closeCards;
-  const openRightPanel = diffOpen ? openDiff : openCards;
 
   useEffect(() => {
     if (!sessionRef || !bootstrapComplete) {
@@ -179,13 +122,8 @@ function ChatSessionRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
-  const shouldRenderCardsContent = cardsOpen || hasOpenedCards;
-  const rightPanelContent = diffOpen ? (
-    shouldRenderDiffContent ? (
-      <LazyDiffPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
-    ) : null
-  ) : shouldRenderCardsContent ? (
-    <LazyResearchCardsPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
+  const rightPanelContent = shouldRenderDiffContent ? (
+    <LazyDiffPanel mode={shouldUseRightPanelSheet ? "sheet" : "sidebar"} />
   ) : null;
 
   if (!shouldUseRightPanelSheet) {
@@ -196,16 +134,11 @@ function ChatSessionRouteView() {
             environmentId={sessionRef.environmentId}
             sessionId={sessionRef.sessionId}
             onDiffPanelOpen={markDiffOpened}
-            onResearchCardsPanelOpen={markCardsOpened}
             reserveTitleBarControlInset={!rightPanelOpen}
             routeKind="server"
           />
         </AppMainSurface>
-        <RightPanelInlineSidebar
-          open={rightPanelOpen}
-          onClose={closeRightPanel}
-          onOpen={openRightPanel}
-        >
+        <RightPanelInlineSidebar open={rightPanelOpen} onClose={closeDiff} onOpen={openDiff}>
           {rightPanelContent}
         </RightPanelInlineSidebar>
       </>
@@ -219,11 +152,10 @@ function ChatSessionRouteView() {
           environmentId={sessionRef.environmentId}
           sessionId={sessionRef.sessionId}
           onDiffPanelOpen={markDiffOpened}
-          onResearchCardsPanelOpen={markCardsOpened}
           routeKind="server"
         />
       </AppMainSurface>
-      <RightPanelSheet open={rightPanelOpen} onClose={closeRightPanel}>
+      <RightPanelSheet open={rightPanelOpen} onClose={closeDiff}>
         {rightPanelContent}
       </RightPanelSheet>
     </>
@@ -233,7 +165,7 @@ function ChatSessionRouteView() {
 export const Route = createFileRoute("/_chat/$environmentId/$sessionId")({
   validateSearch: (search) => parseDiffRouteSearch(search),
   search: {
-    middlewares: [retainSearchParams<DiffRouteSearch>(["diff", "cards"])],
+    middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],
   },
   component: ChatSessionRouteView,
 });

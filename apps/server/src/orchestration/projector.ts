@@ -4,9 +4,6 @@ import {
   OrchestrationMessage,
   OrchestrationProviderRuntime,
   OrchestrationSession,
-  type OrchestrationResearchCard,
-  type ResearchCardLifecycleStatus,
-  type ResearchCardSummary,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -25,11 +22,6 @@ import {
   SessionInteractionModeSetPayload,
   SessionMetaUpdatedPayload,
   SessionProposedPlanUpsertedPayload,
-  SessionResearchCardLifecycleUpdatedPayload,
-  SessionResearchCardProposedPayload,
-  SessionResearchCardReviewedPayload,
-  SessionResearchCardSupersededPayload,
-  SessionResearchCardUpdatedPayload,
   SessionRuntimeModeSetPayload,
   SessionUnarchivedPayload,
   SessionRevertedPayload,
@@ -148,33 +140,6 @@ function retainSessionProposedPlansAfterRevert(
   );
 }
 
-function retainSessionResearchCardsAfterRevert(
-  researchCards: ReadonlyArray<ResearchCardSummary>,
-  retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<ResearchCardSummary> {
-  return researchCards.filter(
-    (researchCard) => researchCard.turnId === null || retainedTurnIds.has(researchCard.turnId),
-  );
-}
-
-function summarizeResearchCard(
-  sessionId: SessionId,
-  card: OrchestrationResearchCard,
-): ResearchCardSummary {
-  return {
-    id: card.id,
-    sessionId,
-    type: card.type,
-    status: card.status,
-    title: card.title,
-    artifactCount: card.artifacts.length,
-    hasPreview: card.preview !== undefined,
-    turnId: card.turnId,
-    createdAt: card.createdAt,
-    updatedAt: card.updatedAt,
-  };
-}
-
 function compareSessionActivities(
   left: OrchestrationSession["activities"][number],
   right: OrchestrationSession["activities"][number],
@@ -190,29 +155,6 @@ function compareSessionActivities(
   }
 
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
-}
-
-function reviewActionToStatus(
-  action: string,
-  currentStatus: ResearchCardLifecycleStatus,
-): ResearchCardLifecycleStatus {
-  switch (action) {
-    case "accept":
-    case "accepted":
-      return "accepted";
-    case "requestChanges":
-    case "request_changes":
-    case "changes-requested":
-      return "changes-requested";
-    case "reject":
-    case "rejected":
-      return "rejected";
-    case "dismiss":
-    case "dismissed":
-      return "dismissed";
-    default:
-      return currentStatus;
-  }
 }
 
 export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
@@ -575,181 +517,6 @@ export function projectEvent(
         };
       });
 
-    case "session.research-card-proposed":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          SessionResearchCardProposedPayload,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
-        if (!session) {
-          return nextBase;
-        }
-
-        const researchCards = [
-          ...session.researchCards.filter((entry) => entry.id !== payload.researchCard.id),
-          summarizeResearchCard(payload.sessionId, payload.researchCard),
-        ].toSorted(
-          (left, right) =>
-            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-        );
-
-        return {
-          ...nextBase,
-          sessions: updateSession(nextBase.sessions, payload.sessionId, {
-            researchCards,
-            updatedAt: event.occurredAt,
-          }),
-        };
-      });
-
-    case "session.research-card-updated":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          SessionResearchCardUpdatedPayload,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
-        if (!session) {
-          return nextBase;
-        }
-
-        const researchCards = [
-          ...session.researchCards.filter((entry) => entry.id !== payload.cardId),
-          summarizeResearchCard(payload.sessionId, payload.researchCard),
-        ].toSorted(
-          (left, right) =>
-            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-        );
-
-        return {
-          ...nextBase,
-          sessions: updateSession(nextBase.sessions, payload.sessionId, {
-            researchCards,
-            updatedAt: event.occurredAt,
-          }),
-        };
-      });
-
-    case "session.research-card-reviewed":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          SessionResearchCardReviewedPayload,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
-        if (!session) {
-          return nextBase;
-        }
-
-        const researchCards: ResearchCardSummary[] = [];
-        for (const researchCard of session.researchCards) {
-          if (researchCard.id !== payload.cardId) {
-            researchCards.push(researchCard);
-            continue;
-          }
-          researchCards.push({
-            ...researchCard,
-            status: reviewActionToStatus(payload.response.action, researchCard.status),
-            updatedAt: payload.response.timestamp,
-          });
-        }
-
-        return {
-          ...nextBase,
-          sessions: updateSession(nextBase.sessions, payload.sessionId, {
-            researchCards,
-            updatedAt: event.occurredAt,
-          }),
-        };
-      });
-
-    case "session.research-card-lifecycle-updated":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          SessionResearchCardLifecycleUpdatedPayload,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
-        if (!session) {
-          return nextBase;
-        }
-
-        const researchCards: ResearchCardSummary[] = [];
-        for (const researchCard of session.researchCards) {
-          researchCards.push(
-            researchCard.id === payload.cardId
-              ? {
-                  ...researchCard,
-                  status: payload.status,
-                  updatedAt: payload.updatedAt,
-                }
-              : researchCard,
-          );
-        }
-
-        return {
-          ...nextBase,
-          sessions: updateSession(nextBase.sessions, payload.sessionId, {
-            researchCards,
-            updatedAt: event.occurredAt,
-          }),
-        };
-      });
-
-    case "session.research-card-superseded":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          SessionResearchCardSupersededPayload,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const session = nextBase.sessions.find((entry) => entry.id === payload.sessionId);
-        if (!session) {
-          return nextBase;
-        }
-
-        const nextResearchCards: ResearchCardSummary[] = [];
-        for (const researchCard of session.researchCards) {
-          if (researchCard.id === payload.replacementCard.id) {
-            continue;
-          }
-          nextResearchCards.push(
-            researchCard.id === payload.cardId
-              ? {
-                  ...researchCard,
-                  status: "superseded",
-                  updatedAt: payload.supersededAt,
-                }
-              : researchCard,
-          );
-        }
-        const researchCards = [
-          ...nextResearchCards,
-          summarizeResearchCard(payload.sessionId, payload.replacementCard),
-        ].toSorted(
-          (left, right) =>
-            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-        );
-
-        return {
-          ...nextBase,
-          sessions: updateSession(nextBase.sessions, payload.sessionId, {
-            researchCards,
-            updatedAt: event.occurredAt,
-          }),
-        };
-      });
-
     case "session.turn-start-requested":
       return decodeForEvent(
         SessionTurnStartRequestedPayload,
@@ -864,10 +631,6 @@ export function projectEvent(
             session.proposedPlans,
             retainedTurnIds,
           ).slice(-200);
-          const researchCards = retainSessionResearchCardsAfterRevert(
-            session.researchCards,
-            retainedTurnIds,
-          );
           const activities = retainSessionActivitiesAfterRevert(
             session.activities,
             retainedTurnIds,
@@ -892,7 +655,6 @@ export function projectEvent(
               checkpoints,
               messages,
               proposedPlans,
-              researchCards,
               activities,
               latestTurn,
               updatedAt: event.occurredAt,

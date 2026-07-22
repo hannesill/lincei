@@ -18,10 +18,6 @@
     "./settings": {
       "types": "./src/settings.ts",
       "import": "./src/settings.ts"
-    },
-    "./researchStudy": {
-      "types": "./src/researchStudy.ts",
-      "import": "./src/researchStudy.ts"
     }
   },
   "scripts": {

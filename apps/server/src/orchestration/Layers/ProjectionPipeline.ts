@@ -2,10 +2,8 @@ import {
   ApprovalRequestId,
   type ChatAttachment,
   type OrchestrationEvent,
-  type ResearchCardLifecycleStatus,
   SessionId,
 } from "@t3tools/contracts";
-import { attachResearchCardReviewResponse } from "@t3tools/shared/researchCards";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -16,6 +14,10 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
+import {
+  isLegacyNativeCardEvent,
+  type PersistedOrchestrationEvent,
+} from "../../persistence/LegacyNativeCardEvents.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionStateRepository } from "../../persistence/Services/ProjectionState.ts";
@@ -29,10 +31,6 @@ import {
   type ProjectionSessionProposedPlan,
   ProjectionSessionProposedPlanRepository,
 } from "../../persistence/Services/ProjectionSessionProposedPlans.ts";
-import {
-  type ProjectionSessionResearchCard,
-  ProjectionSessionResearchCardRepository,
-} from "../../persistence/Services/ProjectionSessionResearchCards.ts";
 import { ProjectionProviderRuntimeRepository } from "../../persistence/Services/ProjectionProviderRuntimes.ts";
 import {
   type ProjectionTurn,
@@ -45,7 +43,6 @@ import { ProjectionStateRepositoryLive } from "../../persistence/Layers/Projecti
 import { ProjectionSessionActivityRepositoryLive } from "../../persistence/Layers/ProjectionSessionActivities.ts";
 import { ProjectionSessionMessageRepositoryLive } from "../../persistence/Layers/ProjectionSessionMessages.ts";
 import { ProjectionSessionProposedPlanRepositoryLive } from "../../persistence/Layers/ProjectionSessionProposedPlans.ts";
-import { ProjectionSessionResearchCardRepositoryLive } from "../../persistence/Layers/ProjectionSessionResearchCards.ts";
 import { ProjectionProviderRuntimeRepositoryLive } from "../../persistence/Layers/ProjectionProviderRuntimes.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionSessionRepositoryLive } from "../../persistence/Layers/ProjectionSessions.ts";
@@ -66,7 +63,6 @@ export const ORCHESTRATION_PROJECTOR_NAMES = {
   sessions: "projection.sessions",
   sessionMessages: "projection.session-messages",
   sessionProposedPlans: "projection.session-proposed-plans",
-  sessionResearchCards: "projection.session-research-cards",
   sessionActivities: "projection.session-activities",
   providerRuntimes: "projection.session-sessions",
   sessionTurns: "projection.session-turns",
@@ -101,29 +97,6 @@ function extractActivityRequestId(payload: unknown): ApprovalRequestId | null {
   }
   const requestId = (payload as Record<string, unknown>).requestId;
   return typeof requestId === "string" ? ApprovalRequestId.make(requestId) : null;
-}
-
-function reviewActionToResearchCardStatus(
-  action: string,
-  currentStatus: ResearchCardLifecycleStatus,
-): ResearchCardLifecycleStatus {
-  switch (action) {
-    case "accept":
-    case "accepted":
-      return "accepted";
-    case "requestChanges":
-    case "request_changes":
-    case "changes-requested":
-      return "changes-requested";
-    case "reject":
-    case "rejected":
-      return "rejected";
-    case "dismiss":
-    case "dismissed":
-      return "dismissed";
-    default:
-      return currentStatus;
-  }
 }
 
 function isStalePendingApprovalFailureDetail(detail: string | null): boolean {
@@ -332,26 +305,6 @@ function retainProjectionProposedPlansAfterRevert(
   );
 }
 
-function retainProjectionResearchCardsAfterRevert(
-  researchCards: ReadonlyArray<ProjectionSessionResearchCard>,
-  turns: ReadonlyArray<ProjectionTurn>,
-  turnCount: number,
-): ReadonlyArray<ProjectionSessionResearchCard> {
-  const retainedTurnIds = new Set<string>(
-    turns
-      .filter(
-        (turn) =>
-          turn.turnId !== null &&
-          turn.checkpointTurnCount !== null &&
-          turn.checkpointTurnCount <= turnCount,
-      )
-      .flatMap((turn) => (turn.turnId === null ? [] : [turn.turnId])),
-  );
-  return researchCards.filter(
-    (researchCard) => researchCard.turnId === null || retainedTurnIds.has(researchCard.turnId),
-  );
-}
-
 function collectSessionAttachmentRelativePaths(
   sessionId: string,
   messages: ReadonlyArray<ProjectionSessionMessage>,
@@ -503,7 +456,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionSessionRepository = yield* ProjectionSessionRepository;
     const projectionSessionMessageRepository = yield* ProjectionSessionMessageRepository;
     const projectionSessionProposedPlanRepository = yield* ProjectionSessionProposedPlanRepository;
-    const projectionSessionResearchCardRepository = yield* ProjectionSessionResearchCardRepository;
     const projectionSessionActivityRepository = yield* ProjectionSessionActivityRepository;
     const projectionProviderRuntimeRepository = yield* ProjectionProviderRuntimeRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
@@ -642,7 +594,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             );
             yield* projectionSessionMessageRepository.deleteBySessionId({ sessionId });
             yield* projectionSessionProposedPlanRepository.deleteBySessionId({ sessionId });
-            yield* projectionSessionResearchCardRepository.deleteBySessionId({ sessionId });
             yield* projectionSessionActivityRepository.deleteBySessionId({ sessionId });
             yield* projectionProviderRuntimeRepository.deleteBySessionId({ sessionId });
             yield* projectionTurnRepository.deleteBySessionId({ sessionId });
@@ -797,11 +748,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
 
         case "session.message-sent":
         case "session.proposed-plan-upserted":
-        case "session.research-card-proposed":
-        case "session.research-card-updated":
-        case "session.research-card-reviewed":
-        case "session.research-card-lifecycle-updated":
-        case "session.research-card-superseded":
         case "session.activity-appended":
         case "session.approval-response-requested":
         case "session.user-input-response-requested": {
@@ -1014,133 +960,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             sessionId: event.payload.sessionId,
           });
           yield* Effect.forEach(keptRows, projectionSessionProposedPlanRepository.upsert, {
-            concurrency: 1,
-          }).pipe(Effect.asVoid);
-          return;
-        }
-
-        default:
-          return;
-      }
-    });
-
-    const applySessionResearchCardsProjection: ProjectorDefinition["apply"] = Effect.fn(
-      "applySessionResearchCardsProjection",
-    )(function* (event, _attachmentSideEffects) {
-      switch (event.type) {
-        case "session.research-card-proposed":
-        case "session.research-card-updated": {
-          const card = event.payload.researchCard;
-          yield* projectionSessionResearchCardRepository.upsert({
-            cardId: card.id,
-            sessionId: event.payload.sessionId,
-            turnId: card.turnId,
-            type: card.type,
-            status: card.status,
-            title: card.title,
-            ...(card.preview !== undefined ? { preview: card.preview } : {}),
-            artifacts: [...card.artifacts],
-            provenance: [...card.provenance],
-            ...(card.review !== undefined ? { review: card.review } : {}),
-            createdAt: card.createdAt,
-            updatedAt: card.updatedAt,
-          });
-          return;
-        }
-
-        case "session.research-card-reviewed": {
-          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
-            sessionId: event.payload.sessionId,
-          });
-          const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
-          if (existingRow === undefined) {
-            return;
-          }
-
-          yield* projectionSessionResearchCardRepository.upsert({
-            ...existingRow,
-            status: reviewActionToResearchCardStatus(
-              event.payload.response.action,
-              existingRow.status,
-            ),
-            review: attachResearchCardReviewResponse(existingRow.review, event.payload.response),
-            updatedAt: event.payload.response.timestamp,
-          });
-          return;
-        }
-
-        case "session.research-card-lifecycle-updated": {
-          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
-            sessionId: event.payload.sessionId,
-          });
-          const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
-          if (existingRow === undefined) {
-            return;
-          }
-
-          yield* projectionSessionResearchCardRepository.upsert({
-            ...existingRow,
-            status: event.payload.status,
-            updatedAt: event.payload.updatedAt,
-          });
-          return;
-        }
-
-        case "session.research-card-superseded": {
-          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
-            sessionId: event.payload.sessionId,
-          });
-          const existingRow = existingRows.find((row) => row.cardId === event.payload.cardId);
-          if (existingRow !== undefined) {
-            yield* projectionSessionResearchCardRepository.upsert({
-              ...existingRow,
-              status: "superseded",
-              updatedAt: event.payload.supersededAt,
-            });
-          }
-
-          const replacement = event.payload.replacementCard;
-          yield* projectionSessionResearchCardRepository.upsert({
-            cardId: replacement.id,
-            sessionId: event.payload.sessionId,
-            turnId: replacement.turnId,
-            type: replacement.type,
-            status: replacement.status,
-            title: replacement.title,
-            ...(replacement.preview !== undefined ? { preview: replacement.preview } : {}),
-            artifacts: [...replacement.artifacts],
-            provenance: [...replacement.provenance],
-            ...(replacement.review !== undefined ? { review: replacement.review } : {}),
-            createdAt: replacement.createdAt,
-            updatedAt: replacement.updatedAt,
-          });
-          return;
-        }
-
-        case "session.reverted": {
-          const existingRows = yield* projectionSessionResearchCardRepository.listBySessionId({
-            sessionId: event.payload.sessionId,
-          });
-          if (existingRows.length === 0) {
-            return;
-          }
-
-          const existingTurns = yield* projectionTurnRepository.listBySessionId({
-            sessionId: event.payload.sessionId,
-          });
-          const keptRows = retainProjectionResearchCardsAfterRevert(
-            existingRows,
-            existingTurns,
-            event.payload.turnCount,
-          );
-          if (keptRows.length === existingRows.length) {
-            return;
-          }
-
-          yield* projectionSessionResearchCardRepository.deleteBySessionId({
-            sessionId: event.payload.sessionId,
-          });
-          yield* Effect.forEach(keptRows, projectionSessionResearchCardRepository.upsert, {
             concurrency: 1,
           }).pipe(Effect.asVoid);
           return;
@@ -1617,10 +1436,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         apply: applySessionProposedPlansProjection,
       },
       {
-        name: ORCHESTRATION_PROJECTOR_NAMES.sessionResearchCards,
-        apply: applySessionResearchCardsProjection,
-      },
-      {
         name: ORCHESTRATION_PROJECTOR_NAMES.sessionActivities,
         apply: applySessionActivitiesProjection,
       },
@@ -1679,6 +1494,18 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       );
     });
 
+    const runProjectorForPersistedEvent = (
+      projector: ProjectorDefinition,
+      event: PersistedOrchestrationEvent,
+    ) =>
+      isLegacyNativeCardEvent(event)
+        ? projectionStateRepository.upsert({
+            projector: projector.name,
+            lastAppliedSequence: event.sequence,
+            updatedAt: event.occurredAt,
+          })
+        : runProjectorForEvent(projector, event);
+
     const bootstrapProjector = (projector: ProjectorDefinition) =>
       projectionStateRepository
         .getByProjector({
@@ -1690,7 +1517,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
               eventStore.readFromSequence(
                 Option.isSome(stateRow) ? stateRow.value.lastAppliedSequence : 0,
               ),
-              (event) => runProjectorForEvent(projector, event),
+              (event) => runProjectorForPersistedEvent(projector, event),
             ),
           ),
         );
@@ -1742,7 +1569,6 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionSessionRepositoryLive),
   Layer.provideMerge(ProjectionSessionMessageRepositoryLive),
   Layer.provideMerge(ProjectionSessionProposedPlanRepositoryLive),
-  Layer.provideMerge(ProjectionSessionResearchCardRepositoryLive),
   Layer.provideMerge(ProjectionSessionActivityRepositoryLive),
   Layer.provideMerge(ProjectionProviderRuntimeRepositoryLive),
   Layer.provideMerge(ProjectionTurnRepositoryLive),

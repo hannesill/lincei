@@ -108,7 +108,6 @@ describe("CheckpointDiffQueryLive", () => {
             }),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
       ),
     );
@@ -201,7 +200,6 @@ describe("CheckpointDiffQueryLive", () => {
           getFullSessionDiffContext: () => Effect.die("unused"),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
       ),
     );
@@ -284,7 +282,6 @@ describe("CheckpointDiffQueryLive", () => {
           getFullSessionDiffContext: () => Effect.die("unused"),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
       ),
     );
@@ -352,7 +349,6 @@ describe("CheckpointDiffQueryLive", () => {
           getFullSessionDiffContext: () => Effect.die("unused"),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
       ),
     );
@@ -405,7 +401,6 @@ describe("CheckpointDiffQueryLive", () => {
           getFullSessionDiffContext: () => Effect.succeed(Option.none()),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
       ),
     );

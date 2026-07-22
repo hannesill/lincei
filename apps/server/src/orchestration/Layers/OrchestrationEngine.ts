@@ -30,6 +30,7 @@ import {
 } from "../../observability/Metrics.ts";
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
+import { isCurrentOrchestrationEvent } from "../../persistence/LegacyNativeCardEvents.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import {
   OrchestrationCommandInvariantError,
@@ -113,7 +114,9 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     } as const;
     const reconcileReadModelAfterDispatchFailure = Effect.gen(function* () {
       const persistedEvents = yield* Stream.runCollect(
-        eventStore.readFromSequence(dispatchStartSequence),
+        eventStore
+          .readFromSequence(dispatchStartSequence)
+          .pipe(Stream.filter(isCurrentOrchestrationEvent)),
       ).pipe(Effect.map((chunk): OrchestrationEvent[] => Array.from(chunk)));
       if (persistedEvents.length === 0) {
         return;
@@ -308,7 +311,9 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   );
 
   const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive) =>
-    eventStore.readFromSequence(fromSequenceExclusive);
+    eventStore
+      .readFromSequence(fromSequenceExclusive)
+      .pipe(Stream.filter(isCurrentOrchestrationEvent));
 
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
     Effect.gen(function* () {

@@ -3,7 +3,6 @@ import type { EnvironmentState } from "./store";
 import type {
   ChatMessage,
   ProposedPlan,
-  ResearchCard,
   Session,
   ProviderRuntime,
   SessionShell,
@@ -14,12 +13,10 @@ import type {
 const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_ACTIVITIES: Session["activities"] = [];
 const EMPTY_PROPOSED_PLANS: ProposedPlan[] = [];
-const EMPTY_RESEARCH_CARDS: ResearchCard[] = [];
 const EMPTY_TURN_DIFF_SUMMARIES: TurnDiffSummary[] = [];
 const EMPTY_MESSAGE_MAP: Record<MessageId, ChatMessage> = {};
 const EMPTY_ACTIVITY_MAP: Record<string, Session["activities"][number]> = {};
 const EMPTY_PROPOSED_PLAN_MAP: Record<string, ProposedPlan> = {};
-const EMPTY_RESEARCH_CARD_MAP: Record<string, ResearchCard> = {};
 const EMPTY_TURN_DIFF_MAP: Record<TurnId, TurnDiffSummary> = {};
 
 const collectedByIdsCache = new WeakMap<readonly string[], WeakMap<object, readonly unknown[]>>();
@@ -31,7 +28,6 @@ const sessionCache = new WeakMap<
     messages: Session["messages"];
     activities: Session["activities"];
     proposedPlans: Session["proposedPlans"];
-    researchCards: Session["researchCards"];
     turnDiffSummaries: Session["turnDiffSummaries"];
     session: Session;
   }
@@ -94,17 +90,6 @@ function selectSessionProposedPlans(
   );
 }
 
-function selectSessionResearchCards(
-  state: EnvironmentState,
-  sessionId: SessionId,
-): Session["researchCards"] {
-  return collectByIds(
-    state.researchCardIdsBySessionId[sessionId],
-    state.researchCardBySessionId[sessionId] ?? EMPTY_RESEARCH_CARD_MAP,
-    EMPTY_RESEARCH_CARDS,
-  );
-}
-
 function selectSessionTurnDiffSummaries(
   state: EnvironmentState,
   sessionId: SessionId,
@@ -130,7 +115,6 @@ export function getSessionFromEnvironmentState(
   const messages = selectSessionMessages(state, sessionId);
   const activities = selectSessionActivities(state, sessionId);
   const proposedPlans = selectSessionProposedPlans(state, sessionId);
-  const researchCards = selectSessionResearchCards(state, sessionId);
   const turnDiffSummaries = selectSessionTurnDiffSummaries(state, sessionId);
   const cached = sessionCache.get(shell);
 
@@ -141,7 +125,6 @@ export function getSessionFromEnvironmentState(
     cached.messages === messages &&
     cached.activities === activities &&
     cached.proposedPlans === proposedPlans &&
-    cached.researchCards === researchCards &&
     cached.turnDiffSummaries === turnDiffSummaries
   ) {
     return cached.session;
@@ -155,7 +138,6 @@ export function getSessionFromEnvironmentState(
     messages,
     activities,
     proposedPlans,
-    researchCards,
     turnDiffSummaries,
   };
 
@@ -165,7 +147,6 @@ export function getSessionFromEnvironmentState(
     messages,
     activities,
     proposedPlans,
-    researchCards,
     turnDiffSummaries,
     session,
   });

@@ -25,7 +25,6 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
   orchestrationDispatchRouteLayer,
-  orchestrationResearchCardDetailRouteLayer,
   orchestrationSnapshotRouteLayer,
 } from "./orchestration/http.ts";
 import { datasetHttpRouteLayer } from "./datasets/http.ts";
@@ -35,12 +34,9 @@ import {
   CommandId,
   ProviderInstanceId,
   ProjectId,
-  ResearchCardId,
   SessionId,
   type DatasetStatusResult,
   type ModelSelection,
-  type OrchestrationResearchCard,
-  type ResearchCardType,
 } from "@t3tools/contracts";
 import {
   makePersistedServerRuntimeState,
@@ -131,21 +127,6 @@ const readPersistedSnapshot = (baseDir: string) =>
     }).pipe(Effect.provide(makeProjectPersistenceLayer(config)));
   });
 
-const readPersistedResearchCardDetail = (
-  baseDir: string,
-  input: {
-    readonly sessionId: SessionId;
-    readonly cardId: ResearchCardId;
-  },
-) =>
-  Effect.gen(function* () {
-    const config = yield* makeCliTestServerConfig(baseDir);
-    return yield* Effect.gen(function* () {
-      const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
-      return yield* projectionSnapshotQuery.getResearchCardDetail(input);
-    }).pipe(Effect.provide(makeProjectPersistenceLayer(config)));
-  });
-
 const runHelpCommand = (entrypoint: "bin.ts" | "lincei.ts") =>
   Effect.promise(async () => {
     const child = spawn(process.execPath, [`src/${entrypoint}`, "--help"], {
@@ -202,20 +183,7 @@ const seedOfflineAgentContext = (baseDir: string) =>
     const config = yield* makeCliTestServerConfig(baseDir);
     const projectId = ProjectId.make("project-agent-cli");
     const sessionId = SessionId.make("session-agent-cli");
-    const cardId = ResearchCardId.make("card-agent-cli");
     const now = "2026-05-30T00:00:00.000Z";
-    const card = {
-      id: cardId,
-      type: "markdown" satisfies ResearchCardType,
-      status: "proposed",
-      title: "Baseline cohort",
-      preview: { markdown: "Cohort summary" },
-      artifacts: [],
-      provenance: [],
-      turnId: null,
-      createdAt: now,
-      updatedAt: now,
-    } satisfies OrchestrationResearchCard;
 
     yield* Effect.gen(function* () {
       const orchestrationEngine = yield* OrchestrationEngineService;
@@ -241,16 +209,9 @@ const seedOfflineAgentContext = (baseDir: string) =>
         worktreePath: null,
         createdAt: now,
       });
-      yield* orchestrationEngine.dispatch({
-        type: "session.research-card.propose",
-        commandId: CommandId.make("cmd-agent-card"),
-        sessionId,
-        researchCard: card,
-        createdAt: now,
-      });
     }).pipe(Effect.provide(makeProjectPersistenceLayer(config)));
 
-    return { projectId, sessionId, cardId };
+    return { projectId, sessionId };
   });
 
 const addOfflineAgentSession = (
@@ -287,7 +248,6 @@ const withLiveProjectCliServer = <A, E, R>(baseDir: string, run: () => Effect.Ef
     const routesLayer = Layer.mergeAll(
       orchestrationSnapshotRouteLayer,
       orchestrationDispatchRouteLayer,
-      orchestrationResearchCardDetailRouteLayer,
     );
     const appLayer = HttpRouter.serve(routesLayer, {
       disableListenLog: true,
@@ -529,15 +489,15 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.isFalse(adminHelp.includes("context"));
 
       assert.isTrue(agentHelp.includes("USAGE\n  lincei"));
-      assert.isTrue(agentHelp.includes("card"));
+      assert.isFalse(agentHelp.includes("card"));
       assert.isTrue(agentHelp.includes("context"));
-      assert.isTrue(agentHelp.includes("artifact"));
+      assert.isFalse(agentHelp.includes("artifact"));
       assert.isTrue(agentHelp.includes("dataset"));
       assert.isTrue(agentHelp.includes("m4"));
       assert.isFalse(agentHelp.includes("serve"));
       assert.isFalse(agentHelp.includes("start"));
       assert.isFalse(agentHelp.includes("auth"));
-      assert.isFalse(agentHelp.includes("project"));
+      assert.isTrue(agentHelp.includes("project"));
     }),
   );
 
@@ -641,60 +601,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       const error = yield* runCliWithRuntime(["m4"]).pipe(Effect.flip);
 
       assertCliShowHelpWithUnrecognizedCommand(error, ["t3"], "m4");
-    }),
-  );
-
-  it.effect("lists, shows, and previews study artifacts by id", () =>
-    Effect.gen(function* () {
-      const studyRoot = mkdtempSync(join(tmpdir(), "lincei-cli-artifacts-study-"));
-      const writerScript = join(studyRoot, "write-artifact.mjs");
-      writeFileSync(
-        writerScript,
-        "import { writeFileSync } from 'node:fs';\nwriteFileSync('artifact.txt', 'hello artifact\\n');\n",
-      );
-
-      yield* runAgentCliWithRuntime([
-        "run",
-        "capture",
-        "--study-root",
-        studyRoot,
-        "--out",
-        "artifact.txt",
-        process.execPath,
-        writerScript,
-      ]);
-
-      const listOutput = yield* captureStdout(
-        runAgentCli(["artifact", "list", "--study-root", studyRoot]),
-      );
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      const listed = JSON.parse(listOutput.output) as {
-        readonly artifacts: ReadonlyArray<{ readonly artifact: { readonly id: string } }>;
-      };
-      const artifactId = listed.artifacts[0]?.artifact.id ?? "";
-
-      const showOutput = yield* captureStdout(
-        runAgentCli(["artifact", "show", artifactId, "--study-root", studyRoot]),
-      );
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      const shown = JSON.parse(showOutput.output) as {
-        readonly artifact: { readonly id: string; readonly relativePath: string };
-      };
-      const previewOutput = yield* captureStdout(
-        runAgentCli([
-          "artifact",
-          "preview",
-          artifactId,
-          "--study-root",
-          studyRoot,
-          "--max-bytes",
-          "128",
-        ]),
-      );
-
-      assert.equal(shown.artifact.id, artifactId);
-      assert.equal(shown.artifact.relativePath, "artifact.txt");
-      assert.equal(previewOutput.output, "hello artifact\n");
     }),
   );
 
@@ -917,48 +823,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
     }),
   );
 
-  it.effect("requires a live server for agent card writes when no runtime state exists", () =>
-    Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-write-no-runtime-"));
-      const error = yield* runAgentCliWithRuntime([
-        "card",
-        "propose",
-        "--session",
-        "session-agent-cli",
-        "--title",
-        "Evidence",
-        "--base-dir",
-        baseDir,
-      ]).pipe(Effect.flip);
-
-      assertAgentCliError(error, "start the Lincei server first");
-    }),
-  );
-
-  it.effect("fails closed for agent card writes when runtime state is stale", () =>
-    Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-write-stale-runtime-"));
-      const config = yield* makeCliTestServerConfig(baseDir);
-      yield* persistServerRuntimeState({
-        path: config.serverRuntimeStatePath,
-        state: yield* makePersistedServerRuntimeState({ config, port: 9 }),
-      });
-
-      const error = yield* runAgentCliWithRuntime([
-        "card",
-        "propose",
-        "--session",
-        "session-agent-cli",
-        "--title",
-        "Evidence",
-        "--base-dir",
-        baseDir,
-      ]).pipe(Effect.flip);
-
-      assertAgentCliError(error, "refusing to use stale projection");
-    }),
-  );
-
   it.effect("fails closed for agent reads when runtime state is stale", () =>
     Effect.gen(function* () {
       const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-read-stale-runtime-"));
@@ -997,15 +861,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         readonly session: {
           readonly id: string;
         };
-        readonly cards: ReadonlyArray<{
-          readonly id: string;
-          readonly title: string;
-          readonly type: string;
-          readonly status: string;
-          readonly updatedAt: string;
-          readonly artifactCount: number;
-          readonly hasPreview: boolean;
-        }>;
         readonly env?: unknown;
         readonly activeSessionIds?: unknown;
       };
@@ -1017,17 +872,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.equal(parsed.session.id, seeded.sessionId);
       assert.equal(parsed.env, undefined);
       assert.equal(parsed.activeSessionIds, undefined);
-      assert.deepEqual(parsed.cards, [
-        {
-          id: seeded.cardId,
-          title: "Baseline cohort",
-          type: "markdown",
-          status: "proposed",
-          updatedAt: "2026-05-30T00:00:00.000Z",
-          artifactCount: 0,
-          hasPreview: true,
-        },
-      ]);
     }),
   );
 
@@ -1065,7 +909,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
           readonly activeSessionIds?: unknown;
         };
         readonly session: { readonly id: string };
-        readonly cards: ReadonlyArray<{ readonly id: string }>;
         readonly env?: unknown;
         readonly diagnostics?: unknown;
       };
@@ -1077,10 +920,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.equal(parsed.workspace.activeSessionIds, undefined);
       assert.equal(parsed.env, undefined);
       assert.equal(parsed.diagnostics, undefined);
-      assert.deepEqual(
-        parsed.cards.map((card) => card.id),
-        [seeded.cardId],
-      );
       assert.equal(output.output.includes("Sibling Session"), false);
       assert.equal(output.output.includes(siblingSessionId), false);
     }),
@@ -1099,153 +938,13 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         readonly diagnostics: {
           readonly env: { readonly sessionId: string | null };
           readonly workspace: { readonly activeSessionIds: ReadonlyArray<string> };
-          readonly session: { readonly activeCardIds: ReadonlyArray<string> };
+          readonly session: { readonly messageCount: number };
         };
       };
 
       assert.deepEqual(parsed.diagnostics.workspace.activeSessionIds, [seeded.sessionId]);
-      assert.deepEqual(parsed.diagnostics.session.activeCardIds, [seeded.cardId]);
+      assert.equal(parsed.diagnostics.session.messageCount, 0);
       assert.equal(parsed.diagnostics.env.sessionId, null);
-    }),
-  );
-
-  it.effect("emits parseable compact card context with clean stdout", () =>
-    Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-card-context-clean-"));
-      const seeded = yield* seedOfflineAgentContext(baseDir);
-      const output = yield* captureStdout(
-        runAgentCli(["card", "context", "--session", seeded.sessionId, "--base-dir", baseDir]),
-      );
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      const parsed = JSON.parse(output.output) as {
-        readonly source: string;
-        readonly cards: ReadonlyArray<{ readonly id: string }>;
-      };
-
-      assert.equal(output.output.includes("\n"), false);
-      assert.equal(parsed.source, "offline");
-      assert.deepEqual(
-        parsed.cards.map((card) => card.id),
-        [seeded.cardId],
-      );
-    }),
-  );
-
-  it.effect("normalizes escaped markdown preview text for agent card writes", () =>
-    Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-card-preview-"));
-      const seeded = yield* seedOfflineAgentContext(baseDir);
-
-      yield* withLiveProjectCliServer(baseDir, () =>
-        Effect.gen(function* () {
-          const output = yield* captureStdout(
-            runAgentCli([
-              "card",
-              "propose",
-              "--session",
-              seeded.sessionId,
-              "--title",
-              "Escaped preview",
-              "--preview",
-              "# MIMIC cohort\\n\\n| group | n |\\n| - | -: |\\n| demo | 42 |",
-              "--base-dir",
-              baseDir,
-            ]),
-          );
-          // @effect-diagnostics-next-line preferSchemaOverJson:off
-          const parsed = JSON.parse(output.output) as {
-            readonly card: { readonly id: string };
-          };
-          const detail = yield* readPersistedResearchCardDetail(baseDir, {
-            sessionId: seeded.sessionId,
-            cardId: ResearchCardId.make(parsed.card.id),
-          });
-          assert.equal(detail._tag, "Some");
-          const preview =
-            detail._tag === "Some"
-              ? (detail.value.preview as { readonly markdown?: unknown } | undefined)
-              : undefined;
-          assert.equal(
-            preview?.markdown,
-            "# MIMIC cohort\n\n| group | n |\n| - | -: |\n| demo | 42 |",
-          );
-        }),
-      );
-    }),
-  );
-
-  it.effect("dispatches lifecycle and supersede commands for agent card workflows", () =>
-    Effect.gen(function* () {
-      const baseDir = mkdtempSync(join(tmpdir(), "lincei-agent-card-workflows-"));
-      const seeded = yield* seedOfflineAgentContext(baseDir);
-
-      yield* withLiveProjectCliServer(baseDir, () =>
-        Effect.gen(function* () {
-          yield* captureStdout(
-            runAgentCli([
-              "card",
-              "request-review",
-              seeded.cardId,
-              "--session",
-              seeded.sessionId,
-              "--note",
-              "Please verify denominators.",
-              "--base-dir",
-              baseDir,
-            ]),
-          );
-
-          const reviewSnapshot = yield* readPersistedSnapshot(baseDir);
-          const reviewedCard = reviewSnapshot.sessions
-            .find((session) => session.id === seeded.sessionId)
-            ?.researchCards.find((card) => card.id === seeded.cardId);
-          const reviewedCardDetail = yield* readPersistedResearchCardDetail(baseDir, {
-            sessionId: seeded.sessionId,
-            cardId: seeded.cardId,
-          });
-          assert.equal(reviewedCard?.status, "review-requested");
-          assert.equal(reviewedCardDetail._tag, "Some");
-          assert.equal(
-            reviewedCardDetail._tag === "Some"
-              ? reviewedCardDetail.value.review?.prompt
-              : undefined,
-            "Please verify denominators.",
-          );
-
-          const supersedeOutput = yield* captureStdout(
-            runAgentCli([
-              "card",
-              "supersede",
-              seeded.cardId,
-              "--session",
-              seeded.sessionId,
-              "--title",
-              "Replacement cohort",
-              "--base-dir",
-              baseDir,
-            ]),
-          );
-          // @effect-diagnostics-next-line preferSchemaOverJson:off
-          const parsed = JSON.parse(supersedeOutput.output) as {
-            readonly action: string;
-            readonly supersededCardId: string;
-            readonly card: { readonly id: string; readonly title: string };
-          };
-
-          const snapshot = yield* readPersistedSnapshot(baseDir);
-          const cards = snapshot.sessions.find(
-            (session) => session.id === seeded.sessionId,
-          )?.researchCards;
-          assert.equal(parsed.action, "superseded");
-          assert.equal(parsed.supersededCardId, seeded.cardId);
-          assert.equal(parsed.card.title, "Replacement cohort");
-          assert.equal(cards?.find((card) => card.id === seeded.cardId)?.status, "superseded");
-          assert.equal(
-            cards?.find((card) => card.id === parsed.card.id)?.title,
-            "Replacement cohort",
-          );
-        }),
-      );
     }),
   );
 });

@@ -55,8 +55,6 @@ import type {
   ClientOrchestrationCommand,
   OrchestrationGetFullSessionDiffInput,
   OrchestrationGetFullSessionDiffResult,
-  OrchestrationGetResearchCardDetailInput,
-  OrchestrationGetResearchCardDetailResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationShellSnapshot,
@@ -87,18 +85,6 @@ import type {
   SourceControlRepositoryInfo,
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
-import type {
-  StudyArtifactInput,
-  StudyArtifactPreviewInput,
-  StudyFilePreviewInput,
-  StudyFilePreviewResult,
-  StudyGetArtifactResult,
-  StudyListArtifactsInput,
-  StudyListArtifactsResult,
-  StudyPreviewArtifactResult,
-  StudyStatusInput,
-  StudyStatusResult,
-} from "./researchStudy.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -554,13 +540,6 @@ export interface EnvironmentApi {
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;
   };
-  study: {
-    getStatus: (input: StudyStatusInput) => Promise<StudyStatusResult>;
-    listArtifacts: (input: StudyListArtifactsInput) => Promise<StudyListArtifactsResult>;
-    getArtifact: (input: StudyArtifactInput) => Promise<StudyGetArtifactResult>;
-    previewArtifact: (input: StudyArtifactPreviewInput) => Promise<StudyPreviewArtifactResult>;
-    previewFile: (input: StudyFilePreviewInput) => Promise<StudyFilePreviewResult>;
-  };
   sourceControl: {
     lookupRepository: (
       input: SourceControlRepositoryLookupInput,
@@ -601,9 +580,6 @@ export interface EnvironmentApi {
     getFullSessionDiff: (
       input: OrchestrationGetFullSessionDiffInput,
     ) => Promise<OrchestrationGetFullSessionDiffResult>;
-    getResearchCardDetail: (
-      input: OrchestrationGetResearchCardDetailInput,
-    ) => Promise<OrchestrationGetResearchCardDetailResult>;
     getArchivedShellSnapshot: () => Promise<OrchestrationShellSnapshot>;
     subscribeShell: (
       callback: (event: OrchestrationShellStreamItem) => void,

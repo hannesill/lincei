@@ -7,11 +7,9 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
-  ResearchCardId,
   SessionId,
   TurnId,
   type OrchestrationEvent,
-  type OrchestrationSession,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -25,16 +23,10 @@ import {
   selectSessionExistsByRef,
   setSessionBranch,
   selectSessionsAcrossEnvironments,
-  syncServerSessionDetail,
   type AppState,
   type EnvironmentState,
 } from "./store";
-import {
-  DEFAULT_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  type ResearchCard,
-  type Session,
-} from "./types";
+import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Session } from "./types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
 const remoteEnvironmentId = EnvironmentId.make("environment-remote");
@@ -85,62 +77,12 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     turnDiffSummaries: [],
     activities: [],
     proposedPlans: [],
-    researchCards: [],
     error: null,
     createdAt: "2026-02-13T00:00:00.000Z",
     archivedAt: null,
     latestTurn: null,
     branch: null,
     worktreePath: null,
-    ...overrides,
-  };
-}
-
-function makeResearchCard(overrides: Partial<ResearchCard> = {}): ResearchCard {
-  return {
-    id: ResearchCardId.make("card-1"),
-    sessionId: SessionId.make("session-1"),
-    type: "markdown",
-    status: "proposed",
-    title: "Baseline cohort",
-    preview: "Initial cohort definition.",
-    artifacts: [],
-    artifactCount: 0,
-    hasPreview: true,
-    provenance: [],
-    turnId: null,
-    createdAt: "2026-02-13T00:00:00.000Z",
-    updatedAt: "2026-02-13T00:00:01.000Z",
-    ...overrides,
-  };
-}
-
-function makeServerSession(overrides: Partial<OrchestrationSession> = {}): OrchestrationSession {
-  return {
-    id: SessionId.make("session-1"),
-    projectId: ProjectId.make("project-1"),
-    title: "Session",
-    modelSelection: {
-      instanceId: ProviderInstanceId.make("codex"),
-      model: "gpt-5-codex",
-    },
-    runtimeMode: DEFAULT_RUNTIME_MODE,
-    interactionMode: DEFAULT_INTERACTION_MODE,
-    workflowId: null,
-    workflowVersion: null,
-    branch: null,
-    worktreePath: null,
-    latestTurn: null,
-    createdAt: "2026-02-13T00:00:00.000Z",
-    updatedAt: "2026-02-13T00:00:01.000Z",
-    archivedAt: null,
-    deletedAt: null,
-    messages: [],
-    proposedPlans: [],
-    researchCards: [],
-    activities: [],
-    checkpoints: [],
-    session: null,
     ...overrides,
   };
 }
@@ -223,14 +165,6 @@ function makeState(session: Session): AppState {
         session.proposedPlans.map((plan) => [plan.id, plan] as const),
       ) as EnvironmentState["proposedPlanBySessionId"][SessionId],
     },
-    researchCardIdsBySessionId: {
-      [session.id]: session.researchCards.map((card) => card.id),
-    },
-    researchCardBySessionId: {
-      [session.id]: Object.fromEntries(
-        session.researchCards.map((card) => [card.id, card] as const),
-      ) as EnvironmentState["researchCardBySessionId"][SessionId],
-    },
     turnDiffIdsBySessionId: {
       [session.id]: session.turnDiffSummaries.map((summary) => summary.turnId),
     },
@@ -262,8 +196,6 @@ function makeEmptyState(overrides: Partial<AppState & EnvironmentState> = {}): A
     activityBySessionId: {},
     proposedPlanIdsBySessionId: {},
     proposedPlanBySessionId: {},
-    researchCardIdsBySessionId: {},
-    researchCardBySessionId: {},
     turnDiffIdsBySessionId: {},
     turnDiffSummaryBySessionId: {},
     sidebarSessionSummaryById: {},
@@ -672,170 +604,6 @@ describe("incremental orchestration updates", () => {
     ]);
   });
 
-  it("hydrates research cards from session detail snapshots", () => {
-    const card = makeResearchCard({
-      id: ResearchCardId.make("card-snapshot"),
-      title: "Snapshot card",
-    });
-
-    const next = syncServerSessionDetail(
-      makeEmptyState(),
-      makeServerSession({ researchCards: [card] }),
-      localEnvironmentId,
-    );
-
-    expect(sessionsOf(next)[0]?.researchCards).toEqual([card]);
-    expect(
-      localEnvironmentStateOf(next).researchCardIdsBySessionId[SessionId.make("session-1")],
-    ).toEqual([card.id]);
-  });
-
-  it("applies research card proposed, updated, and reviewed events", () => {
-    const card = makeResearchCard({
-      id: ResearchCardId.make("card-events"),
-      review: {
-        prompt: "Review this cohort definition?",
-        actions: [{ id: "accept", label: "Accept" }],
-      },
-    });
-    const proposed = applyOrchestrationEvent(
-      makeState(makeSession()),
-      makeEvent("session.research-card-proposed", {
-        sessionId: SessionId.make("session-1"),
-        researchCard: card,
-      }),
-      localEnvironmentId,
-    );
-    expect(sessionsOf(proposed)[0]?.researchCards[0]?.title).toBe("Baseline cohort");
-
-    const updatedCard = makeResearchCard({
-      ...card,
-      status: "changes-requested",
-      title: "Updated cohort",
-      updatedAt: "2026-02-13T00:00:02.000Z",
-    });
-    const updated = applyOrchestrationEvent(
-      proposed,
-      makeEvent("session.research-card-updated", {
-        sessionId: SessionId.make("session-1"),
-        cardId: card.id,
-        researchCard: updatedCard,
-      }),
-      localEnvironmentId,
-    );
-    expect(sessionsOf(updated)[0]?.researchCards).toMatchObject([
-      { id: card.id, title: "Updated cohort", status: "changes-requested" },
-    ]);
-
-    const reviewed = applyOrchestrationEvent(
-      updated,
-      makeEvent("session.research-card-reviewed", {
-        sessionId: SessionId.make("session-1"),
-        cardId: card.id,
-        response: {
-          action: "accept",
-          summary: "Looks correct.",
-          timestamp: "2026-02-13T00:00:03.000Z",
-        },
-      }),
-      localEnvironmentId,
-    );
-
-    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.review?.response).toMatchObject({
-      action: "accept",
-      summary: "Looks correct.",
-    });
-    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.status).toBe("accepted");
-    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.updatedAt).toBe("2026-02-13T00:00:03.000Z");
-
-    const lifecycleUpdated = applyOrchestrationEvent(
-      reviewed,
-      makeEvent("session.research-card-lifecycle-updated", {
-        sessionId: SessionId.make("session-1"),
-        cardId: card.id,
-        status: "withdrawn",
-        action: "withdraw",
-        updatedAt: "2026-02-13T00:00:04.000Z",
-      }),
-      localEnvironmentId,
-    );
-    expect(sessionsOf(lifecycleUpdated)[0]?.researchCards[0]).toMatchObject({
-      id: card.id,
-      status: "withdrawn",
-      updatedAt: "2026-02-13T00:00:04.000Z",
-    });
-
-    const replacementCard = makeResearchCard({
-      id: ResearchCardId.make("card-replacement"),
-      title: "Replacement cohort",
-      createdAt: "2026-02-13T00:00:05.000Z",
-      updatedAt: "2026-02-13T00:00:05.000Z",
-    });
-    const superseded = applyOrchestrationEvent(
-      lifecycleUpdated,
-      makeEvent("session.research-card-superseded", {
-        sessionId: SessionId.make("session-1"),
-        cardId: card.id,
-        replacementCard,
-        supersededAt: "2026-02-13T00:00:05.000Z",
-      }),
-      localEnvironmentId,
-    );
-    expect(sessionsOf(superseded)[0]?.researchCards).toMatchObject([
-      { id: card.id, status: "superseded" },
-      { id: replacementCard.id, title: "Replacement cohort" },
-    ]);
-  });
-
-  it("preserves research card review responses without an existing review envelope", () => {
-    const card = makeResearchCard({
-      id: ResearchCardId.make("card-reviewless"),
-      review: undefined,
-    });
-    const reviewed = applyOrchestrationEvent(
-      makeState(makeSession({ researchCards: [card] })),
-      makeEvent("session.research-card-reviewed", {
-        sessionId: SessionId.make("session-1"),
-        cardId: card.id,
-        response: {
-          action: "request_changes",
-          summary: "Needs more detail.",
-          timestamp: "2026-02-13T00:00:03.000Z",
-        },
-      }),
-      localEnvironmentId,
-    );
-
-    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.status).toBe("changes-requested");
-    expect(sessionsOf(reviewed)[0]?.researchCards[0]?.review).toEqual({
-      prompt: "Human review",
-      actions: [],
-      response: {
-        action: "request_changes",
-        summary: "Needs more detail.",
-        timestamp: "2026-02-13T00:00:03.000Z",
-      },
-    });
-  });
-
-  it("clears research card slices when a session is removed", () => {
-    const session = makeSession({
-      researchCards: [makeResearchCard({ id: ResearchCardId.make("card-remove") })],
-    });
-
-    const next = applyOrchestrationEvent(
-      makeState(session),
-      makeEvent("session.deleted", {
-        sessionId: session.id,
-        deletedAt: "2026-02-13T00:00:02.000Z",
-      }),
-      localEnvironmentId,
-    );
-
-    expect(localEnvironmentStateOf(next).researchCardIdsBySessionId[session.id]).toBeUndefined();
-    expect(localEnvironmentStateOf(next).researchCardBySessionId[session.id]).toBeUndefined();
-  });
-
   it("updates only the affected session for message events", () => {
     const session1 = makeSession({
       id: SessionId.make("session-1"),
@@ -907,14 +675,6 @@ describe("incremental orchestration updates", () => {
       },
       proposedPlanBySessionId: {
         ...baseEnvironmentState.proposedPlanBySessionId,
-        [session2.id]: {},
-      },
-      researchCardIdsBySessionId: {
-        ...baseEnvironmentState.researchCardIdsBySessionId,
-        [session2.id]: [],
-      },
-      researchCardBySessionId: {
-        ...baseEnvironmentState.researchCardBySessionId,
         [session2.id]: {},
       },
       turnDiffIdsBySessionId: {
@@ -1155,23 +915,6 @@ describe("incremental orchestration updates", () => {
             updatedAt: "2026-02-27T00:00:02.000Z",
           },
         ],
-        researchCards: [
-          makeResearchCard({
-            id: ResearchCardId.make("card-global"),
-            title: "Global card",
-            turnId: null,
-          }),
-          makeResearchCard({
-            id: ResearchCardId.make("card-turn-1"),
-            title: "Turn 1 card",
-            turnId: TurnId.make("turn-1"),
-          }),
-          makeResearchCard({
-            id: ResearchCardId.make("card-turn-2"),
-            title: "Turn 2 card",
-            turnId: TurnId.make("turn-2"),
-          }),
-        ],
         activities: [
           {
             id: EventId.make("activity-1"),
@@ -1227,10 +970,6 @@ describe("incremental orchestration updates", () => {
       "assistant-1",
     ]);
     expect(sessionsOf(next)[0]?.proposedPlans.map((plan) => plan.id)).toEqual(["plan-1"]);
-    expect(sessionsOf(next)[0]?.researchCards.map((card) => card.id)).toEqual([
-      ResearchCardId.make("card-global"),
-      ResearchCardId.make("card-turn-1"),
-    ]);
     expect(sessionsOf(next)[0]?.activities.map((activity) => activity.id)).toEqual([
       EventId.make("activity-1"),
     ]);

@@ -5,7 +5,6 @@ import { ProviderDriverKind } from "./providerInstance.ts";
 
 export const LinceiSkillCategory = Schema.Literals([
   "api",
-  "cards",
   "workflow",
   "clinical-methods",
   "provider-native",

@@ -3,8 +3,6 @@ import type {
   ModelSelection,
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
-  OrchestrationResearchCard,
-  ResearchCardSummary,
   RepositoryIdentity,
   OrchestrationProviderRuntimeStatus,
   OrchestrationSessionActivity,
@@ -66,14 +64,6 @@ export interface ProposedPlan {
   updatedAt: string;
 }
 
-export type ResearchCard = ResearchCardSummary & {
-  preview?: OrchestrationResearchCard["preview"];
-  artifacts: OrchestrationResearchCard["artifacts"];
-  provenance: OrchestrationResearchCard["provenance"];
-  review?: OrchestrationResearchCard["review"];
-};
-export type ResearchCardDetail = OrchestrationResearchCard;
-
 export interface TurnDiffFileChange {
   path: string;
   kind?: string | undefined;
@@ -117,7 +107,6 @@ export interface Session {
   session: ProviderRuntime | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
-  researchCards: ResearchCard[];
   error: string | null;
   createdAt: string;
   archivedAt: string | null;

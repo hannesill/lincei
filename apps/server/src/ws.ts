@@ -30,7 +30,6 @@ import {
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
   SessionId,
-  StudyRecordError,
   type TerminalEvent,
   WS_METHODS,
   WsRpcGroup,
@@ -95,19 +94,7 @@ import {
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
-import {
-  getArtifact,
-  getStudyStatus,
-  listArtifacts,
-  previewArtifact,
-  previewStudyFile,
-} from "./study/StudyRecordService.ts";
-import {
-  resolveStudyRootForProject,
-  resolveStudyRootForSession,
-} from "./study/StudyRootResolver.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
-const isOrchestrationGetSnapshotError = Schema.is(OrchestrationGetSnapshotError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -118,11 +105,6 @@ function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
     type:
       | "session.message-sent"
       | "session.proposed-plan-upserted"
-      | "session.research-card-proposed"
-      | "session.research-card-updated"
-      | "session.research-card-reviewed"
-      | "session.research-card-lifecycle-updated"
-      | "session.research-card-superseded"
       | "session.activity-appended"
       | "session.turn-diff-completed"
       | "session.reverted"
@@ -132,11 +114,6 @@ function isSessionDetailEvent(event: OrchestrationEvent): event is Extract<
   return (
     event.type === "session.message-sent" ||
     event.type === "session.proposed-plan-upserted" ||
-    event.type === "session.research-card-proposed" ||
-    event.type === "session.research-card-updated" ||
-    event.type === "session.research-card-reviewed" ||
-    event.type === "session.research-card-lifecycle-updated" ||
-    event.type === "session.research-card-superseded" ||
     event.type === "session.activity-appended" ||
     event.type === "session.turn-diff-completed" ||
     event.type === "session.reverted" ||
@@ -752,31 +729,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "orchestration" },
           ),
-        [ORCHESTRATION_WS_METHODS.getResearchCardDetail]: (input) =>
-          observeRpcEffect(
-            ORCHESTRATION_WS_METHODS.getResearchCardDetail,
-            projectionSnapshotQuery.getResearchCardDetail(input).pipe(
-              Effect.flatMap((card) =>
-                Option.isSome(card)
-                  ? Effect.succeed(card.value)
-                  : Effect.fail(
-                      new OrchestrationGetSnapshotError({
-                        message: `Research card ${input.cardId} was not found`,
-                        cause: input,
-                      }),
-                    ),
-              ),
-              Effect.mapError((cause) =>
-                isOrchestrationGetSnapshotError(cause)
-                  ? cause
-                  : new OrchestrationGetSnapshotError({
-                      message: "Failed to load research card detail",
-                      cause,
-                    }),
-              ),
-            ),
-            { "rpc.aggregate": "orchestration" },
-          ),
         [ORCHESTRATION_WS_METHODS.replayEvents]: (input) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.replayEvents,
@@ -1088,116 +1040,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, externalLauncher.launchEditor(input), {
             "rpc.aggregate": "workspace",
           }),
-        [WS_METHODS.studyPreviewFile]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.studyPreviewFile,
-            Effect.gen(function* () {
-              const studyRoot = yield* resolveStudyRootForSession(
-                projectionSnapshotQuery,
-                input.sessionId,
-              );
-              return yield* Effect.tryPromise({
-                try: () =>
-                  previewStudyFile({
-                    studyRoot,
-                    relativePath: input.relativePath,
-                    ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
-                  }),
-                catch: (cause) =>
-                  new StudyRecordError({
-                    message:
-                      cause instanceof Error ? cause.message : "Failed to preview study file.",
-                    cause,
-                  }),
-              });
-            }),
-            { "rpc.aggregate": "study" },
-          ),
-        [WS_METHODS.studyListArtifacts]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.studyListArtifacts,
-            Effect.gen(function* () {
-              const studyRoot = yield* resolveStudyRootForProject(
-                projectionSnapshotQuery,
-                input.projectId,
-              );
-              return yield* Effect.tryPromise({
-                try: () => listArtifacts(studyRoot),
-                catch: (cause) =>
-                  new StudyRecordError({
-                    message:
-                      cause instanceof Error ? cause.message : "Failed to list study artifacts.",
-                    cause,
-                  }),
-              });
-            }),
-            { "rpc.aggregate": "study" },
-          ),
-        [WS_METHODS.studyGetArtifact]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.studyGetArtifact,
-            Effect.gen(function* () {
-              const studyRoot = yield* resolveStudyRootForSession(
-                projectionSnapshotQuery,
-                input.sessionId,
-              );
-              return yield* Effect.tryPromise({
-                try: () => getArtifact({ studyRoot, artifactId: input.artifactId }),
-                catch: (cause) =>
-                  new StudyRecordError({
-                    message:
-                      cause instanceof Error ? cause.message : "Failed to read study artifact.",
-                    cause,
-                  }),
-              });
-            }),
-            { "rpc.aggregate": "study" },
-          ),
-        [WS_METHODS.studyPreviewArtifact]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.studyPreviewArtifact,
-            Effect.gen(function* () {
-              const studyRoot = yield* resolveStudyRootForSession(
-                projectionSnapshotQuery,
-                input.sessionId,
-              );
-              return yield* Effect.tryPromise({
-                try: () =>
-                  previewArtifact({
-                    studyRoot,
-                    artifactId: input.artifactId,
-                    ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
-                  }),
-                catch: (cause) =>
-                  new StudyRecordError({
-                    message:
-                      cause instanceof Error ? cause.message : "Failed to preview study artifact.",
-                    cause,
-                  }),
-              });
-            }),
-            { "rpc.aggregate": "study" },
-          ),
-        [WS_METHODS.studyStatus]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.studyStatus,
-            Effect.gen(function* () {
-              const studyRoot = yield* resolveStudyRootForProject(
-                projectionSnapshotQuery,
-                input.projectId,
-              );
-              return yield* Effect.tryPromise({
-                try: () => getStudyStatus(studyRoot),
-                catch: (cause) =>
-                  new StudyRecordError({
-                    message:
-                      cause instanceof Error ? cause.message : "Failed to read study status.",
-                    cause,
-                  }),
-              });
-            }),
-            { "rpc.aggregate": "study" },
-          ),
         [WS_METHODS.filesystemBrowse]: (input) =>
           observeRpcEffect(
             WS_METHODS.filesystemBrowse,

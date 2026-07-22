@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  parseDiffRouteSearch,
-  stripCardSearchParams,
-  stripDiffSearchParams,
-} from "./diffRouteSearch";
+import { parseDiffRouteSearch, stripDiffSearchParams } from "./diffRouteSearch";
 
 describe("parseDiffRouteSearch", () => {
   it("parses valid diff search values", () => {
@@ -76,30 +72,14 @@ describe("parseDiffRouteSearch", () => {
     });
   });
 
-  it("parses cards as a mutually exclusive right panel", () => {
-    const parsed = parseDiffRouteSearch({
-      cards: "1",
-      diff: "1",
-      diffTurnId: "turn-1",
-      diffFilePath: "src/app.ts",
-    });
-
-    expect(parsed).toEqual({
-      cards: "1",
-    });
-  });
-
-  it("strips mutually exclusive right panel search params", () => {
+  it("strips diff search params", () => {
     expect(
       stripDiffSearchParams({
         diff: "1",
         diffTurnId: "turn-1",
         diffFilePath: "src/app.ts",
-        cards: "1",
         q: "keep",
       }),
     ).toEqual({ q: "keep" });
-
-    expect(stripCardSearchParams({ cards: "1", q: "keep" })).toEqual({ q: "keep" });
   });
 });

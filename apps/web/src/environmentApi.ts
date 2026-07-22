@@ -23,13 +23,6 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     filesystem: {
       browse: rpcClient.filesystem.browse,
     },
-    study: {
-      getStatus: rpcClient.study.getStatus,
-      listArtifacts: rpcClient.study.listArtifacts,
-      getArtifact: rpcClient.study.getArtifact,
-      previewArtifact: rpcClient.study.previewArtifact,
-      previewFile: rpcClient.study.previewFile,
-    },
     sourceControl: {
       lookupRepository: rpcClient.sourceControl.lookupRepository,
       cloneRepository: rpcClient.sourceControl.cloneRepository,
@@ -54,7 +47,6 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullSessionDiff: rpcClient.orchestration.getFullSessionDiff,
-      getResearchCardDetail: rpcClient.orchestration.getResearchCardDetail,
       getArchivedShellSnapshot: rpcClient.orchestration.getArchivedShellSnapshot,
       subscribeShell: (callback, options) =>
         rpcClient.orchestration.subscribeShell(callback, options),

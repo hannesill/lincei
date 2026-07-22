@@ -5,12 +5,9 @@ import type {
   OrchestrationMessage,
   OrchestrationProposedPlan,
   OrchestrationReadModel,
-  OrchestrationResearchCard,
   OrchestrationShellSnapshot,
   OrchestrationProviderRuntime,
   OrchestrationProviderRuntimeStatus,
-  ResearchCardSummary,
-  SessionId,
   OrchestrationSession,
   OrchestrationSessionShell,
 } from "@t3tools/contracts";
@@ -23,7 +20,6 @@ import type {
   ChatMessage,
   Project,
   ProposedPlan,
-  ResearchCard,
   SidebarSessionSummary,
   Session,
   ProviderRuntime,
@@ -105,46 +101,6 @@ export function mapProposedPlan(proposedPlan: OrchestrationProposedPlan): Propos
   };
 }
 
-export function mapResearchCard(researchCard: ResearchCardSummary): ResearchCard {
-  return {
-    ...researchCard,
-    artifacts: [],
-    provenance: [],
-  };
-}
-
-export function mapResearchCardDetail(
-  sessionId: SessionId,
-  researchCard: OrchestrationResearchCard,
-): ResearchCard {
-  return {
-    id: researchCard.id,
-    sessionId,
-    type: researchCard.type,
-    status: researchCard.status,
-    title: researchCard.title,
-    artifactCount: researchCard.artifacts.length,
-    hasPreview: researchCard.preview !== undefined,
-    ...(researchCard.preview !== undefined ? { preview: researchCard.preview } : {}),
-    artifacts: researchCard.artifacts.map((artifact) => ({ ...artifact })),
-    provenance: researchCard.provenance.map((entry) => ({ ...entry })),
-    ...(researchCard.review
-      ? {
-          review: {
-            ...researchCard.review,
-            actions: researchCard.review.actions.map((action) => ({ ...action })),
-            ...(researchCard.review.response
-              ? { response: { ...researchCard.review.response } }
-              : {}),
-          },
-        }
-      : {}),
-    turnId: researchCard.turnId,
-    createdAt: researchCard.createdAt,
-    updatedAt: researchCard.updatedAt,
-  };
-}
-
 export function mapTurnDiffSummary(checkpoint: OrchestrationCheckpointSummary): TurnDiffSummary {
   return {
     turnId: checkpoint.turnId,
@@ -193,7 +149,6 @@ export function mapSession(session: OrchestrationSession, environmentId: Environ
     session: session.session ? mapProviderRuntime(session.session) : null,
     messages: session.messages.map((message) => mapMessage(environmentId, message)),
     proposedPlans: session.proposedPlans.map(mapProposedPlan),
-    researchCards: session.researchCards.map(mapResearchCard),
     error: sanitizeSessionErrorMessage(session.session?.lastError),
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,

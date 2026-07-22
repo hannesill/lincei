@@ -3,7 +3,6 @@ import {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
-  type ResearchCardLifecycleStatus,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -15,8 +14,6 @@ import {
   listSessionsByProjectId,
   requireProject,
   requireProjectAbsent,
-  requireResearchCard,
-  requireResearchCardAbsent,
   requireSession,
   requireSessionArchived,
   requireSessionAbsent,
@@ -61,26 +58,6 @@ type PlannedOrchestrationEvent = Omit<OrchestrationEvent, "sequence">;
 type DecideOrchestrationCommandResult =
   | PlannedOrchestrationEvent
   | ReadonlyArray<PlannedOrchestrationEvent>;
-
-function invariantError(commandType: string, detail: string): OrchestrationCommandInvariantError {
-  return new OrchestrationCommandInvariantError({
-    commandType,
-    detail,
-  });
-}
-
-function lifecycleActionToStatus(
-  action: Extract<OrchestrationCommand, { type: "session.research-card.lifecycle" }>["action"],
-): ResearchCardLifecycleStatus {
-  switch (action) {
-    case "request_review":
-      return "review-requested";
-    case "withdraw":
-      return "withdrawn";
-    case "dismiss":
-      return "dismissed";
-  }
-}
 
 const decideCommandSequence = Effect.fn("decideCommandSequence")(function* ({
   commands,
@@ -759,172 +736,6 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           sessionId: command.sessionId,
           proposedPlan: command.proposedPlan,
-        },
-      };
-    }
-
-    case "session.research-card.propose": {
-      yield* requireSession({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-      });
-      yield* requireResearchCardAbsent({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-        cardId: command.researchCard.id,
-      });
-      return {
-        ...(yield* withEventBase({
-          aggregateKind: "session",
-          aggregateId: command.sessionId,
-          occurredAt: command.createdAt,
-          commandId: command.commandId,
-        })),
-        type: "session.research-card-proposed",
-        payload: {
-          sessionId: command.sessionId,
-          researchCard: command.researchCard,
-          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
-        },
-      };
-    }
-
-    case "session.research-card.update": {
-      yield* requireSession({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-      });
-      yield* requireResearchCard({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-        cardId: command.cardId,
-      });
-      if (command.researchCard.id !== command.cardId) {
-        return yield* invariantError(
-          command.type,
-          `Research card update id '${command.researchCard.id}' must match target card '${command.cardId}'.`,
-        );
-      }
-      return {
-        ...(yield* withEventBase({
-          aggregateKind: "session",
-          aggregateId: command.sessionId,
-          occurredAt: command.createdAt,
-          commandId: command.commandId,
-        })),
-        type: "session.research-card-updated",
-        payload: {
-          sessionId: command.sessionId,
-          cardId: command.cardId,
-          researchCard: command.researchCard,
-          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
-        },
-      };
-    }
-
-    case "session.research-card.review": {
-      yield* requireSession({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-      });
-      yield* requireResearchCard({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-        cardId: command.cardId,
-      });
-      return {
-        ...(yield* withEventBase({
-          aggregateKind: "session",
-          aggregateId: command.sessionId,
-          occurredAt: command.createdAt,
-          commandId: command.commandId,
-        })),
-        type: "session.research-card-reviewed",
-        payload: {
-          sessionId: command.sessionId,
-          cardId: command.cardId,
-          response: command.response,
-          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
-        },
-      };
-    }
-
-    case "session.research-card.lifecycle": {
-      yield* requireSession({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-      });
-      yield* requireResearchCard({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-        cardId: command.cardId,
-      });
-      return {
-        ...(yield* withEventBase({
-          aggregateKind: "session",
-          aggregateId: command.sessionId,
-          occurredAt: command.createdAt,
-          commandId: command.commandId,
-        })),
-        type: "session.research-card-lifecycle-updated",
-        payload: {
-          sessionId: command.sessionId,
-          cardId: command.cardId,
-          status: lifecycleActionToStatus(command.action),
-          action: command.action,
-          ...(command.note !== undefined ? { note: command.note } : {}),
-          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
-          updatedAt: command.createdAt,
-        },
-      };
-    }
-
-    case "session.research-card.supersede": {
-      yield* requireSession({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-      });
-      yield* requireResearchCard({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-        cardId: command.cardId,
-      });
-      if (command.replacementCard.id === command.cardId) {
-        return yield* invariantError(
-          command.type,
-          "Replacement research card id must be different from the superseded card id.",
-        );
-      }
-      yield* requireResearchCardAbsent({
-        readModel,
-        command,
-        sessionId: command.sessionId,
-        cardId: command.replacementCard.id,
-      });
-      return {
-        ...(yield* withEventBase({
-          aggregateKind: "session",
-          aggregateId: command.sessionId,
-          occurredAt: command.createdAt,
-          commandId: command.commandId,
-        })),
-        type: "session.research-card-superseded",
-        payload: {
-          sessionId: command.sessionId,
-          cardId: command.cardId,
-          replacementCard: command.replacementCard,
-          ...(command.studyRecord !== undefined ? { studyRecord: command.studyRecord } : {}),
-          supersededAt: command.createdAt,
         },
       };
     }

@@ -6,13 +6,11 @@ import {
   ORCHESTRATION_WS_METHODS,
   EnvironmentId,
   type EnvironmentApi,
-  type OrchestrationResearchCard,
   MessageId,
   type OrchestrationReadModel,
   type ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
-  ResearchCardId,
   type ServerConfig,
   type ServerLifecycleWelcomePayload,
   SessionId,
@@ -215,23 +213,6 @@ function createMockEnvironmentApi(input: {
     filesystem: {
       browse: input.browse,
     },
-    study: {
-      getStatus: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["study"]["getStatus"],
-      listArtifacts: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["study"]["listArtifacts"],
-      getArtifact: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["study"]["getArtifact"],
-      previewArtifact: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["study"]["previewArtifact"],
-      previewFile: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["study"]["previewFile"],
-    },
     sourceControl: {} as EnvironmentApi["sourceControl"],
     vcs: {} as EnvironmentApi["vcs"],
     git: {} as EnvironmentApi["git"],
@@ -243,9 +224,6 @@ function createMockEnvironmentApi(input: {
       getFullSessionDiff: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getFullSessionDiff"],
-      getResearchCardDetail: (() => {
-        throw new Error("Not implemented in browser test.");
-      }) as EnvironmentApi["orchestration"]["getResearchCardDetail"],
       getArchivedShellSnapshot: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getArchivedShellSnapshot"],
@@ -392,7 +370,6 @@ function createSnapshotForTargetUser(options: {
         messages,
         activities: [],
         proposedPlans: [],
-        researchCards: [],
         checkpoints: [],
         session: {
           sessionId: THREAD_ID,
@@ -408,200 +385,6 @@ function createSnapshotForTargetUser(options: {
     updatedAt: NOW_ISO,
   };
 }
-
-function createSnapshotWithResearchCards(): OrchestrationReadModel {
-  const snapshot = createSnapshotForTargetUser({
-    targetMessageId: MessageId.make("msg-research-card-target"),
-    targetText: "Summarize the cohort.",
-  });
-  const session = snapshot.sessions[0];
-  if (!session) {
-    return snapshot;
-  }
-
-  return {
-    ...snapshot,
-    sessions: [
-      {
-        ...session,
-        researchCards: [
-          {
-            id: ResearchCardId.make("card-cohort"),
-            sessionId: session.id,
-            type: "markdown",
-            status: "changes-requested",
-            title: "Cohort definition",
-            artifactCount: 2,
-            hasPreview: true,
-            turnId: null,
-            createdAt: isoAt(20),
-            updatedAt: isoAt(31),
-          },
-          {
-            id: ResearchCardId.make("card-balance"),
-            sessionId: session.id,
-            type: "table",
-            status: "accepted",
-            title: "Baseline balance",
-            artifactCount: 0,
-            hasPreview: true,
-            turnId: null,
-            createdAt: isoAt(10),
-            updatedAt: isoAt(10),
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function createSnapshotWithStudyResearchCardsForDraft(): OrchestrationReadModel {
-  const snapshot = createSnapshotWithResearchCards();
-  const sourceSessionId = "session-study-card-source" as SessionId;
-  const sessions = snapshot.sessions.slice();
-  const sourceSessionIndex = sessions.findIndex((session) => session.id === THREAD_ID);
-  const sourceSession = sourceSessionIndex >= 0 ? sessions[sourceSessionIndex] : undefined;
-  if (sourceSession) {
-    sessions[sourceSessionIndex] = Object.assign({}, sourceSession, {
-      id: sourceSessionId,
-      title: "Prior cohort review",
-      session: sourceSession.session
-        ? Object.assign({}, sourceSession.session, {
-            sessionId: sourceSessionId,
-          })
-        : null,
-      researchCards: sourceSession.researchCards.map((card) =>
-        Object.assign({}, card, {
-          sessionId: sourceSessionId,
-        }),
-      ),
-    });
-  }
-
-  return {
-    ...snapshot,
-    sessions,
-  };
-}
-
-function createResearchCardDetailForTest(input: {
-  readonly sessionId: SessionId;
-  readonly cardId: ResearchCardId;
-}): OrchestrationResearchCard | undefined {
-  const session = fixture.snapshot.sessions.find((entry) => entry.id === input.sessionId);
-  const summary = session?.researchCards.find((card) => card.id === input.cardId);
-  if (!session || !summary) {
-    return undefined;
-  }
-
-  if (input.cardId === ResearchCardId.make("card-cohort")) {
-    return {
-      id: input.cardId,
-      type: "markdown",
-      status: "changes-requested",
-      title: "Cohort definition",
-      preview:
-        "# MIMIC cohort\\n\\nPatients with heart failure\\n\\n| group | n |\\n| - | -: |\\n| demo | 42 |",
-      artifacts: [
-        {
-          id: "artifact-cohort-sql",
-          kind: "sql",
-          path: "analysis/cohort.sql",
-          label: "Cohort SQL",
-          contentHash: "sha256:abcdef123456",
-        },
-        {
-          id: "artifact-cohort-md",
-          kind: "markdown",
-          path: "cards/cohort.md",
-          label: "Cohort notes",
-          contentHash: "sha256:fedcba654321",
-        },
-      ],
-      provenance: [{ dataset: "MIMIC-IV demo", backend: "duckdb" }],
-      review: {
-        prompt: "Confirm this definition before extraction.",
-        actions: [],
-        response: {
-          action: "request-changes",
-          message: "Narrow the age range.",
-          timestamp: isoAt(32),
-        },
-      },
-      turnId: null,
-      createdAt: summary.createdAt,
-      updatedAt: summary.updatedAt,
-    };
-  }
-
-  return {
-    id: input.cardId,
-    type: "table",
-    status: "accepted",
-    title: "Baseline balance",
-    preview: {
-      columns: ["variable", "mean"],
-      rows: [["Age", 67.4]],
-    },
-    artifacts: [],
-    provenance: [],
-    turnId: null,
-    createdAt: summary.createdAt,
-    updatedAt: summary.updatedAt,
-  };
-}
-
-function createResearchCardStatusForTest() {
-  const now = isoAt(33);
-  const cards = fixture.snapshot.sessions.flatMap((session) =>
-    session.researchCards.flatMap((summary) => {
-      const detail = createResearchCardDetailForTest({
-        sessionId: session.id,
-        cardId: summary.id,
-      });
-      if (!detail) {
-        return [];
-      }
-      const consistencyStatus =
-        detail.id === ResearchCardId.make("card-cohort") ? "unknown" : "current";
-      return [
-        {
-          schemaVersion: 1,
-          id: detail.id,
-          card: detail,
-          dependencyIds: [],
-          dependencies: [],
-          artifactIds: [],
-          artifacts: detail.artifacts,
-          consistency: {
-            status: consistencyStatus,
-            checkedAt: now,
-          },
-          createdAt: detail.createdAt,
-          updatedAt: detail.updatedAt,
-        },
-      ];
-    }),
-  );
-  return {
-    study: {
-      schemaVersion: 1,
-      studyId: "study-browser-test",
-      title: "Browser test study",
-      createdAt: NOW_ISO,
-      updatedAt: now,
-    },
-    cards,
-    summary: {
-      current: cards.filter((card) => card.consistency.status === "current").length,
-      stale: 0,
-      missing: 0,
-      "dirty-source": 0,
-      unknown: cards.filter((card) => card.consistency.status === "unknown").length,
-    },
-  };
-}
-
 function buildFixture(snapshot: OrchestrationReadModel): TestFixture {
   return {
     snapshot,
@@ -653,7 +436,6 @@ function addSessionToSnapshot(
         messages: [],
         activities: [],
         proposedPlans: [],
-        researchCards: [],
         checkpoints: [],
         session: {
           sessionId,
@@ -990,7 +772,6 @@ function createSnapshotWithSecondaryProject(options?: {
           messages: [],
           activities: [],
           proposedPlans: [],
-          researchCards: [],
           checkpoints: [],
           session: {
             sessionId: "session-secondary-project" as SessionId,
@@ -1026,7 +807,6 @@ function createSnapshotWithSecondaryProject(options?: {
             messages: [],
             activities: [],
             proposedPlans: [],
-            researchCards: [],
             checkpoints: [],
             session: {
               sessionId: ARCHIVED_SECONDARY_THREAD_ID,
@@ -1257,17 +1037,6 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
         },
       ],
     };
-  }
-  if (tag === WS_METHODS.studyStatus) {
-    return createResearchCardStatusForTest();
-  }
-  if (tag === ORCHESTRATION_WS_METHODS.getResearchCardDetail) {
-    const sessionId = typeof body.sessionId === "string" ? SessionId.make(body.sessionId) : null;
-    const cardId = typeof body.cardId === "string" ? ResearchCardId.make(body.cardId) : null;
-    if (sessionId && cardId) {
-      return createResearchCardDetailForTest({ sessionId, cardId }) ?? {};
-    }
-    return {};
   }
   if (tag === WS_METHODS.vcsListRefs) {
     return {
@@ -1994,188 +1763,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
   afterEach(() => {
     customWsRpcResolver = null;
     document.body.innerHTML = "";
-  });
-
-  it("opens and closes the research card drawer from the header toggle", async () => {
-    const mounted = await mountChatView({
-      viewport: DEFAULT_VIEWPORT,
-      snapshot: createSnapshotForTargetUser({
-        targetMessageId: MessageId.make("msg-card-empty"),
-        targetText: "empty cards",
-      }),
-    });
-
-    try {
-      const toggle = await waitForElement(
-        () =>
-          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
-        "Unable to find research cards toggle.",
-      );
-
-      toggle.click();
-      await vi.waitFor(() => {
-        expect((mounted.router.state.location.search as Record<string, unknown>).cards).toBe("1");
-      });
-      await expect.element(page.getByText("No research cards yet.")).toBeInTheDocument();
-
-      toggle.click();
-      await vi.waitFor(() => {
-        expect(
-          (mounted.router.state.location.search as Record<string, unknown>).cards,
-        ).toBeUndefined();
-      });
-    } finally {
-      await mounted.cleanup();
-    }
-  });
-
-  it("opens study research cards from draft sessions before the first turn", async () => {
-    const draftId = DraftId.make("draft-study-cards");
-    useComposerDraftStore.setState({
-      draftSessionsBySessionKey: {
-        [draftId]: {
-          sessionId: THREAD_ID,
-          environmentId: LOCAL_ENVIRONMENT_ID,
-          projectId: PROJECT_ID,
-          logicalProjectKey: PROJECT_DRAFT_KEY,
-          createdAt: NOW_ISO,
-          runtimeMode: "full-access",
-          interactionMode: "default",
-          branch: null,
-          worktreePath: null,
-          envMode: "local",
-        },
-      },
-      logicalProjectDraftSessionKeyByLogicalProjectKey: {
-        [PROJECT_DRAFT_KEY]: draftId,
-      },
-    });
-    const environmentApi = createMockEnvironmentApi({
-      browse: (async () => ({
-        parentPath: "/repo/project",
-        entries: [],
-      })) as EnvironmentApi["filesystem"]["browse"],
-      dispatchCommand: (async () => ({
-        sequence: 1,
-      })) as EnvironmentApi["orchestration"]["dispatchCommand"],
-    });
-    environmentApi.orchestration.getResearchCardDetail = (async (input) =>
-      createResearchCardDetailForTest({
-        sessionId: input.sessionId,
-        cardId: input.cardId,
-      }) ?? {}) as EnvironmentApi["orchestration"]["getResearchCardDetail"];
-    environmentApi.study.getStatus = (async () =>
-      createResearchCardStatusForTest() as unknown as Awaited<
-        ReturnType<EnvironmentApi["study"]["getStatus"]>
-      >) as EnvironmentApi["study"]["getStatus"];
-    __setEnvironmentApiOverrideForTests(LOCAL_ENVIRONMENT_ID, environmentApi);
-
-    const mounted = await mountChatView({
-      viewport: DEFAULT_VIEWPORT,
-      snapshot: createSnapshotWithStudyResearchCardsForDraft(),
-      initialPath: `/draft/${draftId}`,
-    });
-
-    try {
-      const toggle = await waitForElement(
-        () =>
-          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
-        "Unable to find research cards toggle.",
-      );
-      toggle.click();
-
-      await vi.waitFor(() => {
-        expect((mounted.router.state.location.search as Record<string, unknown>).cards).toBe("1");
-      });
-      await expect.element(page.getByText("Cohort definition")).toBeInTheDocument();
-      await expect.element(page.getByText("Baseline balance")).toBeInTheDocument();
-    } finally {
-      await mounted.cleanup();
-    }
-  });
-
-  it("renders seeded research cards with previews, artifacts, and review metadata", async () => {
-    const environmentApi = createMockEnvironmentApi({
-      browse: (async () => ({
-        parentPath: "/repo/project",
-        entries: [],
-      })) as EnvironmentApi["filesystem"]["browse"],
-      dispatchCommand: (async () => ({
-        sequence: 1,
-      })) as EnvironmentApi["orchestration"]["dispatchCommand"],
-    });
-    environmentApi.orchestration.getResearchCardDetail = (async (input) =>
-      createResearchCardDetailForTest({
-        sessionId: input.sessionId,
-        cardId: input.cardId,
-      }) ?? {}) as EnvironmentApi["orchestration"]["getResearchCardDetail"];
-    environmentApi.study.getStatus = (async () =>
-      createResearchCardStatusForTest() as unknown as Awaited<
-        ReturnType<EnvironmentApi["study"]["getStatus"]>
-      >) as EnvironmentApi["study"]["getStatus"];
-    __setEnvironmentApiOverrideForTests(LOCAL_ENVIRONMENT_ID, environmentApi);
-
-    const mounted = await mountChatView({
-      viewport: DEFAULT_VIEWPORT,
-      snapshot: createSnapshotWithResearchCards(),
-    });
-
-    try {
-      const toggle = await waitForElement(
-        () =>
-          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
-        "Unable to find research cards toggle.",
-      );
-      toggle.click();
-
-      await expect.element(page.getByText("Cohort definition")).toBeInTheDocument();
-      await expect.element(page.getByText("Changes Requested")).toBeInTheDocument();
-      await waitForElement(
-        () =>
-          document.body.textContent?.includes("Patients with heart failure") ? document.body : null,
-        "Unable to find markdown card preview.",
-      );
-      await expect.element(page.getByText("2 artifacts")).toBeInTheDocument();
-      await expect.element(page.getByText("Cohort SQL")).toBeInTheDocument();
-      await expect
-        .element(page.getByText("Confirm this definition before extraction."))
-        .toBeInTheDocument();
-      await expect.element(page.getByText("Narrow the age range.")).toBeInTheDocument();
-      await expect.element(page.getByText("Baseline balance")).toBeInTheDocument();
-      await expect.element(page.getByText("variable")).toBeInTheDocument();
-      await expect.element(page.getByText("67.4")).toBeInTheDocument();
-      expect(document.body.textContent).not.toContain("unknown");
-    } finally {
-      await mounted.cleanup();
-    }
-  });
-
-  it("clears diff route search when the research cards drawer opens", async () => {
-    const mounted = await mountChatView({
-      viewport: DEFAULT_VIEWPORT,
-      snapshot: createSnapshotWithResearchCards(),
-      initialPath: `/${LOCAL_ENVIRONMENT_ID}/${THREAD_ID}?diff=1`,
-    });
-
-    try {
-      await vi.waitFor(() => {
-        expect((mounted.router.state.location.search as Record<string, unknown>).diff).toBe("1");
-      });
-
-      const cardsToggle = await waitForElement(
-        () =>
-          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle research cards"]'),
-        "Unable to find research cards toggle.",
-      );
-      cardsToggle.click();
-      await vi.waitFor(() => {
-        const search = mounted.router.state.location.search as Record<string, unknown>;
-        expect(search.cards).toBe("1");
-        expect(search.diff).toBeUndefined();
-      });
-    } finally {
-      await mounted.cleanup();
-    }
   });
 
   it("renders locked single-environment mobile run context as a static workspace label", async () => {

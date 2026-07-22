@@ -10,7 +10,6 @@ import {
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 
 const DiffPanel = lazy(() => import("./DiffPanel"));
-const ResearchCardsPanel = lazy(() => import("./ResearchCardsPanel"));
 
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(24rem,34vw,36rem)";
@@ -34,14 +33,6 @@ export const LazyDiffPanel = (props: { mode: DiffPanelMode }) => {
         <DiffPanel mode={props.mode} />
       </Suspense>
     </DiffWorkerPoolProvider>
-  );
-};
-
-export const LazyResearchCardsPanel = (props: { mode: DiffPanelMode }) => {
-  return (
-    <Suspense fallback={<DiffLoadingFallback mode={props.mode} />}>
-      <ResearchCardsPanel mode={props.mode} />
-    </Suspense>
   );
 };
 

@@ -50,7 +50,6 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullSessionDiffError,
   OrchestrationGetFullSessionDiffInput,
-  OrchestrationGetResearchCardDetailInput,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   OrchestrationGetTurnDiffInput,
@@ -58,19 +57,6 @@ import {
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
 } from "./orchestration.ts";
-import {
-  StudyArtifactInput,
-  StudyArtifactPreviewInput,
-  StudyFilePreviewInput,
-  StudyFilePreviewResult,
-  StudyGetArtifactResult,
-  StudyListArtifactsInput,
-  StudyListArtifactsResult,
-  StudyPreviewArtifactResult,
-  StudyRecordError,
-  StudyStatusInput,
-  StudyStatusResult,
-} from "./researchStudy.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   ProjectSearchEntriesError,
@@ -132,13 +118,6 @@ export const WS_METHODS = {
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
-
-  // Study record methods
-  studyStatus: "study.status",
-  studyListArtifacts: "study.listArtifacts",
-  studyGetArtifact: "study.getArtifact",
-  studyPreviewArtifact: "study.previewArtifact",
-  studyPreviewFile: "study.previewFile",
 
   // Filesystem methods
   filesystemBrowse: "filesystem.browse",
@@ -354,36 +333,6 @@ export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   error: ExternalLauncherError,
 });
 
-export const WsStudyPreviewFileRpc = Rpc.make(WS_METHODS.studyPreviewFile, {
-  payload: StudyFilePreviewInput,
-  success: StudyFilePreviewResult,
-  error: StudyRecordError,
-});
-
-export const WsStudyListArtifactsRpc = Rpc.make(WS_METHODS.studyListArtifacts, {
-  payload: StudyListArtifactsInput,
-  success: StudyListArtifactsResult,
-  error: StudyRecordError,
-});
-
-export const WsStudyGetArtifactRpc = Rpc.make(WS_METHODS.studyGetArtifact, {
-  payload: StudyArtifactInput,
-  success: StudyGetArtifactResult,
-  error: StudyRecordError,
-});
-
-export const WsStudyPreviewArtifactRpc = Rpc.make(WS_METHODS.studyPreviewArtifact, {
-  payload: StudyArtifactPreviewInput,
-  success: StudyPreviewArtifactResult,
-  error: StudyRecordError,
-});
-
-export const WsStudyStatusRpc = Rpc.make(WS_METHODS.studyStatus, {
-  payload: StudyStatusInput,
-  success: StudyStatusResult,
-  error: StudyRecordError,
-});
-
 export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   payload: FilesystemBrowseInput,
   success: FilesystemBrowseResult,
@@ -518,15 +467,6 @@ export const WsOrchestrationGetFullSessionDiffRpc = Rpc.make(
   },
 );
 
-export const WsOrchestrationGetResearchCardDetailRpc = Rpc.make(
-  ORCHESTRATION_WS_METHODS.getResearchCardDetail,
-  {
-    payload: OrchestrationGetResearchCardDetailInput,
-    success: OrchestrationRpcSchemas.getResearchCardDetail.output,
-    error: OrchestrationGetSnapshotError,
-  },
-);
-
 export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.replayEvents, {
   payload: OrchestrationReplayEventsInput,
   success: OrchestrationRpcSchemas.replayEvents.output,
@@ -608,11 +548,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
-  WsStudyStatusRpc,
-  WsStudyListArtifactsRpc,
-  WsStudyGetArtifactRpc,
-  WsStudyPreviewArtifactRpc,
-  WsStudyPreviewFileRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
@@ -639,7 +574,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullSessionDiffRpc,
-  WsOrchestrationGetResearchCardDetailRpc,
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,

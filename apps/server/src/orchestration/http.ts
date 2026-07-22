@@ -2,8 +2,6 @@ import {
   ClientOrchestrationCommand,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
-  ResearchCardId,
-  SessionId,
   type OrchestrationReadModel,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -59,49 +57,6 @@ export const orchestrationSnapshotRouteLayer = HttpRouter.add(
     return HttpServerResponse.jsonUnsafe(snapshot satisfies OrchestrationReadModel, {
       status: 200,
     });
-  }).pipe(
-    Effect.catchTags({
-      OrchestrationDispatchCommandError: respondToOrchestrationHttpError,
-      OrchestrationGetSnapshotError: respondToOrchestrationHttpError,
-    }),
-  ),
-);
-
-export const orchestrationResearchCardDetailRouteLayer = HttpRouter.add(
-  "GET",
-  "/api/orchestration/research-card-detail",
-  Effect.gen(function* () {
-    yield* authenticateOwnerSession;
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const url = new URL(request.url, "http://localhost");
-    const sessionId = url.searchParams.get("sessionId");
-    const cardId = url.searchParams.get("cardId");
-    if (!sessionId || !cardId) {
-      return yield* new OrchestrationGetSnapshotError({
-        message: "sessionId and cardId query parameters are required.",
-      });
-    }
-    const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
-    const card = yield* projectionSnapshotQuery
-      .getResearchCardDetail({
-        sessionId: SessionId.make(sessionId),
-        cardId: ResearchCardId.make(cardId),
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new OrchestrationGetSnapshotError({
-              message: "Failed to load research card detail.",
-              cause,
-            }),
-        ),
-      );
-    if (card._tag === "None") {
-      return yield* new OrchestrationGetSnapshotError({
-        message: `Research card ${cardId} was not found.`,
-      });
-    }
-    return HttpServerResponse.jsonUnsafe(card.value, { status: 200 });
   }).pipe(
     Effect.catchTags({
       OrchestrationDispatchCommandError: respondToOrchestrationHttpError,

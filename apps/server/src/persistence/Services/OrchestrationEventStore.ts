@@ -15,6 +15,7 @@ import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 
 import type { OrchestrationEventStoreError } from "../Errors.ts";
+import type { PersistedOrchestrationEvent } from "../LegacyNativeCardEvents.ts";
 
 /**
  * OrchestrationEventStoreShape - Service API for orchestration event persistence.
@@ -44,14 +45,14 @@ export interface OrchestrationEventStoreShape {
   readonly readFromSequence: (
     sequenceExclusive: number,
     limit?: number,
-  ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+  ) => Stream.Stream<PersistedOrchestrationEvent, OrchestrationEventStoreError>;
 
   /**
    * Read all events from the beginning of the stream.
    *
    * @returns Stream containing all stored events.
    */
-  readonly readAll: () => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+  readonly readAll: () => Stream.Stream<PersistedOrchestrationEvent, OrchestrationEventStoreError>;
 }
 
 /**

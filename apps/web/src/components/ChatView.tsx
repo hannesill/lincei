@@ -43,11 +43,7 @@ import { usePrimaryEnvironmentId } from "../environments/primary";
 import { readEnvironmentApi } from "../environmentApi";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
-import {
-  parseDiffRouteSearch,
-  stripCardSearchParams,
-  stripDiffSearchParams,
-} from "../diffRouteSearch";
+import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import {
   collapseExpandedComposerCursor,
   parseStandaloneComposerSlashCommand,
@@ -225,7 +221,6 @@ type ChatViewProps =
       environmentId: EnvironmentId;
       sessionId: SessionId;
       onDiffPanelOpen?: () => void;
-      onResearchCardsPanelOpen?: () => void;
       reserveTitleBarControlInset?: boolean;
       routeKind: "server";
       draftId?: never;
@@ -234,7 +229,6 @@ type ChatViewProps =
       environmentId: EnvironmentId;
       sessionId: SessionId;
       onDiffPanelOpen?: () => void;
-      onResearchCardsPanelOpen?: () => void;
       reserveTitleBarControlInset?: boolean;
       routeKind: "draft";
       draftId: DraftId;
@@ -505,7 +499,6 @@ export default function ChatView(props: ChatViewProps) {
     sessionId,
     routeKind,
     onDiffPanelOpen,
-    onResearchCardsPanelOpen,
     reserveTitleBarControlInset = true,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
@@ -712,7 +705,6 @@ export default function ChatView(props: ChatViewProps) {
   const isLocalDraftSession = !isServerSession && localDraftSession !== undefined;
   const canCheckoutPullRequestIntoSession = isLocalDraftSession;
   const diffOpen = rawSearch.diff === "1";
-  const cardsOpen = rawSearch.cards === "1";
   const activeSessionId = activeSession?.id ?? null;
   const activeSessionRef = useMemo(
     () => (activeSession ? scopeSessionRef(activeSession.environmentId, activeSession.id) : null),
@@ -1621,69 +1613,10 @@ export default function ChatView(props: ChatViewProps) {
       replace: true,
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, cards: undefined, diff: "1" };
+        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
       },
     });
   }, [diffOpen, environmentId, isServerSession, navigate, onDiffPanelOpen, sessionId]);
-  const onToggleResearchCards = useCallback(() => {
-    if (!cardsOpen) {
-      onResearchCardsPanelOpen?.();
-    }
-    if (isServerSession) {
-      void navigate({
-        to: "/$environmentId/$sessionId",
-        params: {
-          environmentId,
-          sessionId,
-        },
-        replace: true,
-        search: (previous) => {
-          const rest = cardsOpen
-            ? stripCardSearchParams(previous)
-            : stripDiffSearchParams(previous);
-          return cardsOpen
-            ? { ...rest, cards: undefined }
-            : {
-                ...rest,
-                diff: undefined,
-                diffTurnId: undefined,
-                diffFilePath: undefined,
-                cards: "1",
-              };
-        },
-      });
-      return;
-    }
-    if (!draftId) {
-      return;
-    }
-    void navigate({
-      to: "/draft/$draftId",
-      params: { draftId },
-      replace: true,
-      search: (previous) => {
-        const rest = cardsOpen ? stripCardSearchParams(previous) : stripDiffSearchParams(previous);
-        return cardsOpen
-          ? { ...rest, cards: undefined }
-          : {
-              ...rest,
-              diff: undefined,
-              diffTurnId: undefined,
-              diffFilePath: undefined,
-              cards: "1",
-            };
-      },
-    });
-  }, [
-    cardsOpen,
-    draftId,
-    environmentId,
-    isServerSession,
-    navigate,
-    onResearchCardsPanelOpen,
-    sessionId,
-  ]);
-
   const envLocked = Boolean(
     activeSession &&
     (activeSession.messages.length > 0 ||
@@ -3469,8 +3402,8 @@ export default function ChatView(props: ChatViewProps) {
         search: (previous) => {
           const rest = stripDiffSearchParams(previous);
           return filePath
-            ? { ...rest, cards: undefined, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-            : { ...rest, cards: undefined, diff: "1", diffTurnId: turnId };
+            ? { ...rest, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
+            : { ...rest, diff: "1", diffTurnId: turnId };
         },
       });
     },
@@ -3518,14 +3451,12 @@ export default function ChatView(props: ChatViewProps) {
         diffToggleShortcutLabel={diffPanelShortcutLabel}
         gitCwd={gitCwd}
         diffOpen={diffOpen}
-        researchCardsOpen={cardsOpen}
         onRunProjectScript={runProjectScript}
         onAddProjectScript={saveProjectScript}
         onUpdateProjectScript={updateProjectScript}
         onDeleteProjectScript={deleteProjectScript}
         onToggleTerminal={toggleTerminalVisibility}
         onToggleDiff={onToggleDiff}
-        onToggleResearchCards={onToggleResearchCards}
         reserveTitleBarControlInset={reserveTitleBarControlInset}
       />
 

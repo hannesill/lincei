@@ -5,7 +5,6 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ResearchCardId,
   SessionId,
   TurnId,
   ProviderInstanceId,
@@ -286,461 +285,68 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 
-  it.effect("persists research cards, records reviews, and prunes reverted turns", () =>
+  it.effect("advances every projector cursor past legacy native-card events", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
-      const eventStore = yield* OrchestrationEventStore;
       const sql = yield* SqlClient.SqlClient;
-      const sessionId = SessionId.make("session-research-cards");
-      const projectId = ProjectId.make("project-research-cards");
       const now = "2026-01-02T00:00:00.000Z";
 
-      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
-        eventStore
-          .append(event)
-          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
-
-      yield* appendAndProject({
-        type: "project.created",
-        eventId: EventId.make("evt-research-card-1"),
-        aggregateKind: "project",
-        aggregateId: projectId,
-        occurredAt: now,
-        commandId: CommandId.make("cmd-research-card-1"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-1"),
-        metadata: {},
-        payload: {
-          projectId,
-          title: "Research Cards",
-          workspaceRoot: "/tmp/research-cards",
-          defaultModelSelection: null,
-          scripts: [],
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.created",
-        eventId: EventId.make("evt-research-card-2"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: now,
-        commandId: CommandId.make("cmd-research-card-2"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-2"),
-        metadata: {},
-        payload: {
-          sessionId,
-          projectId,
-          title: "Research Cards Session",
-          modelSelection: {
-            instanceId: ProviderInstanceId.make("codex"),
-            model: "gpt-5-codex",
+      yield* sql`
+        INSERT INTO orchestration_events (
+          event_id,
+          aggregate_kind,
+          stream_id,
+          stream_version,
+          event_type,
+          occurred_at,
+          command_id,
+          causation_event_id,
+          correlation_id,
+          actor_kind,
+          payload_json,
+          metadata_json
+        )
+        VALUES (
+          ${EventId.make("evt-legacy-native-card")},
+          ${"session"},
+          ${SessionId.make("session-legacy-native-card")},
+          ${0},
+          ${"session.research-card-proposed"},
+          ${now},
+          ${CommandId.make("cmd-legacy-native-card")},
+          ${null},
+          ${null},
+          ${"server"},
+          ${
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({ sessionId: "session-legacy-native-card", researchCard: {} })
           },
-          runtimeMode: "full-access",
-          branch: null,
-          worktreePath: null,
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.turn-diff-completed",
-        eventId: EventId.make("evt-research-card-3"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:01.000Z",
-        commandId: CommandId.make("cmd-research-card-3"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-3"),
-        metadata: {},
-        payload: {
-          sessionId,
-          turnId: TurnId.make("turn-card-keep"),
-          checkpointTurnCount: 1,
-          checkpointRef: CheckpointRef.make("refs/t3/checkpoints/session-research-cards/turn/1"),
-          status: "ready",
-          files: [],
-          assistantMessageId: null,
-          completedAt: "2026-01-02T00:00:01.000Z",
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.turn-diff-completed",
-        eventId: EventId.make("evt-research-card-4"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:02.000Z",
-        commandId: CommandId.make("cmd-research-card-4"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-4"),
-        metadata: {},
-        payload: {
-          sessionId,
-          turnId: TurnId.make("turn-card-remove"),
-          checkpointTurnCount: 2,
-          checkpointRef: CheckpointRef.make("refs/t3/checkpoints/session-research-cards/turn/2"),
-          status: "ready",
-          files: [],
-          assistantMessageId: null,
-          completedAt: "2026-01-02T00:00:02.000Z",
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-proposed",
-        eventId: EventId.make("evt-research-card-5"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:03.000Z",
-        commandId: CommandId.make("cmd-research-card-5"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-5"),
-        metadata: {},
-        payload: {
-          sessionId,
-          researchCard: {
-            id: ResearchCardId.make("card-keep"),
-            type: "markdown",
-            status: "proposed",
-            title: "Initial finding",
-            preview: { markdown: "first" },
-            artifacts: [
-              {
-                id: "artifact-1",
-                kind: "markdown",
-                path: "cards/card-keep.md",
-              },
-            ],
-            provenance: [{ source: "analysis", timestamp: "2026-01-02T00:00:03.000Z" }],
-            review: {
-              prompt: "Accept this finding?",
-              actions: [{ id: "accept", label: "Accept" }],
-            },
-            turnId: TurnId.make("turn-card-keep"),
-            createdAt: "2026-01-02T00:00:03.000Z",
-            updatedAt: "2026-01-02T00:00:03.000Z",
-          },
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-updated",
-        eventId: EventId.make("evt-research-card-6"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:04.000Z",
-        commandId: CommandId.make("cmd-research-card-6"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-6"),
-        metadata: {},
-        payload: {
-          sessionId,
-          cardId: ResearchCardId.make("card-keep"),
-          researchCard: {
-            id: ResearchCardId.make("card-keep"),
-            type: "markdown",
-            status: "accepted",
-            title: "Updated finding",
-            preview: { markdown: "updated" },
-            artifacts: [],
-            provenance: [],
-            review: {
-              prompt: "Accept this finding?",
-              actions: [{ id: "accept", label: "Accept" }],
-            },
-            turnId: TurnId.make("turn-card-keep"),
-            createdAt: "2026-01-02T00:00:03.000Z",
-            updatedAt: "2026-01-02T00:00:04.000Z",
-          },
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-proposed",
-        eventId: EventId.make("evt-research-card-7"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:05.000Z",
-        commandId: CommandId.make("cmd-research-card-7"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-7"),
-        metadata: {},
-        payload: {
-          sessionId,
-          researchCard: {
-            id: ResearchCardId.make("card-remove"),
-            type: "decision",
-            status: "proposed",
-            title: "Reverted finding",
-            artifacts: [],
-            provenance: [],
-            turnId: TurnId.make("turn-card-remove"),
-            createdAt: "2026-01-02T00:00:05.000Z",
-            updatedAt: "2026-01-02T00:00:05.000Z",
-          },
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-reviewed",
-        eventId: EventId.make("evt-research-card-8"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:06.000Z",
-        commandId: CommandId.make("cmd-research-card-8"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-8"),
-        metadata: {},
-        payload: {
-          sessionId,
-          cardId: ResearchCardId.make("card-keep"),
-          response: {
-            action: "accept",
-            message: "Looks good",
-            timestamp: "2026-01-02T00:00:06.000Z",
-          },
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.reverted",
-        eventId: EventId.make("evt-research-card-9"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-02T00:00:07.000Z",
-        commandId: CommandId.make("cmd-research-card-9"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-9"),
-        metadata: {},
-        payload: {
-          sessionId,
-          turnCount: 1,
-        },
-      });
-
-      const rows = yield* sql<{
-        readonly cardId: string;
-        readonly status: string;
-        readonly title: string;
-        readonly previewJson: string | null;
-        readonly reviewJson: string | null;
-      }>`
-        SELECT
-          card_id AS "cardId",
-          status,
-          title,
-          preview_json AS "previewJson",
-          review_json AS "reviewJson"
-        FROM projection_session_research_cards
-        WHERE session_id = ${sessionId}
-        ORDER BY created_at ASC, card_id ASC
+          ${"{}"}
+        )
       `;
 
-      assert.equal(rows.length, 1);
-      assert.equal(rows[0]?.cardId, "card-keep");
-      assert.equal(rows[0]?.status, "accepted");
-      assert.equal(rows[0]?.title, "Updated finding");
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      assert.deepEqual(JSON.parse(rows[0]?.previewJson ?? "null"), { markdown: "updated" });
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      assert.deepEqual(JSON.parse(rows[0]?.reviewJson ?? "null")?.response, {
-        action: "accept",
-        message: "Looks good",
-        timestamp: "2026-01-02T00:00:06.000Z",
-      });
-    }),
-  );
+      const sequenceRows = yield* sql<{ readonly sequence: number }>`
+        SELECT sequence
+        FROM orchestration_events
+        WHERE event_id = ${EventId.make("evt-legacy-native-card")}
+      `;
+      const sequence = sequenceRows[0]?.sequence;
+      assert.notEqual(sequence, undefined);
 
-  it.effect("persists research card lifecycle, supersede, and reviewless responses", () =>
-    Effect.gen(function* () {
-      const projectionPipeline = yield* OrchestrationProjectionPipeline;
-      const eventStore = yield* OrchestrationEventStore;
-      const sql = yield* SqlClient.SqlClient;
-      const sessionId = SessionId.make("session-research-card-lifecycle");
-      const projectId = ProjectId.make("project-research-card-lifecycle");
-      const now = "2026-01-03T00:00:00.000Z";
+      yield* projectionPipeline.bootstrap;
 
-      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
-        eventStore
-          .append(event)
-          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
-
-      yield* appendAndProject({
-        type: "project.created",
-        eventId: EventId.make("evt-research-card-lifecycle-1"),
-        aggregateKind: "project",
-        aggregateId: projectId,
-        occurredAt: now,
-        commandId: CommandId.make("cmd-research-card-lifecycle-1"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-lifecycle-1"),
-        metadata: {},
-        payload: {
-          projectId,
-          title: "Research Card Lifecycle",
-          workspaceRoot: "/tmp/research-card-lifecycle",
-          defaultModelSelection: null,
-          scripts: [],
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.created",
-        eventId: EventId.make("evt-research-card-lifecycle-2"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: now,
-        commandId: CommandId.make("cmd-research-card-lifecycle-2"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-lifecycle-2"),
-        metadata: {},
-        payload: {
-          sessionId,
-          projectId,
-          title: "Research Card Lifecycle Session",
-          modelSelection: {
-            instanceId: ProviderInstanceId.make("codex"),
-            model: "gpt-5-codex",
-          },
-          runtimeMode: "full-access",
-          branch: null,
-          worktreePath: null,
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-proposed",
-        eventId: EventId.make("evt-research-card-lifecycle-3"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-03T00:00:01.000Z",
-        commandId: CommandId.make("cmd-research-card-lifecycle-3"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-lifecycle-3"),
-        metadata: {},
-        payload: {
-          sessionId,
-          researchCard: {
-            id: ResearchCardId.make("card-old"),
-            type: "markdown",
-            status: "proposed",
-            title: "Old finding",
-            artifacts: [],
-            provenance: [],
-            turnId: null,
-            createdAt: "2026-01-03T00:00:01.000Z",
-            updatedAt: "2026-01-03T00:00:01.000Z",
-          },
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-reviewed",
-        eventId: EventId.make("evt-research-card-lifecycle-4"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-03T00:00:02.000Z",
-        commandId: CommandId.make("cmd-research-card-lifecycle-4"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-lifecycle-4"),
-        metadata: {},
-        payload: {
-          sessionId,
-          cardId: ResearchCardId.make("card-old"),
-          response: {
-            action: "request_changes",
-            message: "Add denominators",
-            timestamp: "2026-01-03T00:00:02.000Z",
-          },
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-lifecycle-updated",
-        eventId: EventId.make("evt-research-card-lifecycle-5"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-03T00:00:03.000Z",
-        commandId: CommandId.make("cmd-research-card-lifecycle-5"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-lifecycle-5"),
-        metadata: {},
-        payload: {
-          sessionId,
-          cardId: ResearchCardId.make("card-old"),
-          status: "review-requested",
-          action: "request_review",
-          note: "Please review again.",
-          updatedAt: "2026-01-03T00:00:03.000Z",
-        },
-      });
-
-      yield* appendAndProject({
-        type: "session.research-card-superseded",
-        eventId: EventId.make("evt-research-card-lifecycle-6"),
-        aggregateKind: "session",
-        aggregateId: sessionId,
-        occurredAt: "2026-01-03T00:00:04.000Z",
-        commandId: CommandId.make("cmd-research-card-lifecycle-6"),
-        causationEventId: null,
-        correlationId: CorrelationId.make("cmd-research-card-lifecycle-6"),
-        metadata: {},
-        payload: {
-          sessionId,
-          cardId: ResearchCardId.make("card-old"),
-          replacementCard: {
-            id: ResearchCardId.make("card-new"),
-            type: "markdown",
-            status: "proposed",
-            title: "New finding",
-            artifacts: [],
-            provenance: [],
-            turnId: null,
-            createdAt: "2026-01-03T00:00:04.000Z",
-            updatedAt: "2026-01-03T00:00:04.000Z",
-          },
-          supersededAt: "2026-01-03T00:00:04.000Z",
-        },
-      });
-
-      const rows = yield* sql<{
-        readonly cardId: string;
-        readonly status: string;
-        readonly reviewJson: string | null;
+      const stateRows = yield* sql<{
+        readonly projector: string;
+        readonly lastAppliedSequence: number;
       }>`
         SELECT
-          card_id AS "cardId",
-          status,
-          review_json AS "reviewJson"
-        FROM projection_session_research_cards
-        WHERE session_id = ${sessionId}
-        ORDER BY created_at ASC, card_id ASC
+          projector,
+          last_applied_sequence AS "lastAppliedSequence"
+        FROM projection_state
+        ORDER BY projector ASC
       `;
-
-      assert.equal(rows.length, 2);
-      assert.equal(rows[0]?.cardId, "card-old");
-      assert.equal(rows[0]?.status, "superseded");
-      assert.equal(rows[1]?.cardId, "card-new");
-      assert.equal(rows[1]?.status, "proposed");
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      assert.deepEqual(JSON.parse(rows[0]?.reviewJson ?? "null"), {
-        prompt: "Human review",
-        actions: [],
-        response: {
-          action: "request_changes",
-          message: "Add denominators",
-          timestamp: "2026-01-03T00:00:02.000Z",
-        },
-      });
+      assert.equal(stateRows.length, Object.keys(ORCHESTRATION_PROJECTOR_NAMES).length);
+      assert.ok(stateRows.every((row) => row.lastAppliedSequence === sequence));
     }),
   );
 });

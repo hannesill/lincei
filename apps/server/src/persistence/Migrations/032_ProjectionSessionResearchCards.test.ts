@@ -9,7 +9,7 @@ import * as NodeSqliteClient from "../NodeSqliteClient.ts";
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
 layer("032_ProjectionSessionResearchCards", (it) => {
-  it.effect("creates research card projection table and ordering index", () =>
+  it.effect("records the historical migration without creating a card table", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
@@ -22,24 +22,56 @@ layer("032_ProjectionSessionResearchCards", (it) => {
         WHERE type = 'table'
           AND name = 'projection_session_research_cards'
       `;
-      assert.deepStrictEqual(tableRows, [{ name: "projection_session_research_cards" }]);
+      assert.deepStrictEqual(tableRows, []);
 
-      const indexes = yield* sql<{ readonly name: string }>`
-        PRAGMA index_list(projection_session_research_cards)
+      const migrations = yield* sql<{ readonly migration_id: number; readonly name: string }>`
+        SELECT migration_id, name
+        FROM effect_sql_migrations
+        WHERE migration_id = 32
       `;
-      assert.ok(
-        indexes.some(
-          (index) => index.name === "idx_projection_session_research_cards_session_created_id",
-        ),
-      );
+      assert.deepStrictEqual(migrations, [
+        { migration_id: 32, name: "ProjectionSessionResearchCards" },
+      ]);
+    }),
+  );
 
-      const indexColumns = yield* sql<{ readonly name: string }>`
-        PRAGMA index_info('idx_projection_session_research_cards_session_created_id')
+  it.effect("leaves an existing legacy card table and its data dormant", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* runMigrations({ toMigrationInclusive: 32 });
+      yield* sql`
+        CREATE TABLE projection_session_research_cards (
+          card_id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          title TEXT NOT NULL
+        )
       `;
-      assert.deepStrictEqual(
-        indexColumns.map((column) => column.name),
-        ["session_id", "created_at", "card_id"],
-      );
+      yield* sql`
+        INSERT INTO projection_session_research_cards (card_id, session_id, title)
+        VALUES ('legacy-card', 'legacy-session', 'Preserved card')
+      `;
+
+      yield* runMigrations();
+
+      const rows = yield* sql<{
+        readonly cardId: string;
+        readonly sessionId: string;
+        readonly title: string;
+      }>`
+        SELECT
+          card_id AS "cardId",
+          session_id AS "sessionId",
+          title
+        FROM projection_session_research_cards
+      `;
+      assert.deepStrictEqual(rows, [
+        {
+          cardId: "legacy-card",
+          sessionId: "legacy-session",
+          title: "Preserved card",
+        },
+      ]);
     }),
   );
 });

@@ -4,8 +4,6 @@ import type {
   OrchestrationReadModel,
   OrchestrationSession,
   ProjectId,
-  ResearchCardId,
-  ResearchCardSummary,
   SessionId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -140,44 +138,6 @@ export function requireSessionAbsent(input: {
     invariantError(
       input.command.type,
       `Session '${input.sessionId}' already exists and cannot be created twice.`,
-    ),
-  );
-}
-
-export function requireResearchCard(input: {
-  readonly readModel: OrchestrationReadModel;
-  readonly command: OrchestrationCommand;
-  readonly sessionId: SessionId;
-  readonly cardId: ResearchCardId;
-}): Effect.Effect<ResearchCardSummary, OrchestrationCommandInvariantError> {
-  const session = findSessionById(input.readModel, input.sessionId);
-  const card = session?.researchCards.find((entry) => entry.id === input.cardId);
-  if (card) {
-    return Effect.succeed(card);
-  }
-  return Effect.fail(
-    invariantError(
-      input.command.type,
-      `Research card '${input.cardId}' does not exist in session '${input.sessionId}' for command '${input.command.type}'.`,
-    ),
-  );
-}
-
-export function requireResearchCardAbsent(input: {
-  readonly readModel: OrchestrationReadModel;
-  readonly command: OrchestrationCommand;
-  readonly sessionId: SessionId;
-  readonly cardId: ResearchCardId;
-}): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  const session = findSessionById(input.readModel, input.sessionId);
-  const card = session?.researchCards.find((entry) => entry.id === input.cardId);
-  if (!card) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    invariantError(
-      input.command.type,
-      `Research card '${input.cardId}' already exists in session '${input.sessionId}'.`,
     ),
   );
 }

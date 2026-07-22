@@ -27,8 +27,14 @@ import {
   OrchestrationEventStore,
   type OrchestrationEventStoreShape,
 } from "../Services/OrchestrationEventStore.ts";
+import {
+  LegacyNativeCardEventType,
+  PersistedOrchestrationEvent,
+  type PersistedOrchestrationEvent as PersistedOrchestrationEventType,
+} from "../LegacyNativeCardEvents.ts";
 
-const decodeEvent = Schema.decodeUnknownEffect(OrchestrationEvent);
+const decodeCurrentEvent = Schema.decodeUnknownEffect(OrchestrationEvent);
+const decodePersistedEvent = Schema.decodeUnknownEffect(PersistedOrchestrationEvent);
 const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
 const EventMetadataFromJsonString = Schema.fromJsonString(OrchestrationEventMetadata);
 
@@ -36,7 +42,7 @@ const AppendEventRequestSchema = Schema.Struct({
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
   streamId: Schema.Union([ProjectId, SessionId]),
-  type: OrchestrationEventType,
+  type: Schema.String,
   causationEventId: Schema.NullOr(EventId),
   correlationId: Schema.NullOr(CommandId),
   actorKind: OrchestrationActorKind,
@@ -49,7 +55,7 @@ const AppendEventRequestSchema = Schema.Struct({
 const OrchestrationEventPersistedRowSchema = Schema.Struct({
   sequence: NonNegativeInt,
   eventId: EventId,
-  type: OrchestrationEventType,
+  type: Schema.Union([OrchestrationEventType, LegacyNativeCardEventType]),
   aggregateKind: OrchestrationAggregateKind,
   aggregateId: Schema.Union([ProjectId, SessionId]),
   occurredAt: IsoDateTime,
@@ -202,7 +208,7 @@ const makeEventStore = Effect.gen(function* () {
         ),
       ),
       Effect.flatMap((row) =>
-        decodeEvent(row).pipe(
+        decodeCurrentEvent(row).pipe(
           Effect.mapError(toPersistenceDecodeError("OrchestrationEventStore.append:rowToEvent")),
         ),
       ),
@@ -219,7 +225,7 @@ const makeEventStore = Effect.gen(function* () {
     const readPage = (
       cursor: number,
       remaining: number,
-    ): Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError> =>
+    ): Stream.Stream<PersistedOrchestrationEventType, OrchestrationEventStoreError> =>
       Stream.fromEffect(
         readEventRowsFromSequence({
           sequenceExclusive: cursor,
@@ -233,7 +239,7 @@ const makeEventStore = Effect.gen(function* () {
           ),
           Effect.flatMap((rows) =>
             Effect.forEach(rows, (row) =>
-              decodeEvent(row).pipe(
+              decodePersistedEvent(row).pipe(
                 Effect.mapError(
                   toPersistenceDecodeError("OrchestrationEventStore.readFromSequence:rowToEvent"),
                 ),

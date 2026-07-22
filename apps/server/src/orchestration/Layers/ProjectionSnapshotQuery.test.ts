@@ -3,7 +3,6 @@ import {
   EventId,
   MessageId,
   ProjectId,
-  ResearchCardId,
   SessionId,
   TurnId,
   ProviderInstanceId,
@@ -155,37 +154,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           'session-2',
           '2026-02-24T00:00:05.000Z',
           '2026-02-24T00:00:05.500Z'
-        )
-      `;
-
-      yield* sql`
-        INSERT INTO projection_session_research_cards (
-          card_id,
-          session_id,
-          turn_id,
-          type,
-          status,
-          title,
-          preview_json,
-          artifacts_json,
-          provenance_json,
-          review_json,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          'card-1',
-          'session-1',
-          'turn-1',
-          'markdown',
-          'accepted',
-          'Primary endpoint',
-          '{"markdown":"The primary endpoint improved."}',
-          '[{"id":"artifact-1","kind":"markdown","path":"cards/card-1.md"}]',
-          '[{"source":"analysis","timestamp":"2026-02-24T00:00:05.750Z"}]',
-          '{"prompt":"Review?","actions":[{"id":"accept","label":"Accept"}],"response":{"action":"accept","message":"Looks good","timestamp":"2026-02-24T00:00:05.800Z"}}',
-          '2026-02-24T00:00:05.750Z',
-          '2026-02-24T00:00:05.800Z'
         )
       `;
 
@@ -366,20 +334,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
               implementationSessionId: SessionId.make("session-2"),
               createdAt: "2026-02-24T00:00:05.000Z",
               updatedAt: "2026-02-24T00:00:05.500Z",
-            },
-          ],
-          researchCards: [
-            {
-              id: ResearchCardId.make("card-1"),
-              sessionId: SessionId.make("session-1"),
-              type: "markdown",
-              status: "accepted",
-              title: "Primary endpoint",
-              artifactCount: 1,
-              hasPreview: true,
-              turnId: asTurnId("turn-1"),
-              createdAt: "2026-02-24T00:00:05.750Z",
-              updatedAt: "2026-02-24T00:00:05.800Z",
             },
           ],
           activities: [
@@ -595,7 +549,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           (${ORCHESTRATION_PROJECTOR_NAMES.sessions}, 4, '2026-04-06T00:00:07.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.sessionMessages}, 4, '2026-04-06T00:00:07.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.sessionProposedPlans}, 4, '2026-04-06T00:00:07.000Z'),
-          (${ORCHESTRATION_PROJECTOR_NAMES.sessionResearchCards}, 4, '2026-04-06T00:00:07.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.sessionActivities}, 4, '2026-04-06T00:00:07.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.providerRuntimes}, 4, '2026-04-06T00:00:07.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.checkpoints}, 4, '2026-04-06T00:00:07.000Z')
@@ -613,128 +566,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         [SessionId.make("session-archived")],
       );
       assert.equal(archivedShellSnapshot.sessions[0]?.archivedAt, "2026-04-06T00:00:06.000Z");
-    }),
-  );
-
-  it.effect("hydrates research cards in command read models", () =>
-    Effect.gen(function* () {
-      const snapshotQuery = yield* ProjectionSnapshotQuery;
-      const sql = yield* SqlClient.SqlClient;
-
-      yield* sql`DELETE FROM projection_projects`;
-      yield* sql`DELETE FROM projection_sessions`;
-      yield* sql`DELETE FROM projection_session_research_cards`;
-      yield* sql`DELETE FROM projection_state`;
-
-      yield* sql`
-        INSERT INTO projection_projects (
-          project_id,
-          title,
-          workspace_root,
-          default_model_selection_json,
-          scripts_json,
-          created_at,
-          updated_at,
-          deleted_at
-        )
-        VALUES (
-          'project-command-cards',
-          'Command Cards',
-          '/tmp/command-cards',
-          '{"provider":"codex","model":"gpt-5-codex"}',
-          '[]',
-          '2026-02-25T00:00:00.000Z',
-          '2026-02-25T00:00:00.000Z',
-          NULL
-        )
-      `;
-
-      yield* sql`
-        INSERT INTO projection_sessions (
-          session_id,
-          project_id,
-          title,
-          model_selection_json,
-          runtime_mode,
-          interaction_mode,
-          branch,
-          worktree_path,
-          latest_turn_id,
-          latest_user_message_at,
-          pending_approval_count,
-          pending_user_input_count,
-          has_actionable_proposed_plan,
-          created_at,
-          updated_at,
-          deleted_at
-        )
-        VALUES (
-          'session-command-cards',
-          'project-command-cards',
-          'Command Cards Session',
-          '{"provider":"codex","model":"gpt-5-codex"}',
-          'full-access',
-          'default',
-          NULL,
-          NULL,
-          NULL,
-          NULL,
-          0,
-          0,
-          0,
-          '2026-02-25T00:00:01.000Z',
-          '2026-02-25T00:00:01.000Z',
-          NULL
-        )
-      `;
-
-      yield* sql`
-        INSERT INTO projection_session_research_cards (
-          card_id,
-          session_id,
-          turn_id,
-          type,
-          status,
-          title,
-          preview_json,
-          artifacts_json,
-          provenance_json,
-          review_json,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          'card-command',
-          'session-command-cards',
-          NULL,
-          'keyValue',
-          'proposed',
-          'Baseline',
-          '{"n":42}',
-          '[]',
-          '[]',
-          NULL,
-          '2026-02-25T00:00:02.000Z',
-          '2026-02-25T00:00:02.000Z'
-        )
-      `;
-
-      const commandReadModel = yield* snapshotQuery.getCommandReadModel();
-
-      assert.deepEqual(commandReadModel.sessions[0]?.researchCards, [
-        {
-          id: ResearchCardId.make("card-command"),
-          sessionId: SessionId.make("session-command-cards"),
-          type: "keyValue",
-          status: "proposed",
-          title: "Baseline",
-          artifactCount: 0,
-          hasPreview: true,
-          turnId: null,
-          createdAt: "2026-02-25T00:00:02.000Z",
-          updatedAt: "2026-02-25T00:00:02.000Z",
-        },
-      ]);
     }),
   );
 
@@ -1466,7 +1297,6 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           (${ORCHESTRATION_PROJECTOR_NAMES.sessions}, 3, '2026-04-03T00:00:40.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.sessionMessages}, 3, '2026-04-03T00:00:40.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.sessionProposedPlans}, 3, '2026-04-03T00:00:40.000Z'),
-          (${ORCHESTRATION_PROJECTOR_NAMES.sessionResearchCards}, 3, '2026-04-03T00:00:40.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.sessionActivities}, 3, '2026-04-03T00:00:40.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.providerRuntimes}, 3, '2026-04-03T00:00:40.000Z'),
           (${ORCHESTRATION_PROJECTOR_NAMES.checkpoints}, 3, '2026-04-03T00:00:40.000Z')

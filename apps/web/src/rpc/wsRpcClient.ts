@@ -86,13 +86,6 @@ export interface WsRpcClient {
       readonly column?: number;
     }) => ReturnType<LocalApi["shell"]["openInEditor"]>;
   };
-  readonly study: {
-    readonly getStatus: RpcUnaryMethod<typeof WS_METHODS.studyStatus>;
-    readonly listArtifacts: RpcUnaryMethod<typeof WS_METHODS.studyListArtifacts>;
-    readonly getArtifact: RpcUnaryMethod<typeof WS_METHODS.studyGetArtifact>;
-    readonly previewArtifact: RpcUnaryMethod<typeof WS_METHODS.studyPreviewArtifact>;
-    readonly previewFile: RpcUnaryMethod<typeof WS_METHODS.studyPreviewFile>;
-  };
   readonly vcs: {
     readonly pull: RpcUnaryMethod<typeof WS_METHODS.vcsPull>;
     readonly refreshStatus: RpcUnaryMethod<typeof WS_METHODS.vcsRefreshStatus>;
@@ -167,9 +160,6 @@ export interface WsRpcClient {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullSessionDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullSessionDiff>;
-    readonly getResearchCardDetail: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.getResearchCardDetail
-    >;
     readonly getArchivedShellSnapshot: RpcUnaryNoArgMethod<
       typeof ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot
     >;
@@ -221,17 +211,6 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     shell: {
       openInEditor: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInEditor](input)),
-    },
-    study: {
-      getStatus: (input) => transport.request((client) => client[WS_METHODS.studyStatus](input)),
-      listArtifacts: (input) =>
-        transport.request((client) => client[WS_METHODS.studyListArtifacts](input)),
-      getArtifact: (input) =>
-        transport.request((client) => client[WS_METHODS.studyGetArtifact](input)),
-      previewArtifact: (input) =>
-        transport.request((client) => client[WS_METHODS.studyPreviewArtifact](input)),
-      previewFile: (input) =>
-        transport.request((client) => client[WS_METHODS.studyPreviewFile](input)),
     },
     vcs: {
       pull: (input) => transport.request((client) => client[WS_METHODS.vcsPull](input)),
@@ -349,10 +328,6 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getTurnDiff](input)),
       getFullSessionDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullSessionDiff](input)),
-      getResearchCardDetail: (input) =>
-        transport.request((client) =>
-          client[ORCHESTRATION_WS_METHODS.getResearchCardDetail](input),
-        ),
       getArchivedShellSnapshot: () =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),

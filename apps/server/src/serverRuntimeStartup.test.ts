@@ -103,7 +103,6 @@ it.effect("launchStartupHeartbeat does not block the caller while counts are loa
           getFullSessionDiffContext: () => Effect.succeed(Option.none()),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
-          getResearchCardDetail: () => Effect.succeed(Option.none()),
         }),
         Effect.provideService(AnalyticsService, {
           record: () => Effect.void,
@@ -166,7 +165,6 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and sessi
         getFullSessionDiffContext: () => Effect.succeed(Option.none()),
         getSessionShellById: () => Effect.die("unused"),
         getSessionDetailById: () => Effect.die("unused"),
-        getResearchCardDetail: () => Effect.die("unused"),
       }),
       Effect.provideService(OrchestrationEngineService, {
         readEvents: () => Stream.empty,
@@ -209,7 +207,6 @@ it.effect("resolveAutoBootstrapWelcomeTargets creates a project and session when
         getFullSessionDiffContext: () => Effect.succeed(Option.none()),
         getSessionShellById: () => Effect.die("unused"),
         getSessionDetailById: () => Effect.die("unused"),
-        getResearchCardDetail: () => Effect.die("unused"),
       }),
       Effect.provideService(OrchestrationEngineService, {
         readEvents: () => Stream.empty,
@@ -258,7 +255,6 @@ it.effect("resolveAutoBootstrapWelcomeTargets preserves typed UUID generation fa
         getFullSessionDiffContext: () => Effect.succeed(Option.none()),
         getSessionShellById: () => Effect.die("unused"),
         getSessionDetailById: () => Effect.die("unused"),
-        getResearchCardDetail: () => Effect.die("unused"),
       }),
       Effect.provideService(OrchestrationEngineService, {
         readEvents: () => Stream.empty,
