@@ -98,6 +98,10 @@
     "./preview": {
       "types": "./src/preview.ts",
       "import": "./src/preview.ts"
+    },
+    "./vitrine": {
+      "types": "./src/vitrine.ts",
+      "import": "./src/vitrine.ts"
     }
   },
   "scripts": {

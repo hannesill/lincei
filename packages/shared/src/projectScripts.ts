@@ -1,5 +1,7 @@
 import type { ProjectScript } from "@t3tools/contracts";
 
+import { projectVitrineDataDir, VITRINE_DATA_DIR_ENV } from "./vitrine.ts";
+
 interface ProjectScriptRuntimeEnvInput {
   project: {
     cwd: string;
@@ -29,9 +31,14 @@ export function projectScriptRuntimeEnv(
     env.T3CODE_WORKTREE_PATH = input.worktreePath;
   }
   if (input.extraEnv) {
-    return { ...env, ...input.extraEnv };
+    Object.assign(env, input.extraEnv);
   }
-  return env;
+  return {
+    ...env,
+    // This identity is owned by Lincei and must not follow a worktree cwd or
+    // be redirected by a project-script override.
+    [VITRINE_DATA_DIR_ENV]: projectVitrineDataDir(input.project.cwd),
+  };
 }
 
 export function setupProjectScript(scripts: readonly ProjectScript[]): ProjectScript | null {

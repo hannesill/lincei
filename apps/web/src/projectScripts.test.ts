@@ -59,6 +59,7 @@ describe("projectScripts helpers", () => {
     expect(env).toMatchObject({
       T3CODE_PROJECT_ROOT: "/repo",
       T3CODE_WORKTREE_PATH: "/repo/worktree-a",
+      VITRINE_DATA_DIR: "/repo/.vitrine",
     });
   });
 
@@ -68,11 +69,13 @@ describe("projectScripts helpers", () => {
       extraEnv: {
         T3CODE_PROJECT_ROOT: "/custom-root",
         CUSTOM_FLAG: "1",
+        VITRINE_DATA_DIR: "/wrong/worktree/.vitrine",
       },
     });
 
     expect(env.T3CODE_PROJECT_ROOT).toBe("/custom-root");
     expect(env.CUSTOM_FLAG).toBe("1");
+    expect(env.VITRINE_DATA_DIR).toBe("/repo/.vitrine");
     expect(env.T3CODE_WORKTREE_PATH).toBeUndefined();
   });
 

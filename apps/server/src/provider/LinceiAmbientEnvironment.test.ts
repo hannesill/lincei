@@ -5,6 +5,7 @@ import {
   SessionId,
   type ProviderSessionStartInput,
 } from "@t3tools/contracts";
+import { VITRINE_DATA_DIR_ENV } from "@t3tools/shared/vitrine";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { mergeProviderInstanceEnvironment } from "./ProviderInstanceEnvironment.ts";
@@ -57,6 +58,7 @@ describe("makeLinceiSessionEnvironment", () => {
       [LINCEI_SESSION_ID_ENV]: "session-1",
       [LINCEI_PROJECT_ID_ENV]: "project-1",
       [LINCEI_PROJECT_DIR_ENV]: "/workspace",
+      [VITRINE_DATA_DIR_ENV]: "/workspace/.vitrine",
       [LINCEI_PROVIDER_INSTANCE_ID_ENV]: "codex-main",
     });
   });
@@ -74,6 +76,11 @@ describe("makeLinceiSessionEnvironment", () => {
           value: ["/provider/bin", "/usr/bin"].join(PATH_DELIMITER),
           sensitive: false,
         },
+        {
+          name: VITRINE_DATA_DIR_ENV,
+          value: "/wrong/worktree/.vitrine",
+          sensitive: false,
+        },
       ],
       { PATH: "/base/bin", OPENAI_API_KEY: "sk-openai-test" },
     );
@@ -87,6 +94,7 @@ describe("makeLinceiSessionEnvironment", () => {
     expect(env.OPENAI_API_KEY).toBe("sk-openai-test");
     expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-test");
     expect(env[LINCEI_SESSION_ID_ENV]).toBe("session-1");
+    expect(env[VITRINE_DATA_DIR_ENV]).toBe("/workspace/.vitrine");
   });
 });
 

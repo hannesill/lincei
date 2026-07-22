@@ -1,4 +1,5 @@
 import type { ProviderSessionStartInput } from "@t3tools/contracts";
+import { projectVitrineDataDir, VITRINE_DATA_DIR_ENV } from "@t3tools/shared/vitrine";
 
 export const LINCEI_SESSION_ID_ENV = "LINCEI_SESSION_ID";
 export const LINCEI_PROJECT_ID_ENV = "LINCEI_PROJECT_ID";
@@ -58,7 +59,12 @@ export function makeLinceiSessionEnvironment(
       : {}),
     [LINCEI_SESSION_ID_ENV]: input.sessionId,
     ...(input.projectId ? { [LINCEI_PROJECT_ID_ENV]: input.projectId } : {}),
-    ...(input.workspaceRoot ? { [LINCEI_PROJECT_DIR_ENV]: input.workspaceRoot } : {}),
+    ...(input.workspaceRoot
+      ? {
+          [LINCEI_PROJECT_DIR_ENV]: input.workspaceRoot,
+          [VITRINE_DATA_DIR_ENV]: projectVitrineDataDir(input.workspaceRoot),
+        }
+      : {}),
     ...(input.providerInstanceId
       ? { [LINCEI_PROVIDER_INSTANCE_ID_ENV]: input.providerInstanceId }
       : {}),
