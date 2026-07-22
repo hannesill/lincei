@@ -1,9 +1,10 @@
 # TODO
 
-Last checked: 2026-06-02 across:
+Last checked: 2026-07-22 across:
 
-- `main` at `9e2b80fc`
-- `codex/card-handles-review-flow` at `9088f675`
+- `codex/vitrine-browser-pivot`
+- `codex/lincei-lifecycle-json` in Vitrine
+- `codex/card-handles-review-flow` as historical reference only
 - `codex/lincei-skills-workflows` at `de05f02e`
 
 ## Recently completed on main
@@ -20,64 +21,27 @@ Last checked: 2026-06-02 across:
 - [ ] Decide whether sidebar preview should default to exactly 10 sessions. Current setting is configurable from 1 to 15.
 - [ ] Add focused browser coverage for "send while scrolled up" if scroll-to-bottom regresses in real use.
 
-## Study card review system
+## Vitrine research surface
 
-Strategic read: the current card drawer is useful as a quick session review surface, but not enough as the main clinical study review experience. Keep the drawer. Add a focused full-screen study review view and harden the card model around provenance, review history, supersession, VCS/checkpoint binding, and downstream invalidation.
+Vitrine is the sole owner of studies, research cards, artifacts, decisions, provenance, review, and export. Lincei owns projects, sessions, chat, terminals, diffs, provider integration, and the managed project-scoped Vitrine launch/preview path.
 
-### First-release essentials
-
-- [ ] Add a full-screen Study Review route for serious card/artifact review. Keep the side drawer for quick "what just happened?" review.
-- [ ] Show cards as a study-level review workspace, not only a sorted drawer list: card list/timeline, selected card, artifacts, dependencies, provenance, and review notes in one view.
-- [ ] Add review history/audit trail. Current projected card review keeps only latest `review.response`; clinical review should preserve prior accept/change/reject events.
-- [ ] Add downstream impact display. If a dependency/artifact is stale, missing, rejected, or superseded, show affected downstream cards.
-- [ ] Add a correction flow for bad earlier cards: mark issue, create correction branch/session, supersede old card, and require downstream revalidation.
-- [ ] Make captured artifact vs current artifact comparison explicit for stale files.
-- [ ] Bind each persisted card to VCS/checkpoint context: branch/worktree, commit/checkpoint ref, and captured dependency/blob identity where available.
-- [ ] Add anchored comments with a small scope: card-level, artifact-level, and optional file path + line range.
-
-### Data model hardening
-
-- [ ] Add explicit graph fields: parent/dependency card ids and `supersedesCardId` or equivalent.
-- [ ] Add immutable card version identity if mutable card ids remain user-facing.
-- [ ] Store review responses as append-only events or a review log, while still projecting latest response for UI speed.
-- [ ] Store branch/worktree/checkpoint/commit context on card manifests, not only scattered artifact/dependency fields.
-- [ ] Distinguish "stale input", "stale output", "missing", and "needs revalidation" in card consistency.
-- [ ] Ensure study scope does not hide branch structure by deduping solely by card id and latest timestamp.
-
-### UX details
-
-- [ ] Keep drawer actions compact: Preview, Open in editor, Accept, Request changes, Reject.
-- [ ] In full-screen review, show filters for needs review, changes requested, stale, missing, accepted, and superseded.
-- [ ] Show dependencies and artifacts as first-class inspectable rows with status, captured hash, current hash, and path.
-- [ ] Add "Open captured version" or "Compare with captured version" where VCS/checkpoint data exists.
-- [ ] Show branch/session origin for study-scope cards so researchers can understand parallel work.
-- [ ] Add clear empty/error states for missing previews, binary files, stale files, and unavailable card details.
-
-### Defer for now
-
-- [ ] Defer large decorative graph visualizations until card graph semantics are solid.
-- [ ] Defer realtime Google-Docs-style collaboration; anchored comments are enough for v1.
-- [ ] Defer many new card types. Current practical types are enough unless a concrete study workflow needs more.
-- [ ] Defer complex branch management UI until correction/supersede/downstream invalidation works.
-- [ ] Avoid generic dashboards that do not answer whether the study output can be trusted.
+- [ ] Introduce a pinned/bundled Vitrine distribution so users do not need to install a compatible `vitrine` executable separately.
+- [ ] Define secure loopback forwarding/tunneling before enabling embedded Vitrine for remote execution environments.
+- [ ] Define and approve an explicit export/migration strategy before deleting dormant native-card tables, events, or on-disk records from developer databases.
+- [ ] Complete the two-project manual acceptance flow, including M4 → `vitrine.show(...)`, blocking `confirm()`/`show(..., wait=True)`, and Lincei restart recovery.
 
 ## Worktree integration
 
-### `codex/card-handles-review-flow`
+### `codex/card-handles-review-flow` — obsolete; do not merge
 
-Branch summary: stable research-card slugs/handles, `@card:<handle>` composer mentions, bounded card context injection, `lincei card show`, `lincei card review`, and CLI review request flow.
-
-- [ ] Rebase onto `main` and keep the `help-feedback` route/route tree from `9e2b80fc`.
-- [ ] Resolve migration numbering before merge. This branch uses `033_ProjectionSessionResearchCardSlugs`; `codex/lincei-skills-workflows` also uses migration `033`.
-- [ ] After merge, verify card handles still use UUIDs as canonical IDs and slugs only as stable human-facing handles.
-- [ ] Run `bun fmt`, `bun lint`, `bun typecheck`, and targeted card/composer tests.
+This branch implements the retired Lincei-native card domain. Keep its branch/worktree only as a historical reference. Do not rebase, merge, or delete it as part of the Vitrine pivot.
 
 ### `codex/lincei-skills-workflows`
 
 Branch summary: bundled Lincei skill/workflow catalog, Skills settings page, provider skill review, prompt enablement settings, managed skill sync metadata, workflow selection persistence, and responsive right-panel fixes.
 
-- [ ] Rebase onto `main`; preserve the research-card review actions from `48d228c4`, scope-toggle polish from `e3ef91a7`, and Help & Feedback route from `9e2b80fc`.
-- [ ] Resolve migration numbering before merge. This branch uses `033_ProjectionSessionWorkflowMetadata`; `codex/card-handles-review-flow` also uses migration `033`.
+- [ ] Rebase onto `main`; preserve scope-toggle polish and Help & Feedback, but do not restore native research-card actions or schemas.
+- [ ] Resolve `033_ProjectionSessionWorkflowMetadata` against current `main`; the obsolete card branch no longer participates in migration-number decisions.
 - [ ] Decide the explicit provider-native skill sync action API. Current behavior records deployment intent and avoids overwriting conflicts automatically.
 - [ ] Verify workflow prompt enablement after provider session restart and projection reload.
 - [ ] Run `bun fmt`, `bun lint`, `bun typecheck`, `bun run test src/linceiSkills.test.ts`, and relevant settings/provider tests.
