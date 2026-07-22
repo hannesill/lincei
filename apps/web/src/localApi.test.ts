@@ -53,6 +53,11 @@ const rpcClientMock = {
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
   },
+  vitrine: {
+    ensure: vi.fn(),
+    status: vi.fn(),
+    stop: vi.fn(),
+  },
   filesystem: {
     browse: vi.fn(),
   },
@@ -504,6 +509,31 @@ describe("wsApi", () => {
       sessionId: "session-1",
       toTurnCount: 1,
     });
+  });
+
+  it("forwards project-scoped Vitrine lifecycle requests", async () => {
+    const projectId = ProjectId.make("project-1");
+    const state = {
+      projectId,
+      status: "ready" as const,
+      dataDir: "/tmp/project/.vitrine",
+      url: "http://vitrine.localhost:8812/",
+      apiUrl: "http://127.0.0.1:8812/",
+      pid: 12_345,
+      port: 8_812,
+      sessionId: "vitrine-session",
+      version: "0.1.0",
+      issueCode: null,
+      message: null,
+      updatedAt: "2026-02-24T00:00:00.000Z",
+    };
+    rpcClientMock.vitrine.ensure.mockResolvedValue(state);
+    const { createEnvironmentApi } = await import("./environmentApi");
+
+    const api = createEnvironmentApi(rpcClientMock as never);
+
+    await expect(api.vitrine.ensure({ projectId })).resolves.toEqual(state);
+    expect(rpcClientMock.vitrine.ensure).toHaveBeenCalledWith({ projectId });
   });
 
   it("forwards provider refreshes directly to the RPC client", async () => {
