@@ -154,6 +154,41 @@ function makeTestLayer(input: {
 }
 
 describe("DesktopWindow", () => {
+  it("allows only same-origin main-renderer navigation", () => {
+    assert.isTrue(
+      DesktopWindow.isSameOriginRendererNavigation({
+        applicationUrl: "http://127.0.0.1:5733/chat",
+        navigationUrl: "http://127.0.0.1:5733/settings",
+      }),
+    );
+    assert.isFalse(
+      DesktopWindow.isSameOriginRendererNavigation({
+        applicationUrl: "http://127.0.0.1:5733/chat",
+        navigationUrl: "https://example.com/",
+      }),
+    );
+  });
+
+  it("forces sandboxed preview web preferences without a guest preload", () => {
+    const preferences = {
+      preload: "/tmp/untrusted-preload.js",
+      sandbox: false,
+      contextIsolation: false,
+      nodeIntegration: true,
+      nodeIntegrationInSubFrames: true,
+      allowRunningInsecureContent: true,
+    } as Electron.WebPreferences;
+
+    DesktopWindow.hardenPreviewWebPreferences(preferences);
+
+    assert.isUndefined(preferences.preload);
+    assert.isTrue(preferences.sandbox);
+    assert.isTrue(preferences.contextIsolation);
+    assert.isFalse(preferences.nodeIntegration);
+    assert.isFalse(preferences.nodeIntegrationInSubFrames);
+    assert.isFalse(preferences.allowRunningInsecureContent);
+  });
+
   it.effect("does not open a development window until the backend is ready", () =>
     Effect.gen(function* () {
       const fakeWindow = makeFakeBrowserWindow();

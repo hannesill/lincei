@@ -11,6 +11,7 @@ import * as DesktopAssets from "../app/DesktopAssets.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopState from "../app/DesktopState.ts";
+import { previewViewManager } from "../preview/Manager.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
@@ -77,6 +78,26 @@ function resolveDesktopDevServerUrl(
     onNone: () => Effect.fail(new DesktopWindowDevServerUrlMissingError()),
     onSome: (url) => Effect.succeed(url.href),
   });
+}
+
+export function isSameOriginRendererNavigation(input: {
+  readonly applicationUrl: string;
+  readonly navigationUrl: string;
+}): boolean {
+  try {
+    return new URL(input.applicationUrl).origin === new URL(input.navigationUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+export function hardenPreviewWebPreferences(webPreferences: Electron.WebPreferences): void {
+  delete webPreferences.preload;
+  webPreferences.sandbox = true;
+  webPreferences.contextIsolation = true;
+  webPreferences.nodeIntegration = false;
+  webPreferences.nodeIntegrationInSubFrames = false;
+  webPreferences.allowRunningInsecureContent = false;
 }
 
 function getIconOption(
@@ -164,6 +185,9 @@ const make = Effect.gen(function* () {
     const iconPaths = yield* assets.iconPaths;
     const iconOption = getIconOption(iconPaths);
     const shouldUseDarkColors = yield* electronTheme.shouldUseDarkColors;
+    const applicationUrl = environment.isDevelopment
+      ? yield* resolveDesktopDevServerUrl(environment)
+      : backendHttpUrl.href;
     const window = yield* electronWindow.create({
       width: 1100,
       height: 780,
@@ -180,7 +204,20 @@ const make = Effect.gen(function* () {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        webviewTag: true,
       },
+    });
+
+    previewViewManager.setMainWindow(window);
+    window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+      if (
+        typeof params.partition !== "string" ||
+        !previewViewManager.isBrowserPartition(params.partition)
+      ) {
+        event.preventDefault();
+        return;
+      }
+      hardenPreviewWebPreferences(webPreferences);
     });
 
     window.webContents.on("context-menu", (event, params) => {
@@ -237,6 +274,13 @@ const make = Effect.gen(function* () {
       }
       return { action: "deny" };
     });
+    window.webContents.on("will-navigate", (event, navigationUrl) => {
+      if (isSameOriginRendererNavigation({ applicationUrl, navigationUrl })) return;
+      event.preventDefault();
+      if (Option.isSome(ElectronShell.parseSafeExternalUrl(navigationUrl))) {
+        void runPromise(electronShell.openExternal(navigationUrl));
+      }
+    });
 
     window.on("page-title-updated", (event) => {
       event.preventDefault();
@@ -288,14 +332,14 @@ const make = Effect.gen(function* () {
     });
 
     if (environment.isDevelopment) {
-      const devServerUrl = yield* resolveDesktopDevServerUrl(environment);
-      void window.loadURL(devServerUrl);
+      void window.loadURL(applicationUrl);
       window.webContents.openDevTools({ mode: "detach" });
     } else {
-      void window.loadURL(backendHttpUrl.href);
+      void window.loadURL(applicationUrl);
     }
 
     window.on("closed", () => {
+      previewViewManager.clearMainWindow(window);
       void runPromise(electronWindow.clearMain(Option.some(window)));
     });
 
