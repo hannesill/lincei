@@ -5,6 +5,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   CommandId,
   DEFAULT_SERVER_SETTINGS,
+  EMPTY_SKILL_CATALOG,
   EnvironmentId,
   EventId,
   GitCommandError,
@@ -159,7 +160,7 @@ const defaultModelSelection = {
 const defaultDatasetStatus = {
   runtime: {
     available: true,
-    command: "uvx --from m4-infra m4",
+    command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
     checkedAt: "1970-01-01T00:00:00.000Z",
   },
   credentials: {
@@ -852,7 +853,7 @@ const buildAppUnderTest = (options?: {
             Effect.succeed({
               workspacePath: "/tmp/lincei-datasets",
               defaultBackendId: "duckdb",
-              m4Command: "uvx --from m4-infra m4",
+              m4Command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
             }),
           status: () => Effect.succeed(defaultDatasetStatus),
           capabilities: () =>
@@ -2504,7 +2505,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         );
 
         assert.equal(result.initial.runtime.available, true);
-        assert.equal(result.initial.runtime.command, "uvx --from m4-infra m4");
+        assert.equal(result.initial.runtime.command, "uvx --from 'm4-infra>=0.5.4,<0.6' m4");
         assert.equal(result.initial.runtime.workspacePath, workspacePath);
         assert.equal(result.initial.appReadiness.selectedBackendId, "duckdb");
         assert.equal(result.initial.appReadiness.clinicalDataReady, false);
@@ -2567,7 +2568,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.deepEqual(second, {
         version: 1,
         type: "providerStatuses",
-        payload: { providers: nextProviders },
+        payload: {
+          providers: nextProviders,
+          skillCatalog: EMPTY_SKILL_CATALOG,
+        },
       });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );

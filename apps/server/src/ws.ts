@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import {
   DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL,
+  EMPTY_SKILL_CATALOG,
   type AuthAccessStreamEvent,
   AuthSessionId,
   CommandId,
@@ -49,6 +50,7 @@ import * as M4Cli from "./datasets/M4Cli.ts";
 import { M4DatasetService } from "./datasets/M4DatasetService.ts";
 import * as M4DatasetServiceLayer from "./datasets/M4DatasetService.ts";
 import { Shortcuts } from "./shortcuts.ts";
+import { SkillCatalogService } from "./skills/SkillCatalogService.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
@@ -246,6 +248,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       );
       const sourceControlRepositories = yield* SourceControlRepositoryService;
       const datasets = yield* M4DatasetService;
+      const skillCatalog = Option.getOrUndefined(yield* Effect.serviceOption(SkillCatalogService));
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
@@ -652,6 +655,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         const settings = redactServerSettingsForClient(yield* serverSettings.getSettings);
         const environment = yield* serverEnvironment.getDescriptor;
         const auth = yield* serverAuth.getDescriptor();
+        const skillCatalogSnapshot = skillCatalog
+          ? yield* skillCatalog.getSnapshot
+          : EMPTY_SKILL_CATALOG;
 
         return {
           environment,
@@ -673,6 +679,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
           },
           settings,
+          skillCatalog: skillCatalogSnapshot,
         };
       });
 
@@ -1381,11 +1388,16 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 })),
               );
               const providerStatuses = providerRegistry.streamChanges.pipe(
-                Stream.map((providers) => ({
-                  version: 1 as const,
-                  type: "providerStatuses" as const,
-                  payload: { providers },
-                })),
+                Stream.mapEffect((providers) =>
+                  Effect.map(
+                    skillCatalog?.getSnapshot ?? Effect.succeed(EMPTY_SKILL_CATALOG),
+                    (skillCatalogSnapshot) => ({
+                      version: 1 as const,
+                      type: "providerStatuses" as const,
+                      payload: { providers, skillCatalog: skillCatalogSnapshot },
+                    }),
+                  ),
+                ),
                 Stream.debounce(Duration.millis(PROVIDER_STATUS_DEBOUNCE_MS)),
               );
               const settingsUpdates = serverSettings.streamChanges.pipe(

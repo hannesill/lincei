@@ -51,7 +51,7 @@ function createDatasetStatus(overrides: Partial<DatasetStatusResult> = {}): Data
   const base: DatasetStatusResult = {
     runtime: {
       available: true,
-      command: "uvx --from m4-infra m4",
+      command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
       workspacePath: "/repo/project",
       checkedAt: "2026-05-28T10:00:00.000Z",
     },
@@ -384,7 +384,7 @@ describe("DatasetSettingsPanel", () => {
         code: "m4_unavailable",
         detail: "M4 command could not be started: uvx.",
         actionableMessage: "Install or update m4-infra.",
-        command: "uvx --from m4-infra m4 status --all --json",
+        command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4 status --all --json",
       }),
     });
 

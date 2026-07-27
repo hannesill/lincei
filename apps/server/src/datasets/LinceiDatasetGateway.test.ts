@@ -119,7 +119,7 @@ beforeEach(() => {
 });
 
 describe("LinceiDatasetGateway", () => {
-  it.effect("resolves status to uvx --from m4-infra m4 in the dataset workspace", () => {
+  it.effect("resolves status to the supported M4 range in the dataset workspace", () => {
     const callerCwd = mkdtempSync(join(tmpdir(), "lincei-gateway-status-caller-"));
     const baseDir = mkdtempSync(join(tmpdir(), "lincei-gateway-status-base-"));
     const workspacePath = mkdtempSync(join(tmpdir(), "lincei-gateway-status-workspace-"));
@@ -131,11 +131,19 @@ describe("LinceiDatasetGateway", () => {
       const status = yield* gateway.status();
 
       expect(status.credentials).toEqual(emptyCredentials);
-      expect(status.runtime.command).toBe("uvx --from m4-infra m4");
+      expect(status.runtime.command).toBe("uvx --from 'm4-infra>=0.5.4,<0.6' m4");
       expect(mockRun).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "uvx",
-          args: ["--from", "m4-infra", "m4", "status", "--all", "--json", "--no-interactive"],
+          args: [
+            "--from",
+            "m4-infra>=0.5.4,<0.6",
+            "m4",
+            "status",
+            "--all",
+            "--json",
+            "--no-interactive",
+          ],
           cwd: workspacePath,
         }),
       );
@@ -158,7 +166,7 @@ describe("LinceiDatasetGateway", () => {
           command: "uvx",
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--dataset",
@@ -190,7 +198,7 @@ describe("LinceiDatasetGateway", () => {
           command: "uvx",
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--all",
@@ -221,7 +229,7 @@ describe("LinceiDatasetGateway", () => {
       expect(mockRun).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "uvx",
-          args: expect.arrayContaining(["--from", "m4-infra", "m4"]),
+          args: expect.arrayContaining(["--from", "m4-infra>=0.5.4,<0.6", "m4"]),
           cwd: workspacePath,
         }),
       );
@@ -252,7 +260,7 @@ describe("LinceiDatasetGateway", () => {
           cwd: workspacePath,
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--dataset",
@@ -270,7 +278,7 @@ describe("LinceiDatasetGateway", () => {
           cwd: workspacePath,
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "schema",
             "--dataset",
@@ -288,7 +296,7 @@ describe("LinceiDatasetGateway", () => {
           cwd: workspacePath,
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--dataset",
@@ -306,7 +314,7 @@ describe("LinceiDatasetGateway", () => {
           cwd: workspacePath,
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "query",
             "--sql",

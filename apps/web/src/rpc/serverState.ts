@@ -1,6 +1,7 @@
 import { useAtomSubscribe, useAtomValue } from "@effect/atom-react";
 import {
   DEFAULT_SERVER_SETTINGS,
+  EMPTY_SKILL_CATALOG,
   type EditorId,
   type ServerConfig,
   type ServerConfigStreamEvent,
@@ -9,6 +10,7 @@ import {
   type ServerProvider,
   type ServerProviderUpdatedPayload,
   type ServerSettings,
+  type SkillCatalogSnapshot,
 } from "@t3tools/contracts";
 import { DEFAULT_RESOLVED_SHORTCUTS } from "@t3tools/shared/shortcuts";
 import { Atom } from "effect/unstable/reactivity";
@@ -56,6 +58,8 @@ const selectProviders = (config: ServerConfig | null) =>
   config?.providers ?? EMPTY_SERVER_PROVIDERS;
 const selectSettings = (config: ServerConfig | null): ServerSettings =>
   config?.settings ?? DEFAULT_SERVER_SETTINGS;
+const selectSkillCatalog = (config: ServerConfig | null): SkillCatalogSnapshot =>
+  config?.skillCatalog ?? EMPTY_SKILL_CATALOG;
 
 export const welcomeAtom = makeStateAtom<ServerLifecycleWelcomePayload | null>(
   "server-welcome",
@@ -120,9 +124,13 @@ export function applyServerConfigEvent(event: ServerConfigStreamEvent): void {
   }
 }
 
-export function applyProvidersUpdated(payload: ServerProviderUpdatedPayload): void {
+export function applyProvidersUpdated(
+  payload: ServerProviderUpdatedPayload & {
+    readonly skillCatalog?: SkillCatalogSnapshot | undefined;
+  },
+): void {
   const latestServerConfig = getServerConfig();
-  emitProvidersUpdated(payload);
+  emitProvidersUpdated({ providers: payload.providers });
 
   if (!latestServerConfig) {
     return;
@@ -131,6 +139,7 @@ export function applyProvidersUpdated(payload: ServerProviderUpdatedPayload): vo
   const nextConfig = {
     ...latestServerConfig,
     providers: payload.providers,
+    ...(payload.skillCatalog !== undefined ? { skillCatalog: payload.skillCatalog } : {}),
   } satisfies ServerConfig;
   resolveServerConfig(nextConfig);
   emitServerConfigUpdated(toServerConfigUpdatedPayload(nextConfig), "providerStatuses");
@@ -274,6 +283,10 @@ export function useServerSettings(): ServerSettings {
 
 export function useServerProviders(): ReadonlyArray<ServerProvider> {
   return useAtomValue(serverConfigAtom, selectProviders);
+}
+
+export function useSkillCatalog(): SkillCatalogSnapshot {
+  return useAtomValue(serverConfigAtom, selectSkillCatalog);
 }
 
 export function useServerShortcuts(): ServerConfig["shortcuts"] {

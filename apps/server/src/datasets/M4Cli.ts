@@ -33,8 +33,8 @@ import {
 } from "../processRunner.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 
-const DEFAULT_M4_COMMAND = "uvx --from m4-infra m4";
-const M4_MINIMUM_VERSION = "0.5.3";
+const DEFAULT_M4_COMMAND = "uvx --from 'm4-infra>=0.5.4,<0.6' m4";
+const M4_MINIMUM_VERSION = "0.5.4";
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const STATUS_TIMEOUT = Duration.seconds(30);
 const COMMAND_TIMEOUT = Duration.minutes(15);

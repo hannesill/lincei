@@ -32,6 +32,7 @@ export interface ServerDerivedPaths {
   readonly legacyShortcutsConfigPath: string;
   readonly settingsPath: string;
   readonly providerStatusCacheDir: string;
+  readonly skillBundlesDir: string;
   readonly datasetsDir: string;
   readonly worktreesDir: string;
   readonly attachmentsDir: string;
@@ -92,6 +93,7 @@ export const deriveServerPaths = Effect.fn(function* (
   const runtimeBinDir = join(stateDir, "bin");
   const providerLogsDir = join(logsDir, "provider");
   const providerStatusCacheDir = join(baseDir, "caches");
+  const skillBundlesDir = join(baseDir, "skill-bundles");
   return {
     stateDir,
     dbPath,
@@ -99,6 +101,7 @@ export const deriveServerPaths = Effect.fn(function* (
     legacyShortcutsConfigPath: join(stateDir, "keybindings.json"),
     settingsPath: join(stateDir, "settings.json"),
     providerStatusCacheDir,
+    skillBundlesDir,
     datasetsDir: join(baseDir, "datasets"),
     worktreesDir: join(baseDir, "worktrees"),
     attachmentsDir,
@@ -134,6 +137,7 @@ export const ensureServerDirectories = Effect.fn(function* (derivedPaths: Server
       fs.makeDirectory(path.dirname(derivedPaths.shortcutsConfigPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.settingsPath), { recursive: true }),
       fs.makeDirectory(derivedPaths.providerStatusCacheDir, { recursive: true }),
+      fs.makeDirectory(derivedPaths.skillBundlesDir, { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.anonymousIdPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.serverRuntimeStatePath), { recursive: true }),
     ],

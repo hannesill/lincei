@@ -26,7 +26,7 @@ const SOURCE_CONTENT_URL = "https://physionet.org/content/mimic-iv-demo/2.2/";
 const DEFAULT_OUTPUT_DIR = "assets/datasets/mimic-iv-demo";
 const ARCHIVE_FILE = "mimic-iv-demo.tar.gz";
 const MANIFEST_FILE = "mimic-iv-demo.asset.json";
-const M4_COMMAND = process.env.LINCEI_M4_COMMAND?.trim() || "uvx --from m4-infra m4";
+const M4_COMMAND = process.env.LINCEI_M4_COMMAND?.trim() || "uvx --from 'm4-infra>=0.5.4,<0.6' m4";
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),

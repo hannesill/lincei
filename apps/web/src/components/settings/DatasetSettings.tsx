@@ -600,7 +600,7 @@ export function DatasetSettingsPanel() {
                 <Input
                   aria-label="M4 command"
                   className="w-full sm:w-80"
-                  placeholder="uvx --from m4-infra m4"
+                  placeholder="uvx --from 'm4-infra>=0.5.4,<0.6' m4"
                   value={m4Command}
                   onBlur={() => commitDatasetSettings({ m4Command })}
                   onChange={(event) => setM4Command(event.currentTarget.value)}

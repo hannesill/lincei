@@ -277,6 +277,12 @@ describe("serverState", () => {
         message: "rate limited",
       },
     ];
+    const nextSkillCatalog = {
+      schemaVersion: 1 as const,
+      refreshedAt: "2026-01-02T00:00:00.000Z",
+      skills: [],
+      sources: [{ publisher: "m4", state: "ready" as const, bundleVersion: "1.0.0" }],
+    };
 
     const nextShortcuts = [
       {
@@ -305,6 +311,7 @@ describe("serverState", () => {
       type: "providerStatuses",
       payload: {
         providers: nextProviders,
+        skillCatalog: nextSkillCatalog,
       },
     });
     emitServerConfigEvent({
@@ -324,6 +331,7 @@ describe("serverState", () => {
         shortcuts: nextShortcuts,
         issues: [{ kind: "shortcuts.malformed-config", message: "bad json" }],
         providers: nextProviders,
+        skillCatalog: nextSkillCatalog,
         settings: {
           ...DEFAULT_SERVER_SETTINGS,
           enableAssistantStreaming: true,

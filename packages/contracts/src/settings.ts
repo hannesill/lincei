@@ -343,6 +343,41 @@ export const LinceiSkillSettings = Schema.Struct({
 });
 export type LinceiSkillSettings = typeof LinceiSkillSettings.Type;
 
+const LinceiSkillSettingsRecord = Schema.Record(TrimmedNonEmptyString, LinceiSkillSettings);
+const DecodedLinceiSkillSettingsRecord = Schema.Record(
+  TrimmedNonEmptyString,
+  Schema.Struct({ enabled: Schema.Boolean }),
+);
+
+export const LEGACY_LINCEI_SKILL_IDS = {
+  "lincei-api": "lincei:context",
+  "clinical-research-pitfalls": "m4:clinical-research-pitfalls",
+} as const;
+
+function migrateLinceiSkillSettings(
+  settings: Readonly<Record<string, LinceiSkillSettings>>,
+): Record<string, LinceiSkillSettings> {
+  const migrated = { ...settings };
+  for (const [legacyId, qualifiedId] of Object.entries(LEGACY_LINCEI_SKILL_IDS)) {
+    const legacy = migrated[legacyId];
+    if (legacy !== undefined && migrated[qualifiedId] === undefined) {
+      migrated[qualifiedId] = legacy;
+    }
+    delete migrated[legacyId];
+  }
+  return migrated;
+}
+
+const MigratedLinceiSkillSettingsRecord = LinceiSkillSettingsRecord.pipe(
+  Schema.decodeTo(
+    DecodedLinceiSkillSettingsRecord,
+    SchemaTransformation.transformOrFail({
+      decode: (settings) => Effect.succeed(migrateLinceiSkillSettings(settings)),
+      encode: (settings) => Effect.succeed(settings),
+    }),
+  ),
+);
+
 export const LinceiWorkflowSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
@@ -393,7 +428,7 @@ export const ServerSettings = Schema.Struct({
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   datasets: DatasetSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
-  linceiSkills: Schema.Record(TrimmedNonEmptyString, LinceiSkillSettings).pipe(
+  linceiSkills: MigratedLinceiSkillSettingsRecord.pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   linceiWorkflows: Schema.Record(TrimmedNonEmptyString, LinceiWorkflowSettings).pipe(
@@ -479,7 +514,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   datasets: Schema.optionalKey(DatasetSettingsPatch),
-  linceiSkills: Schema.optionalKey(Schema.Record(TrimmedNonEmptyString, LinceiSkillSettings)),
+  linceiSkills: Schema.optionalKey(MigratedLinceiSkillSettingsRecord),
   linceiWorkflows: Schema.optionalKey(Schema.Record(TrimmedNonEmptyString, LinceiWorkflowSettings)),
   providers: Schema.optionalKey(
     Schema.Struct({

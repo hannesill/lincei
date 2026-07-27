@@ -62,7 +62,7 @@ function statusResult(
   return {
     runtime: {
       available: true,
-      command: "uvx --from m4-infra m4",
+      command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
       checkedAt: "2026-05-28T10:00:00.000Z",
     },
     credentials,
@@ -98,10 +98,10 @@ const makeLayer = (
       Layer.succeed(
         M4Cli,
         M4Cli.of({
-          defaultCommand: "uvx --from m4-infra m4",
+          defaultCommand: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
           resolveCommand: (configuredCommand) => ({
             command: configuredCommand || "uvx",
-            prefixArgs: configuredCommand ? [] : ["--from", "m4-infra", "m4"],
+            prefixArgs: configuredCommand ? [] : ["--from", "m4-infra>=0.5.4,<0.6", "m4"],
           }),
           exec: mockExec,
           json: mockJson,

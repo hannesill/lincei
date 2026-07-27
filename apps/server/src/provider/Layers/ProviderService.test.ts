@@ -892,15 +892,15 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
       yield* provider.sendTurn({
         sessionId: session.sessionId,
-        input: "Use /lincei-api and $lincei-api for schema work.",
+        input: "Use /lincei-api and $lincei:context for schema work.",
         attachments: [],
       });
 
       assert.equal(routing.codex.sendTurn.mock.calls.length, 1);
       const dispatched = routing.codex.sendTurn.mock.calls[0]?.[0];
-      assert.equal(dispatched?.input?.startsWith("Use /lincei-api and $lincei-api"), true);
+      assert.equal(dispatched?.input?.startsWith("Use /lincei-api and $lincei:context"), true);
       assert.include(dispatched?.input ?? "", "<lincei_selected_skills>");
-      assert.include(dispatched?.input ?? "", '<lincei_skill id="lincei-api"');
+      assert.include(dispatched?.input ?? "", '<lincei_skill id="lincei:context"');
       assert.equal((dispatched?.input?.match(/<lincei_skill /g) ?? []).length, 1);
     }),
   );
@@ -911,7 +911,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const settings = yield* ServerSettingsService;
       yield* settings.updateSettings({
         linceiSkills: {
-          "lincei-api": {
+          "lincei:context": {
             enabled: false,
           },
         },
@@ -927,14 +927,14 @@ routing.layer("ProviderServiceLive routing", (it) => {
 
       yield* provider.sendTurn({
         sessionId: session.sessionId,
-        input: "/lincei-api",
+        input: "/lincei:context",
         attachments: [],
       });
 
-      assert.equal(routing.codex.sendTurn.mock.calls[0]?.[0].input, "/lincei-api");
+      assert.equal(routing.codex.sendTurn.mock.calls[0]?.[0].input, "/lincei:context");
       yield* settings.updateSettings({
         linceiSkills: {
-          "lincei-api": {
+          "lincei:context": {
             enabled: true,
           },
         },
@@ -1290,6 +1290,11 @@ routing.layer("ProviderServiceLive routing", (it) => {
         activeTurnId: null,
         lastError: null,
         projectContext: { projectId: "project-b" },
+        skillSelection: {
+          bundlePins: [],
+          skillIds: ["lincei:context"],
+        },
+        deliveredSkillIds: [],
       });
 
       yield* routing.codex.stopAll();

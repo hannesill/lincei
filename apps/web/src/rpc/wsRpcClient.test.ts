@@ -40,7 +40,7 @@ describe("wsRpcClient", () => {
     const datasetStatus: DatasetStatusResult = {
       runtime: {
         available: true,
-        command: "uvx --from m4-infra m4",
+        command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
         checkedAt: "2026-05-28T10:00:00.000Z",
       },
       credentials: {

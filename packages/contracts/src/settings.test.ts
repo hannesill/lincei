@@ -83,17 +83,17 @@ describe("ServerSettings.linceiSkills", () => {
       },
     });
 
-    expect(decoded.linceiSkills["clinical-research-pitfalls"]).toEqual({
+    expect(decoded.linceiSkills["m4:clinical-research-pitfalls"]).toEqual({
       enabled: false,
     });
 
     const encoded = encodeServerSettings(decoded);
-    expect(encoded.linceiSkills?.["clinical-research-pitfalls"]).toEqual({
+    expect(encoded.linceiSkills?.["m4:clinical-research-pitfalls"]).toEqual({
       enabled: false,
     });
     expect(
       (
-        encoded.linceiSkills?.["clinical-research-pitfalls"] as
+        encoded.linceiSkills?.["m4:clinical-research-pitfalls"] as
           | { deployNative?: unknown }
           | undefined
       )?.deployNative,
@@ -110,9 +110,25 @@ describe("ServerSettings.linceiSkills", () => {
       },
     });
 
-    expect(patch.linceiSkills?.["lincei-api"]).toEqual({
+    expect(patch.linceiSkills?.["lincei:context"]).toEqual({
       enabled: true,
     });
+  });
+
+  it("preserves unknown keys and lets an existing qualified preference win migration", () => {
+    const decoded = decodeServerSettings({
+      linceiSkills: {
+        "lincei-api": { enabled: false },
+        "lincei:context": { enabled: true },
+        "future:unknown-skill": { enabled: false },
+      },
+    });
+
+    expect(decoded.linceiSkills).toEqual({
+      "lincei:context": { enabled: true },
+      "future:unknown-skill": { enabled: false },
+    });
+    expect(encodeServerSettings(decoded).linceiSkills).toEqual(decoded.linceiSkills);
   });
 });
 
@@ -180,14 +196,14 @@ describe("ServerSettingsPatch.datasets", () => {
       datasets: {
         workspacePath: "  ~/.lincei/m4  ",
         preferredBackendId: "bigquery",
-        m4Command: "  uvx --from m4-infra m4  ",
+        m4Command: "  uvx --from 'm4-infra>=0.5.4,<0.6' m4  ",
       },
     });
 
     expect(patch.datasets).toEqual({
       workspacePath: "~/.lincei/m4",
       preferredBackendId: "bigquery",
-      m4Command: "uvx --from m4-infra m4",
+      m4Command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
     });
   });
 });

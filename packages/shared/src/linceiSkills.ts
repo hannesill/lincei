@@ -1,19 +1,16 @@
-import type {
-  LinceiCanonicalSkill,
-  LinceiSkillSyncSidecar,
-  LinceiSkillSyncState,
-  LinceiWorkflow,
-  LinceiWorkflowSettings,
-  ProviderDriverKind,
-  ServerProvider,
-  ServerProviderSkill,
-  LinceiSkillSettings,
+import {
+  LEGACY_LINCEI_SKILL_IDS,
+  type LinceiCanonicalSkill,
+  type LinceiWorkflow,
+  type LinceiWorkflowSettings,
+  type ProviderDriverKind,
+  type ServerProvider,
+  type ServerProviderSkill,
+  type LinceiSkillSettings,
 } from "@t3tools/contracts";
 
-const BUNDLED_SKILL_VERSION = "2.0.0";
-const STRUCTURED_CLINICAL_STUDY_VERSION = "2.0.0";
-
-export const LINCEI_SKILL_SYNC_SIDECAR = ".lincei-skill-sync.json";
+const BUNDLED_SKILL_VERSION = "3.0.0";
+const STRUCTURED_CLINICAL_STUDY_VERSION = "3.0.0";
 
 export function linceiContentHash(content: string): string {
   let hash = 0xcbf29ce484222325n;
@@ -27,28 +24,31 @@ export function linceiContentHash(content: string): string {
 
 const bundledSkillDefinitions = [
   {
-    id: "lincei-api",
-    title: "Lincei API",
+    id: "lincei:context",
+    title: "Lincei Context",
     description:
-      "Use Lincei for project/session context and M4 datasets, then publish meaningful research checkpoints to Vitrine.",
+      "Orient work inside Lincei and route clinical computation and research review to their canonical skills.",
     category: "api" as const,
     body: `---
-name: lincei-api
-description: Use for Lincei context, M4 dataset work, and Vitrine research checkpoints or human decisions.
+name: lincei-context
+description: Orient work inside Lincei and route clinical computation and research review to their canonical skills.
 tier: bundled
 category: api
 ---
 
-# Lincei, M4, and Vitrine
+# Lincei Context
 
-Lincei owns projects, sessions, chat, terminals, and diffs. M4 owns clinical dataset access and computation. Vitrine owns studies, results, artifacts, decisions, provenance, and human review.
+Lincei owns projects, sessions, chat, terminals, diffs, and workflow composition. M4
+owns clinical dataset access, computation, and clinical methodology. Vitrine owns
+research results, decisions, provenance, and human review.
 
-## Start Here
+## Orientation
 
-1. Orient with \`lincei context current\`.
-2. Before clinical data work, run \`lincei dataset context\` and inspect the selected M4 dataset/backend.
-3. Keep substantive analysis script-first and preserve the exact SQL, code, inputs, and outputs in the project.
-4. Send meaningful intermediate or final results to Vitrine. Do not create a checkpoint for trivial terminal output.
+1. Run \`lincei context current --pretty\` for project and session context.
+2. Run \`lincei dataset context\` before clinical data work.
+3. Activate the canonical M4 API or clinical skill for computation and definitions.
+4. Activate the canonical Vitrine skill for research checkpoints and human decisions.
+5. Preserve substantive SQL, code, inputs, and outputs in the project.
 
 Useful Lincei commands:
 
@@ -63,100 +63,9 @@ lincei dataset describe-table TABLE --dataset DATASET --backend BACKEND
 lincei dataset query --dataset DATASET --backend BACKEND --sql "select ... limit 20"
 \`\`\`
 
-Use read-only M4 queries for exploration. Save final SQL and analysis code under the project before treating a result as stable. Preserve dataset/backend, denominator, time window, assumptions, and uncertainty with every substantive result.
-
-## Vitrine Python API
-
-Use the Python API directly:
-
-\`\`\`python
-from vitrine import show, confirm, ask
-
-show(result, title="Cohort after exclusions", study="sepsis")
-approved = confirm("Use this cohort?", study="sepsis")
-choice = ask(
-    "Which severity score?",
-    ["SOFA", "APACHE III", "Both"],
-    study="sepsis",
-)
-\`\`\`
-
-- \`show(...)\`: publish a meaningful result, table, visualization, method checkpoint, limitation, or final output.
-- \`show(..., wait=True)\`: publish a result and block for review when work must not continue without a response.
-- \`confirm(...)\`: block for a yes/no methodological or clinical decision.
-- \`ask(...)\`: block for a choice among explicit options.
-
-The return value from blocking Vitrine calls is the human response. Use it directly in the calling process; do not scrape rendered HTML or infer a response from UI state.
-
-M4 results should flow naturally into Vitrine:
-
-\`\`\`python
-from vitrine import show
-
-# result is the table, dataframe, chart, mapping, or other object produced from M4-backed work.
-show(
-    result,
-    title="Eligible admissions by exclusion step",
-    study="sepsis",
-)
-\`\`\`
-
-## Checkpoint Discipline
-
-Use Vitrine for nontrivial checkpoints such as:
-
-- protocol, cohort, exposure, outcome, covariate, and analysis-plan choices;
-- cohort attrition, final denominators, missingness, model diagnostics, and sensitivity analyses;
-- tables, figures, clinically meaningful findings, limitations, and final outputs;
-- human approval needed before dependent analysis continues.
-
-Skip Vitrine for command echoes, package installation, routine file listings, transient debug output, and other low-value terminal noise.
-
-At each substantive checkpoint, separate facts, assumptions, uncertainty, methodological risk, validation needs, and interpretation. Keep user-facing summaries concise while preserving reproducible code and provenance in the project and Vitrine.`,
-  },
-  {
-    id: "clinical-research-pitfalls",
-    title: "Clinical Research Pitfalls",
-    description: "Check common clinical research failure modes before interpreting results.",
-    category: "clinical-methods" as const,
-    body: `---
-name: clinical-research-pitfalls
-description: Use when checking clinical research analyses for leakage, time bias, missingness, coding drift, denominator mismatch, inappropriate adjustment, multiple testing, and unsupported claims.
-tier: bundled
-category: clinical
----
-
-# Clinical Research Pitfalls
-
-Before treating a result as stable, check the risks that could materially change its denominator, estimate, or interpretation.
-
-## Core Checks
-
-- Cohort leakage: information after the index time influences eligibility or predictors.
-- Time bias: immortal time, survivorship, inconsistent time zero, or unequal follow-up.
-- Denominator drift: tables, models, and narrative claims use different populations.
-- Missingness: complete-case analysis or imputation changes the target population or estimand.
-- Coding drift: site, era, unit, vocabulary, and code-list changes alter definitions.
-- Confounding and adjustment: mediators, colliders, post-treatment variables, or unsupported covariates enter the model.
-- Multiplicity: outcomes, subgroups, and model variants are interpreted without accounting for selection.
-- Validation: implausible ranges, duplicates, temporal ordering, calibration, and sensitivity checks are missing.
-- Claims: causal or clinical conclusions exceed the design and evidence.
-
-Inspect the exact M4-backed SQL/scripts and outputs. Recompute key counts when necessary. For a material risk, publish a concise Vitrine checkpoint with the affected result, evidence inspected, likely impact, and proposed resolution:
-
-\`\`\`python
-from vitrine import show, confirm, ask
-
-show(validity_check, title="Validity check: denominator mismatch", study="sepsis")
-proceed = confirm("Proceed with this denominator?", study="sepsis")
-strategy = ask(
-    "How should missing baseline values be handled?",
-    ["Complete case", "Multiple imputation", "Sensitivity analysis"],
-    study="sepsis",
-)
-\`\`\`
-
-Block for review only when the unresolved choice changes dependent work. Do not create Vitrine noise for a routine check that found no material issue.`,
+Use read-only dataset commands for exploration. Save final analysis code before treating a
+result as stable. Keep the dataset/backend, denominator, time window, assumptions,
+uncertainty, and canonical skill versions attached to substantive results.`,
   },
 ] satisfies ReadonlyArray<{
   readonly id: string;
@@ -180,7 +89,6 @@ export function bundledLinceiSkills(): ReadonlyArray<LinceiCanonicalSkill> {
     contentHash: linceiContentHash(skill.body),
     upstreamId: skill.id,
     upstreamVersion: BUNDLED_SKILL_VERSION,
-    deploymentTargets: [],
   }));
 }
 
@@ -252,7 +160,7 @@ export const LINCEI_WORKFLOWS: ReadonlyArray<LinceiWorkflow> = [
     title: "Ad hoc",
     version: "2.0.0",
     description: "No additional workflow body beyond baseline Lincei instructions.",
-    skillIds: ["lincei-api"],
+    skillIds: ["lincei:context"],
     body: "",
   },
   {
@@ -260,7 +168,13 @@ export const LINCEI_WORKFLOWS: ReadonlyArray<LinceiWorkflow> = [
     title: "Structured clinical study",
     version: STRUCTURED_CLINICAL_STUDY_VERSION,
     description: "Vitrine-mediated clinical study workflow with protocol review and M4 analysis.",
-    skillIds: ["lincei-api", "clinical-research-pitfalls"],
+    skillIds: [
+      "lincei:context",
+      "m4:m4-api",
+      "m4:clinical-research-pitfalls",
+      "m4:clinical-research-analysis-framework",
+      "m4:vitrine-api",
+    ],
     body: structuredClinicalStudyBody,
   },
   {
@@ -268,7 +182,7 @@ export const LINCEI_WORKFLOWS: ReadonlyArray<LinceiWorkflow> = [
     title: "Replication / validation",
     version: "2.0.0",
     description: "Validate an existing finding, script, cohort, or protocol before extending it.",
-    skillIds: ["lincei-api", "clinical-research-pitfalls"],
+    skillIds: ["lincei:context", "m4:m4-api", "m4:clinical-research-pitfalls", "m4:vitrine-api"],
     body: `# Replication / Validation Workflow
 
 Start by identifying the original claim, cohort, outcome, and analysis plan. Re-run or reconstruct the M4-backed analysis script-first, record material deviations and decisions in Vitrine, and report agreement, disagreement, and unresolved threats to validity.`,
@@ -279,7 +193,7 @@ Start by identifying the original claim, cohort, outcome, and analysis plan. Re-
     version: "2.0.0",
     description:
       "Review existing project evidence and Vitrine results without creating new claims unless requested.",
-    skillIds: ["lincei-api", "clinical-research-pitfalls"],
+    skillIds: ["lincei:context", "m4:clinical-research-pitfalls", "m4:vitrine-api"],
     body: `# Review Only Workflow
 
 Inspect existing context, project files, Vitrine results, and scripts. Focus on correctness, reproducibility, methodological risk, and missing evidence. Publish only material review findings to Vitrine.`,
@@ -316,7 +230,6 @@ export function projectSkillFromBody(input: {
     enabled: input.enabled ?? true,
     body: input.body,
     contentHash: linceiContentHash(input.body),
-    deploymentTargets: [],
   };
 }
 
@@ -443,7 +356,11 @@ export function parseSelectedLinceiSkillIds(input: {
   const tokenRegex = /(^|\s)[$/]([a-zA-Z][a-zA-Z0-9:_-]*)(?=\s|$)/g;
 
   for (const match of input.text.matchAll(tokenRegex)) {
-    const id = match[2] ?? "";
+    const matchedId = match[2] ?? "";
+    const id =
+      matchedId in LEGACY_LINCEI_SKILL_IDS
+        ? LEGACY_LINCEI_SKILL_IDS[matchedId as keyof typeof LEGACY_LINCEI_SKILL_IDS]
+        : matchedId;
     const skill = skillsById.get(id);
     if (!skill?.enabled || selectedSet.has(id)) {
       continue;
@@ -502,38 +419,6 @@ export function appendSelectedLinceiSkillPrompts(input: {
     return input.text;
   }
   return `${input.text.trimEnd()}\n\n${prompt}`;
-}
-
-export function evaluateManagedSkillSyncState(input: {
-  readonly canonicalHash: string;
-  readonly targetExists: boolean;
-  readonly targetHash?: string;
-  readonly sidecar?: LinceiSkillSyncSidecar;
-}): LinceiSkillSyncState {
-  if (!input.targetExists) return "missing";
-  if (!input.sidecar) return "unmanaged";
-  if (input.targetHash === undefined) return "missing";
-
-  const canonicalChanged = input.sidecar.contentHash !== input.canonicalHash;
-  const targetChanged = input.sidecar.lastSeenTargetHash !== input.targetHash;
-  if (!canonicalChanged && !targetChanged && input.targetHash === input.canonicalHash) {
-    return "current";
-  }
-  if (canonicalChanged && !targetChanged) {
-    return "outdated";
-  }
-  if (!canonicalChanged && targetChanged) {
-    return "target-modified";
-  }
-  return "conflict";
-}
-
-export function shouldAutoSyncSkill(input: {
-  readonly skill: Pick<LinceiCanonicalSkill, "source">;
-  readonly state: LinceiSkillSyncState;
-}): boolean {
-  if (input.skill.source !== "bundled") return false;
-  return input.state === "missing" || input.state === "outdated" || input.state === "current";
 }
 
 export function buildEffectiveLinceiPrompt(input: {

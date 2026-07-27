@@ -16,6 +16,7 @@ import { websocketRpcRouteLayer } from "./ws.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as M4CliLayer from "./datasets/M4Cli.ts";
 import * as M4DatasetServiceLayer from "./datasets/M4DatasetService.ts";
+import * as SkillCatalogServiceLayer from "./skills/SkillCatalogService.ts";
 import * as LinceiDatasetGatewayLayer from "./datasets/LinceiDatasetGateway.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
 import { ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
@@ -162,17 +163,6 @@ const ProviderSessionDirectoryLayerLive = ProviderSessionDirectoryLive.pipe(
   Layer.provide(ProviderRuntimeRepositoryLive),
 );
 
-// `ProviderAdapterRegistryLive` is now a facade that resolves kind → adapter
-// by looking up the default `ProviderInstance` per driver in the instance
-// registry. Adapter construction itself moved inside each driver's
-// `create()`; `ProviderEventLoggersLive` owns the shared native/canonical
-// NDJSON writers and is provided at the outer runtime layer so both
-// `ProviderService` and the per-instance drivers read the same logger pair.
-const ProviderLayerLive = ProviderServiceLive.pipe(
-  Layer.provide(ProviderAdapterRegistryLive),
-  Layer.provideMerge(ProviderSessionDirectoryLayerLive),
-);
-
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
 const VcsDriverRegistryLayerLive = VcsDriverRegistry.layer.pipe(
@@ -259,6 +249,25 @@ const DatasetBaseLayerLive = Layer.mergeAll(
 
 const M4CliLive = M4CliLayer.layer.pipe(Layer.provideMerge(DatasetBaseLayerLive));
 
+const SkillCatalogServiceLive = SkillCatalogServiceLayer.layer.pipe(
+  Layer.provideMerge(M4CliLive),
+  Layer.provideMerge(ServerSettingsLive),
+);
+
+// `ProviderAdapterRegistryLive` is a facade that resolves kind → adapter
+// through the instance registry. Both provider orchestration and provider
+// discovery receive the same catalog layer so managed delivery and UI
+// reconciliation use one verified bundle snapshot.
+const ProviderLayerLive = ProviderServiceLive.pipe(
+  Layer.provide(ProviderAdapterRegistryLive),
+  Layer.provideMerge(ProviderSessionDirectoryLayerLive),
+  Layer.provideMerge(SkillCatalogServiceLive),
+);
+
+const ProviderRegistryLayerLive = ProviderRegistryLive.pipe(
+  Layer.provideMerge(SkillCatalogServiceLive),
+);
+
 const M4DatasetServiceLive = M4DatasetServiceLayer.layer.pipe(
   Layer.provideMerge(M4CliLive),
   Layer.provideMerge(DatasetBaseLayerLive),
@@ -272,7 +281,11 @@ const DatasetGatewayLayerLive = LinceiDatasetGatewayLayer.layer.pipe(
 
 const VitrineCliLayerLive = VitrineCliLive.pipe(Layer.provideMerge(ProcessRunnerLive));
 const VitrineLayerLive = VitrineManagerLive.pipe(Layer.provideMerge(VitrineCliLayerLive));
-const ClinicalToolsLayerLive = Layer.mergeAll(DatasetGatewayLayerLive, VitrineLayerLive);
+const ClinicalToolsLayerLive = Layer.mergeAll(
+  DatasetGatewayLayerLive,
+  VitrineLayerLive,
+  SkillCatalogServiceLive,
+);
 
 const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(ProviderLayerLive),
@@ -290,7 +303,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(PreviewLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(ShortcutsLive),
-  Layer.provideMerge(ProviderRegistryLive),
+  Layer.provideMerge(ProviderRegistryLayerLive),
   // The instance registry is the new routing keystone — text generation,
   // adapter lookup, and runtime ingestion all resolve `ProviderInstanceId`
   // through this layer. Built-in drivers come from `BUILT_IN_DRIVERS`;

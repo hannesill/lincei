@@ -26,12 +26,12 @@ describe("LinceiAgentInstructions", () => {
     assert.doesNotMatch(instructions, /lincei context current --json/);
     assert.match(instructions, /lincei dataset context/);
     assert.doesNotMatch(instructions, /dataset context --format/);
-    assert.match(instructions, /from vitrine import show, confirm, ask/);
+    assert.doesNotMatch(instructions, /from vitrine import show, confirm, ask/);
     assert.match(instructions, /M4-backed dataset work/);
-    assert.match(instructions, /show\(\.\.\., wait=True\)/);
+    assert.doesNotMatch(instructions, /show\(\.\.\., wait=True\)/);
     assert.match(instructions, /trivial terminal output/);
     assert.doesNotMatch(instructions, /lincei card/);
-    assert.match(instructions, /\$lincei-api/);
+    assert.match(instructions, /\$lincei:context/);
     assert.match(instructions, /<lincei_effective_prompt>/);
   });
 
@@ -40,17 +40,18 @@ describe("LinceiAgentInstructions", () => {
     assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
     assert.match(instructions, /Run clinical research as a controlled, reviewable workflow/);
     assert.match(instructions, /Vitrine owns the study record/);
-    assert.match(instructions, /<lincei_skill id="clinical-research-pitfalls"/);
+    assert.match(instructions, /<lincei_skill id="lincei:context"/);
+    assert.doesNotMatch(instructions, /<lincei_skill id="m4:clinical-research-pitfalls"/);
   });
 
   it("omits disabled Lincei skills from injected guidance", () => {
     const instructions = buildLinceiAgentInstructions(undefined, "structured-clinical-study", {
-      "lincei-api": { enabled: false },
+      "lincei:context": { enabled: false },
     });
 
     assert.match(instructions, /<lincei_workflow id="structured-clinical-study"/);
-    assert.doesNotMatch(instructions, /<lincei_skill id="lincei-api"/);
-    assert.match(instructions, /<lincei_skill id="clinical-research-pitfalls"/);
+    assert.doesNotMatch(instructions, /<lincei_skill id="lincei:context"/);
+    assert.doesNotMatch(instructions, /<lincei_skill id="m4:clinical-research-pitfalls"/);
   });
 
   it("omits disabled workflows from injected guidance", () => {
@@ -64,7 +65,7 @@ describe("LinceiAgentInstructions", () => {
     );
 
     assert.doesNotMatch(instructions, /<lincei_workflow id="structured-clinical-study"/);
-    assert.doesNotMatch(instructions, /<lincei_skill id="lincei-api"/);
+    assert.doesNotMatch(instructions, /<lincei_skill id="lincei:context"/);
   });
 
   it("appends trimmed custom instructions after the hidden baseline", () => {

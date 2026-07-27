@@ -26,7 +26,7 @@ function statusResult(
   return {
     runtime: {
       available: true,
-      command: "uvx --from m4-infra m4",
+      command: "uvx --from 'm4-infra>=0.5.4,<0.6' m4",
       checkedAt: "2026-05-31T00:00:00.000Z",
     },
     credentials: {

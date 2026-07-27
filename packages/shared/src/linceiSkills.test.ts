@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   ProviderDriverKind,
   ProviderInstanceId,
-  type LinceiSkillSyncSidecar,
   type ServerProvider,
   type ServerProviderSkill,
 } from "@t3tools/contracts";
@@ -13,7 +12,6 @@ import {
   buildEffectiveLinceiPrompt,
   configuredBundledLinceiSkills,
   enrichServerProviderWithLinceiSkills,
-  evaluateManagedSkillSyncState,
   isExternalProviderSkill,
   isLinceiOwnedProviderSkill,
   isLinceiWorkflowEnabled,
@@ -23,28 +21,15 @@ import {
   mergeLinceiSkillCatalog,
   parseSelectedLinceiSkillIds,
   projectSkillFromBody,
-  shouldAutoSyncSkill,
 } from "./linceiSkills.ts";
 
-const sidecar = (contentHash: string, targetHash = contentHash): LinceiSkillSyncSidecar => ({
-  skillId: "lincei-api",
-  contentHash,
-  version: "2.0.0",
-  targetProvider: ProviderDriverKind.make("codex"),
-  targetPath: "/tmp/SKILL.md",
-  syncedAt: "2026-01-01T00:00:00.000Z",
-  lastSeenTargetHash: targetHash,
-  installMode: "managed-copy",
-});
-
 describe("linceiSkills", () => {
-  it("ships Vitrine guidance under bumped managed versions", () => {
+  it("ships only Lincei-owned context without copied M4 or Vitrine APIs", () => {
     const skills = bundledLinceiSkills();
-    expect(skills.every((skill) => skill.version === "2.0.0")).toBe(true);
-    expect(skills.find((skill) => skill.id === "lincei-api")?.body).toContain(
-      "from vitrine import show, confirm, ask",
-    );
-    expect(skills.find((skill) => skill.id === "lincei-api")?.body).not.toContain("lincei card");
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toMatchObject({ id: "lincei:context", version: "3.0.0" });
+    expect(skills[0]?.body).not.toContain("from vitrine import");
+    expect(skills[0]?.body).not.toContain("# Clinical Research Pitfalls");
   });
 
   it("hashes content deterministically", () => {
@@ -72,7 +57,7 @@ describe("linceiSkills", () => {
     });
 
     expect(merged.map((skill) => skill.name)).toEqual([
-      "lincei-api",
+      "lincei:context",
       "project-skill",
       "provider-native",
     ]);
@@ -96,12 +81,12 @@ describe("linceiSkills", () => {
     ).toBe(true);
     expect(
       isLinceiOwnedProviderSkill({
-        path: "lincei://bundled/lincei-api",
+        path: "lincei://bundled/lincei:context",
       }),
     ).toBe(true);
     expect(
       isExternalProviderSkill({
-        path: "lincei://bundled/lincei-api",
+        path: "lincei://bundled/lincei:context",
       }),
     ).toBe(false);
   });
@@ -115,7 +100,7 @@ describe("linceiSkills", () => {
     expect(
       linceiSkillTokenPrefixForProviderSkill({
         provider: ProviderDriverKind.make("claudeAgent"),
-        skill: { path: "lincei://bundled/lincei-api" },
+        skill: { path: "lincei://bundled/lincei:context" },
       }),
     ).toBe("/");
     expect(
@@ -148,10 +133,7 @@ describe("linceiSkills", () => {
     } satisfies ServerProvider;
 
     const enriched = enrichServerProviderWithLinceiSkills({ provider });
-    expect(enriched.skills.map((skill) => skill.name).slice(0, 2)).toEqual([
-      "lincei-api",
-      "clinical-research-pitfalls",
-    ]);
+    expect(enriched.skills.map((skill) => skill.name).slice(0, 1)).toEqual(["lincei:context"]);
     expect(enriched.skills.at(-1)).toMatchObject({
       name: "provider-native",
       linceiSource: "provider-native",
@@ -160,58 +142,55 @@ describe("linceiSkills", () => {
     const disabled = enrichServerProviderWithLinceiSkills({
       provider: enriched,
       skillSettings: {
-        "lincei-api": {
+        "lincei:context": {
           enabled: false,
         },
       },
     });
-    expect(disabled.skills.find((skill) => skill.name === "lincei-api")?.enabled).toBe(false);
+    expect(disabled.skills.find((skill) => skill.name === "lincei:context")?.enabled).toBe(false);
     expect(disabled.skills.find((skill) => skill.name === "provider-native")).toBeDefined();
   });
 
   it("parses visible Lincei skill tokens and appends selected XML", () => {
     expect(
       parseSelectedLinceiSkillIds({
-        text: "/lincei-api $lincei-api $provider-native",
+        text: "/lincei-api $lincei:context $provider-native",
       }),
-    ).toEqual(["lincei-api"]);
+    ).toEqual(["lincei:context"]);
     expect(
       parseSelectedLinceiSkillIds({
-        text: "/lincei-api",
+        text: "/lincei:context",
         skillSettings: {
-          "lincei-api": {
+          "lincei:context": {
             enabled: false,
           },
         },
       }),
     ).toEqual([]);
 
-    const prompt = buildSelectedLinceiSkillsPrompt({ skillIds: ["lincei-api"] });
+    const prompt = buildSelectedLinceiSkillsPrompt({ skillIds: ["lincei:context"] });
     expect(prompt).toContain("<lincei_selected_skills>");
-    expect(prompt).toContain('<lincei_skill id="lincei-api"');
+    expect(prompt).toContain('<lincei_skill id="lincei:context"');
 
     const expanded = appendSelectedLinceiSkillPrompts({
-      text: "Use /lincei-api for dataset context.",
+      text: "Use /lincei:context for dataset context.",
     });
-    expect(expanded).toContain("Use /lincei-api for dataset context.");
+    expect(expanded).toContain("Use /lincei:context for dataset context.");
     expect(expanded).toContain("<lincei_selected_skills>");
   });
 
   it("applies persisted skill settings to bundled skills and prompt injection", () => {
     const configured = configuredBundledLinceiSkills({
-      "clinical-research-pitfalls": { enabled: false },
+      "lincei:context": { enabled: false },
     });
 
-    expect(configured.find((skill) => skill.id === "clinical-research-pitfalls")?.enabled).toBe(
-      false,
-    );
+    expect(configured.find((skill) => skill.id === "lincei:context")?.enabled).toBe(false);
 
     const prompt = buildEffectiveLinceiPrompt({
       workflowId: "structured-clinical-study",
       skills: configured,
     });
-    expect(prompt).not.toContain('<lincei_skill id="clinical-research-pitfalls"');
-    expect(prompt).toContain('<lincei_skill id="lincei-api"');
+    expect(prompt).not.toContain('<lincei_skill id="lincei:context"');
     expect(prompt).toContain('<lincei_workflow id="structured-clinical-study"');
   });
 
@@ -231,36 +210,6 @@ describe("linceiSkills", () => {
     });
 
     expect(prompt).not.toContain('<lincei_workflow id="structured-clinical-study"');
-    expect(prompt).not.toContain('<lincei_skill id="lincei-api"');
-  });
-
-  it.each([
-    ["current", { canonical: "a", targetExists: true, target: "a", sidecar: sidecar("a") }],
-    ["outdated", { canonical: "b", targetExists: true, target: "a", sidecar: sidecar("a") }],
-    [
-      "target-modified",
-      { canonical: "a", targetExists: true, target: "local", sidecar: sidecar("a") },
-    ],
-    ["missing", { canonical: "a", targetExists: false, target: undefined, sidecar: sidecar("a") }],
-    ["unmanaged", { canonical: "a", targetExists: true, target: "a", sidecar: undefined }],
-    ["conflict", { canonical: "b", targetExists: true, target: "local", sidecar: sidecar("a") }],
-  ] as const)("detects %s sync state", (expected, input) => {
-    expect(
-      evaluateManagedSkillSyncState({
-        canonicalHash: input.canonical,
-        targetExists: input.targetExists,
-        ...(input.target !== undefined ? { targetHash: input.target } : {}),
-        ...(input.sidecar !== undefined ? { sidecar: input.sidecar } : {}),
-      }),
-    ).toBe(expected);
-  });
-
-  it("auto-syncs only bundled safe states", () => {
-    const bundled = bundledLinceiSkills()[0]!;
-    const project = projectSkillFromBody({ id: "project", body: "# Project" });
-
-    expect(shouldAutoSyncSkill({ skill: bundled, state: "outdated" })).toBe(true);
-    expect(shouldAutoSyncSkill({ skill: bundled, state: "target-modified" })).toBe(false);
-    expect(shouldAutoSyncSkill({ skill: project, state: "outdated" })).toBe(false);
+    expect(prompt).not.toContain('<lincei_skill id="lincei:context"');
   });
 });

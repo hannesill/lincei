@@ -24,8 +24,11 @@ import {
   type ProviderDriverKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
+  LEGACY_LINCEI_SKILL_IDS,
+  SessionSkillSelection,
+  type SessionSkillSelection as SessionSkillSelectionType,
 } from "@t3tools/contracts";
-import { appendSelectedLinceiSkillPrompts } from "@t3tools/shared/linceiSkills";
+import { bundledLinceiSkills, workflowById } from "@t3tools/shared/linceiSkills";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -59,8 +62,15 @@ import { type EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import {
+  SkillCatalogService,
+  type ProviderDelivery,
+  type RuntimeManagedSkill,
+  type SkillCatalogServiceShape,
+} from "../../skills/SkillCatalogService.ts";
 const isModelSelection = Schema.is(ModelSelection);
 const isProjectId = Schema.is(ProjectId);
+const isSessionSkillSelection = Schema.is(SessionSkillSelection);
 
 interface PersistedProjectContext {
   readonly projectId?: ProjectId;
@@ -140,6 +150,8 @@ function toRuntimePayloadFromSession(
   extra?: {
     readonly modelSelection?: unknown;
     readonly projectContext?: PersistedProjectContext | null;
+    readonly skillSelection?: SessionSkillSelectionType;
+    readonly deliveredSkillIds?: ReadonlyArray<string>;
     readonly lastRuntimeEvent?: string;
     readonly lastRuntimeEventAt?: string;
   },
@@ -151,11 +163,88 @@ function toRuntimePayloadFromSession(
     lastError: session.lastError ?? null,
     ...(extra?.modelSelection !== undefined ? { modelSelection: extra.modelSelection } : {}),
     ...(extra?.projectContext !== undefined ? { projectContext: extra.projectContext } : {}),
+    ...(extra?.skillSelection !== undefined ? { skillSelection: extra.skillSelection } : {}),
+    ...(extra?.deliveredSkillIds !== undefined
+      ? { deliveredSkillIds: extra.deliveredSkillIds }
+      : {}),
     ...(extra?.lastRuntimeEvent !== undefined ? { lastRuntimeEvent: extra.lastRuntimeEvent } : {}),
     ...(extra?.lastRuntimeEventAt !== undefined
       ? { lastRuntimeEventAt: extra.lastRuntimeEventAt }
       : {}),
   };
+}
+
+function readPersistedSkillSelection(
+  runtimePayload: ProviderRuntimeBinding["runtimePayload"],
+): SessionSkillSelectionType | undefined {
+  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
+    return undefined;
+  }
+  const raw = "skillSelection" in runtimePayload ? runtimePayload.skillSelection : undefined;
+  return isSessionSkillSelection(raw) ? raw : undefined;
+}
+
+function readDeliveredSkillIds(
+  runtimePayload: ProviderRuntimeBinding["runtimePayload"],
+): ReadonlyArray<string> {
+  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
+    return [];
+  }
+  const raw = "deliveredSkillIds" in runtimePayload ? runtimePayload.deliveredSkillIds : undefined;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (value, index): value is string =>
+      typeof value === "string" && value.trim().length > 0 && raw.indexOf(value) === index,
+  );
+}
+
+function parseExplicitManagedSkillIds(text: string | undefined): ReadonlyArray<string> {
+  if (!text) return [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(/(^|\s)[$/]([a-zA-Z][a-zA-Z0-9:_-]*)(?=\s|$)/g)) {
+    const matchedId = match[2];
+    const id =
+      matchedId && matchedId in LEGACY_LINCEI_SKILL_IDS
+        ? LEGACY_LINCEI_SKILL_IDS[matchedId as keyof typeof LEGACY_LINCEI_SKILL_IDS]
+        : matchedId;
+    if (id?.includes(":") && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function escapeXmlText(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function escapeXmlAttribute(value: string): string {
+  return escapeXmlText(value).replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+}
+
+function buildManagedSkillDeliveryPrompt(input: {
+  readonly skills: ReadonlyArray<RuntimeManagedSkill>;
+  readonly deliveries: ReadonlyMap<string, ProviderDelivery | undefined>;
+  readonly explicitSkillIds: ReadonlySet<string>;
+}): string {
+  const blocks = input.skills.map((skill) => {
+    const descriptor = skill.descriptor;
+    const delivery = input.deliveries.get(descriptor.id);
+    const explicitlyCanonical = input.explicitSkillIds.has(descriptor.id);
+    if (
+      delivery?.state === "provider-native" ||
+      (!explicitlyCanonical && delivery?.state === "local-override")
+    ) {
+      return `<lincei_skill_reference canonical_id="${escapeXmlAttribute(descriptor.id)}" source="${delivery.state}"${delivery.nativePath ? ` path="${escapeXmlAttribute(delivery.nativePath)}"` : ""}>\nUse this provider-native skill as the single delivered copy.\n</lincei_skill_reference>`;
+    }
+    const assetRoot = skill.assetRoot ? ` asset_root="${escapeXmlAttribute(skill.assetRoot)}"` : "";
+    return `<lincei_skill id="${escapeXmlAttribute(descriptor.id)}" version="${escapeXmlAttribute(descriptor.bundleVersion)}"${assetRoot}>\n${escapeXmlText(skill.canonical.body)}\n</lincei_skill>`;
+  });
+  return blocks.length > 0
+    ? `<lincei_selected_skills>\n${blocks.join("\n")}\n</lincei_selected_skills>`
+    : "";
 }
 
 function readPersistedModelSelection(
@@ -248,7 +337,79 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   options?: ProviderServiceLiveOptions,
 ) {
   const analytics = yield* Effect.service(AnalyticsService);
-  const settingsService = yield* ServerSettingsService;
+  const fallbackSettingsService = Option.getOrUndefined(
+    yield* Effect.serviceOption(ServerSettingsService),
+  );
+  const fallbackRuntimeSkills: ReadonlyArray<RuntimeManagedSkill> = bundledLinceiSkills().map(
+    (canonical) => ({
+      canonical,
+      descriptor: {
+        id: canonical.id,
+        publisher: "lincei",
+        name: "context",
+        title: canonical.title,
+        description: canonical.description,
+        kind: "integration",
+        category: "lincei",
+        tier: canonical.tier,
+        bundleVersion: canonical.version,
+        contentDigest: canonical.contentHash,
+        treeDigest: canonical.contentHash,
+        relativeRoot: "context",
+        files: [],
+        source: "bundled",
+        enabled: canonical.enabled,
+        activationPolicy: "workflow-required",
+        deliveryState: "managed-cache",
+        stale: false,
+        body: canonical.body,
+      },
+    }),
+  );
+  const skillCatalog = Option.getOrElse(
+    yield* Effect.serviceOption(SkillCatalogService),
+    (): SkillCatalogServiceShape => ({
+      getSnapshot: Effect.succeed({
+        schemaVersion: 1,
+        refreshedAt: "1970-01-01T00:00:00.000Z",
+        skills: [],
+        sources: [],
+      }),
+      refresh: Effect.succeed({
+        schemaVersion: 1,
+        refreshedAt: "1970-01-01T00:00:00.000Z",
+        skills: [],
+        sources: [],
+      }),
+      reconcileProvider: Effect.succeed,
+      pinSession: (input) =>
+        Effect.succeed({
+          ...(input.workflowId !== undefined ? { workflowId: input.workflowId } : {}),
+          ...(input.workflowVersion !== undefined
+            ? { workflowVersion: input.workflowVersion }
+            : {}),
+          bundlePins: [],
+          skillIds: [
+            ...workflowById(input.workflowId).skillIds,
+            ...(input.explicitSkillIds ?? []),
+          ].filter((skillId, index, values) => values.indexOf(skillId) === index),
+        }),
+      getPinnedRuntimeSkills: (selection) => {
+        const selected = new Set(selection.skillIds);
+        return Effect.gen(function* () {
+          const settings = fallbackSettingsService
+            ? yield* fallbackSettingsService.getSettings.pipe(Effect.orElseSucceed(() => undefined))
+            : undefined;
+          return fallbackRuntimeSkills.filter(
+            (skill) =>
+              selected.has(skill.descriptor.id) &&
+              (settings?.linceiSkills[skill.descriptor.id]?.enabled ?? true),
+          );
+        });
+      },
+      getProviderDelivery: () => Effect.succeed(undefined as ProviderDelivery | undefined),
+    }),
+  );
   const eventLoggers = yield* ProviderEventLoggers;
   // Options-provided logger wins (test overrides); otherwise we take whatever
   // the `ProviderEventLoggers` tag exposes — `undefined` means "no canonical
@@ -296,6 +457,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     extra?: {
       readonly modelSelection?: unknown;
       readonly projectContext?: PersistedProjectContext | null;
+      readonly skillSelection?: SessionSkillSelectionType;
+      readonly deliveredSkillIds?: ReadonlyArray<string>;
       readonly clearMissingResumeCursor?: boolean;
       readonly lastRuntimeEvent?: string;
       readonly lastRuntimeEventAt?: string;
@@ -629,6 +792,18 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         );
         const restorePersistedSessionContext =
           requestedProjectContext === undefined || requestedProjectContextMatchesPersisted;
+        const persistedSkillSelection =
+          bindingMatchesInstance && restorePersistedSessionContext
+            ? readPersistedSkillSelection(persistedBinding?.runtimePayload)
+            : undefined;
+        const skillSelection =
+          persistedSkillSelection ??
+          (yield* skillCatalog.pinSession({
+            ...(input.workflowId !== undefined ? { workflowId: input.workflowId } : {}),
+            ...(input.workflowVersion !== undefined
+              ? { workflowVersion: input.workflowVersion }
+              : {}),
+          }));
         // Project identity, cwd, and provider resume state form one persisted
         // execution context. Compatible partial input may reuse it, but a
         // replacement must not inherit any filesystem or resume state from
@@ -700,6 +875,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         yield* upsertSessionBinding(sessionWithInstance, sessionId, {
           modelSelection: input.modelSelection,
           projectContext: effectiveProjectContext ?? null,
+          skillSelection,
+          deliveredSkillIds:
+            bindingMatchesInstance && restorePersistedSessionContext
+              ? readDeliveredSkillIds(persistedBinding?.runtimePayload)
+              : [],
           clearMissingResumeCursor:
             persistedBinding !== undefined &&
             (!bindingMatchesInstance || !restorePersistedSessionContext),
@@ -764,19 +944,66 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.kind": routed.adapter.provider,
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
-      const settings = yield* settingsService.getSettings.pipe(
-        Effect.mapError((error) =>
-          toValidationError(
-            "ProviderService.sendTurn",
-            "Failed to read Lincei skill settings.",
-            error,
-          ),
-        ),
-      );
-      const expandedInput = appendSelectedLinceiSkillPrompts({
-        text: input.input,
-        skillSettings: settings.linceiSkills,
+      const explicitSkillIds = parseExplicitManagedSkillIds(input.input);
+      const explicitSkillIdSet = new Set(explicitSkillIds);
+      const persistedSelection = readPersistedSkillSelection(routed.binding.runtimePayload);
+      const requestedSelection = yield* skillCatalog.pinSession({
+        ...((input.workflowId ?? persistedSelection?.workflowId)
+          ? { workflowId: input.workflowId ?? persistedSelection?.workflowId }
+          : {}),
+        ...((input.workflowVersion ?? persistedSelection?.workflowVersion)
+          ? { workflowVersion: input.workflowVersion ?? persistedSelection?.workflowVersion }
+          : {}),
+        explicitSkillIds,
       });
+      const existingPinsByPublisher = new Map(
+        (persistedSelection?.bundlePins ?? []).map((pin) => [pin.publisher, pin] as const),
+      );
+      const skillSelection: SessionSkillSelectionType = {
+        ...(requestedSelection.workflowId !== undefined
+          ? { workflowId: requestedSelection.workflowId }
+          : {}),
+        ...(requestedSelection.workflowVersion !== undefined
+          ? { workflowVersion: requestedSelection.workflowVersion }
+          : {}),
+        bundlePins: [
+          ...existingPinsByPublisher.values(),
+          ...requestedSelection.bundlePins.filter(
+            (pin) => !existingPinsByPublisher.has(pin.publisher),
+          ),
+        ],
+        skillIds: [...(persistedSelection?.skillIds ?? []), ...requestedSelection.skillIds].filter(
+          (skillId, index, values) => values.indexOf(skillId) === index,
+        ),
+      };
+      const alreadyDelivered = new Set(readDeliveredSkillIds(routed.binding.runtimePayload));
+      const runtimeSkills = (yield* skillCatalog.getPinnedRuntimeSkills(skillSelection)).filter(
+        (skill) =>
+          skill.descriptor.id !== "lincei:context" || explicitSkillIdSet.has("lincei:context"),
+      );
+      const skillsToDeliver = runtimeSkills.filter(
+        (skill) =>
+          !alreadyDelivered.has(skill.descriptor.id) || explicitSkillIdSet.has(skill.descriptor.id),
+      );
+      const deliveryEntries = yield* Effect.forEach(
+        skillsToDeliver,
+        (skill) =>
+          Effect.map(
+            skillCatalog.getProviderDelivery(routed.instanceId, skill.descriptor.id),
+            (delivery) => [skill.descriptor.id, delivery] as const,
+          ),
+        { concurrency: "unbounded" },
+      );
+      const skillPrompt = buildManagedSkillDeliveryPrompt({
+        skills: skillsToDeliver,
+        deliveries: new Map(deliveryEntries),
+        explicitSkillIds: explicitSkillIdSet,
+      });
+      const expandedInput = skillPrompt
+        ? input.input
+          ? `${input.input.trimEnd()}\n\n${skillPrompt}`
+          : skillPrompt
+        : input.input;
       const dispatchInput = {
         ...input,
         ...(expandedInput !== undefined ? { input: expandedInput } : {}),
@@ -800,6 +1027,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         ...(turn.resumeCursor !== undefined ? { resumeCursor: turn.resumeCursor } : {}),
         runtimePayload: {
           ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+          skillSelection,
+          deliveredSkillIds: [
+            ...alreadyDelivered,
+            ...skillsToDeliver.map((skill) => skill.descriptor.id),
+          ],
           activeTurnId: turn.turnId,
           lastRuntimeEvent: "provider.sendTurn",
           lastRuntimeEventAt: yield* nowIso,

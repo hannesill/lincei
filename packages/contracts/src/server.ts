@@ -20,6 +20,7 @@ import { EditorId } from "./editor.ts";
 import { ModelCapabilities } from "./model.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import { ServerSettings } from "./settings.ts";
+import { EMPTY_SKILL_CATALOG, SkillCatalogSnapshot } from "./skills.ts";
 
 const ShortcutsMalformedConfigIssue = Schema.Struct({
   kind: Schema.Literal("shortcuts.malformed-config"),
@@ -92,6 +93,13 @@ export const ServerProviderSkill = Schema.Struct({
   linceiSource: Schema.optional(TrimmedNonEmptyString),
   linceiSyncStatus: Schema.optional(TrimmedNonEmptyString),
   linceiAvailability: Schema.optional(TrimmedNonEmptyString),
+  linceiPublisher: Schema.optional(TrimmedNonEmptyString),
+  linceiBundleVersion: Schema.optional(TrimmedNonEmptyString),
+  linceiTier: Schema.optional(TrimmedNonEmptyString),
+  linceiCategory: Schema.optional(TrimmedNonEmptyString),
+  linceiKind: Schema.optional(TrimmedNonEmptyString),
+  linceiTreeDigest: Schema.optional(TrimmedNonEmptyString),
+  linceiNativeTreeDigest: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 
@@ -409,6 +417,9 @@ export const ServerConfig = Schema.Struct({
   availableEditors: Schema.Array(EditorId),
   observability: ServerObservability,
   settings: ServerSettings,
+  skillCatalog: Schema.optionalKey(SkillCatalogSnapshot).pipe(
+    Schema.withDecodingDefaultType(Effect.succeed(EMPTY_SKILL_CATALOG)),
+  ),
 });
 export type ServerConfig = typeof ServerConfig.Type;
 
@@ -453,6 +464,7 @@ export type ServerConfigShortcutsUpdatedPayload = typeof ServerConfigShortcutsUp
 
 export const ServerConfigProviderStatusesPayload = Schema.Struct({
   providers: ServerProviders,
+  skillCatalog: Schema.optionalKey(SkillCatalogSnapshot),
 });
 export type ServerConfigProviderStatusesPayload = typeof ServerConfigProviderStatusesPayload.Type;
 

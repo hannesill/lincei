@@ -24,6 +24,7 @@
  */
 import {
   defaultInstanceIdForDriver,
+  DEFAULT_SERVER_SETTINGS,
   ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
@@ -35,6 +36,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
@@ -43,6 +45,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { SkillCatalogService } from "../../skills/SkillCatalogService.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry.ts";
 import {
@@ -192,9 +195,9 @@ export const ProviderRegistryLive = Layer.effect(
     const instanceRegistry = yield* ProviderInstanceRegistry;
     const config = yield* ServerConfig;
     const settingsService = yield* ServerSettingsService;
+    const skillCatalog = Option.getOrUndefined(yield* Effect.serviceOption(SkillCatalogService));
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const settingsRef = yield* Ref.make(yield* settingsService.getSettings);
 
     // Aggregator PubSub — consumers (WS gateway, etc.) subscribe here for
     // coalesced updates across every instance.
@@ -329,7 +332,10 @@ export const ProviderRegistryLive = Layer.effect(
     const enrichProviderSkills = Effect.fn("enrichProviderSkills")(function* (
       provider: ServerProvider,
     ) {
-      const settings = yield* Ref.get(settingsRef);
+      if (skillCatalog) return yield* skillCatalog.reconcileProvider(provider);
+      const settings = yield* settingsService.getSettings.pipe(
+        Effect.orElseSucceed(() => DEFAULT_SERVER_SETTINGS),
+      );
       return enrichServerProviderWithLinceiSkills({
         provider,
         skillSettings: settings.linceiSkills,
@@ -457,6 +463,7 @@ export const ProviderRegistryLive = Layer.effect(
     });
 
     const refreshAll = Effect.fn("refreshAll")(function* () {
+      if (skillCatalog) yield* skillCatalog.refresh;
       const sources = yield* getLiveSources;
       return yield* Effect.forEach(sources, (source) => refreshOneSource(source), {
         concurrency: "unbounded",
@@ -468,6 +475,7 @@ export const ProviderRegistryLive = Layer.effect(
       if (provider === undefined) {
         return yield* refreshAll();
       }
+      if (skillCatalog) yield* skillCatalog.refresh;
       // Kind-scoped refreshes target the default instance for that driver.
       const defaultInstanceId = defaultInstanceIdForDriver(provider);
       const sources = yield* getLiveSources;
@@ -483,6 +491,7 @@ export const ProviderRegistryLive = Layer.effect(
     const refreshInstance = Effect.fn("refreshInstance")(function* (
       instanceId: ProviderInstanceId,
     ) {
+      if (skillCatalog) yield* skillCatalog.refresh;
       const sources = yield* getLiveSources;
       const providerSource = sources.find((candidate) => candidate.instanceId === instanceId);
       if (!providerSource) {
@@ -642,9 +651,8 @@ export const ProviderRegistryLive = Layer.effect(
     // these via `upsertProviders` so on-disk state wins where present
     // and pending fallbacks fill the gaps.
     yield* upsertProviders(fallbackProviders, { publish: false });
-    yield* Stream.runForEach(settingsService.streamChanges, (settings) =>
+    yield* Stream.runForEach(settingsService.streamChanges, () =>
       Effect.gen(function* () {
-        yield* Ref.set(settingsRef, settings);
         const providers = yield* Ref.get(providersRef);
         yield* upsertProviders(providers, {
           persist: false,

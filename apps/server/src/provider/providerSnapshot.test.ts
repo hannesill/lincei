@@ -44,7 +44,7 @@ describe("providerModelsFromSettings", () => {
 });
 
 describe("buildServerProvider", () => {
-  it("adds merged Lincei skills ahead of provider-native skills", () => {
+  it("adds the managed Lincei skill ahead of provider-native skills", () => {
     const provider = buildServerProvider({
       driver: ProviderDriverKind.make("codex"),
       presentation: { displayName: "Codex" },
@@ -67,9 +67,8 @@ describe("buildServerProvider", () => {
       ],
     });
 
-    expect(provider.skills.map((skill) => skill.name).slice(0, 3)).toEqual([
-      "lincei-api",
-      "clinical-research-pitfalls",
+    expect(provider.skills.map((skill) => skill.name).slice(0, 2)).toEqual([
+      "lincei:context",
       "native-review",
     ]);
     expect(provider.skills.at(-1)).toMatchObject({

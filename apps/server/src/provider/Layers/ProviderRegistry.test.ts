@@ -611,13 +611,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             let providers = yield* registry.getProviders;
             assert.deepStrictEqual(
               providers.map((provider) => providerSkillNames(provider)[0]),
-              ["lincei-api", "lincei-api"],
+              ["lincei:context", "lincei:context"],
             );
 
             yield* Effect.yieldNow;
             yield* settingsService.updateSettings({
               linceiSkills: {
-                "lincei-api": {
+                "lincei:context": {
                   enabled: false,
                 },
               },
@@ -626,7 +626,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               let attempt = 0;
               attempt < 50 &&
               providers.some((provider) =>
-                provider.skills.some((skill) => skill.name === "lincei-api" && skill.enabled),
+                provider.skills.some((skill) => skill.name === "lincei:context" && skill.enabled),
               );
               attempt += 1
             ) {
@@ -636,13 +636,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             }
             assert.strictEqual(
               providers.some((provider) =>
-                provider.skills.some((skill) => skill.name === "lincei-api" && skill.enabled),
+                provider.skills.some((skill) => skill.name === "lincei:context" && skill.enabled),
               ),
               false,
             );
             assert.strictEqual(
               providers.every((provider) =>
-                providerSkillNames(provider).includes("clinical-research-pitfalls"),
+                provider.skills.some((skill) => skill.name === "lincei:context" && !skill.enabled),
               ),
               true,
             );
@@ -908,10 +908,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               cachedProvider = yield* readProviderStatusCache(filePath);
             }
 
-            assert.deepStrictEqual(providerSkillNames(cachedProvider).slice(0, 3), [
-              "lincei-api",
-              "clinical-research-pitfalls",
-            ]);
+            assert.deepStrictEqual(providerSkillNames(cachedProvider), ["lincei:context"]);
             assert.deepStrictEqual(cachedProvider && providerWithoutSkills(cachedProvider), {
               ...refreshedProvider,
               models: [...initialProvider.models],
@@ -987,10 +984,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
 
             const providers = yield* registry.getProviders;
             assert.deepStrictEqual(providers.map(providerWithoutSkills), [cachedProvider]);
-            assert.deepStrictEqual(providerSkillNames(providers[0]).slice(0, 3), [
-              "lincei-api",
-              "clinical-research-pitfalls",
-            ]);
+            assert.deepStrictEqual(providerSkillNames(providers[0]), ["lincei:context"]);
             assert.deepStrictEqual(
               (yield* registry.refresh(codexDriver)).map(providerWithoutSkills),
               [cachedProvider],

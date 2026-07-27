@@ -167,12 +167,12 @@ beforeEach(() => {
 });
 
 describe("M4Cli", () => {
-  it.effect("uses uvx --from m4-infra m4 by default and maps status JSON", () =>
+  it.effect("uses the supported M4 package range by default and maps status JSON", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(Effect.succeed(processOutput(statusJson)));
 
       const m4 = yield* M4Cli;
-      expect(m4.defaultCommand).toBe("uvx --from m4-infra m4");
+      expect(m4.defaultCommand).toBe("uvx --from 'm4-infra>=0.5.4,<0.6' m4");
 
       const status = yield* m4.status({ cwd: "/repo", credentials: emptyCredentials });
       const dataset = status.datasets[0]!;
@@ -187,11 +187,19 @@ describe("M4Cli", () => {
         tables: [{ name: "primary", ready: true, rowCount: 100 }],
         lastCheckedAt: dataset.lastCheckedAt,
       });
-      expect(status.runtime.command).toBe("uvx --from m4-infra m4");
+      expect(status.runtime.command).toBe("uvx --from 'm4-infra>=0.5.4,<0.6' m4");
       expect(mockRun).toHaveBeenCalledWith(
         expect.objectContaining({
           command: "uvx",
-          args: ["--from", "m4-infra", "m4", "status", "--all", "--json", "--no-interactive"],
+          args: [
+            "--from",
+            "m4-infra>=0.5.4,<0.6",
+            "m4",
+            "status",
+            "--all",
+            "--json",
+            "--no-interactive",
+          ],
           cwd: "/repo",
         }),
       );
@@ -271,7 +279,7 @@ describe("M4Cli", () => {
         expect.objectContaining({
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--dataset",
@@ -301,7 +309,7 @@ describe("M4Cli", () => {
         expect.objectContaining({
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--all",
@@ -330,7 +338,7 @@ describe("M4Cli", () => {
         expect.objectContaining({
           args: [
             "--from",
-            "m4-infra",
+            "m4-infra>=0.5.4,<0.6",
             "m4",
             "status",
             "--all",
@@ -486,7 +494,7 @@ describe("M4Cli", () => {
       expect(mockRun.mock.calls.map(([input]) => input.args)).toEqual([
         [
           "--from",
-          "m4-infra",
+          "m4-infra>=0.5.4,<0.6",
           "m4",
           "init",
           "mimic-iv",
@@ -500,7 +508,7 @@ describe("M4Cli", () => {
         ],
         [
           "--from",
-          "m4-infra",
+          "m4-infra>=0.5.4,<0.6",
           "m4",
           "init-derived",
           "mimic-iv",
@@ -511,7 +519,7 @@ describe("M4Cli", () => {
         ],
         [
           "--from",
-          "m4-infra",
+          "m4-infra>=0.5.4,<0.6",
           "m4",
           "backend",
           "bigquery",
@@ -542,7 +550,7 @@ describe("M4Cli", () => {
 
       expect(mockRun.mock.calls[0]?.[0].args).toEqual([
         "--from",
-        "m4-infra",
+        "m4-infra>=0.5.4,<0.6",
         "m4",
         "init-derived",
         "mimic-iv",
