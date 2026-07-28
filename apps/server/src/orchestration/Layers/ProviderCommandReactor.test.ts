@@ -21,6 +21,7 @@ import {
   SessionId,
   TurnId,
 } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -142,6 +143,9 @@ describe("ProviderCommandReactor", () => {
     readonly baseDir?: string;
     readonly sessionModelSelection?: ModelSelection;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
+    readonly startSessionEffect?: (
+      session: ProviderSession,
+    ) => Effect.Effect<ProviderSession, ProviderAdapterRequestError>;
   }) {
     const now = "2026-01-01T00:00:00.000Z";
     const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-"));
@@ -155,6 +159,7 @@ describe("ProviderCommandReactor", () => {
       instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5-codex",
     };
+    const startSessionEffect = input?.startSessionEffect;
     const startSession = vi.fn((_: unknown, input: unknown) => {
       const sessionIndex = nextSessionIndex++;
       const resumeCursor =
@@ -208,8 +213,13 @@ describe("ProviderCommandReactor", () => {
         createdAt: now,
         updatedAt: now,
       };
-      runtimeSessions.push(session);
-      return Effect.succeed(session);
+      return (startSessionEffect?.(session) ?? Effect.succeed(session)).pipe(
+        Effect.tap((startedSession) =>
+          Effect.sync(() => {
+            runtimeSessions.push(startedSession);
+          }),
+        ),
+      );
     });
     const sendTurn = vi.fn((_: unknown) =>
       Effect.succeed({
@@ -459,9 +469,116 @@ describe("ProviderCommandReactor", () => {
     const readModel = await harness.readModel();
     const session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
     expect(session?.session?.sessionId).toBe("session-1");
+    expect(session?.session?.status).toBe("starting");
     expect(session?.session?.runtimeMode).toBe("approval-required");
     expect(session?.workflowId).toBe("clinical-review");
     expect(session?.workflowVersion).toBe("2026-06-01");
+  });
+
+  it("projects starting before a slow provider session finishes", async () => {
+    const releaseStart = await Effect.runPromise(Deferred.make<void>());
+    const harness = await createHarness({
+      startSessionEffect: (session) => Deferred.await(releaseStart).pipe(Effect.as(session)),
+    });
+    const now = "2026-01-01T00:00:00.000Z";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-slow-provider"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-slow-provider"),
+          role: "user",
+          text: "start slowly",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    const duringStartup = await harness.readModel();
+    expect(
+      duringStartup.sessions.find((entry) => entry.id === SessionId.make("session-1"))?.session
+        ?.status,
+    ).toBe("starting");
+    expect(harness.sendTurn).not.toHaveBeenCalled();
+
+    await Effect.runPromise(Deferred.succeed(releaseStart, undefined));
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+  });
+
+  it("settles a failed provider startup and allows a clean retry", async () => {
+    let failStartup = true;
+    const harness = await createHarness({
+      startSessionEffect: (session) =>
+        failStartup
+          ? Effect.fail(
+              new ProviderAdapterRequestError({
+                provider: "codex",
+                method: "session.start",
+                detail: "deterministic startup failure",
+              }),
+            )
+          : Effect.succeed(session),
+    });
+    const now = "2026-01-01T00:00:00.000Z";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-provider-failure"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-provider-failure"),
+          role: "user",
+          text: "fail once",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await harness.readModel();
+      return (
+        readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"))?.session
+          ?.status === "error"
+      );
+    });
+    let readModel = await harness.readModel();
+    let session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+    expect(session?.session?.lastError).toContain("deterministic startup failure");
+    expect(harness.sendTurn).not.toHaveBeenCalled();
+
+    failStartup = false;
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-provider-retry"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-provider-retry"),
+          role: "user",
+          text: "retry",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    readModel = await harness.readModel();
+    session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+    expect(session?.session?.status).toBe("starting");
+    expect(session?.session?.lastError).toBeNull();
   });
 
   it("forwards the selected workflow on existing-session turns", async () => {
