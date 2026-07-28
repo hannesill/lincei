@@ -120,7 +120,12 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
-import { VitrineLifecycleError, VitrineProjectInput, VitrineProjectState } from "./vitrine.ts";
+import {
+  VitrineLifecycleError,
+  VitrineProjectInput,
+  VitrineProjectState,
+  VitrineRuntimeStatus,
+} from "./vitrine.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -133,6 +138,7 @@ export const WS_METHODS = {
   // Project-scoped Vitrine lifecycle methods
   vitrineEnsure: "vitrine.ensure",
   vitrineOpen: "vitrine.open",
+  vitrineRuntimeStatus: "vitrine.runtimeStatus",
   vitrineStatus: "vitrine.status",
   vitrineStop: "vitrine.stop",
 
@@ -368,6 +374,11 @@ export const WsVitrineOpenRpc = Rpc.make(WS_METHODS.vitrineOpen, {
   payload: VitrineProjectInput,
   success: VitrineProjectState,
   error: VitrineLifecycleError,
+});
+
+export const WsVitrineRuntimeStatusRpc = Rpc.make(WS_METHODS.vitrineRuntimeStatus, {
+  payload: Schema.Struct({}),
+  success: VitrineRuntimeStatus,
 });
 
 export const WsVitrineStatusRpc = Rpc.make(WS_METHODS.vitrineStatus, {
@@ -650,6 +661,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsWriteFileRpc,
   WsVitrineEnsureRpc,
   WsVitrineOpenRpc,
+  WsVitrineRuntimeStatusRpc,
   WsVitrineStatusRpc,
   WsVitrineStopRpc,
   WsShellOpenInEditorRpc,

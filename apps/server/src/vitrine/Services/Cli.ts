@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type { VitrineRuntimeStatus } from "@t3tools/contracts";
 
 export type VitrineCliAction = "start" | "status" | "stop";
 
@@ -62,6 +63,7 @@ export interface VitrineCliShape {
     action: VitrineCliAction,
     input: VitrineCliInput,
   ) => Effect.Effect<VitrineCliSnapshot, VitrineCliError>;
+  readonly runtimeStatus: Effect.Effect<VitrineRuntimeStatus>;
 }
 
 export class VitrineCli extends Context.Service<VitrineCli, VitrineCliShape>()(

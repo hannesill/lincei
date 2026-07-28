@@ -2,6 +2,31 @@ import * as Schema from "effect/Schema";
 
 import { IsoDateTime, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
+export const VitrineRuntimeSource = Schema.Literals(["environment", "settings", "path"]);
+export type VitrineRuntimeSource = typeof VitrineRuntimeSource.Type;
+
+export const VitrineRuntimeStatusKind = Schema.Literals([
+  "ready",
+  "unavailable",
+  "incompatible",
+  "failed",
+]);
+export type VitrineRuntimeStatusKind = typeof VitrineRuntimeStatusKind.Type;
+
+export const VitrineRuntimeStatus = Schema.Struct({
+  status: VitrineRuntimeStatusKind,
+  source: VitrineRuntimeSource,
+  executable: TrimmedNonEmptyString,
+  version: Schema.NullOr(TrimmedNonEmptyString),
+  lifecycleContractVersion: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
+  pythonExecutable: Schema.NullOr(TrimmedNonEmptyString),
+  supportedVersionRange: TrimmedNonEmptyString,
+  requiredLifecycleContractVersion: Schema.Int.check(Schema.isGreaterThan(0)),
+  message: Schema.NullOr(TrimmedNonEmptyString),
+  checkedAt: IsoDateTime,
+});
+export type VitrineRuntimeStatus = typeof VitrineRuntimeStatus.Type;
+
 export const VitrineLifecycleStatus = Schema.Literals([
   "unavailable",
   "starting",

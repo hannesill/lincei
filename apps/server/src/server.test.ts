@@ -27,6 +27,7 @@ import {
   EditorId,
   type DatasetStatusResult,
   type VitrineProjectState,
+  type VitrineRuntimeStatus,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure, assertInclude, assertTrue } from "@effect/vitest/utils";
@@ -130,6 +131,7 @@ import {
   LinceiDatasetGateway,
   type LinceiDatasetGatewayShape,
 } from "./datasets/LinceiDatasetGateway.ts";
+import { VitrineCli, type VitrineCliShape } from "./vitrine/Services/Cli.ts";
 import { VitrineManager, type VitrineManagerShape } from "./vitrine/Services/Manager.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
@@ -146,12 +148,24 @@ const makeReadyVitrineProjectState = (
   pid: 1234,
   port: 7741,
   sessionId: "vitrine-session",
-  version: "0.1.0",
+  version: "0.1.1",
   issueCode: null,
   message: null,
   updatedAt: "2026-07-22T12:00:00.000Z",
   ...overrides,
 });
+const defaultVitrineRuntimeStatus: VitrineRuntimeStatus = {
+  status: "ready",
+  source: "path",
+  executable: "vitrine",
+  version: "0.1.1",
+  lifecycleContractVersion: 1,
+  pythonExecutable: "/usr/bin/python3",
+  supportedVersionRange: ">=0.1.1 <0.2.0",
+  requiredLifecycleContractVersion: 1,
+  message: null,
+  checkedAt: "2026-07-22T12:00:00.000Z",
+};
 const defaultModelSelection = {
   instanceId: ProviderInstanceId.make("codex"),
   model: "gpt-5-codex",
@@ -393,6 +407,7 @@ const buildAppUnderTest = (options?: {
     serverEnvironment?: Partial<ServerEnvironmentShape>;
     repositoryIdentityResolver?: Partial<RepositoryIdentityResolverShape>;
     datasetGateway?: Partial<LinceiDatasetGatewayShape>;
+    vitrineCli?: Partial<VitrineCliShape>;
     vitrineManager?: Partial<VitrineManagerShape>;
   };
 }) =>
@@ -604,6 +619,11 @@ const buildAppUnderTest = (options?: {
         getBinding: () => Effect.succeed(Option.none()),
         listSessionIds: () => Effect.succeed([]),
         listBindings: () => Effect.succeed([]),
+      }),
+      Layer.mock(VitrineCli)({
+        run: () => Effect.die("unexpected Vitrine lifecycle command"),
+        runtimeStatus: Effect.succeed(defaultVitrineRuntimeStatus),
+        ...options?.layers?.vitrineCli,
       }),
       Layer.mock(VitrineManager)({
         ensure: (input) =>
@@ -2815,6 +2835,33 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         result.failure.message,
         "Workspace file path must stay within the project root.",
       );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("routes the source-aware Vitrine runtime status", () =>
+    Effect.gen(function* () {
+      const expected: VitrineRuntimeStatus = {
+        ...defaultVitrineRuntimeStatus,
+        status: "incompatible",
+        source: "settings",
+        executable: "/configured/vitrine",
+        version: "0.1.0",
+        message: "Vitrine 0.1.0 is incompatible; expected >=0.1.1 <0.2.0.",
+      };
+      yield* buildAppUnderTest({
+        layers: {
+          vitrineCli: {
+            runtimeStatus: Effect.succeed(expected),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.vitrineRuntimeStatus]({})),
+      );
+
+      assert.deepEqual(response, expected);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

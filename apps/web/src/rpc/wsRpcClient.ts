@@ -83,6 +83,7 @@ export interface WsRpcClient {
   readonly vitrine: {
     readonly open: RpcUnaryMethod<typeof WS_METHODS.vitrineOpen>;
     readonly ensure: RpcUnaryMethod<typeof WS_METHODS.vitrineEnsure>;
+    readonly runtimeStatus: RpcUnaryNoArgMethod<typeof WS_METHODS.vitrineRuntimeStatus>;
     readonly status: RpcUnaryMethod<typeof WS_METHODS.vitrineStatus>;
     readonly stop: RpcUnaryMethod<typeof WS_METHODS.vitrineStop>;
   };
@@ -236,6 +237,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     vitrine: {
       open: (input) => transport.request((client) => client[WS_METHODS.vitrineOpen](input)),
       ensure: (input) => transport.request((client) => client[WS_METHODS.vitrineEnsure](input)),
+      runtimeStatus: () =>
+        transport.request((client) => client[WS_METHODS.vitrineRuntimeStatus]({})),
       status: (input) => transport.request((client) => client[WS_METHODS.vitrineStatus](input)),
       stop: (input) => transport.request((client) => client[WS_METHODS.vitrineStop](input)),
     },

@@ -56,6 +56,7 @@ const rpcClientMock = {
   vitrine: {
     open: vi.fn(),
     ensure: vi.fn(),
+    runtimeStatus: vi.fn(),
     status: vi.fn(),
     stop: vi.fn(),
   },
@@ -535,6 +536,28 @@ describe("wsApi", () => {
 
     await expect(api.vitrine.ensure({ projectId })).resolves.toEqual(state);
     expect(rpcClientMock.vitrine.ensure).toHaveBeenCalledWith({ projectId });
+  });
+
+  it("forwards Vitrine runtime status checks", async () => {
+    const runtimeStatus = {
+      status: "ready" as const,
+      source: "settings" as const,
+      executable: "/tmp/project/.venv/bin/vitrine",
+      version: "0.1.1",
+      lifecycleContractVersion: 1,
+      pythonExecutable: "/tmp/project/.venv/bin/python",
+      supportedVersionRange: ">=0.1.1 <0.2.0",
+      requiredLifecycleContractVersion: 1,
+      message: null,
+      checkedAt: "2026-02-24T00:00:00.000Z",
+    };
+    rpcClientMock.vitrine.runtimeStatus.mockResolvedValue(runtimeStatus);
+    const { createEnvironmentApi } = await import("./environmentApi");
+
+    const api = createEnvironmentApi(rpcClientMock as never);
+
+    await expect(api.vitrine.runtimeStatus()).resolves.toEqual(runtimeStatus);
+    expect(rpcClientMock.vitrine.runtimeStatus).toHaveBeenCalledWith();
   });
 
   it("forwards provider refreshes directly to the RPC client", async () => {

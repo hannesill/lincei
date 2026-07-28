@@ -70,6 +70,7 @@ import { PreviewPortScanner } from "./preview/Services/PortScanner.ts";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths.ts";
+import { VitrineCli } from "./vitrine/Services/Cli.ts";
 import { VitrineManager } from "./vitrine/Services/Manager.ts";
 import { isVitrineBrowserLaunchPolicyAllowed } from "./vitrine/browserLaunchPolicy.ts";
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
@@ -200,6 +201,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const startup = yield* ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem;
+      const vitrineCli = yield* VitrineCli;
       const vitrineManager = yield* VitrineManager;
       const resolveVitrineProject = Effect.fn("ws.resolveVitrineProject")(function* (
         projectId: ProjectId,
@@ -1136,6 +1138,10 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "vitrine" },
           ),
+        [WS_METHODS.vitrineRuntimeStatus]: (_input) =>
+          observeRpcEffect(WS_METHODS.vitrineRuntimeStatus, vitrineCli.runtimeStatus, {
+            "rpc.aggregate": "vitrine",
+          }),
         [WS_METHODS.vitrineStatus]: (input) =>
           observeRpcEffect(
             WS_METHODS.vitrineStatus,

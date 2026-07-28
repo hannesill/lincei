@@ -84,6 +84,21 @@ describe("serverSettings helpers", () => {
     });
   });
 
+  it("deep merges Vitrine runtime settings without disturbing unrelated settings", () => {
+    const current = {
+      ...DEFAULT_SERVER_SETTINGS,
+      enableAssistantStreaming: true,
+      vitrine: { executablePath: "/old/bin/vitrine" },
+    };
+
+    const next = applyServerSettingsPatch(current, {
+      vitrine: { executablePath: "/project/.venv/bin/vitrine" },
+    });
+
+    expect(next.vitrine).toEqual({ executablePath: "/project/.venv/bin/vitrine" });
+    expect(next.enableAssistantStreaming).toBe(true);
+  });
+
   it("still deep merges text generation selection when only options are provided", () => {
     const current = {
       ...DEFAULT_SERVER_SETTINGS,

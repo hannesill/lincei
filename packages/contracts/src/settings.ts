@@ -338,6 +338,11 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+export const VitrineRuntimeSettings = Schema.Struct({
+  executablePath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type VitrineRuntimeSettings = typeof VitrineRuntimeSettings.Type;
+
 export const LinceiSkillSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
@@ -391,6 +396,7 @@ export const ServerSettings = Schema.Struct({
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  vitrine: VitrineRuntimeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   datasets: DatasetSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   linceiSkills: Schema.Record(TrimmedNonEmptyString, LinceiSkillSettings).pipe(
@@ -472,6 +478,11 @@ export const ServerSettingsPatch = Schema.Struct({
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   linceiAgentCustomInstructions: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  vitrine: Schema.optionalKey(
+    Schema.Struct({
+      executablePath: Schema.optionalKey(TrimmedString),
+    }),
+  ),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
