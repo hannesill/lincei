@@ -285,6 +285,69 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 
+  it.effect("clears a pending turn start when provider startup becomes terminal", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const sessionId = SessionId.make("session-terminal-startup");
+      const requestedAt = "2026-01-01T00:00:00.000Z";
+      const failedAt = "2026-01-01T00:00:01.000Z";
+
+      yield* eventStore.append({
+        type: "session.turn-start-requested",
+        eventId: EventId.make("evt-terminal-startup-requested"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: requestedAt,
+        commandId: CommandId.make("cmd-terminal-startup-requested"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-terminal-startup-requested"),
+        metadata: {},
+        payload: {
+          sessionId,
+          messageId: MessageId.make("message-terminal-startup"),
+          runtimeMode: "approval-required",
+          createdAt: requestedAt,
+        },
+      });
+      yield* eventStore.append({
+        type: "session.session-set",
+        eventId: EventId.make("evt-terminal-startup-failed"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: failedAt,
+        commandId: CommandId.make("cmd-terminal-startup-failed"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-terminal-startup-failed"),
+        metadata: {},
+        payload: {
+          sessionId,
+          session: {
+            sessionId,
+            status: "error",
+            providerName: "codex",
+            runtimeMode: "approval-required",
+            activeTurnId: null,
+            lastError: "provider startup failed",
+            updatedAt: failedAt,
+          },
+        },
+      });
+
+      yield* projectionPipeline.bootstrap;
+
+      const pendingRows = yield* sql<{ readonly sessionId: string }>`
+        SELECT session_id AS "sessionId"
+        FROM projection_turns
+        WHERE session_id = ${sessionId}
+          AND turn_id IS NULL
+          AND state = 'pending'
+      `;
+      assert.deepEqual(pendingRows, []);
+    }),
+  );
+
   it.effect("advances every projector cursor past legacy native-card events", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;

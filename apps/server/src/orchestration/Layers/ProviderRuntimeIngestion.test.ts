@@ -450,6 +450,121 @@ describe("ProviderRuntimeIngestion", () => {
     expect(session.session?.lastError).toBeNull();
   });
 
+  it("clears the active turn when the provider session becomes ready", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-turn-started-session-ready"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-session-ready"),
+    });
+
+    await waitForSession(
+      harness.readModel,
+      (session) =>
+        session.session?.status === "running" &&
+        session.session?.activeTurnId === "turn-session-ready",
+    );
+
+    harness.emit({
+      type: "session.state.changed",
+      eventId: asEventId("evt-session-state-ready-with-active-turn"),
+      provider: ProviderDriverKind.make("codex"),
+      sessionId: asSessionId("session-1"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      payload: {
+        state: "ready",
+      },
+    });
+
+    const session = await waitForSession(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "ready" &&
+        entry.session?.activeTurnId === null &&
+        entry.session?.lastError === null,
+    );
+    expect(session.session?.status).toBe("ready");
+    expect(session.session?.activeTurnId).toBeNull();
+    expect(session.session?.lastError).toBeNull();
+  });
+
+  it("preserves starting while a pending turn reconnects to a ready provider", async () => {
+    const harness = await createHarness();
+    const requestedAt = "2026-01-01T00:00:00.000Z";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-pending-turn-reconnect"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("message-pending-turn-reconnect"),
+          role: "user",
+          text: "continue after reconnect",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: requestedAt,
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.session.set",
+        commandId: CommandId.make("cmd-pending-turn-starting"),
+        sessionId: SessionId.make("session-1"),
+        session: {
+          sessionId: SessionId.make("session-1"),
+          status: "starting",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: requestedAt,
+        },
+        createdAt: requestedAt,
+      }),
+    );
+
+    harness.emit({
+      type: "session.started",
+      eventId: asEventId("evt-pending-turn-session-started"),
+      provider: ProviderDriverKind.make("codex"),
+      sessionId: asSessionId("session-1"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+    });
+    await harness.drain();
+    let session = await waitForSession(
+      harness.readModel,
+      (entry) => entry.session?.status === "starting",
+    );
+    expect(session.session?.activeTurnId).toBeNull();
+
+    harness.emit({
+      type: "session.state.changed",
+      eventId: asEventId("evt-pending-turn-session-ready"),
+      provider: ProviderDriverKind.make("codex"),
+      sessionId: asSessionId("session-1"),
+      createdAt: "2026-01-01T00:00:02.000Z",
+      payload: {
+        state: "ready",
+      },
+    });
+    await harness.drain();
+
+    session = await waitForSession(
+      harness.readModel,
+      (entry) => entry.session?.status === "starting",
+    );
+    expect(session.session?.activeTurnId).toBeNull();
+    expect(session.session?.lastError).toBeNull();
+  });
+
   it("does not clear active turn when session/session started arrives mid-turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";

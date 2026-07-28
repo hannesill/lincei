@@ -277,14 +277,19 @@ const make = Effect.gen(function* () {
   }) {
     const targetSession = yield* resolveSession(input.sessionId);
     const providerRuntime = targetSession?.session;
-    if (!providerRuntime) {
+    if (!targetSession) {
       return;
     }
     yield* setProviderRuntime({
       sessionId: input.sessionId,
       session: {
-        ...providerRuntime,
-        status: providerRuntime.status === "stopped" ? "stopped" : "ready",
+        ...(providerRuntime ?? {
+          sessionId: input.sessionId,
+          providerName: null,
+          providerInstanceId: targetSession.modelSelection.instanceId,
+          runtimeMode: targetSession.runtimeMode,
+        }),
+        status: providerRuntime?.status === "stopped" ? "stopped" : "error",
         activeTurnId: null,
         lastError: input.detail,
         updatedAt: input.createdAt,
@@ -312,6 +317,7 @@ const make = Effect.gen(function* () {
       readonly modelSelection?: ModelSelection;
       readonly workflowId?: string;
       readonly workflowVersion?: string;
+      readonly pendingTurnStart?: boolean;
     },
   ) {
     const session = yield* resolveSession(sessionId);
@@ -413,6 +419,22 @@ const make = Effect.gen(function* () {
         });
       }
     }
+    if (options?.pendingTurnStart === true && session.session?.status !== "running") {
+      yield* setProviderRuntime({
+        sessionId,
+        session: {
+          sessionId,
+          status: "starting",
+          providerName: activeSession?.provider ?? preferredProvider,
+          providerInstanceId: activeSession?.providerInstanceId ?? desiredInstanceId,
+          runtimeMode: desiredRuntimeMode,
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: createdAt,
+        },
+        createdAt,
+      });
+    }
     const project = yield* resolveProject(session.projectId);
     const effectiveCwd = resolveSessionWorkspaceCwd({
       session,
@@ -452,7 +474,10 @@ const make = Effect.gen(function* () {
           sessionId,
           session: {
             sessionId,
-            status: mapProviderSessionStatusToOrchestrationStatus(session.status),
+            status:
+              options?.pendingTurnStart === true && session.status === "ready"
+                ? "starting"
+                : mapProviderSessionStatusToOrchestrationStatus(session.status),
             providerName: session.provider,
             providerInstanceId: session.providerInstanceId,
             runtimeMode: desiredRuntimeMode,
@@ -557,6 +582,7 @@ const make = Effect.gen(function* () {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       ...(input.workflowId !== undefined ? { workflowId: input.workflowId } : {}),
       ...(input.workflowVersion !== undefined ? { workflowVersion: input.workflowVersion } : {}),
+      pendingTurnStart: true,
     });
     if (input.modelSelection !== undefined) {
       sessionModelSelections.set(input.sessionId, input.modelSelection);
