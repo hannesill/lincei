@@ -141,7 +141,7 @@ const MAX_CACHED_THREAD_DETAIL_SUBSCRIPTIONS = 32;
 const BROWSER_RESUME_RECONNECT_COOLDOWN_MS = 2_000;
 const INITIAL_SERVER_CONFIG_SNAPSHOT_WAIT_MS = 150;
 const NOOP = () => undefined;
-const SSH_HTTP_STATUS_RE = /^\[ssh_http:(\d+)\]\s/u;
+const SSH_HTTP_STATUS_RE = /\[ssh_http:(\d+)\]\s/u;
 
 function createDeferredPromise<T>() {
   let resolve: ((value: T) => void) | null = null;
