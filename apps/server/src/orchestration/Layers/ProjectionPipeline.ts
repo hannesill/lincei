@@ -528,20 +528,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       switch (event.type) {
         case "project.purged": {
           for (const sessionId of event.payload.sessionIds) {
-            const pendingApprovals = yield* projectionPendingApprovalRepository.listBySessionId({
-              sessionId,
-            });
-            yield* Effect.forEach(
-              pendingApprovals,
-              (approval) =>
-                projectionPendingApprovalRepository.deleteByRequestId({
-                  requestId: approval.requestId,
-                }),
-              { concurrency: 1 },
-            );
             yield* projectionSessionMessageRepository.deleteBySessionId({ sessionId });
             yield* projectionSessionProposedPlanRepository.deleteBySessionId({ sessionId });
-            yield* projectionSessionActivityRepository.deleteBySessionId({ sessionId });
             yield* projectionProviderRuntimeRepository.deleteBySessionId({ sessionId });
             yield* projectionTurnRepository.deleteBySessionId({ sessionId });
             yield* projectionSessionRepository.deleteById({ sessionId });
@@ -990,6 +978,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       "applySessionActivitiesProjection",
     )(function* (event, _attachmentSideEffects) {
       switch (event.type) {
+        case "project.purged":
+          yield* Effect.forEach(
+            event.payload.sessionIds,
+            (sessionId) => projectionSessionActivityRepository.deleteBySessionId({ sessionId }),
+            { concurrency: 1 },
+          );
+          return;
+
         case "session.activity-appended":
           yield* projectionSessionActivityRepository.upsert({
             activityId: event.payload.activity.id,
@@ -1326,6 +1322,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       "applyPendingApprovalsProjection",
     )(function* (event, _attachmentSideEffects) {
       switch (event.type) {
+        case "project.purged":
+          yield* Effect.forEach(
+            event.payload.sessionIds,
+            (sessionId) => projectionPendingApprovalRepository.deleteBySessionId({ sessionId }),
+            { concurrency: 1 },
+          );
+          return;
+
         case "session.activity-appended": {
           const requestId =
             extractActivityRequestId(event.payload.activity.payload) ??

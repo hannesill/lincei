@@ -400,5 +400,133 @@ it.layer(RebuildProjectionTestLayer)(
         ]);
       }),
     );
+
+    it.effect("does not resurrect purged session lifecycle rows during replay or retry", () =>
+      Effect.gen(function* () {
+        const eventStore = yield* OrchestrationEventStore;
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const sql = yield* SqlClient.SqlClient;
+        const sessionId = SessionId.make("session-lifecycle-purged");
+        const projectId = ProjectId.make("project-lifecycle-purged");
+        const requestId = ApprovalRequestId.make("request-lifecycle-purged");
+        const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+          Effect.gen(function* () {
+            const savedEvent = yield* eventStore.append(event);
+            yield* projectionPipeline.projectEvent(savedEvent);
+            return savedEvent;
+          });
+        const readOwnedRowCounts = Effect.fn("readOwnedRowCounts")(function* () {
+          const [activities, approvals, sessions] = yield* Effect.all([
+            sql<{ readonly count: number }>`
+              SELECT COUNT(*) AS count
+              FROM projection_session_activities
+              WHERE session_id = ${sessionId}
+            `,
+            sql<{ readonly count: number }>`
+              SELECT COUNT(*) AS count
+              FROM projection_pending_approvals
+              WHERE session_id = ${sessionId}
+            `,
+            sql<{ readonly count: number }>`
+              SELECT COUNT(*) AS count
+              FROM projection_sessions
+              WHERE session_id = ${sessionId}
+            `,
+          ]);
+          return {
+            activities: activities[0]?.count ?? -1,
+            approvals: approvals[0]?.count ?? -1,
+            sessions: sessions[0]?.count ?? -1,
+          };
+        });
+
+        yield* appendAndProject({
+          type: "session.created",
+          eventId: EventId.make("event-lifecycle-purged-created"),
+          aggregateKind: "session",
+          aggregateId: sessionId,
+          occurredAt: "2026-07-02T12:00:00.000Z",
+          commandId: CommandId.make("command-lifecycle-purged-created"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("command-lifecycle-purged-created"),
+          metadata: {},
+          payload: {
+            sessionId,
+            projectId,
+            title: "Purged lifecycle",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5.4",
+            },
+            runtimeMode: "approval-required",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+            createdAt: "2026-07-02T12:00:00.000Z",
+            updatedAt: "2026-07-02T12:00:00.000Z",
+          },
+        });
+        yield* appendAndProject({
+          type: "session.activity-appended",
+          eventId: EventId.make("event-lifecycle-purged-requested"),
+          aggregateKind: "session",
+          aggregateId: sessionId,
+          occurredAt: "2026-07-02T12:00:01.000Z",
+          commandId: CommandId.make("command-lifecycle-purged-requested"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("command-lifecycle-purged-requested"),
+          metadata: {},
+          payload: {
+            sessionId,
+            activity: {
+              id: EventId.make("activity-lifecycle-purged-requested"),
+              tone: "approval",
+              kind: "approval.requested",
+              summary: "Approval requested before purge",
+              payload: { requestId },
+              turnId: null,
+              createdAt: "2026-07-02T12:00:01.000Z",
+            },
+          },
+        });
+        assert.deepStrictEqual(yield* readOwnedRowCounts(), {
+          activities: 1,
+          approvals: 1,
+          sessions: 1,
+        });
+
+        yield* appendAndProject({
+          type: "project.purged",
+          eventId: EventId.make("event-lifecycle-project-purged"),
+          aggregateKind: "project",
+          aggregateId: projectId,
+          occurredAt: "2026-07-02T12:00:02.000Z",
+          commandId: CommandId.make("command-lifecycle-project-purged"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("command-lifecycle-project-purged"),
+          metadata: {},
+          payload: {
+            projectId,
+            sessionIds: [sessionId],
+            purgedAt: "2026-07-02T12:00:02.000Z",
+          },
+        });
+        assert.deepStrictEqual(yield* readOwnedRowCounts(), {
+          activities: 0,
+          approvals: 0,
+          sessions: 0,
+        });
+
+        for (let retry = 0; retry < 2; retry += 1) {
+          yield* Migration036;
+          yield* projectionPipeline.bootstrap;
+          assert.deepStrictEqual(yield* readOwnedRowCounts(), {
+            activities: 0,
+            approvals: 0,
+            sessions: 0,
+          });
+        }
+      }),
+    );
   },
 );
