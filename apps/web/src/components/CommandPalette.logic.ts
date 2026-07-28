@@ -95,11 +95,12 @@ export function buildProjectActionItems(input: {
   valuePrefix: string;
   icon: (project: Project) => ReactNode;
   runProject: (project: Project) => Promise<void>;
+  searchTerms?: (project: Project) => ReadonlyArray<string>;
 }): CommandPaletteActionItem[] {
   return input.projects.map((project) => ({
     kind: "action",
     value: `${input.valuePrefix}:${project.environmentId}:${project.id}`,
-    searchTerms: [project.name, project.cwd],
+    searchTerms: [project.name, project.cwd, ...(input.searchTerms?.(project) ?? [])],
     title: project.name,
     description: project.cwd,
     icon: input.icon(project),

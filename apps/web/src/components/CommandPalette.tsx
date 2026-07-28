@@ -53,6 +53,7 @@ import {
   refreshSourceControlDiscovery,
 } from "../lib/sourceControlDiscoveryState";
 import {
+  resolveSessionActionProjectRef,
   startNewSessionInProjectFromContext,
   startNewSessionFromContext,
 } from "../lib/chatSessionActions";
@@ -118,6 +119,11 @@ import { stackedSessionToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
+import { selectProjectGroupingSettings } from "../logicalProject";
+import {
+  buildSidebarProjectPickerEntries,
+  buildSidebarProjectSnapshots,
+} from "../sidebarProjectGrouping";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 const BROWSE_STALE_TIME_MS = 30_000;
@@ -421,6 +427,79 @@ function OpenCommandPaletteDialog() {
   const primaryEnvironmentLabel = readPrimaryEnvironmentDescriptor()?.label ?? null;
   const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((state) => state.byId);
   const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((state) => state.byId);
+  const projectGroupingSettings = useMemo(
+    () => selectProjectGroupingSettings(settings),
+    [settings],
+  );
+  const environmentLabelById = useMemo(() => {
+    const labels = new Map<EnvironmentId, string>();
+    if (primaryEnvironmentId && primaryEnvironmentLabel) {
+      labels.set(primaryEnvironmentId, primaryEnvironmentLabel);
+    }
+    for (const record of Object.values(savedEnvironmentRegistry)) {
+      const runtimeLabel = savedEnvironmentRuntimeById[record.environmentId]?.descriptor?.label;
+      labels.set(record.environmentId, runtimeLabel ?? record.label);
+    }
+    return labels;
+  }, [
+    primaryEnvironmentId,
+    primaryEnvironmentLabel,
+    savedEnvironmentRegistry,
+    savedEnvironmentRuntimeById,
+  ]);
+  const projectGroups = useMemo(
+    () =>
+      buildSidebarProjectSnapshots({
+        projects,
+        settings: projectGroupingSettings,
+        primaryEnvironmentId,
+        resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
+      }),
+    [environmentLabelById, primaryEnvironmentId, projectGroupingSettings, projects],
+  );
+  const contextualProjectRef = useMemo(
+    () =>
+      resolveSessionActionProjectRef({
+        activeDraftSession,
+        activeSession,
+        defaultProjectRef,
+        defaultSessionEnvMode: settings.defaultSessionEnvMode,
+        handleNewSession,
+      }),
+    [
+      activeDraftSession,
+      activeSession,
+      defaultProjectRef,
+      handleNewSession,
+      settings.defaultSessionEnvMode,
+    ],
+  );
+  const projectPickerEntries = useMemo(
+    () =>
+      buildSidebarProjectPickerEntries({
+        groups: projectGroups,
+        preferredProjectRef: contextualProjectRef,
+      }),
+    [contextualProjectRef, projectGroups],
+  );
+  const pickerProjects = useMemo(
+    () =>
+      projectPickerEntries.map(({ group, targetProject }) => ({
+        ...targetProject,
+        name: group.displayName,
+      })),
+    [projectPickerEntries],
+  );
+  const projectGroupByTargetKey = useMemo(
+    () =>
+      new Map(
+        projectPickerEntries.map(({ group, targetProject }) => [
+          `${targetProject.environmentId}:${targetProject.id}`,
+          group,
+        ]),
+      ),
+    [projectPickerEntries],
+  );
 
   const addProjectEnvironmentOptions = useMemo(() => {
     const options: AddProjectEnvironmentOption[] = [];
@@ -611,11 +690,31 @@ function OpenCommandPaletteDialog() {
 
   const openProjectFromSearch = useMemo(
     () => async (project: (typeof projects)[number]) => {
-      const latestSession = getLatestSessionForProject(
-        sessions.filter((session) => session.environmentId === project.environmentId),
-        project.id,
-        settings.sidebarSessionSortOrder,
-      );
+      const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
+      const groupedProjectKeys = group
+        ? new Set(
+            group.memberProjectRefs.map(
+              (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
+            ),
+          )
+        : null;
+      const latestSession = groupedProjectKeys
+        ? (sessions
+            .filter(
+              (session) =>
+                session.archivedAt === null &&
+                groupedProjectKeys.has(`${session.environmentId}:${session.projectId}`),
+            )
+            .toSorted(
+              (left, right) =>
+                Date.parse(right.latestUserMessageAt ?? right.updatedAt ?? right.createdAt) -
+                Date.parse(left.latestUserMessageAt ?? left.updatedAt ?? left.createdAt),
+            )[0] ?? null)
+        : getLatestSessionForProject(
+            sessions.filter((session) => session.environmentId === project.environmentId),
+            project.id,
+            settings.sidebarSessionSortOrder,
+          );
       if (latestSession) {
         await navigate({
           to: "/$environmentId/$sessionId",
@@ -635,6 +734,7 @@ function OpenCommandPaletteDialog() {
       navigate,
       settings.defaultSessionEnvMode,
       settings.sidebarSessionSortOrder,
+      projectGroupByTargetKey,
       sessions,
     ],
   );
@@ -642,8 +742,12 @@ function OpenCommandPaletteDialog() {
   const projectSearchItems = useMemo(
     () =>
       buildProjectActionItems({
-        projects,
+        projects: pickerProjects,
         valuePrefix: "project",
+        searchTerms: (project) =>
+          projectGroupByTargetKey
+            .get(`${project.environmentId}:${project.id}`)
+            ?.memberProjects.flatMap((member) => [member.name, member.cwd]) ?? [],
         icon: (project) => (
           <ProjectFavicon
             environmentId={project.environmentId}
@@ -653,14 +757,18 @@ function OpenCommandPaletteDialog() {
         ),
         runProject: openProjectFromSearch,
       }),
-    [openProjectFromSearch, projects],
+    [openProjectFromSearch, pickerProjects, projectGroupByTargetKey],
   );
 
   const projectSessionItems = useMemo(
     () =>
       buildProjectActionItems({
-        projects,
+        projects: pickerProjects,
         valuePrefix: "new-session-in",
+        searchTerms: (project) =>
+          projectGroupByTargetKey
+            .get(`${project.environmentId}:${project.id}`)
+            ?.memberProjects.flatMap((member) => [member.name, member.cwd]) ?? [],
         icon: (project) => (
           <ProjectFavicon
             environmentId={project.environmentId}
@@ -669,6 +777,14 @@ function OpenCommandPaletteDialog() {
           />
         ),
         runProject: async (project) => {
+          const group = projectGroupByTargetKey.get(`${project.environmentId}:${project.id}`);
+          const contextualRefBelongsToGroup =
+            contextualProjectRef !== null &&
+            group?.memberProjectRefs.some(
+              (projectRef) =>
+                projectRef.environmentId === contextualProjectRef.environmentId &&
+                projectRef.projectId === contextualProjectRef.projectId,
+            );
           await startNewSessionInProjectFromContext(
             {
               activeDraftSession,
@@ -677,16 +793,20 @@ function OpenCommandPaletteDialog() {
               defaultSessionEnvMode: settings.defaultSessionEnvMode,
               handleNewSession,
             },
-            scopeProjectRef(project.environmentId, project.id),
+            contextualRefBelongsToGroup
+              ? contextualProjectRef
+              : scopeProjectRef(project.environmentId, project.id),
           );
         },
       }),
     [
       activeDraftSession,
       activeSession,
+      contextualProjectRef,
       defaultProjectRef,
       handleNewSession,
-      projects,
+      pickerProjects,
+      projectGroupByTargetKey,
       settings.defaultSessionEnvMode,
     ],
   );
@@ -979,12 +1099,26 @@ function OpenCommandPaletteDialog() {
     openAddProjectFlow();
   }, [clearOpenIntent, openAddProjectFlow, openIntent]);
 
+  useLayoutEffect(() => {
+    if (openIntent?.kind !== "new-session-in" || projectSessionItems.length === 0) {
+      return;
+    }
+    clearOpenIntent();
+    setAddProjectCloneFlow(null);
+    setViewStack([]);
+    setQuery("");
+    pushPaletteView({
+      addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
+      groups: [{ value: "projects", label: "Projects", items: projectSessionItems }],
+    });
+  }, [clearOpenIntent, openIntent, projectSessionItems]);
+
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
 
   if (projects.length > 0) {
-    const activeProjectTitle = currentProjectId
-      ? (projectTitleById.get(currentProjectId) ?? null)
-      : null;
+    const activeProjectTitle =
+      projectPickerEntries.find((entry) => entry.isPreferred)?.group.displayName ??
+      (currentProjectId ? (projectTitleById.get(currentProjectId) ?? null) : null);
 
     if (activeProjectTitle) {
       actionItems.push({

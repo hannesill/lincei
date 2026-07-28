@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { EnvironmentId, ProjectId, ProviderInstanceId, SessionId } from "@t3tools/contracts";
-import type { Session } from "../types";
+import type { Project, Session } from "../types";
 import {
+  buildProjectActionItems,
   buildSessionActionItems,
   filterCommandPaletteGroups,
   type CommandPaletteGroup,
@@ -9,6 +10,37 @@ import {
 
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const PROJECT_ID = ProjectId.make("project-1");
+
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: PROJECT_ID,
+    environmentId: LOCAL_ENVIRONMENT_ID,
+    name: "Grouped study",
+    cwd: "/work/study",
+    defaultModelSelection: null,
+    scripts: [],
+    ...overrides,
+  };
+}
+
+describe("buildProjectActionItems", () => {
+  it("includes grouped member aliases in filtering terms", () => {
+    const [item] = buildProjectActionItems({
+      projects: [makeProject()],
+      valuePrefix: "new-session-in",
+      icon: () => null,
+      searchTerms: () => ["Remote study", "/remote/study"],
+      runProject: async () => undefined,
+    });
+
+    expect(item?.searchTerms).toEqual([
+      "Grouped study",
+      "/work/study",
+      "Remote study",
+      "/remote/study",
+    ]);
+  });
+});
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
