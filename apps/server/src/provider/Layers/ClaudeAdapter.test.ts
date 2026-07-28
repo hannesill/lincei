@@ -1664,14 +1664,19 @@ describe("ClaudeAdapterLive", () => {
         harness.query.emit(message as unknown as SDKMessage);
       }
 
+      const urgentNotificationText = `context window nearly full: ${"x".repeat(
+        220,
+      )} RAW_SDK_NOTIFICATION_TEXT`;
       harness.query.emit({
         type: "system",
         subtype: "notification",
-        key: "limit",
-        text: "context window nearly full",
+        key: "private-notification-key",
+        text: urgentNotificationText,
         priority: "high",
-        session_id: "session",
-        uuid: "notif-high",
+        color: "private-notification-color",
+        timeout_ms: 4_500,
+        session_id: "private-sdk-session-id",
+        uuid: "private-sdk-notification-uuid",
       } as unknown as SDKMessage);
 
       for (const [state, uuid] of [
@@ -1722,10 +1727,13 @@ describe("ClaudeAdapterLive", () => {
       yield* Effect.yieldNow;
 
       const warnings = runtimeEvents.filter((event) => event.type === "runtime.warning");
-      assert.deepEqual(
-        warnings.map((event) => event.payload.message),
-        ["context window nearly full"],
-      );
+      assert.equal(warnings.length, 1);
+      const warning = warnings[0];
+      assert.equal(warning?.payload.message, urgentNotificationText);
+      assert.deepEqual(warning?.payload.detail, {
+        priority: "high",
+        timeoutMs: 4_500,
+      });
 
       const sessionStates = runtimeEvents
         .filter((event) => event.type === "runtime.state.changed")

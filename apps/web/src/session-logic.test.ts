@@ -689,16 +689,19 @@ describe("deriveWorkLogEntries", () => {
   });
 
   it("uses an urgent runtime warning message as the work-log label", () => {
+    const longWarning = `context window nearly full: ${"x".repeat(220)} RAW_SDK_NOTIFICATION_TEXT`;
+    const truncatedWarning = `${longWarning.slice(0, 177)}...`;
     const activities: OrchestrationSessionActivity[] = [
       makeActivity({
         id: "claude-context-warning",
         kind: "runtime.warning",
-        summary: "context window nearly full",
+        summary: truncatedWarning,
         tone: "info",
         payload: {
-          message: "context window nearly full",
+          message: truncatedWarning,
           detail: {
             priority: "high",
+            timeoutMs: 4_500,
           },
         },
       }),
@@ -710,10 +713,12 @@ describe("deriveWorkLogEntries", () => {
       {
         id: "claude-context-warning",
         createdAt: "2026-02-23T00:00:00.000Z",
-        label: "context window nearly full",
+        label: truncatedWarning,
         tone: "info",
       },
     ]);
+    expect(entries[0]?.label).toHaveLength(180);
+    expect(entries[0]?.label).not.toContain("RAW_SDK_NOTIFICATION_TEXT");
   });
 
   it("filters by turn id when provided", () => {
