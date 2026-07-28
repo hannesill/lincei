@@ -55,6 +55,10 @@ import { SkillCatalogService } from "./skills/SkillCatalogService.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
+import {
+  projectActivityEvent,
+  projectSessionDetailSnapshot,
+} from "./orchestration/ActivityPayloadProjection.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
@@ -799,6 +803,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ).pipe(
               Effect.map((events) => Array.from(events)),
               Effect.flatMap(enrichOrchestrationEvents),
+              Effect.map((events) => events.map(projectActivityEvent)),
               Effect.mapError(
                 (cause) =>
                   new OrchestrationReplayEventsError({
@@ -873,7 +878,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 ),
                 Stream.map((event) => ({
                   kind: "event" as const,
-                  event,
+                  event: projectActivityEvent(event),
                 })),
               );
 
@@ -917,10 +922,10 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               return Stream.concat(
                 Stream.make({
                   kind: "snapshot" as const,
-                  snapshot: {
+                  snapshot: projectSessionDetailSnapshot({
                     snapshotSequence,
                     session: sessionDetail.value,
-                  },
+                  }),
                 }),
                 bufferedLiveStream,
               );
