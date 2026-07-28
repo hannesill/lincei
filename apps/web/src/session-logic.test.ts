@@ -688,6 +688,34 @@ describe("deriveWorkLogEntries", () => {
     ]);
   });
 
+  it("uses an urgent runtime warning message as the work-log label", () => {
+    const activities: OrchestrationSessionActivity[] = [
+      makeActivity({
+        id: "claude-context-warning",
+        kind: "runtime.warning",
+        summary: "context window nearly full",
+        tone: "info",
+        payload: {
+          message: "context window nearly full",
+          detail: {
+            priority: "high",
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+
+    expect(entries).toEqual([
+      {
+        id: "claude-context-warning",
+        createdAt: "2026-02-23T00:00:00.000Z",
+        label: "context window nearly full",
+        tone: "info",
+      },
+    ]);
+  });
+
   it("filters by turn id when provided", () => {
     const activities: OrchestrationSessionActivity[] = [
       makeActivity({ id: "turn-1", turnId: "turn-1", summary: "Tool call", kind: "tool.started" }),

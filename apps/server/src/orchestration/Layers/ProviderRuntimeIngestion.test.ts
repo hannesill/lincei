@@ -2678,7 +2678,7 @@ describe("ProviderRuntimeIngestion", () => {
     expect(activityPayload?.message).toBe("runtime activity exploded");
   });
 
-  it("keeps the session running when a runtime.warning arrives during an active turn", async () => {
+  it("keeps the session running and preserves runtime.warning text during an active turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
 
@@ -2695,14 +2695,14 @@ describe("ProviderRuntimeIngestion", () => {
     harness.emit({
       type: "runtime.warning",
       eventId: asEventId("evt-warning-runtime"),
-      provider: ProviderDriverKind.make("codex"),
+      provider: ProviderDriverKind.make("claudeAgent"),
       createdAt: now,
       sessionId: asSessionId("session-1"),
       turnId: asTurnId("turn-warning"),
       payload: {
-        message: "Reconnecting... 2/5",
+        message: "context window nearly full",
         detail: {
-          willRetry: true,
+          priority: "high",
         },
       },
     });
@@ -2720,6 +2720,15 @@ describe("ProviderRuntimeIngestion", () => {
     expect(session.session?.status).toBe("running");
     expect(session.session?.activeTurnId).toBe("turn-warning");
     expect(session.session?.lastError).toBeNull();
+    const warning = session.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-warning-runtime",
+    );
+    const warningPayload =
+      warning?.payload && typeof warning.payload === "object"
+        ? (warning.payload as Record<string, unknown>)
+        : undefined;
+    expect(warning?.summary).toBe("context window nearly full");
+    expect(warningPayload?.message).toBe("context window nearly full");
   });
 
   it("maps session/session lifecycle and item.started into session/activity projections", async () => {
