@@ -32,6 +32,18 @@ describe("normalizeGitRemoteUrl", () => {
     ).toBe("gitlab.com/example-workspace/platform/example-app");
   });
 
+  it("preserves case-sensitive repository paths while normalizing hosts", () => {
+    expect(normalizeGitRemoteUrl("HTTPS://GITHUB.COM/Example-Workspace/Example-App.git")).toBe(
+      "github.com/Example-Workspace/Example-App",
+    );
+    expect(normalizeGitRemoteUrl("git@GITHUB.COM:Example-Workspace/Example-App.git")).toBe(
+      "github.com/Example-Workspace/Example-App",
+    );
+    expect(normalizeGitRemoteUrl("https://github.com/Example-Workspace/Example-App.git")).not.toBe(
+      normalizeGitRemoteUrl("https://github.com/example-workspace/example-app.git"),
+    );
+  });
+
   it("preserves non-default endpoint ports and transport identity", () => {
     expect(normalizeGitRemoteUrl("https://gitlab.company.com:8443/team/project.git")).toBe(
       "https://gitlab.company.com:8443/team/project",
