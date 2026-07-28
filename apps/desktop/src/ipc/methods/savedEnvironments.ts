@@ -1,4 +1,8 @@
-import { EnvironmentId, PersistedSavedEnvironmentRecordSchema } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  LegacyPersistedSavedEnvironmentRecordSchema,
+  PersistedSavedEnvironmentRecordSchema,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -7,7 +11,10 @@ import * as DesktopSavedEnvironments from "../../settings/DesktopSavedEnvironmen
 import * as IpcChannels from "../channels.ts";
 import { makeIpcMethod } from "../DesktopIpc.ts";
 
-const SavedEnvironmentRegistryPayload = Schema.Array(PersistedSavedEnvironmentRecordSchema);
+const SavedEnvironmentRegistryReadResult = Schema.Array(
+  LegacyPersistedSavedEnvironmentRecordSchema,
+);
+const SavedEnvironmentRegistryWritePayload = Schema.Array(PersistedSavedEnvironmentRecordSchema);
 const NonBlankString = Schema.String.check(
   Schema.makeFilter((value) =>
     value.trim().length > 0 ? undefined : "Expected a non-empty string",
@@ -22,7 +29,7 @@ const SetSavedEnvironmentSecretInput = Schema.Struct({
 export const getSavedEnvironmentRegistry = makeIpcMethod({
   channel: IpcChannels.GET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL,
   payload: Schema.Void,
-  result: SavedEnvironmentRegistryPayload,
+  result: SavedEnvironmentRegistryReadResult,
   handler: Effect.fn("desktop.ipc.savedEnvironments.getRegistry")(function* () {
     const savedEnvironments = yield* DesktopSavedEnvironments.DesktopSavedEnvironments;
     return yield* savedEnvironments.getRegistry;
@@ -31,7 +38,7 @@ export const getSavedEnvironmentRegistry = makeIpcMethod({
 
 export const setSavedEnvironmentRegistry = makeIpcMethod({
   channel: IpcChannels.SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL,
-  payload: SavedEnvironmentRegistryPayload,
+  payload: SavedEnvironmentRegistryWritePayload,
   result: Schema.Void,
   handler: Effect.fn("desktop.ipc.savedEnvironments.setRegistry")(function* (records) {
     const savedEnvironments = yield* DesktopSavedEnvironments.DesktopSavedEnvironments;

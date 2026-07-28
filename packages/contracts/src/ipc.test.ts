@@ -2,10 +2,16 @@ import { describe, expect, it } from "vitest";
 import * as Schema from "effect/Schema";
 
 import { EnvironmentId } from "./baseSchemas.ts";
-import { PersistedSavedEnvironmentRecordSchema } from "./ipc.ts";
+import {
+  LegacyPersistedSavedEnvironmentRecordSchema,
+  PersistedSavedEnvironmentRecordSchema,
+} from "./ipc.ts";
 
 const decodePersistedSavedEnvironmentRecord = Schema.decodeUnknownSync(
   PersistedSavedEnvironmentRecordSchema,
+);
+const decodeLegacyPersistedSavedEnvironmentRecord = Schema.decodeUnknownSync(
+  LegacyPersistedSavedEnvironmentRecordSchema,
 );
 
 const makeRecord = (overrides?: {
@@ -21,6 +27,16 @@ const makeRecord = (overrides?: {
 });
 
 describe("PersistedSavedEnvironmentRecordSchema", () => {
+  it("keeps unsupported legacy targets decodable at read-only migration boundaries", () => {
+    const legacyRecord = makeRecord({
+      httpBaseUrl: "ftp://remote.example.test/",
+      wsBaseUrl: "file:///tmp/lincei.sock",
+    });
+
+    expect(decodeLegacyPersistedSavedEnvironmentRecord(legacyRecord)).toEqual(legacyRecord);
+    expect(() => decodePersistedSavedEnvironmentRecord(legacyRecord)).toThrow();
+  });
+
   it("accepts aligned HTTP and WebSocket remote endpoints", () => {
     expect(decodePersistedSavedEnvironmentRecord(makeRecord()).environmentId).toBe(
       "environment-remote",
