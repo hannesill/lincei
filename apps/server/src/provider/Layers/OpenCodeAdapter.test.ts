@@ -363,6 +363,26 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 
+  it.effect("propagates a durable-session lookup with no session payload", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+
+      const error = yield* adapter
+        .startSession({
+          provider: ProviderDriverKind.make("opencode"),
+          sessionId: asSessionId("session-opencode-empty-lookup"),
+          runtimeMode: "full-access",
+          resumeCursor: { schemaVersion: 1, sessionId: "ses_empty" },
+        })
+        .pipe(Effect.flip);
+
+      assert.equal(error._tag, "ProviderAdapterProcessError");
+      assert.equal(error.detail, "OpenCode session.get returned no session payload.");
+      assert.deepEqual(runtimeMock.state.sessionGetIds, ["ses_empty"]);
+      assert.deepEqual(runtimeMock.state.sessionCreateUrls, []);
+    }),
+  );
+
   it.effect("propagates transient durable-session lookup failures without resetting context", () =>
     Effect.gen(function* () {
       const adapter = yield* OpenCodeAdapter;
