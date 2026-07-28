@@ -251,6 +251,8 @@
   ],
   "patchedDependencies": {
     "effect@4.0.0-beta.73": "patches/effect@4.0.0-beta.73.patch",
+    "@effect/platform-bun@4.0.0-beta.73": "patches/@effect__platform-bun@4.0.0-beta.73.patch",
+    "@effect/platform-node@4.0.0-beta.73": "patches/@effect__platform-node@4.0.0-beta.73.patch",
   },
   "overrides": {
     "@effect/atom-react": "catalog:",

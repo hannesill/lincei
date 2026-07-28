@@ -1,0 +1,19 @@
+diff --git a/dist/NodeHttpServer.js b/dist/NodeHttpServer.js
+index 8955d600a92408f2f433d5406d878607e905e0b5..8543c30fb2c3933d2f277f653d0021db0dd7ae13 100644
+--- a/dist/NodeHttpServer.js
++++ b/dist/NodeHttpServer.js
+@@ -102,6 +102,13 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (evaluate, options)
+   const address = server.address();
+   const wss = yield* Effect.acquireRelease(Effect.sync(() => new NodeWS.WebSocketServer({
+-    noServer: true
++    noServer: true,
++    // Patch: upstreamed as https://github.com/Effect-TS/effect/pull/6691
++    // (available as a layer option in >= 4.0.0-beta.103). On upgrade,
++    // remove this beta.73 patch and configure the option in the server.
++    // Negotiate permessage-deflate only when clients offer it. Context
++    // takeover remains enabled so one compression window is shared across
++    // frames; with context takeover, ws does not apply its size threshold.
++    perMessageDeflate: true
+   })), wss => Effect.callback(resume => {
+     wss.close(() => resume(Effect.void));
+   })).pipe(Scope.provide(scope), Effect.cached);
