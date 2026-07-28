@@ -132,4 +132,26 @@ describe("deriveOrchestrationBatchEffects", () => {
     expect(effects.clearDeletedSessionIds).toEqual([]);
     expect(effects.removeTerminalStateSessionIds).toEqual([]);
   });
+
+  it("does not reuse archive cleanup for settled or snoozed lifecycle events", () => {
+    const sessionId = SessionId.make("session-sidebar-lifecycle");
+    const effects = deriveOrchestrationBatchEffects([
+      makeEvent("session.settled", {
+        sessionId,
+        settledAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+      makeEvent("session.snoozed", {
+        sessionId,
+        snoozedUntil: "2026-02-28T00:00:00.000Z",
+        snoozedAt: "2026-02-27T00:00:02.000Z",
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      }),
+    ]);
+
+    expect(effects.promoteDraftSessionIds).toEqual([]);
+    expect(effects.clearDeletedSessionIds).toEqual([]);
+    expect(effects.removeTerminalStateSessionIds).toEqual([]);
+    expect(effects.needsProviderInvalidation).toBe(false);
+  });
 });

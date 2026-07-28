@@ -359,6 +359,10 @@ export const OrchestrationSession = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   settledAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  // Snooze is an overlay on the active lifecycle. It suppresses a session
+  // from the inbox without archiving or settling it.
+  snoozedUntil: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  snoozedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -415,6 +419,8 @@ export const OrchestrationSessionShell = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   settledAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  snoozedUntil: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  snoozedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   session: Schema.NullOr(OrchestrationProviderRuntime),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   hasPendingApprovals: Schema.Boolean,
@@ -551,6 +557,21 @@ const SessionUnsettleCommand = Schema.Struct({
   sessionId: SessionId,
   // Activity resets are server-decided events; clients may only request the
   // explicit keep-active override.
+  reason: Schema.Literal("user"),
+});
+
+const SessionSnoozeCommand = Schema.Struct({
+  type: Schema.Literal("session.snooze"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  snoozedUntil: IsoDateTime,
+});
+
+const SessionUnsnoozeCommand = Schema.Struct({
+  type: Schema.Literal("session.unsnooze"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  // Timer wakes are derived and activity wakes are server-decided events.
   reason: Schema.Literal("user"),
 });
 
@@ -710,6 +731,8 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   SessionUnarchiveCommand,
   SessionSettleCommand,
   SessionUnsettleCommand,
+  SessionSnoozeCommand,
+  SessionUnsnoozeCommand,
   SessionMetaUpdateCommand,
   SessionRuntimeModeSetCommand,
   SessionInteractionModeSetCommand,
@@ -733,6 +756,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   SessionUnarchiveCommand,
   SessionSettleCommand,
   SessionUnsettleCommand,
+  SessionSnoozeCommand,
+  SessionUnsnoozeCommand,
   SessionMetaUpdateCommand,
   SessionRuntimeModeSetCommand,
   SessionInteractionModeSetCommand,
@@ -852,6 +877,8 @@ export const OrchestrationEventType = Schema.Literals([
   "session.unarchived",
   "session.settled",
   "session.unsettled",
+  "session.snoozed",
+  "session.unsnoozed",
   "session.meta-updated",
   "session.runtime-mode-set",
   "session.interaction-mode-set",
@@ -946,6 +973,19 @@ export const SessionSettledPayload = Schema.Struct({
 });
 
 export const SessionUnsettledPayload = Schema.Struct({
+  sessionId: SessionId,
+  reason: Schema.Literals(["user", "activity"]),
+  updatedAt: IsoDateTime,
+});
+
+export const SessionSnoozedPayload = Schema.Struct({
+  sessionId: SessionId,
+  snoozedUntil: IsoDateTime,
+  snoozedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const SessionUnsnoozedPayload = Schema.Struct({
   sessionId: SessionId,
   reason: Schema.Literals(["user", "activity"]),
   updatedAt: IsoDateTime,
@@ -1134,6 +1174,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("session.unsettled"),
     payload: SessionUnsettledPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.snoozed"),
+    payload: SessionSnoozedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.unsnoozed"),
+    payload: SessionUnsnoozedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

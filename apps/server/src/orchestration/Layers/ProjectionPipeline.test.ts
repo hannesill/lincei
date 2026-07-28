@@ -285,7 +285,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 
-  it.effect("persists settled state without mutating archived_at", () =>
+  it.effect("persists settled and snoozed state without mutating archived_at", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
@@ -295,10 +295,14 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const createdAt = "2026-07-28T00:00:00.000Z";
       const archivedAt = "2026-07-28T00:01:00.000Z";
       const settledAt = "2026-07-28T00:02:00.000Z";
+      const snoozedAt = "2026-07-28T00:03:00.000Z";
+      const snoozedUntil = "2026-07-29T00:00:00.000Z";
       type LifecycleRow = {
         readonly archivedAt: string | null;
         readonly settledOverride: string | null;
         readonly settledAt: string | null;
+        readonly snoozedUntil: string | null;
+        readonly snoozedAt: string | null;
       };
 
       const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
@@ -389,7 +393,9 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         SELECT
           archived_at AS "archivedAt",
           settled_override AS "settledOverride",
-          settled_at AS "settledAt"
+          settled_at AS "settledAt",
+          snoozed_until AS "snoozedUntil",
+          snoozed_at AS "snoozedAt"
         FROM projection_sessions
         WHERE session_id = ${sessionId}
       `;
@@ -398,6 +404,83 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           archivedAt,
           settledOverride: "settled",
           settledAt,
+          snoozedUntil: null,
+          snoozedAt: null,
+        },
+      ]);
+
+      yield* appendAndProject({
+        type: "session.snoozed",
+        eventId: EventId.make("evt-snoozed"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: snoozedAt,
+        commandId: CommandId.make("cmd-snoozed"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-snoozed"),
+        metadata: {},
+        payload: {
+          sessionId,
+          snoozedUntil,
+          snoozedAt,
+          updatedAt: snoozedAt,
+        },
+      });
+
+      rows = yield* sql<LifecycleRow>`
+        SELECT
+          archived_at AS "archivedAt",
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt",
+          snoozed_until AS "snoozedUntil",
+          snoozed_at AS "snoozedAt"
+        FROM projection_sessions
+        WHERE session_id = ${sessionId}
+      `;
+      assert.deepEqual(rows, [
+        {
+          archivedAt,
+          settledOverride: "settled",
+          settledAt,
+          snoozedUntil,
+          snoozedAt,
+        },
+      ]);
+
+      yield* appendAndProject({
+        type: "session.unsnoozed",
+        eventId: EventId.make("evt-unsnoozed"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-07-28T00:04:00.000Z",
+        commandId: CommandId.make("cmd-unsnoozed"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-unsnoozed"),
+        metadata: {},
+        payload: {
+          sessionId,
+          reason: "user",
+          updatedAt: "2026-07-28T00:04:00.000Z",
+        },
+      });
+
+      rows = yield* sql<LifecycleRow>`
+        SELECT
+          archived_at AS "archivedAt",
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt",
+          snoozed_until AS "snoozedUntil",
+          snoozed_at AS "snoozedAt"
+        FROM projection_sessions
+        WHERE session_id = ${sessionId}
+      `;
+      assert.deepEqual(rows, [
+        {
+          archivedAt,
+          settledOverride: "settled",
+          settledAt,
+          snoozedUntil: null,
+          snoozedAt: null,
         },
       ]);
 
@@ -406,7 +489,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         eventId: EventId.make("evt-unsettled"),
         aggregateKind: "session",
         aggregateId: sessionId,
-        occurredAt: "2026-07-28T00:03:00.000Z",
+        occurredAt: "2026-07-28T00:05:00.000Z",
         commandId: CommandId.make("cmd-unsettled"),
         causationEventId: null,
         correlationId: CorrelationId.make("cmd-unsettled"),
@@ -414,7 +497,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         payload: {
           sessionId,
           reason: "user",
-          updatedAt: "2026-07-28T00:03:00.000Z",
+          updatedAt: "2026-07-28T00:05:00.000Z",
         },
       });
 
@@ -422,7 +505,9 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         SELECT
           archived_at AS "archivedAt",
           settled_override AS "settledOverride",
-          settled_at AS "settledAt"
+          settled_at AS "settledAt",
+          snoozed_until AS "snoozedUntil",
+          snoozed_at AS "snoozedAt"
         FROM projection_sessions
         WHERE session_id = ${sessionId}
       `;
@@ -431,6 +516,8 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           archivedAt,
           settledOverride: "active",
           settledAt: null,
+          snoozedUntil: null,
+          snoozedAt: null,
         },
       ]);
     }),

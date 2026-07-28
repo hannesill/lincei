@@ -29,6 +29,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     latestTurn: null,
     branch: null,
     worktreePath: null,

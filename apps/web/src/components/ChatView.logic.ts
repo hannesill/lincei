@@ -46,6 +46,8 @@ export function buildLocalDraftSession(
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     latestTurn: null,
     branch: draftSession.branch,
     worktreePath: draftSession.worktreePath,

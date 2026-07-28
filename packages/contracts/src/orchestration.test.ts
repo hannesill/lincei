@@ -684,7 +684,7 @@ it.effect("preserves proposed plan implementation metadata when present", () =>
   }),
 );
 
-it.effect("decodes settled lifecycle commands and activity reset events", () =>
+it.effect("decodes settled and snoozed lifecycle commands and activity reset events", () =>
   Effect.gen(function* () {
     const settle = yield* decodeOrchestrationCommand({
       type: "session.settle",
@@ -701,7 +701,23 @@ it.effect("decodes settled lifecycle commands and activity reset events", () =>
     });
     assert.strictEqual(unsettle.type, "session.unsettle");
 
-    const event = yield* decodeOrchestrationEvent({
+    const snooze = yield* decodeOrchestrationCommand({
+      type: "session.snooze",
+      commandId: "cmd-snooze",
+      sessionId: "session-1",
+      snoozedUntil: "2026-07-29T00:00:00.000Z",
+    });
+    assert.strictEqual(snooze.type, "session.snooze");
+
+    const unsnooze = yield* decodeOrchestrationCommand({
+      type: "session.unsnooze",
+      commandId: "cmd-unsnooze",
+      sessionId: "session-1",
+      reason: "user",
+    });
+    assert.strictEqual(unsnooze.type, "session.unsnooze");
+
+    const unsettledEvent = yield* decodeOrchestrationEvent({
       sequence: 1,
       eventId: "event-unsettled",
       aggregateKind: "session",
@@ -718,14 +734,36 @@ it.effect("decodes settled lifecycle commands and activity reset events", () =>
         updatedAt: "2026-07-28T00:00:00.000Z",
       },
     });
-    assert.strictEqual(event.type, "session.unsettled");
-    if (event.type === "session.unsettled") {
-      assert.strictEqual(event.payload.reason, "activity");
+    assert.strictEqual(unsettledEvent.type, "session.unsettled");
+    if (unsettledEvent.type === "session.unsettled") {
+      assert.strictEqual(unsettledEvent.payload.reason, "activity");
+    }
+
+    const unsnoozedEvent = yield* decodeOrchestrationEvent({
+      sequence: 2,
+      eventId: "event-unsnoozed",
+      aggregateKind: "session",
+      aggregateId: "session-1",
+      occurredAt: "2026-07-28T00:00:01.000Z",
+      commandId: "cmd-user-activity",
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      type: "session.unsnoozed",
+      payload: {
+        sessionId: "session-1",
+        reason: "activity",
+        updatedAt: "2026-07-28T00:00:01.000Z",
+      },
+    });
+    assert.strictEqual(unsnoozedEvent.type, "session.unsnoozed");
+    if (unsnoozedEvent.type === "session.unsnoozed") {
+      assert.strictEqual(unsnoozedEvent.payload.reason, "activity");
     }
   }),
 );
 
-it.effect("defaults settled lifecycle state when decoding historical sessions", () =>
+it.effect("defaults settled and snoozed lifecycle state when decoding historical sessions", () =>
   Effect.gen(function* () {
     const session = yield* decodeOrchestrationSession({
       id: "session-1",
@@ -752,6 +790,8 @@ it.effect("defaults settled lifecycle state when decoding historical sessions", 
     });
     assert.strictEqual(session.settledOverride, null);
     assert.strictEqual(session.settledAt, null);
+    assert.strictEqual(session.snoozedUntil, null);
+    assert.strictEqual(session.snoozedAt, null);
   }),
 );
 

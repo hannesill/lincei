@@ -612,6 +612,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             archivedAt: null,
             settledOverride: null,
             settledAt: null,
+            snoozedUntil: null,
+            snoozedAt: null,
             latestUserMessageAt: null,
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
@@ -677,6 +679,38 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             settledOverride: event.payload.reason === "user" ? "active" : null,
             settledAt: null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "session.snoozed": {
+          const existingRow = yield* projectionSessionRepository.getById({
+            sessionId: event.payload.sessionId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionSessionRepository.upsert({
+            ...existingRow.value,
+            snoozedUntil: event.payload.snoozedUntil,
+            snoozedAt: event.payload.snoozedAt,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "session.unsnoozed": {
+          const existingRow = yield* projectionSessionRepository.getById({
+            sessionId: event.payload.sessionId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionSessionRepository.upsert({
+            ...existingRow.value,
+            snoozedUntil: null,
+            snoozedAt: null,
             updatedAt: event.payload.updatedAt,
           });
           return;

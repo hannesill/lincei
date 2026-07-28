@@ -130,6 +130,8 @@ function makeSessionShellSnapshot(params: {
         archivedAt: null,
         settledOverride: null,
         settledAt: null,
+        snoozedUntil: null,
+        snoozedAt: null,
         session: params.sessionStatus
           ? {
               sessionId: params.sessionId,

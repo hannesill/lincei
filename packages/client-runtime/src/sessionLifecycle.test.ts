@@ -31,6 +31,8 @@ function makeShell(overrides: Partial<SessionLifecycleShell> = {}): SessionLifec
     hasPendingUserInput: false,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     ...overrides,
   };
 }
