@@ -1,7 +1,9 @@
 import { useEffect, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import SessionSidebar from "./Sidebar";
+import SidebarV2 from "./SidebarV2";
+import { resolveSidebarImplementation } from "./AppSidebarLayout.logic";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { resolveShortcutCommand } from "../shortcuts";
 import { useServerShortcuts } from "../rpc/serverState";
@@ -10,6 +12,7 @@ import {
   clearShortcutModifierState,
   syncShortcutModifierStateFromKeyboardEvent,
 } from "../shortcutModifierState";
+import { useSettings } from "../hooks/useSettings";
 
 function SidebarGlobalShortcuts() {
   const { toggleSidebar } = useSidebar();
@@ -43,6 +46,12 @@ function SidebarGlobalShortcuts() {
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const sidebarV1RollbackEnabled = useSettings((settings) => settings.sidebarV1RollbackEnabled);
+  const sidebarImplementation = resolveSidebarImplementation({
+    pathname,
+    sidebarV1RollbackEnabled,
+  });
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -91,7 +100,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         collapsible="offcanvas"
         className="border-r border-border bg-card text-foreground"
       >
-        <SessionSidebar />
+        {sidebarImplementation === "v1" ? <SessionSidebar /> : <SidebarV2 />}
         <SidebarRail />
       </Sidebar>
       {children}
