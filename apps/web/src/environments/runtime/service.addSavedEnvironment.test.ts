@@ -364,7 +364,7 @@ describe("addSavedEnvironment", () => {
     await resetEnvironmentServiceForTests();
   });
 
-  it("retries desktop ssh session refresh when the forwarded endpoint returns ssh_http 401", async () => {
+  it("retries desktop ssh session refresh when Electron wraps ssh_http 401", async () => {
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(true);
     mockBootstrapSshBearerSession
       .mockResolvedValueOnce({
@@ -376,7 +376,11 @@ describe("addSavedEnvironment", () => {
         role: "owner",
       });
     mockFetchSshSessionState
-      .mockRejectedValueOnce(new Error("[ssh_http:401] Unauthorized"))
+      .mockRejectedValueOnce(
+        new Error(
+          "Error invoking remote method 'desktop:fetch-ssh-session-state': Error: [ssh_http:401] Unauthorized",
+        ),
+      )
       .mockResolvedValueOnce({
         authenticated: true,
         role: "owner",
