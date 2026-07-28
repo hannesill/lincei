@@ -25,7 +25,7 @@ describe("parseModelsCliOutput", () => {
 
     const parsed = parseModelsCliOutput(stdout);
 
-    assert.deepEqual([...parsed.connected].sort(), ["anthropic", "openai"]);
+    assert.deepEqual(parsed.connected.toSorted(), ["anthropic", "openai"]);
     assert.equal(
       parsed.providers.get("anthropic")?.models["claude-sonnet-4-5"]?.name,
       "Claude Sonnet 4.5",
