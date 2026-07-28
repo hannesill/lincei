@@ -89,6 +89,42 @@ export const runOpenCodeSdk = <A>(
       new OpenCodeRuntimeError({ operation, detail: openCodeRuntimeErrorDetail(cause), cause }),
   }).pipe(Effect.withSpan(`opencode.${operation}`));
 
+/**
+ * OpenCode SDK 1.3.15's generated `session.update` serializer predates the
+ * session permission field and silently drops it. Use the same configured SDK
+ * transport so base URL, directory, authentication, and throw-on-error
+ * behavior remain intact until the generated type catches up.
+ */
+export function updateOpenCodeSessionPermissions(
+  client: OpencodeClient,
+  input: {
+    readonly sessionID: string;
+    readonly permission: PermissionRuleset;
+  },
+): Promise<unknown> {
+  const transport = (
+    client.session as unknown as {
+      readonly client?: {
+        readonly patch?: (options: {
+          readonly url: string;
+          readonly path: { readonly sessionID: string };
+          readonly body: { readonly permission: PermissionRuleset };
+          readonly headers: { readonly "Content-Type": string };
+        }) => Promise<unknown>;
+      };
+    }
+  ).client;
+  if (!transport?.patch) {
+    return Promise.reject(new Error("OpenCode SDK session transport is unavailable."));
+  }
+  return transport.patch({
+    url: "/session/{sessionID}",
+    path: { sessionID: input.sessionID },
+    body: { permission: input.permission },
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export interface OpenCodeCommandResult {
   readonly stdout: string;
   readonly stderr: string;

@@ -17,6 +17,8 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
@@ -48,12 +50,97 @@ import {
   toOpenCodePermissionReply,
   toOpenCodeQuestionAnswers,
   type OpenCodeServerConnection,
+  updateOpenCodeSessionPermissions,
 } from "../opencodeRuntime.ts";
 import * as Option from "effect/Option";
 import { buildLinceiSessionInstructionFallback } from "../LinceiAgentInstructions.ts";
 import { makeLinceiSessionEnvironment } from "../LinceiAmbientEnvironment.ts";
 
 const PROVIDER = ProviderDriverKind.make("opencode");
+const OPENCODE_RESUME_VERSION = 1 as const;
+
+function parseOpenCodeResume(raw: unknown): { readonly sessionId: string } | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return undefined;
+  }
+  const record = raw as Record<string, unknown>;
+  if (record.schemaVersion !== OPENCODE_RESUME_VERSION) {
+    return undefined;
+  }
+  if (typeof record.sessionId !== "string" || record.sessionId.trim().length === 0) {
+    return undefined;
+  }
+  return { sessionId: record.sessionId.trim() };
+}
+
+/**
+ * Only a structured 404 or exact NotFoundError may replace a durable
+ * OpenCode session with a fresh one. Other failures must propagate so a
+ * transient transport or authentication failure cannot erase context.
+ */
+export function isOpenCodeNotFound(cause: unknown): boolean {
+  const seen = new Set<unknown>();
+  const queue: Array<unknown> = [cause];
+  for (let steps = 0; queue.length > 0 && steps < 32; steps += 1) {
+    const node = queue.shift();
+    if (node === null || typeof node !== "object" || seen.has(node)) {
+      continue;
+    }
+    seen.add(node);
+    const record = node as Record<string, unknown>;
+
+    const response = record.response;
+    const statuses = [
+      record.status,
+      record.statusCode,
+      response !== null && typeof response === "object"
+        ? (response as { readonly status?: unknown }).status
+        : undefined,
+    ].filter((status): status is number => typeof status === "number");
+    if (statuses.includes(404)) {
+      return true;
+    }
+    if (statuses.length > 0) {
+      continue;
+    }
+
+    const name = record.name;
+    if (typeof name === "string" && name.toLowerCase() === "notfounderror") {
+      return true;
+    }
+
+    for (const key of ["cause", "body", "error", "data"] as const) {
+      if (record[key] !== undefined) {
+        queue.push(record[key]);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Resolve equivalent path spellings and symlinks before deciding whether an
+ * adopted OpenCode session must be forked into a new working directory.
+ */
+export function isSameOpenCodeDirectory(
+  fileSystem: FileSystem.FileSystem,
+  path: Path.Path,
+  left: string,
+  right: string,
+): Effect.Effect<boolean> {
+  const lexicalLeft = path.resolve(left);
+  const lexicalRight = path.resolve(right);
+  if (lexicalLeft === lexicalRight) {
+    return Effect.succeed(true);
+  }
+  const canonicalize = (lexical: string) =>
+    fileSystem.realPath(lexical).pipe(Effect.orElseSucceed(() => lexical));
+  return Effect.zipWith(
+    canonicalize(lexicalLeft),
+    canonicalize(lexicalRight),
+    (canonicalLeft, canonicalRight) => canonicalLeft === canonicalRight,
+  );
+}
 
 interface OpenCodeTurnSnapshot {
   readonly id: TurnId;
@@ -438,6 +525,10 @@ export function makeOpenCodeAdapter(
     const serverSettings = yield* ServerSettingsService;
     const openCodeRuntime = yield* OpenCodeRuntime;
     const crypto = yield* Crypto.Crypto;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const sameDirectory = (left: string, right: string) =>
+      isSameOpenCodeDirectory(fileSystem, path, left, right);
     const nativeEventLogger =
       options?.nativeEventLogger ??
       (options?.nativeEventLogPath !== undefined
@@ -1057,6 +1148,7 @@ export function makeOpenCodeAdapter(
         const serverUrl = openCodeSettings.serverUrl;
         const serverPassword = openCodeSettings.serverPassword;
         const directory = input.cwd ?? serverConfig.cwd;
+        const resumeSessionId = parseOpenCodeResume(input.resumeCursor)?.sessionId;
         const existing = sessions.get(input.sessionId);
         if (existing) {
           yield* stopOpenCodeContext(existing);
@@ -1085,23 +1177,82 @@ export function makeOpenCodeAdapter(
                 directory,
                 ...(server.external && serverPassword ? { serverPassword } : {}),
               });
-              const openCodeSession = yield* runOpenCodeSdk("session.create", () =>
-                client.session.create({
-                  title: `Lincei ${input.sessionId}`,
-                  permission: buildOpenCodePermissionRules(input.runtimeMode),
-                }),
-              );
-              if (!openCodeSession.data) {
-                return yield* new OpenCodeRuntimeError({
-                  operation: "session.create",
-                  detail: "OpenCode session.create returned no session payload.",
-                });
-              }
+              const resolved = yield* Effect.gen(function* () {
+                const adopted = resumeSessionId
+                  ? yield* runOpenCodeSdk("session.get", () =>
+                      client.session.get({ sessionID: resumeSessionId }),
+                    ).pipe(
+                      Effect.map((response) => response.data),
+                      Effect.catchIf(
+                        (cause) => isOpenCodeNotFound(cause),
+                        () => Effect.void,
+                      ),
+                    )
+                  : undefined;
+
+                const reusable =
+                  adopted &&
+                  (!adopted.directory || (yield* sameDirectory(adopted.directory, directory)))
+                    ? adopted
+                    : undefined;
+                if (reusable) {
+                  yield* runOpenCodeSdk("session.update", () =>
+                    updateOpenCodeSessionPermissions(client, {
+                      sessionID: reusable.id,
+                      permission: buildOpenCodePermissionRules(input.runtimeMode),
+                    }),
+                  );
+                  return { openCodeSession: reusable, created: false };
+                }
+
+                if (adopted) {
+                  yield* Effect.logInfo(
+                    `OpenCode session '${adopted.id}' was created under a different working directory; forking into '${directory}' to preserve conversation history.`,
+                  );
+                  const forkedSession = yield* runOpenCodeSdk("session.fork", () =>
+                    client.session.fork({ sessionID: adopted.id, directory }),
+                  );
+                  const forked = forkedSession.data;
+                  if (!forked) {
+                    return yield* new OpenCodeRuntimeError({
+                      operation: "session.fork",
+                      detail: "OpenCode session.fork returned no session payload.",
+                    });
+                  }
+                  yield* runOpenCodeSdk("session.update", () =>
+                    updateOpenCodeSessionPermissions(client, {
+                      sessionID: forked.id,
+                      permission: buildOpenCodePermissionRules(input.runtimeMode),
+                    }),
+                  );
+                  return { openCodeSession: forked, created: true };
+                }
+
+                if (resumeSessionId) {
+                  yield* Effect.logWarning(
+                    `OpenCode session '${resumeSessionId}' no longer exists; starting a fresh session.`,
+                  );
+                }
+                const createdSession = yield* runOpenCodeSdk("session.create", () =>
+                  client.session.create({
+                    title: `Lincei ${input.sessionId}`,
+                    permission: buildOpenCodePermissionRules(input.runtimeMode),
+                  }),
+                );
+                if (!createdSession.data) {
+                  return yield* new OpenCodeRuntimeError({
+                    operation: "session.create",
+                    detail: "OpenCode session.create returned no session payload.",
+                  });
+                }
+                return { openCodeSession: createdSession.data, created: true };
+              });
               return {
                 sessionScope,
                 server,
                 client,
-                openCodeSession: openCodeSession.data,
+                openCodeSession: resolved.openCodeSession,
+                created: resolved.created,
               };
             }).pipe(Effect.provideService(Scope.Scope, sessionScope)),
           );
@@ -1116,13 +1267,15 @@ export function makeOpenCodeAdapter(
         // and already inserted a session while we were awaiting async work.
         const raceWinner = sessions.get(input.sessionId);
         if (raceWinner) {
-          // Another call won the race – clean up the session we just created
-          // (including the remote SDK session) and return the existing one.
-          yield* runOpenCodeSdk("session.abort", () =>
-            started.client.session.abort({
-              sessionID: started.openCodeSession.id,
-            }),
-          ).pipe(Effect.ignore);
+          // A resumed session is shared upstream state, so only abort an
+          // upstream session created by this losing start attempt.
+          if (started.created) {
+            yield* runOpenCodeSdk("session.abort", () =>
+              started.client.session.abort({
+                sessionID: started.openCodeSession.id,
+              }),
+            ).pipe(Effect.ignore);
+          }
           yield* Scope.close(started.sessionScope, Exit.void).pipe(Effect.ignore);
           return raceWinner.session;
         }
@@ -1136,6 +1289,10 @@ export function makeOpenCodeAdapter(
           cwd: directory,
           ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
           sessionId: input.sessionId,
+          resumeCursor: {
+            schemaVersion: OPENCODE_RESUME_VERSION,
+            sessionId: started.openCodeSession.id,
+          },
           createdAt,
           updatedAt: createdAt,
         };
@@ -1309,6 +1466,9 @@ export function makeOpenCodeAdapter(
       return {
         sessionId: input.sessionId,
         turnId,
+        ...(context.session.resumeCursor !== undefined
+          ? { resumeCursor: context.session.resumeCursor }
+          : {}),
       };
     });
 
