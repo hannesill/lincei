@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Scope from "effect/Scope";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { expect } from "vitest";
+import { expect, test } from "vitest";
 import type {
   GitActionProgressEvent,
   GitPreparePullRequestSessionInput,
@@ -20,7 +20,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { GitCommandError, TextGenerationError } from "@t3tools/contracts";
-import { type GitManagerShape } from "./GitManager.ts";
+import { type GitManagerShape, makeBoundedPrLookupEpochs } from "./GitManager.ts";
 import {
   GitHubCliError,
   type GitHubCliShape,
@@ -702,6 +702,27 @@ function makeManager(input?: {
 }
 
 const asSessionId = (sessionId: string) => sessionId as SessionId;
+
+test("PR lookup epochs stay bounded without reusing evicted generations", () => {
+  const epochs = makeBoundedPrLookupEpochs(2);
+  const firstEpoch = epochs.get("first");
+  const secondEpoch = epochs.get("second");
+
+  expect(epochs.size()).toBe(2);
+  expect(epochs.get("first")).toBe(firstEpoch);
+
+  const thirdEpoch = epochs.get("third");
+  expect(epochs.size()).toBe(2);
+  expect(epochs.get("first")).toBe(firstEpoch);
+
+  const revisitedSecondEpoch = epochs.get("second");
+  expect(revisitedSecondEpoch).toBeGreaterThan(thirdEpoch);
+  expect(revisitedSecondEpoch).not.toBe(secondEpoch);
+  expect(epochs.size()).toBe(2);
+
+  expect(epochs.bump("second")).toBeGreaterThan(revisitedSecondEpoch);
+  expect(epochs.size()).toBe(2);
+});
 
 const GitManagerTestLayer = GitVcsDriver.layer.pipe(
   Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-git-manager-test-" })),
@@ -1533,6 +1554,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         "origin",
         "https://github.com:8443/example-workspace/example-app.git",
       ]);
+      yield* runGit(repoDir, ["branch", "--unset-upstream"]);
 
       const existingPr = {
         number: 217,
