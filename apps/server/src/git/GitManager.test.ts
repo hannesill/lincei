@@ -1519,6 +1519,56 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status does not reuse a PR after only the remote endpoint port changes", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("example-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-port-repointed"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-port-repointed"]);
+      yield* runGit(repoDir, [
+        "remote",
+        "set-url",
+        "origin",
+        "https://github.com:8443/example-workspace/example-app.git",
+      ]);
+
+      const existingPr = {
+        number: 217,
+        title: "Old endpoint PR",
+        url: "https://github.com/example-workspace/example-app/pull/217",
+        baseRefName: "main",
+        headRefName: "feature/pr-port-repointed",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub API rate limited the PR lookup.",
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(217);
+
+      yield* runGit(repoDir, [
+        "remote",
+        "set-url",
+        "origin",
+        "https://github.com:9443/example-workspace/example-app.git",
+      ]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr).toBeNull();
+    }),
+  );
+
   it.effect("creates a commit when working tree is dirty", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
