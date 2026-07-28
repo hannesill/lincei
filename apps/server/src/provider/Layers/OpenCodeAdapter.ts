@@ -73,6 +73,23 @@ function parseOpenCodeResume(raw: unknown): { readonly sessionId: string } | und
   return { sessionId: record.sessionId.trim() };
 }
 
+type OpenCodeSessionPayload = {
+  readonly id: string;
+  readonly directory?: string;
+};
+
+function isOpenCodeSessionPayload(payload: unknown): payload is OpenCodeSessionPayload {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return false;
+  }
+  const record = payload as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    record.id.trim().length > 0 &&
+    (record.directory === undefined || typeof record.directory === "string")
+  );
+}
+
 /**
  * Only a structured 404 or exact NotFoundError may replace a durable
  * OpenCode session with a fresh one. Other failures must propagate so a
@@ -1183,7 +1200,7 @@ export function makeOpenCodeAdapter(
                       client.session.get({ sessionID: resumeSessionId }),
                     ).pipe(
                       Effect.flatMap((response) =>
-                        response.data
+                        isOpenCodeSessionPayload(response.data)
                           ? Effect.succeed(response.data)
                           : Effect.fail(
                               new OpenCodeRuntimeError({
