@@ -597,6 +597,31 @@ function runtimeEventToActivities(
       if (!isToolLifecycleItemType(event.payload.itemType)) {
         return [];
       }
+      if (event.payload.status === "declined") {
+        const summary =
+          event.payload.itemType === "command_execution"
+            ? "Command denied"
+            : `${event.payload.title ?? "Tool"} denied`;
+        const detail = event.payload.detail ? truncateDetail(event.payload.detail) : undefined;
+        return [
+          {
+            id: event.eventId,
+            createdAt: event.createdAt,
+            tone: "error",
+            kind: "tool.denied",
+            summary,
+            payload: {
+              message: detail ?? summary,
+              itemType: event.payload.itemType,
+              status: event.payload.status,
+              ...(detail ? { detail } : {}),
+              ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
+            },
+            turnId: toTurnId(event.turnId) ?? null,
+            ...maybeSequence,
+          },
+        ];
+      }
       return [
         {
           id: event.eventId,

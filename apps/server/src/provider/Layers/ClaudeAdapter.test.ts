@@ -1754,6 +1754,7 @@ describe("ClaudeAdapterLive", () => {
       if (denial?.type === "item.completed") {
         assert.equal(denial.payload.itemType, "command_execution");
         assert.equal(denial.payload.status, "declined");
+        assert.equal(denial.payload.title, "Command run");
         assert.equal(denial.payload.detail, "Blocked by policy");
       }
 

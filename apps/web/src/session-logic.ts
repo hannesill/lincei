@@ -874,7 +874,9 @@ function extractToolCommand(payload: Record<string, unknown> | null): {
     itemInput?.command,
     itemResult?.command,
     data?.command,
-    itemType === "command_execution" && detail ? stripTrailingExitCode(detail).output : null,
+    itemType === "command_execution" && payload?.status !== "declined" && detail
+      ? stripTrailingExitCode(detail).output
+      : null,
   ];
 
   for (const candidate of candidates) {
