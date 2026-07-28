@@ -28,6 +28,7 @@ const clientSettings: ClientSettings = {
   sidebarAutoSettleAfterDays: 3,
   sidebarSessionSortOrder: "created_at",
   sidebarSessionPreviewCount: 6,
+  sidebarV1RollbackEnabled: true,
   timestampFormat: "24-hour",
 };
 

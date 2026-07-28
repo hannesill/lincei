@@ -103,6 +103,9 @@ export const ClientSettingsSchema = Schema.Struct({
   sidebarSessionPreviewCount: SidebarSessionPreviewCount.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT)),
   ),
+  // Qualification escape hatch. Sidebar v2 is the alpha default; persisted
+  // `true` explicitly selects the retained v1 implementation.
+  sidebarV1RollbackEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
@@ -591,6 +594,7 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarProjectSortOrder: Schema.optionalKey(SidebarProjectSortOrder),
   sidebarSessionSortOrder: Schema.optionalKey(SidebarSessionSortOrder),
   sidebarSessionPreviewCount: Schema.optionalKey(SidebarSessionPreviewCount),
+  sidebarV1RollbackEnabled: Schema.optionalKey(Schema.Boolean),
   timestampFormat: Schema.optionalKey(TimestampFormat),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;

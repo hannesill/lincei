@@ -712,6 +712,7 @@ describe("wsApi", () => {
       sidebarAutoSettleAfterDays: 3,
       sidebarSessionSortOrder: "created_at" as const,
       sidebarSessionPreviewCount: 6,
+      sidebarV1RollbackEnabled: true,
       timestampFormat: "24-hour" as const,
     };
     const getClientSettings = vi.fn().mockResolvedValue({
@@ -776,6 +777,7 @@ describe("wsApi", () => {
       sidebarAutoSettleAfterDays: 3,
       sidebarSessionSortOrder: "created_at" as const,
       sidebarSessionPreviewCount: 6,
+      sidebarV1RollbackEnabled: true,
       timestampFormat: "24-hour" as const,
     };
 

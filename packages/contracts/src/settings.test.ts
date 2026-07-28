@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   ClientSettingsSchema,
+  ClientSettingsPatch,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_SERVER_SETTINGS,
   ServerSettings,
@@ -11,6 +12,8 @@ import {
 } from "./settings.ts";
 
 const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
+const decodeClientSettingsPatch = Schema.decodeUnknownSync(ClientSettingsPatch);
+const encodeClientSettings = Schema.encodeSync(ClientSettingsSchema);
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
@@ -34,6 +37,22 @@ describe("ClientSettings.sidebarAutoSettleAfterDays", () => {
     expect(() => decodeClientSettings({ sidebarAutoSettleAfterDays: 0 })).toThrow();
     expect(() => decodeClientSettings({ sidebarAutoSettleAfterDays: 3.5 })).toThrow();
     expect(() => decodeClientSettings({ sidebarAutoSettleAfterDays: 91 })).toThrow();
+  });
+});
+
+describe("ClientSettings.sidebarV1RollbackEnabled", () => {
+  it("defaults legacy settings to Sidebar v2", () => {
+    expect(DEFAULT_CLIENT_SETTINGS.sidebarV1RollbackEnabled).toBe(false);
+    expect(decodeClientSettings({}).sidebarV1RollbackEnabled).toBe(false);
+  });
+
+  it("round-trips an explicit Sidebar v1 rollback choice", () => {
+    const settings = decodeClientSettings({ sidebarV1RollbackEnabled: true });
+    expect(settings.sidebarV1RollbackEnabled).toBe(true);
+    expect(encodeClientSettings(settings).sidebarV1RollbackEnabled).toBe(true);
+    expect(decodeClientSettingsPatch({ sidebarV1RollbackEnabled: true })).toEqual({
+      sidebarV1RollbackEnabled: true,
+    });
   });
 });
 
