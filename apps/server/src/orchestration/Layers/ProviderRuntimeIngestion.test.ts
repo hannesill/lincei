@@ -973,6 +973,51 @@ describe("ProviderRuntimeIngestion", () => {
     expect(payload?.detail).toBe("bun run lint");
   });
 
+  it("projects declined commands as denied error activities", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-command-denied"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      createdAt: now,
+      sessionId: asSessionId("session-1"),
+      turnId: asTurnId("turn-command-denied"),
+      itemId: asItemId("item-command-denied"),
+      payload: {
+        itemType: "command_execution",
+        status: "declined",
+        title: "Command run",
+        detail: "Blocked by policy",
+        data: {
+          toolName: "Bash",
+        },
+      },
+    });
+
+    const session = await waitForSession(harness.readModel, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) => activity.id === "evt-command-denied",
+      ),
+    );
+    const activity = session.activities.find(
+      (entry: ProviderRuntimeTestActivity) => entry.id === "evt-command-denied",
+    );
+    const payload =
+      activity?.payload && typeof activity.payload === "object"
+        ? (activity.payload as Record<string, unknown>)
+        : undefined;
+
+    expect(activity?.kind).toBe("tool.denied");
+    expect(activity?.tone).toBe("error");
+    expect(activity?.summary).toBe("Command denied");
+    expect(payload?.message).toBe("Blocked by policy");
+    expect(payload?.itemType).toBe("command_execution");
+    expect(payload?.status).toBe("declined");
+    expect(payload?.detail).toBe("Blocked by policy");
+  });
+
   it("uses structured read-file paths when available", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";

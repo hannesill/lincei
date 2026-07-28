@@ -655,6 +655,39 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]?.tone).toBe("error");
   });
 
+  it("renders a declined command as a denied error instead of a completed command", () => {
+    const activities: OrchestrationSessionActivity[] = [
+      makeActivity({
+        id: "command-denied",
+        kind: "tool.denied",
+        summary: "Command denied",
+        tone: "error",
+        payload: {
+          message: "Blocked by policy",
+          itemType: "command_execution",
+          status: "declined",
+          detail: "Blocked by policy",
+          data: {
+            toolName: "Bash",
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+
+    expect(entries).toEqual([
+      {
+        id: "command-denied",
+        createdAt: "2026-02-23T00:00:00.000Z",
+        label: "Command denied",
+        detail: "Blocked by policy",
+        tone: "error",
+        itemType: "command_execution",
+      },
+    ]);
+  });
+
   it("filters by turn id when provided", () => {
     const activities: OrchestrationSessionActivity[] = [
       makeActivity({ id: "turn-1", turnId: "turn-1", summary: "Tool call", kind: "tool.started" }),
