@@ -99,6 +99,46 @@ const STATUS_RESULT_CACHE_CAPACITY = 2_048;
 const PR_LOOKUP_CACHE_TTL = Duration.minutes(2);
 const PR_LOOKUP_FAILURE_TTL = Duration.seconds(20);
 const PR_LOOKUP_CACHE_CAPACITY = 2_048;
+
+export function makeBoundedPrLookupEpochs(capacity: number) {
+  if (!Number.isSafeInteger(capacity) || capacity < 1) {
+    throw new RangeError("PR lookup epoch capacity must be a positive safe integer.");
+  }
+
+  const epochByKey = new Map<string, number>();
+  let nextEpoch = 1;
+  const assignNextEpoch = (key: string) => {
+    if (epochByKey.has(key)) {
+      epochByKey.delete(key);
+    } else if (epochByKey.size >= capacity) {
+      const oldestKey = epochByKey.keys().next().value;
+      if (oldestKey !== undefined) {
+        epochByKey.delete(oldestKey);
+      }
+    }
+
+    const epoch = nextEpoch;
+    nextEpoch += 1;
+    epochByKey.set(key, epoch);
+    return epoch;
+  };
+
+  return {
+    get: (key: string) => {
+      const epoch = epochByKey.get(key);
+      if (epoch === undefined) {
+        return assignNextEpoch(key);
+      }
+
+      epochByKey.delete(key);
+      epochByKey.set(key, epoch);
+      return epoch;
+    },
+    bump: assignNextEpoch,
+    size: () => epochByKey.size,
+  };
+}
+
 type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
 type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
 type GitActionProgressEmitter = (event: GitActionProgressPayload) => Effect.Effect<void, never>;
@@ -753,12 +793,12 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   // Hosting-provider PR lookups are slower and more failure-prone than local
   // ahead/behind checks. Cache them independently so status polling stays
   // responsive while explicit refreshes can still force a live lookup.
-  const prLookupEpochByCwd = new Map<string, number>();
-  const prLookupEpoch = (cwd: string) => prLookupEpochByCwd.get(cwd) ?? 0;
+  const prLookupEpochs = makeBoundedPrLookupEpochs(PR_LOOKUP_CACHE_CAPACITY);
+  const prLookupEpoch = (cwd: string) => prLookupEpochs.get(cwd);
   const bumpPrLookupEpoch = (cwd: string) =>
     normalizeStatusCacheKey(cwd).pipe(
       Effect.map((cacheKey) => {
-        prLookupEpochByCwd.set(cacheKey, prLookupEpoch(cacheKey) + 1);
+        prLookupEpochs.bump(cacheKey);
       }),
     );
   const prLookupCacheKey = (cwd: string, details: { branch: string; upstreamRef: string | null }) =>
