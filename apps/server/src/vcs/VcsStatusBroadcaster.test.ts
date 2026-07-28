@@ -4,6 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -19,6 +20,7 @@ import type {
 
 import * as VcsStatusBroadcaster from "./VcsStatusBroadcaster.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
+import { makeBoundedKeyEpochs } from "../git/boundedKeyEpochs.ts";
 
 const baseLocalStatus: VcsStatusLocalResult = {
   isRepo: true,
@@ -87,6 +89,26 @@ function makeTestLayer(state: {
 }
 
 describe("VcsStatusBroadcaster", () => {
+  it("bounds status generations and never resurrects an evicted token", () => {
+    const generations = makeBoundedKeyEpochs(2);
+    const firstGeneration = generations.get("/first");
+    const secondGeneration = generations.get("/second");
+
+    assert.equal(generations.get("/first"), firstGeneration);
+    const thirdGeneration = generations.get("/third");
+
+    assert.equal(generations.size(), 2);
+    assert.isTrue(generations.isCurrent("/first", firstGeneration));
+    assert.isFalse(generations.isCurrent("/second", secondGeneration));
+
+    const revisitedSecondGeneration = generations.get("/second");
+    assert.isAbove(revisitedSecondGeneration, thirdGeneration);
+    assert.notEqual(revisitedSecondGeneration, secondGeneration);
+    assert.isFalse(generations.isCurrent("/second", secondGeneration));
+    assert.isTrue(generations.isCurrent("/second", revisitedSecondGeneration));
+    assert.equal(generations.size(), 2);
+  });
+
   it.effect("reuses the cached VCS status across repeated reads", () => {
     const state = {
       currentLocalStatus: baseLocalStatus,
@@ -151,6 +173,103 @@ describe("VcsStatusBroadcaster", () => {
       assert.equal(state.localInvalidationCalls, 1);
       assert.equal(state.remoteInvalidationCalls, 1);
     }).pipe(Effect.provide(makeTestLayer(state)));
+  });
+
+  it.effect("does not cache or publish a lookup completed after a newer full refresh", () => {
+    let staleLookupStartedDeferred: Deferred.Deferred<void, never> | null = null;
+    let releaseStaleLookupDeferred: Deferred.Deferred<void, never> | null = null;
+    let currentLocalStatus = baseLocalStatus;
+    let remoteStatusCalls = 0;
+    const staleRemoteStatus: VcsStatusRemoteResult = {
+      ...baseRemoteStatus,
+      aheadCount: 1,
+    };
+    const refreshedRemoteStatus: VcsStatusRemoteResult = {
+      ...baseRemoteStatus,
+      aheadCount: 2,
+    };
+    const testLayer = VcsStatusBroadcaster.layer.pipe(
+      Layer.provideMerge(NodeServices.layer),
+      Layer.provide(
+        Layer.mock(GitWorkflowService.GitWorkflowService)({
+          localStatus: () => Effect.sync(() => currentLocalStatus),
+          remoteStatus: () =>
+            Effect.sync(() => {
+              remoteStatusCalls += 1;
+              return remoteStatusCalls;
+            }).pipe(
+              Effect.flatMap((call) =>
+                call === 1 && staleLookupStartedDeferred && releaseStaleLookupDeferred
+                  ? Deferred.succeed(staleLookupStartedDeferred, undefined).pipe(
+                      Effect.ignore,
+                      Effect.andThen(Deferred.await(releaseStaleLookupDeferred)),
+                      Effect.as(staleRemoteStatus),
+                    )
+                  : Effect.succeed(refreshedRemoteStatus),
+              ),
+            ),
+          invalidateLocalStatus: () => Effect.void,
+          invalidateRemoteStatus: () => Effect.void,
+          invalidateStatus: () => Effect.void,
+        }),
+      ),
+    );
+
+    return Effect.gen(function* () {
+      const staleLookupStarted = yield* Deferred.make<void>();
+      const releaseStaleLookup = yield* Deferred.make<void>();
+      staleLookupStartedDeferred = staleLookupStarted;
+      releaseStaleLookupDeferred = releaseStaleLookup;
+
+      const broadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
+      const snapshotReceived = yield* Deferred.make<void>();
+      const refreshedRemotePublished = yield* Deferred.make<void>();
+      const markerLocalPublished = yield* Deferred.make<void>();
+      const remoteEvents: Array<VcsStatusRemoteResult | null> = [];
+      yield* Stream.runForEach(
+        broadcaster.streamStatus(
+          { cwd: "/repo" },
+          { automaticRemoteRefreshInterval: Effect.succeed(Duration.zero) },
+        ),
+        (event) => {
+          if (event._tag === "snapshot") {
+            return Deferred.succeed(snapshotReceived, undefined).pipe(Effect.ignore);
+          }
+          if (event._tag === "remoteUpdated") {
+            remoteEvents.push(event.remote);
+            return event.remote?.aheadCount === refreshedRemoteStatus.aheadCount
+              ? Deferred.succeed(refreshedRemotePublished, undefined).pipe(Effect.ignore)
+              : Effect.void;
+          }
+          return event.local.refName === "feature/refresh-marker"
+            ? Deferred.succeed(markerLocalPublished, undefined).pipe(Effect.ignore)
+            : Effect.void;
+        },
+      ).pipe(Effect.forkScoped);
+      yield* Deferred.await(snapshotReceived);
+
+      const staleRefreshFiber = yield* broadcaster.refreshStatus("/repo").pipe(Effect.forkChild);
+      yield* Deferred.await(staleLookupStarted);
+
+      const refreshed = yield* broadcaster.refreshStatus("/repo");
+      assert.equal(refreshed.aheadCount, 2);
+      yield* Deferred.await(refreshedRemotePublished);
+
+      yield* Deferred.succeed(releaseStaleLookup, undefined);
+      const stale = yield* Fiber.join(staleRefreshFiber);
+      assert.equal(stale.aheadCount, 1);
+
+      currentLocalStatus = {
+        ...baseLocalStatus,
+        refName: "feature/refresh-marker",
+      };
+      yield* broadcaster.refreshLocalStatus("/repo");
+      yield* Deferred.await(markerLocalPublished);
+
+      const cached = yield* broadcaster.getStatus({ cwd: "/repo" });
+      assert.equal(cached.aheadCount, 2);
+      assert.deepStrictEqual(remoteEvents, [refreshedRemoteStatus]);
+    }).pipe(Effect.provide(testLayer));
   });
 
   it.effect("refreshes only the cached local snapshot when requested", () => {

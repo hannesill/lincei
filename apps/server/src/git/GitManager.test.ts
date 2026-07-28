@@ -5,7 +5,9 @@ import { spawnSync } from "node:child_process";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
@@ -63,6 +65,7 @@ interface FakeGhScenario {
   failWith?: GitHubCliError;
   /** Allow this many gh calls to succeed before failWith takes effect. */
   failAfterCalls?: number;
+  beforePrList?: (callIndex: number) => Effect.Effect<void, never, never>;
 }
 
 function fakeGhOutput(stdout: string): VcsProcess.VcsProcessOutput {
@@ -398,6 +401,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
     ]),
   );
   const ghCalls: string[] = [];
+  let prListCallCount = 0;
 
   const execute: GitHubCliShape["execute"] = (input) => {
     const args = [...input.args];
@@ -408,6 +412,8 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
     }
 
     if (args[0] === "pr" && args[1] === "list") {
+      const callIndex = prListCallCount;
+      prListCallCount += 1;
       const headSelectorIndex = args.findIndex((value) => value === "--head");
       const headSelector =
         headSelectorIndex >= 0 && headSelectorIndex < args.length - 1
@@ -422,7 +428,9 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           ? scenario.prListByHeadSelector?.[headSelector]
           : undefined;
       const stdout = (mappedQueue ?? mappedStdout ?? prListQueue.shift() ?? "[]") + "\n";
-      return Effect.succeed(fakeGhOutput(stdout));
+      return (scenario.beforePrList?.(callIndex) ?? Effect.void).pipe(
+        Effect.as(fakeGhOutput(stdout)),
+      );
     }
 
     if (args[0] === "pr" && args[1] === "create") {
@@ -1408,6 +1416,72 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* manager.invalidateStatus(repoDir);
       const second = yield* manager.status({ cwd: repoDir });
       expect(second.pr?.number).toBe(214);
+    }),
+  );
+
+  it.effect("an obsolete in-flight PR lookup cannot replace newer sticky state", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("example-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-overlap"]);
+      const originalRemote = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", originalRemote]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-overlap"]);
+
+      const staleLookupStarted = yield* Deferred.make<void>();
+      const releaseStaleLookup = yield* Deferred.make<void>();
+      const stalePr = {
+        number: 301,
+        title: "Stale remote PR",
+        url: "https://github.com/example-workspace/example-app/pull/301",
+        baseRefName: "main",
+        headRefName: "feature/pr-overlap",
+      };
+      const refreshedPr = {
+        number: 302,
+        title: "Refreshed remote PR",
+        url: "https://github.com/example-workspace/example-app/pull/302",
+        baseRefName: "main",
+        headRefName: "feature/pr-overlap",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([stalePr]), JSON.stringify([refreshedPr])],
+          beforePrList: (callIndex) =>
+            callIndex === 0
+              ? Deferred.succeed(staleLookupStarted, undefined).pipe(
+                  Effect.ignore,
+                  Effect.andThen(Deferred.await(releaseStaleLookup)),
+                )
+              : Effect.void,
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub API rate limited the PR lookup.",
+          }),
+          failAfterCalls: 2,
+        },
+      });
+
+      const staleFiber = yield* manager.status({ cwd: repoDir }).pipe(Effect.forkChild);
+      yield* Deferred.await(staleLookupStarted);
+
+      const replacementRemote = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "replacement", replacementRemote]);
+      yield* runGit(repoDir, ["push", "replacement", "feature/pr-overlap"]);
+      yield* runGit(repoDir, ["remote", "set-url", "origin", replacementRemote]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const refreshed = yield* manager.status({ cwd: repoDir });
+      expect(refreshed.pr?.number).toBe(302);
+
+      yield* Deferred.succeed(releaseStaleLookup, undefined);
+      const stale = yield* Fiber.join(staleFiber);
+      expect(stale.pr?.number).toBe(301);
+
+      yield* manager.invalidateStatus(repoDir);
+      const fallback = yield* manager.status({ cwd: repoDir });
+      expect(fallback.pr?.number).toBe(302);
     }),
   );
 

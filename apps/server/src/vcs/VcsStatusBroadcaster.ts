@@ -22,10 +22,12 @@ import type {
 import { mergeGitStatusParts } from "@t3tools/shared/git";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
+import { makeBoundedKeyEpochs } from "../git/boundedKeyEpochs.ts";
 
 const DEFAULT_VCS_STATUS_REFRESH_INTERVAL = Duration.seconds(30);
 const VCS_STATUS_REFRESH_FAILURE_BASE_DELAY = Duration.seconds(30);
 const VCS_STATUS_REFRESH_FAILURE_MAX_DELAY = Duration.minutes(15);
+const STATUS_GENERATION_CAPACITY = 2_048;
 
 interface VcsStatusChange {
   readonly cwd: string;
@@ -107,7 +109,20 @@ export const layer = Layer.effect(
       Scope.close(scope, Exit.void),
     );
     const cacheRef = yield* Ref.make(new Map<string, CachedVcsStatus>());
+    const statusGenerationsRef = yield* SynchronizedRef.make(
+      makeBoundedKeyEpochs(STATUS_GENERATION_CAPACITY),
+    );
     const pollersRef = yield* SynchronizedRef.make(new Map<string, ActiveRemotePoller>());
+
+    const getStatusGeneration = (cwd: string) =>
+      SynchronizedRef.modify(statusGenerationsRef, (generations) => [
+        generations.get(cwd),
+        generations,
+      ]);
+    const advanceStatusGeneration = (cwd: string) =>
+      SynchronizedRef.modify(statusGenerationsRef, (generations) => {
+        return [generations.bump(cwd), generations] as const;
+      });
 
     const getCachedStatus = Effect.fn("VcsStatusBroadcaster.getCachedStatus")(function* (
       cwd: string,
@@ -116,30 +131,42 @@ export const layer = Layer.effect(
     });
 
     const updateCachedLocalStatus = Effect.fn("VcsStatusBroadcaster.updateCachedLocalStatus")(
-      function* (cwd: string, local: VcsStatusLocalResult, options?: { publish?: boolean }) {
+      function* (
+        cwd: string,
+        local: VcsStatusLocalResult,
+        options: { generation: number; publish?: boolean },
+      ) {
         const nextLocal = {
           fingerprint: fingerprintStatusPart(local),
           value: local,
         } satisfies CachedValue<VcsStatusLocalResult>;
-        const shouldPublish = yield* Ref.modify(cacheRef, (cache) => {
-          const previous = cache.get(cwd) ?? { local: null, remote: null };
-          const nextCache = new Map(cache);
-          nextCache.set(cwd, {
-            ...previous,
-            local: nextLocal,
-          });
-          return [previous.local?.fingerprint !== nextLocal.fingerprint, nextCache] as const;
+        yield* SynchronizedRef.modifyEffect(statusGenerationsRef, (generations) => {
+          if (!generations.isCurrent(cwd, options.generation)) {
+            return Effect.succeed([undefined, generations] as const);
+          }
+          return Ref.modify(cacheRef, (cache) => {
+            const previous = cache.get(cwd) ?? { local: null, remote: null };
+            const nextCache = new Map(cache);
+            nextCache.set(cwd, {
+              ...previous,
+              local: nextLocal,
+            });
+            return [previous.local?.fingerprint !== nextLocal.fingerprint, nextCache] as const;
+          }).pipe(
+            Effect.flatMap((shouldPublish) =>
+              options.publish && shouldPublish
+                ? PubSub.publish(changesPubSub, {
+                    cwd,
+                    event: {
+                      _tag: "localUpdated",
+                      local,
+                    },
+                  }).pipe(Effect.asVoid)
+                : Effect.void,
+            ),
+            Effect.as([undefined, generations] as const),
+          );
         });
-
-        if (options?.publish && shouldPublish) {
-          yield* PubSub.publish(changesPubSub, {
-            cwd,
-            event: {
-              _tag: "localUpdated",
-              local,
-            },
-          });
-        }
 
         return local;
       },
@@ -149,31 +176,39 @@ export const layer = Layer.effect(
       function* (
         cwd: string,
         remote: VcsStatusRemoteResult | null,
-        options?: { publish?: boolean },
+        options: { generation: number; publish?: boolean },
       ) {
         const nextRemote = {
           fingerprint: fingerprintStatusPart(remote),
           value: remote,
         } satisfies CachedValue<VcsStatusRemoteResult | null>;
-        const shouldPublish = yield* Ref.modify(cacheRef, (cache) => {
-          const previous = cache.get(cwd) ?? { local: null, remote: null };
-          const nextCache = new Map(cache);
-          nextCache.set(cwd, {
-            ...previous,
-            remote: nextRemote,
-          });
-          return [previous.remote?.fingerprint !== nextRemote.fingerprint, nextCache] as const;
+        yield* SynchronizedRef.modifyEffect(statusGenerationsRef, (generations) => {
+          if (!generations.isCurrent(cwd, options.generation)) {
+            return Effect.succeed([undefined, generations] as const);
+          }
+          return Ref.modify(cacheRef, (cache) => {
+            const previous = cache.get(cwd) ?? { local: null, remote: null };
+            const nextCache = new Map(cache);
+            nextCache.set(cwd, {
+              ...previous,
+              remote: nextRemote,
+            });
+            return [previous.remote?.fingerprint !== nextRemote.fingerprint, nextCache] as const;
+          }).pipe(
+            Effect.flatMap((shouldPublish) =>
+              options.publish && shouldPublish
+                ? PubSub.publish(changesPubSub, {
+                    cwd,
+                    event: {
+                      _tag: "remoteUpdated",
+                      remote,
+                    },
+                  }).pipe(Effect.asVoid)
+                : Effect.void,
+            ),
+            Effect.as([undefined, generations] as const),
+          );
         });
-
-        if (options?.publish && shouldPublish) {
-          yield* PubSub.publish(changesPubSub, {
-            cwd,
-            event: {
-              _tag: "remoteUpdated",
-              remote,
-            },
-          });
-        }
 
         return remote;
       },
@@ -182,15 +217,17 @@ export const layer = Layer.effect(
     const loadLocalStatus = Effect.fn("VcsStatusBroadcaster.loadLocalStatus")(function* (
       cwd: string,
     ) {
+      const generation = yield* getStatusGeneration(cwd);
       const local = yield* workflow.localStatus({ cwd });
-      return yield* updateCachedLocalStatus(cwd, local);
+      return yield* updateCachedLocalStatus(cwd, local, { generation });
     });
 
     const loadRemoteStatus = Effect.fn("VcsStatusBroadcaster.loadRemoteStatus")(function* (
       cwd: string,
     ) {
+      const generation = yield* getStatusGeneration(cwd);
       const remote = yield* workflow.remoteStatus({ cwd });
-      return yield* updateCachedRemoteStatus(cwd, remote);
+      return yield* updateCachedRemoteStatus(cwd, remote, { generation });
     });
 
     const getOrLoadLocalStatus = Effect.fn("VcsStatusBroadcaster.getOrLoadLocalStatus")(function* (
@@ -230,23 +267,26 @@ export const layer = Layer.effect(
       "VcsStatusBroadcaster.refreshLocalStatus",
     )(function* (rawCwd) {
       const cwd = yield* withFileSystem(normalizeCwd(rawCwd));
+      const generation = yield* getStatusGeneration(cwd);
       yield* workflow.invalidateLocalStatus(cwd);
       const local = yield* workflow.localStatus({ cwd });
-      return yield* updateCachedLocalStatus(cwd, local, { publish: true });
+      return yield* updateCachedLocalStatus(cwd, local, { generation, publish: true });
     });
 
     const refreshRemoteStatus = Effect.fn("VcsStatusBroadcaster.refreshRemoteStatus")(function* (
       cwd: string,
     ) {
+      const generation = yield* getStatusGeneration(cwd);
       yield* workflow.invalidateRemoteStatus(cwd);
       const remote = yield* workflow.remoteStatus({ cwd });
-      return yield* updateCachedRemoteStatus(cwd, remote, { publish: true });
+      return yield* updateCachedRemoteStatus(cwd, remote, { generation, publish: true });
     });
 
     const refreshStatus: VcsStatusBroadcasterShape["refreshStatus"] = Effect.fn(
       "VcsStatusBroadcaster.refreshStatus",
     )(function* (rawCwd) {
       const cwd = yield* withFileSystem(normalizeCwd(rawCwd));
+      const generation = yield* advanceStatusGeneration(cwd);
       // Full invalidation also advances GitManager's slower PR lookup epoch.
       // Partial invalidation remains appropriate for automatic local/remote
       // polling, which should keep the PR cache warm.
@@ -257,8 +297,8 @@ export const layer = Layer.effect(
       );
       const [cachedLocal, cachedRemote] = yield* Effect.all(
         [
-          updateCachedLocalStatus(cwd, local, { publish: true }),
-          updateCachedRemoteStatus(cwd, remote, { publish: true }),
+          updateCachedLocalStatus(cwd, local, { generation, publish: true }),
+          updateCachedRemoteStatus(cwd, remote, { generation, publish: true }),
         ],
         { concurrency: "unbounded" },
       );
