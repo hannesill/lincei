@@ -44,6 +44,8 @@ export function buildLocalDraftSession(
     error,
     createdAt: draftSession.createdAt,
     archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
     latestTurn: null,
     branch: draftSession.branch,
     worktreePath: draftSession.worktreePath,

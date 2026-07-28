@@ -355,6 +355,10 @@ export const OrchestrationSession = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  settledOverride: Schema.NullOr(Schema.Literals(["settled", "active"])).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  settledAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -407,6 +411,10 @@ export const OrchestrationSessionShell = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  settledOverride: Schema.NullOr(Schema.Literals(["settled", "active"])).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  settledAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   session: Schema.NullOr(OrchestrationProviderRuntime),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   hasPendingApprovals: Schema.Boolean,
@@ -529,6 +537,21 @@ const SessionUnarchiveCommand = Schema.Struct({
   type: Schema.Literal("session.unarchive"),
   commandId: CommandId,
   sessionId: SessionId,
+});
+
+const SessionSettleCommand = Schema.Struct({
+  type: Schema.Literal("session.settle"),
+  commandId: CommandId,
+  sessionId: SessionId,
+});
+
+const SessionUnsettleCommand = Schema.Struct({
+  type: Schema.Literal("session.unsettle"),
+  commandId: CommandId,
+  sessionId: SessionId,
+  // Activity resets are server-decided events; clients may only request the
+  // explicit keep-active override.
+  reason: Schema.Literal("user"),
 });
 
 const SessionMetaUpdateCommand = Schema.Struct({
@@ -685,6 +708,8 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   SessionDeleteCommand,
   SessionArchiveCommand,
   SessionUnarchiveCommand,
+  SessionSettleCommand,
+  SessionUnsettleCommand,
   SessionMetaUpdateCommand,
   SessionRuntimeModeSetCommand,
   SessionInteractionModeSetCommand,
@@ -706,6 +731,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   SessionDeleteCommand,
   SessionArchiveCommand,
   SessionUnarchiveCommand,
+  SessionSettleCommand,
+  SessionUnsettleCommand,
   SessionMetaUpdateCommand,
   SessionRuntimeModeSetCommand,
   SessionInteractionModeSetCommand,
@@ -823,6 +850,8 @@ export const OrchestrationEventType = Schema.Literals([
   "session.deleted",
   "session.archived",
   "session.unarchived",
+  "session.settled",
+  "session.unsettled",
   "session.meta-updated",
   "session.runtime-mode-set",
   "session.interaction-mode-set",
@@ -907,6 +936,18 @@ export const SessionArchivedPayload = Schema.Struct({
 
 export const SessionUnarchivedPayload = Schema.Struct({
   sessionId: SessionId,
+  updatedAt: IsoDateTime,
+});
+
+export const SessionSettledPayload = Schema.Struct({
+  sessionId: SessionId,
+  settledAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const SessionUnsettledPayload = Schema.Struct({
+  sessionId: SessionId,
+  reason: Schema.Literals(["user", "activity"]),
   updatedAt: IsoDateTime,
 });
 
@@ -1083,6 +1124,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("session.unarchived"),
     payload: SessionUnarchivedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.settled"),
+    payload: SessionSettledPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("session.unsettled"),
+    payload: SessionUnsettledPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

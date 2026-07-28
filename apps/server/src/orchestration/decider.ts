@@ -20,6 +20,7 @@ import {
   requireSessionNotArchived,
 } from "./commandInvariants.ts";
 import { projectEvent } from "./projector.ts";
+import { hasOpenBlockingRequest, hasQueuedTurnStart } from "./sessionLifecycle.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -339,6 +340,73 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "session.settle": {
+      const session = yield* requireSessionNotArchived({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      if (session.session?.status === "starting" || session.session?.status === "running") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' has active provider work and cannot be settled.`,
+        });
+      }
+      if (hasOpenBlockingRequest(session)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' has a pending approval or user-input request and cannot be settled.`,
+        });
+      }
+
+      const occurredAt = yield* nowIso;
+      if (hasQueuedTurnStart(session, occurredAt)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' has a queued turn start and cannot be settled.`,
+        });
+      }
+
+      const alreadySettled = session.settledOverride === "settled" && session.settledAt !== null;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "session.settled",
+        payload: {
+          sessionId: command.sessionId,
+          settledAt: alreadySettled ? session.settledAt : occurredAt,
+          updatedAt: alreadySettled ? session.updatedAt : occurredAt,
+        },
+      };
+    }
+
+    case "session.unsettle": {
+      const session = yield* requireSessionNotArchived({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "session.unsettled",
+        payload: {
+          sessionId: command.sessionId,
+          reason: command.reason,
+          updatedAt: session.settledOverride === "active" ? session.updatedAt : occurredAt,
+        },
+      };
+    }
+
     case "session.meta.update": {
       yield* requireSession({
         readModel,
@@ -495,7 +563,24 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           createdAt: command.createdAt,
         },
       };
-      return [userMessageEvent, turnStartRequestedEvent];
+      if (targetSession.settledOverride === null) {
+        return [userMessageEvent, turnStartRequestedEvent];
+      }
+      const unsettledEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "session.unsettled",
+        payload: {
+          sessionId: command.sessionId,
+          reason: "activity",
+          updatedAt: command.createdAt,
+        },
+      };
+      return [unsettledEvent, userMessageEvent, turnStartRequestedEvent];
     }
 
     case "session.turn.interrupt": {
@@ -616,12 +701,12 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     }
 
     case "session.session.set": {
-      yield* requireSession({
+      const session = yield* requireSession({
         readModel,
         command,
         sessionId: command.sessionId,
       });
-      return {
+      const sessionSetEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
@@ -635,6 +720,26 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           session: command.session,
         },
       };
+      const isProviderActivity =
+        command.session.status === "starting" || command.session.status === "running";
+      if (session.settledOverride === null || !isProviderActivity) {
+        return sessionSetEvent;
+      }
+      const unsettledEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "session.unsettled",
+        payload: {
+          sessionId: command.sessionId,
+          reason: "activity",
+          updatedAt: command.createdAt,
+        },
+      };
+      return [unsettledEvent, sessionSetEvent];
     }
 
     case "session.message.assistant.delta": {
@@ -789,7 +894,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     }
 
     case "session.activity.append": {
-      yield* requireSession({
+      const session = yield* requireSession({
         readModel,
         command,
         sessionId: command.sessionId,
@@ -802,7 +907,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           ? ((command.activity.payload as { requestId: string })
               .requestId as OrchestrationEvent["metadata"]["requestId"])
           : undefined;
-      return {
+      const activityAppendedEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...(yield* withEventBase({
           aggregateKind: "session",
           aggregateId: command.sessionId,
@@ -816,6 +921,27 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           activity: command.activity,
         },
       };
+      const wakesSettledSession =
+        command.activity.kind === "approval.requested" ||
+        command.activity.kind === "user-input.requested";
+      if (session.settledOverride === null || !wakesSettledSession) {
+        return activityAppendedEvent;
+      }
+      const unsettledEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "session.unsettled",
+        payload: {
+          sessionId: command.sessionId,
+          reason: "activity",
+          updatedAt: command.createdAt,
+        },
+      };
+      return [unsettledEvent, activityAppendedEvent];
     }
 
     default: {

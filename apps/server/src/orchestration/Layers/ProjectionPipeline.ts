@@ -57,6 +57,10 @@ import {
   parseSessionSegmentFromAttachmentId,
   toSafeSessionAttachmentSegment,
 } from "../../attachmentStore.ts";
+import {
+  isStalePendingApprovalFailureDetail,
+  isStalePendingUserInputFailureDetail,
+} from "../sessionLifecycle.ts";
 
 export const ORCHESTRATION_PROJECTOR_NAMES = {
   projects: "projection.projects",
@@ -99,17 +103,6 @@ function extractActivityRequestId(payload: unknown): ApprovalRequestId | null {
   return typeof requestId === "string" ? ApprovalRequestId.make(requestId) : null;
 }
 
-function isStalePendingApprovalFailureDetail(detail: string | null): boolean {
-  if (detail === null) {
-    return false;
-  }
-  return (
-    detail.includes("stale pending approval request") ||
-    detail.includes("unknown pending approval request") ||
-    detail.includes("unknown pending permission request")
-  );
-}
-
 function derivePendingUserInputCountFromActivities(
   activities: ReadonlyArray<ProjectionSessionActivity>,
 ): number {
@@ -143,9 +136,7 @@ function derivePendingUserInputCountFromActivities(
 
     if (
       activity.kind === "provider.user-input.respond.failed" &&
-      detail !== null &&
-      (detail.includes("stale pending user-input request") ||
-        detail.includes("unknown pending user-input request"))
+      isStalePendingUserInputFailureDetail(detail)
     ) {
       openRequestIds.delete(requestId);
     }
@@ -619,6 +610,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
             archivedAt: null,
+            settledOverride: null,
+            settledAt: null,
             latestUserMessageAt: null,
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
@@ -652,6 +645,38 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionSessionRepository.upsert({
             ...existingRow.value,
             archivedAt: null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "session.settled": {
+          const existingRow = yield* projectionSessionRepository.getById({
+            sessionId: event.payload.sessionId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionSessionRepository.upsert({
+            ...existingRow.value,
+            settledOverride: "settled",
+            settledAt: event.payload.settledAt,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "session.unsettled": {
+          const existingRow = yield* projectionSessionRepository.getById({
+            sessionId: event.payload.sessionId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionSessionRepository.upsert({
+            ...existingRow.value,
+            settledOverride: event.payload.reason === "user" ? "active" : null,
+            settledAt: null,
             updatedAt: event.payload.updatedAt,
           });
           return;

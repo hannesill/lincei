@@ -26,6 +26,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     error: null,
     createdAt: "2026-03-01T00:00:00.000Z",
     archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
     updatedAt: "2026-03-01T00:00:00.000Z",
     latestTurn: null,
     branch: null,
