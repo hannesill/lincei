@@ -22,6 +22,10 @@ export type ExecutionEnvironmentPlatform = typeof ExecutionEnvironmentPlatform.T
 
 export const ExecutionEnvironmentCapabilities = Schema.Struct({
   repositoryIdentity: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // Optional-on-the-wire negotiation flags. Legacy authenticated remotes omit
+  // them and consumers therefore treat absence as unsupported.
+  sessionSettlement: Schema.optionalKey(Schema.Boolean),
+  sessionSnooze: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 

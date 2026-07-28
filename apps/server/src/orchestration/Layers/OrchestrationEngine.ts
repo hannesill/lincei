@@ -179,7 +179,22 @@ const makeOrchestrationEngine = Effect.gen(function* () {
               for (const nextEvent of eventBases) {
                 const savedEvent = yield* eventStore.append(nextEvent);
                 nextCommandReadModel = yield* projectEvent(nextCommandReadModel, savedEvent);
-                yield* projectionPipeline.projectEvent(savedEvent);
+                const lifecycleSummary = yield* projectionPipeline.projectEvent(savedEvent);
+                if (lifecycleSummary !== null) {
+                  nextCommandReadModel = {
+                    ...nextCommandReadModel,
+                    sessions: nextCommandReadModel.sessions.map((session) =>
+                      session.id === lifecycleSummary.sessionId
+                        ? {
+                            ...session,
+                            latestUserMessageAt: lifecycleSummary.latestUserMessageAt,
+                            pendingApprovalCount: lifecycleSummary.pendingApprovalCount,
+                            pendingUserInputCount: lifecycleSummary.pendingUserInputCount,
+                          }
+                        : session,
+                    ),
+                  };
+                }
                 committedEvents.push(savedEvent);
               }
 

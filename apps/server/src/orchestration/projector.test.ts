@@ -95,6 +95,9 @@ describe("orchestration projector", () => {
         settledAt: null,
         snoozedUntil: null,
         snoozedAt: null,
+        latestUserMessageAt: null,
+        pendingApprovalCount: 0,
+        pendingUserInputCount: 0,
         deletedAt: null,
         messages: [],
         proposedPlans: [],
@@ -103,6 +106,126 @@ describe("orchestration projector", () => {
         session: null,
       },
     ]);
+  });
+
+  it("retains unresolved request summaries after activity timeline eviction", async () => {
+    const now = "2026-01-01T00:00:00.000Z";
+    let model = await Effect.runPromise(
+      projectEvent(
+        createEmptyReadModel(now),
+        makeEvent({
+          sequence: 1,
+          type: "session.created",
+          aggregateKind: "session",
+          aggregateId: "session-cap",
+          occurredAt: now,
+          commandId: "cmd-session-cap-create",
+          payload: {
+            sessionId: "session-cap",
+            projectId: "project-1",
+            title: "cap",
+            modelSelection: {
+              provider: ProviderDriverKind.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        }),
+      ),
+    );
+
+    model = await Effect.runPromise(
+      projectEvent(
+        model,
+        makeEvent({
+          sequence: 2,
+          type: "session.activity-appended",
+          aggregateKind: "session",
+          aggregateId: "session-cap",
+          occurredAt: now,
+          commandId: "cmd-request",
+          payload: {
+            sessionId: "session-cap",
+            activity: {
+              id: "activity-request",
+              tone: "approval",
+              kind: "approval.requested",
+              summary: "Approval needed",
+              payload: { requestId: "request-cap" },
+              turnId: null,
+              createdAt: now,
+            },
+          },
+        }),
+      ),
+    );
+
+    for (let index = 0; index < 501; index += 1) {
+      const sequence = index + 3;
+      model = await Effect.runPromise(
+        projectEvent(
+          model,
+          makeEvent({
+            sequence,
+            type: "session.activity-appended",
+            aggregateKind: "session",
+            aggregateId: "session-cap",
+            occurredAt: now,
+            commandId: `cmd-noise-${index}`,
+            payload: {
+              sessionId: "session-cap",
+              activity: {
+                id: `activity-noise-${index}`,
+                tone: "info",
+                kind: "provider.notice",
+                summary: "Noise",
+                payload: {},
+                turnId: null,
+                createdAt: now,
+              },
+            },
+          }),
+        ),
+      );
+    }
+
+    expect(model.sessions[0]?.activities).toHaveLength(500);
+    expect(
+      model.sessions[0]?.activities.some((activity) => activity.id === "activity-request"),
+    ).toBe(false);
+    expect(model.sessions[0]?.pendingApprovalCount).toBe(1);
+
+    model = await Effect.runPromise(
+      projectEvent(
+        model,
+        makeEvent({
+          sequence: 504,
+          type: "session.activity-appended",
+          aggregateKind: "session",
+          aggregateId: "session-cap",
+          occurredAt: now,
+          commandId: "cmd-resolve",
+          payload: {
+            sessionId: "session-cap",
+            activity: {
+              id: "activity-resolved",
+              tone: "info",
+              kind: "approval.resolved",
+              summary: "Approval resolved",
+              payload: { requestId: "request-cap" },
+              turnId: null,
+              createdAt: now,
+            },
+          },
+        }),
+      ),
+    );
+
+    expect(model.sessions[0]?.pendingApprovalCount).toBe(0);
   });
 
   it("fails when event payload cannot be decoded by runtime schema", async () => {

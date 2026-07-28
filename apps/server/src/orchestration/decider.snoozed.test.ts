@@ -15,6 +15,7 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
 import { decideOrchestrationCommand } from "./decider.ts";
+import { derivePendingRequestCounts } from "./sessionLifecycle.ts";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 // NodeServices' Effect test clock is pinned to the epoch.
@@ -36,6 +37,9 @@ function makeReadModel(
     readonly runtimeStatus?: "starting" | "running" | "ready" | "error";
   } = {},
 ): OrchestrationReadModel {
+  const messages = input.messages ?? [];
+  const activities = input.activities ?? [];
+  const pendingRequestCounts = derivePendingRequestCounts(activities);
   return {
     snapshotSequence: 0,
     projects: [],
@@ -62,10 +66,16 @@ function makeReadModel(
         settledAt: input.settledAt ?? null,
         snoozedUntil: input.snoozedUntil ?? null,
         snoozedAt: input.snoozedAt ?? (input.snoozedUntil !== undefined ? SNOOZED_AT : null),
+        latestUserMessageAt:
+          messages
+            .filter((message) => message.role === "user")
+            .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
+            .at(-1)?.createdAt ?? null,
+        ...pendingRequestCounts,
         deletedAt: null,
-        messages: input.messages ?? [],
+        messages,
         proposedPlans: [],
-        activities: input.activities ?? [],
+        activities,
         checkpoints: [],
         session:
           input.runtimeStatus === undefined
@@ -120,19 +130,26 @@ it.layer(NodeServices.layer)("snoozed session decider", (it) => {
     }),
   );
 
-  it.effect("rejects past and unparseable wake times", () =>
+  it.effect("rejects malformed, past, and excessive wake times without reflecting input", () =>
     Effect.gen(function* () {
-      for (const snoozedUntil of [PAST_WAKE, "not-a-date"]) {
+      for (const [label, snoozedUntil] of [
+        ["past", PAST_WAKE],
+        ["unparseable", "not-a-date"],
+        ["noncanonical", "1970-01-02T09:00:00Z"],
+        ["oversized", "9".repeat(10_000)],
+        ["excessive-horizon", "1971-01-02T09:00:00.000Z"],
+      ] as const) {
         const error = yield* decideOrchestrationCommand({
           command: {
             type: "session.snooze",
-            commandId: CommandId.make(`cmd-invalid-${snoozedUntil}`),
+            commandId: CommandId.make(`cmd-invalid-${label}`),
             sessionId: SESSION_ID,
             snoozedUntil,
           },
           readModel: makeReadModel(),
         }).pipe(Effect.flip);
         expect(error._tag).toBe("OrchestrationCommandInvariantError");
+        expect(error.message).not.toContain(snoozedUntil);
       }
     }),
   );

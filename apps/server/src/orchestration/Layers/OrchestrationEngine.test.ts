@@ -172,11 +172,17 @@ describe("OrchestrationEngine", () => {
       })),
     };
     let fullSnapshotReadCount = 0;
+    let commandReadModelCount = 0;
+    let sessionDetailReadCount = 0;
 
     const layer = OrchestrationEngineLive.pipe(
       Layer.provide(
         Layer.succeed(ProjectionSnapshotQuery, {
-          getCommandReadModel: () => Effect.succeed(commandReadModel),
+          getCommandReadModel: () =>
+            Effect.sync(() => {
+              commandReadModelCount += 1;
+              return commandReadModel;
+            }),
           getSnapshot: () =>
             Effect.sync(() => {
               fullSnapshotReadCount += 1;
@@ -205,14 +211,22 @@ describe("OrchestrationEngine", () => {
           getSessionCheckpointContext: () => Effect.succeed(Option.none()),
           getFullSessionDiffContext: () => Effect.succeed(Option.none()),
           getSessionShellById: () => Effect.succeed(Option.none()),
-          getSessionDetailById: () => Effect.succeed(Option.none()),
-          getSessionDetailSnapshot: () => Effect.succeed(Option.none()),
+          getSessionDetailById: () =>
+            Effect.sync(() => {
+              sessionDetailReadCount += 1;
+              return Option.none();
+            }),
+          getSessionDetailSnapshot: () =>
+            Effect.sync(() => {
+              sessionDetailReadCount += 1;
+              return Option.none();
+            }),
         }),
       ),
       Layer.provide(
         Layer.succeed(OrchestrationProjectionPipeline, {
           bootstrap: Effect.void,
-          projectEvent: () => Effect.void,
+          projectEvent: () => Effect.succeed(null),
         } satisfies OrchestrationProjectionPipelineShape),
       ),
       Layer.provide(Layer.succeed(OrchestrationEventStore, eventStore)),
@@ -235,6 +249,8 @@ describe("OrchestrationEngine", () => {
 
     expect(result.sequence).toBe(8);
     expect(fullSnapshotReadCount).toBe(0);
+    expect(commandReadModelCount).toBe(1);
+    expect(sessionDetailReadCount).toBe(0);
 
     await runtime.dispose();
   });
@@ -789,7 +805,7 @@ describe("OrchestrationEngine", () => {
             }),
           );
         }
-        return Effect.void;
+        return Effect.succeed(null);
       },
     };
 
@@ -932,7 +948,7 @@ describe("OrchestrationEngine", () => {
             }),
           );
         }
-        return Effect.void;
+        return Effect.succeed(null);
       },
     };
 

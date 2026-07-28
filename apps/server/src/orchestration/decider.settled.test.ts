@@ -18,12 +18,15 @@ import { describe, expect, it } from "vitest";
 
 import { decideOrchestrationCommand } from "./decider.ts";
 import { projectEvent } from "./projector.ts";
+import { derivePendingRequestCounts } from "./sessionLifecycle.ts";
 
 const SESSION_ID = SessionId.make("session-settled");
 const PROJECT_ID = ProjectId.make("project-settled");
 const OLD = "2026-07-20T10:00:00.000Z";
 
 function makeSession(overrides: Partial<OrchestrationSession> = {}): OrchestrationSession {
+  const messages = overrides.messages ?? [];
+  const activities = overrides.activities ?? [];
   return {
     id: SESSION_ID,
     projectId: PROJECT_ID,
@@ -46,10 +49,16 @@ function makeSession(overrides: Partial<OrchestrationSession> = {}): Orchestrati
     settledAt: null,
     snoozedUntil: null,
     snoozedAt: null,
+    latestUserMessageAt:
+      messages
+        .filter((message) => message.role === "user")
+        .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .at(-1)?.createdAt ?? null,
+    ...derivePendingRequestCounts(activities),
     deletedAt: null,
-    messages: [],
+    messages,
     proposedPlans: [],
-    activities: [],
+    activities,
     checkpoints: [],
     session: null,
     ...overrides,
@@ -251,6 +260,38 @@ describe("settled session decider", () => {
         testCase.name,
       ).rejects.toThrow(testCase.message);
     }
+  });
+
+  it("uses hydrated lifecycle summaries when command timelines are empty after restart", async () => {
+    const now = await Effect.runPromise(Effect.map(DateTime.now, DateTime.formatIso));
+
+    await expect(
+      decide(
+        {
+          type: "session.settle",
+          commandId: CommandId.make("cmd-restart-pending"),
+          sessionId: SESSION_ID,
+        },
+        makeReadModel({
+          activities: [],
+          pendingApprovalCount: 1,
+        }),
+      ),
+    ).rejects.toThrow("pending approval or user-input request");
+
+    await expect(
+      decide(
+        {
+          type: "session.settle",
+          commandId: CommandId.make("cmd-restart-queued"),
+          sessionId: SESSION_ID,
+        },
+        makeReadModel({
+          messages: [],
+          latestUserMessageAt: now,
+        }),
+      ),
+    ).rejects.toThrow("queued turn start");
   });
 
   it("auto-unsettles manual overrides when provider or user activity begins", async () => {

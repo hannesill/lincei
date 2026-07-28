@@ -21,6 +21,7 @@ const completedTurn = {
 
 function makeShell(overrides: Partial<SessionLifecycleShell> = {}): SessionLifecycleShell {
   return {
+    updatedAt: "2026-07-28T10:01:00.000Z",
     latestUserMessageAt: "2026-07-28T10:00:00.000Z",
     latestTurn: completedTurn,
     session: {

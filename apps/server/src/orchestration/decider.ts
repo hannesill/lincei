@@ -7,6 +7,7 @@ import {
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -23,6 +24,21 @@ import { projectEvent } from "./projector.ts";
 import { hasOpenBlockingRequest, hasQueuedTurnStart } from "./sessionLifecycle.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+export const MAX_SESSION_SNOOZE_HORIZON_MS = 365 * 24 * 60 * 60 * 1_000;
+const CANONICAL_UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+function parseCanonicalUtcIso(value: string): number | null {
+  if (value.length !== 24 || !CANONICAL_UTC_ISO_PATTERN.test(value)) {
+    return null;
+  }
+  return DateTime.make(value).pipe(
+    Option.match({
+      onNone: () => null,
+      onSome: (dateTime) =>
+        DateTime.formatIso(dateTime) === value ? DateTime.toEpochMillis(dateTime) : null,
+    }),
+  );
+}
 
 function withEventBase(
   input: Pick<OrchestrationCommand, "commandId"> & {
@@ -414,10 +430,24 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         sessionId: command.sessionId,
       });
       const occurredAt = yield* nowIso;
-      if (!(Date.parse(command.snoozedUntil) > Date.parse(occurredAt))) {
+      const snoozedUntilMs = parseCanonicalUtcIso(command.snoozedUntil);
+      const occurredAtMs = Date.parse(occurredAt);
+      if (snoozedUntilMs === null) {
         return yield* new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: `Session '${command.sessionId}' snooze wake time '${command.snoozedUntil}' is not in the future.`,
+          detail: `Session '${command.sessionId}' snooze wake time must be canonical UTC ISO-8601.`,
+        });
+      }
+      if (snoozedUntilMs <= occurredAtMs) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' snooze wake time must be in the future.`,
+        });
+      }
+      if (snoozedUntilMs - occurredAtMs > MAX_SESSION_SNOOZE_HORIZON_MS) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' snooze wake time exceeds the maximum horizon.`,
         });
       }
       if (hasOpenBlockingRequest(session)) {

@@ -6,11 +6,18 @@
  *
  * @module OrchestrationProjectionPipeline
  */
-import type { OrchestrationEvent } from "@t3tools/contracts";
+import type { OrchestrationEvent, SessionId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
+
+export interface ProjectedSessionLifecycleSummary {
+  readonly sessionId: SessionId;
+  readonly latestUserMessageAt: string | null;
+  readonly pendingApprovalCount: number;
+  readonly pendingUserInputCount: number;
+}
 
 /**
  * OrchestrationProjectionPipelineShape - Service API for projection execution.
@@ -30,7 +37,7 @@ export interface OrchestrationProjectionPipelineShape {
    */
   readonly projectEvent: (
     event: OrchestrationEvent,
-  ) => Effect.Effect<void, ProjectionRepositoryError>;
+  ) => Effect.Effect<ProjectedSessionLifecycleSummary | null, ProjectionRepositoryError>;
 }
 
 /**

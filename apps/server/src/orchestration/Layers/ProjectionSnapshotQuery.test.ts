@@ -322,6 +322,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           settledAt: null,
           snoozedUntil: "2026-02-25T00:00:00.000Z",
           snoozedAt: "2026-02-24T00:00:02.500Z",
+          latestUserMessageAt: "2026-02-24T00:00:04.000Z",
+          pendingApprovalCount: 1,
+          pendingUserInputCount: 0,
           deletedAt: null,
           messages: [
             {
@@ -1250,8 +1253,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           NULL,
           'turn-running',
           '2026-04-03T00:00:04.000Z',
-          0,
-          0,
+          1,
+          2,
           0,
           '2026-04-03T00:00:02.000Z',
           '2026-04-03T00:00:03.000Z',
@@ -1327,6 +1330,11 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const commandReadModel = yield* snapshotQuery.getCommandReadModel();
       assert.equal(commandReadModel.sessions[0]?.latestTurn?.turnId, asTurnId("turn-running"));
       assert.equal(commandReadModel.sessions[0]?.latestTurn?.state, "running");
+      assert.equal(commandReadModel.sessions[0]?.latestUserMessageAt, "2026-04-03T00:00:04.000Z");
+      assert.equal(commandReadModel.sessions[0]?.pendingApprovalCount, 1);
+      assert.equal(commandReadModel.sessions[0]?.pendingUserInputCount, 2);
+      assert.deepEqual(commandReadModel.sessions[0]?.messages, []);
+      assert.deepEqual(commandReadModel.sessions[0]?.activities, []);
 
       const shellSnapshot = yield* snapshotQuery.getShellSnapshot();
       assert.equal(shellSnapshot.sessions[0]?.latestTurn?.turnId, asTurnId("turn-running"));

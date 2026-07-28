@@ -20,8 +20,10 @@ function makeShell(input: {
   readonly sessionStatus?: "starting" | "running" | "ready" | "error";
   readonly pending?: "approval" | "user-input";
   readonly turnCompletedAt?: string | null;
+  readonly updatedAt?: string;
 }): SessionSnoozeShell {
   return {
+    updatedAt: input.updatedAt ?? "2026-04-10T10:45:00.000Z",
     snoozedUntil: input.snoozedUntil ?? null,
     snoozedAt:
       input.snoozedAt ??
@@ -233,5 +235,19 @@ describe("sessionWokeAt", () => {
         { now: NOW },
       ),
     ).toBe("2026-04-10T09:30:00.000Z");
+  });
+
+  it("keeps the server request timestamp after an intervening visit", () => {
+    const pendingShell = makeShell({
+      snoozedUntil: FUTURE_WAKE,
+      pending: "approval",
+      sessionStatus: "ready",
+      updatedAt: "2026-04-10T10:15:00.000Z",
+    });
+
+    expect(sessionWokeAt(pendingShell, { now: NOW })).toBe("2026-04-10T10:15:00.000Z");
+    expect(sessionWokeAt(pendingShell, { now: "2026-04-10T13:00:00.000Z" })).toBe(
+      "2026-04-10T10:15:00.000Z",
+    );
   });
 });
