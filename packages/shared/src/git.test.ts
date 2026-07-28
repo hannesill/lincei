@@ -32,12 +32,33 @@ describe("normalizeGitRemoteUrl", () => {
     ).toBe("gitlab.com/example-workspace/platform/example-app");
   });
 
-  it("drops explicit ports from URL-shaped remotes", () => {
+  it("preserves non-default endpoint ports and transport identity", () => {
     expect(normalizeGitRemoteUrl("https://gitlab.company.com:8443/team/project.git")).toBe(
-      "gitlab.company.com/team/project",
+      "https://gitlab.company.com:8443/team/project",
     );
     expect(normalizeGitRemoteUrl("ssh://git@gitlab.company.com:2222/team/project.git")).toBe(
-      "gitlab.company.com/team/project",
+      "ssh://git@gitlab.company.com:2222/team/project",
+    );
+    expect(normalizeGitRemoteUrl("https://gitlab.company.com:8443/team/project.git")).not.toBe(
+      normalizeGitRemoteUrl("https://gitlab.company.com:9443/team/project.git"),
+    );
+    expect(normalizeGitRemoteUrl("ssh://git@gitlab.company.com:2222/team/project.git")).not.toBe(
+      normalizeGitRemoteUrl("https://gitlab.company.com:2222/team/project.git"),
+    );
+  });
+
+  it("collapses explicit default ports only for standard HTTPS and Git SSH remotes", () => {
+    expect(normalizeGitRemoteUrl("https://github.com:443/example/workspace.git")).toBe(
+      "github.com/example/workspace",
+    );
+    expect(normalizeGitRemoteUrl("ssh://git@github.com:22/example/workspace.git")).toBe(
+      "github.com/example/workspace",
+    );
+    expect(normalizeGitRemoteUrl("ssh://deploy@github.com:22/example/workspace.git")).toBe(
+      "ssh://deploy@github.com/example/workspace",
+    );
+    expect(normalizeGitRemoteUrl("http://github.com/example/workspace.git")).toBe(
+      "http://github.com/example/workspace",
     );
   });
 });

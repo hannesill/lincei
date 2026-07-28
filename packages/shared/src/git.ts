@@ -115,7 +115,25 @@ export function normalizeGitRemoteUrl(value: string): string {
         .filter((segment) => segment.length > 0)
         .join("/");
       if (url.hostname && repositoryPath.includes("/")) {
-        return `${url.hostname}/${repositoryPath}`;
+        const isStandardHttps =
+          url.protocol === "https:" &&
+          url.port.length === 0 &&
+          url.username.length === 0 &&
+          url.password.length === 0;
+        const isDefaultSshPort = url.port.length === 0 || url.port === "22";
+        const isStandardGitSsh =
+          url.protocol === "ssh:" &&
+          isDefaultSshPort &&
+          url.username === "git" &&
+          url.password.length === 0;
+        if (isStandardHttps || isStandardGitSsh) {
+          return `${url.hostname}/${repositoryPath}`;
+        }
+
+        const sshUsername =
+          url.protocol === "ssh:" && url.username.length > 0 ? `${url.username}@` : "";
+        const endpointHost = url.protocol === "ssh:" && isDefaultSshPort ? url.hostname : url.host;
+        return `${url.protocol}//${sshUsername}${endpointHost}/${repositoryPath}`;
       }
     } catch {
       return normalized;

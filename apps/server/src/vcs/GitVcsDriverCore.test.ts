@@ -361,13 +361,30 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         });
         assert.equal(reusedForDefaultSshPort, "origin");
 
+        const addedForNonDefaultSshPort = yield* driver.ensureRemote({
+          cwd,
+          preferredName: "example-port",
+          url: "ssh://git@github.com:2222/example-workspace/example-app.git",
+        });
+        assert.equal(addedForNonDefaultSshPort, "example-port");
+
+        const addedForNonDefaultHttpsPort = yield* driver.ensureRemote({
+          cwd,
+          preferredName: "example-web-port",
+          url: "https://github.com:8443/example-workspace/example-app.git",
+        });
+        assert.equal(addedForNonDefaultHttpsPort, "example-web-port");
+
         const addedForFork = yield* driver.ensureRemote({
           cwd,
           preferredName: "example-fork",
           url: "git@github.com:example-fork/example-app.git",
         });
         assert.equal(addedForFork, "example-fork");
-        assert.equal(yield* git(cwd, ["remote"]), "example-fork\norigin");
+        assert.equal(
+          yield* git(cwd, ["remote"]),
+          "example-fork\nexample-port\nexample-web-port\norigin",
+        );
       }),
     );
 
