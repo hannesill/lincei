@@ -17,6 +17,7 @@ export interface ProjectedSessionLifecycleSummary {
   readonly latestUserMessageAt: string | null;
   readonly pendingApprovalCount: number;
   readonly pendingUserInputCount: number;
+  readonly pendingRequestRaisedAt: string | null;
 }
 
 /**

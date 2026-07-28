@@ -325,6 +325,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           latestUserMessageAt: "2026-02-24T00:00:04.000Z",
           pendingApprovalCount: 1,
           pendingUserInputCount: 0,
+          pendingRequestRaisedAt: null,
           deletedAt: null,
           messages: [
             {
@@ -462,6 +463,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           latestUserMessageAt: "2026-02-24T00:00:04.000Z",
           hasPendingApprovals: true,
           hasPendingUserInput: false,
+          pendingRequestRaisedAt: null,
           hasActionableProposedPlan: false,
         },
       ]);

@@ -494,6 +494,7 @@ function toShellSession(session: OrchestrationReadModel["sessions"][number]) {
       session.messages.findLast((message) => message.role === "user")?.createdAt ?? null,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
+    pendingRequestRaisedAt: null,
     hasActionableProposedPlan: false,
   };
 }

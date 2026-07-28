@@ -173,6 +173,7 @@ export interface SidebarSessionSummary {
   latestUserMessageAt: string | null;
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
+  pendingRequestRaisedAt?: string | null;
   hasActionableProposedPlan: boolean;
 }
 

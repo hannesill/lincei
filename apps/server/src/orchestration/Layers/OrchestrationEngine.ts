@@ -190,6 +190,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
                             latestUserMessageAt: lifecycleSummary.latestUserMessageAt,
                             pendingApprovalCount: lifecycleSummary.pendingApprovalCount,
                             pendingUserInputCount: lifecycleSummary.pendingUserInputCount,
+                            pendingRequestRaisedAt: lifecycleSummary.pendingRequestRaisedAt,
                           }
                         : session,
                     ),

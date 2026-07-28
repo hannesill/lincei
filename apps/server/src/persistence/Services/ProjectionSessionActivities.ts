@@ -29,6 +29,7 @@ export const ProjectionSessionActivity = Schema.Struct({
   summary: Schema.String,
   payload: Schema.Unknown,
   sequence: Schema.optional(NonNegativeInt),
+  eventOccurredAt: Schema.NullOr(IsoDateTime),
   createdAt: IsoDateTime,
 });
 export type ProjectionSessionActivity = typeof ProjectionSessionActivity.Type;

@@ -765,17 +765,23 @@ it.effect("decodes settled and snoozed lifecycle commands and activity reset eve
 
 it.effect("rejects noncanonical and oversized snooze command timestamps", () =>
   Effect.gen(function* () {
+    const sensitiveValue = `sensitive-snooze-${"9".repeat(10_000)}`;
     for (const snoozedUntil of [
       "2026-07-29T00:00:00Z",
       "2026-07-29 00:00:00.000Z",
-      "9".repeat(10_000),
+      sensitiveValue,
+      { nested: sensitiveValue },
+      42,
     ]) {
-      yield* decodeOrchestrationCommand({
+      const error = yield* decodeOrchestrationCommand({
         type: "session.snooze",
         commandId: "cmd-invalid-snooze",
         sessionId: "session-1",
         snoozedUntil,
       }).pipe(Effect.flip);
+      const renderedIssue = error.issue.toString();
+      assert.notInclude(renderedIssue, sensitiveValue);
+      assert.isBelow(renderedIssue.length, 1_024);
     }
   }),
 );

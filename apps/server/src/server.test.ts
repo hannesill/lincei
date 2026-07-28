@@ -1876,6 +1876,63 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("bounds and redacts invalid snooze payload errors at the websocket boundary", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const sensitiveValue = `sensitive-snooze-${"9".repeat(10_000)}`;
+      const { cookie, url } = parseSessionCookieFromWsUrl(yield* getWsServerUrl("/ws"));
+      const socket = yield* Effect.acquireRelease(
+        Effect.callback<NodeSocket.NodeWS.WebSocket, Error>((resume) => {
+          const nextSocket = new NodeSocket.NodeWS.WebSocket(
+            url,
+            cookie ? { headers: { cookie } } : {},
+          );
+          nextSocket.once("open", () => resume(Effect.succeed(nextSocket)));
+          nextSocket.once("error", (error) => resume(Effect.fail(error)));
+        }),
+        (nextSocket) => Effect.sync(() => nextSocket.close()),
+      );
+
+      const rpcParser = RpcSerialization.json.makeUnsafe();
+      const response = yield* Effect.callback<string, Error>((resume) => {
+        const onMessage = (data: NodeSocket.NodeWS.RawData) => {
+          socket.off("error", onError);
+          resume(Effect.succeed(String(data)));
+        };
+        const onError = (error: Error) => {
+          socket.off("message", onMessage);
+          resume(Effect.fail(error));
+        };
+        socket.once("message", onMessage);
+        socket.once("error", onError);
+        socket.send(
+          rpcParser.encode({
+            _tag: "Request",
+            id: "1",
+            tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+            payload: {
+              type: "session.snooze",
+              commandId: "cmd-invalid-snooze-rpc",
+              sessionId: "session-invalid-snooze-rpc",
+              snoozedUntil: sensitiveValue,
+            },
+            headers: [],
+          }) ?? "",
+        );
+      });
+
+      const decoded = rpcParser.decode(response)[0] as {
+        readonly _tag?: string;
+        readonly exit?: { readonly _tag?: string };
+      };
+      assert.equal(decoded._tag, "Exit");
+      assert.equal(decoded.exit?._tag, "Failure");
+      assert.notInclude(response, sensitiveValue);
+      assert.isBelow(response.length, 2_048);
+    }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect(
     "rejects websocket rpc handshake when a session token is only provided via query string",
     () =>

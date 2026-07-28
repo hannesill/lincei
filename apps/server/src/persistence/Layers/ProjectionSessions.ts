@@ -52,6 +52,7 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
           latest_user_message_at,
           pending_approval_count,
           pending_user_input_count,
+          pending_request_raised_at,
           has_actionable_proposed_plan,
           deleted_at
         )
@@ -77,6 +78,7 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
           ${row.latestUserMessageAt},
           ${row.pendingApprovalCount},
           ${row.pendingUserInputCount},
+          ${row.pendingRequestRaisedAt},
           ${row.hasActionableProposedPlan},
           ${row.deletedAt}
         )
@@ -102,6 +104,7 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
           latest_user_message_at = excluded.latest_user_message_at,
           pending_approval_count = excluded.pending_approval_count,
           pending_user_input_count = excluded.pending_user_input_count,
+          pending_request_raised_at = excluded.pending_request_raised_at,
           has_actionable_proposed_plan = excluded.has_actionable_proposed_plan,
           deleted_at = excluded.deleted_at
       `,
@@ -134,6 +137,7 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_sessions
@@ -168,10 +172,46 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_sessions
         WHERE project_id = ${projectId}
+        ORDER BY created_at ASC, session_id ASC
+      `,
+  });
+
+  const listAllProjectionSessionRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionSessionDbRow,
+    execute: () =>
+      sql`
+        SELECT
+          session_id AS "sessionId",
+          project_id AS "projectId",
+          title,
+          model_selection_json AS "modelSelection",
+          runtime_mode AS "runtimeMode",
+          interaction_mode AS "interactionMode",
+          workflow_id AS "workflowId",
+          workflow_version AS "workflowVersion",
+          branch,
+          worktree_path AS "worktreePath",
+          latest_turn_id AS "latestTurnId",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          archived_at AS "archivedAt",
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt",
+          snoozed_until AS "snoozedUntil",
+          snoozed_at AS "snoozedAt",
+          latest_user_message_at AS "latestUserMessageAt",
+          pending_approval_count AS "pendingApprovalCount",
+          pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
+          has_actionable_proposed_plan AS "hasActionableProposedPlan",
+          deleted_at AS "deletedAt"
+        FROM projection_sessions
         ORDER BY created_at ASC, session_id ASC
       `,
   });
@@ -200,6 +240,11 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionSessionRepository.listByProjectId:query")),
     );
 
+  const listAll: ProjectionSessionRepositoryShape["listAll"] = () =>
+    listAllProjectionSessionRows(undefined).pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionSessionRepository.listAll:query")),
+    );
+
   const deleteById: ProjectionSessionRepositoryShape["deleteById"] = (input) =>
     deleteProjectionSessionRow(input).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionSessionRepository.deleteById:query")),
@@ -209,6 +254,7 @@ const makeProjectionSessionRepository = Effect.gen(function* () {
     upsert,
     getById,
     listByProjectId,
+    listAll,
     deleteById,
   } satisfies ProjectionSessionRepositoryShape;
 });

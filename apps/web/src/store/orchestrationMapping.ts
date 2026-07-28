@@ -224,6 +224,7 @@ export function mapSessionShell(
     latestUserMessageAt: session.latestUserMessageAt,
     hasPendingApprovals: session.hasPendingApprovals,
     hasPendingUserInput: session.hasPendingUserInput,
+    pendingRequestRaisedAt: session.pendingRequestRaisedAt ?? null,
     hasActionableProposedPlan: session.hasActionableProposedPlan,
   };
   return {
@@ -337,6 +338,7 @@ export function sidebarSessionSummariesEqual(
     left.latestUserMessageAt === right.latestUserMessageAt &&
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
+    left.pendingRequestRaisedAt === right.pendingRequestRaisedAt &&
     left.hasActionableProposedPlan === right.hasActionableProposedPlan
   );
 }
