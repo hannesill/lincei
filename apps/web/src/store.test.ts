@@ -80,6 +80,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     error: null,
     createdAt: "2026-02-13T00:00:00.000Z",
     archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
     latestTurn: null,
     branch: null,
     worktreePath: null,
@@ -125,6 +127,8 @@ function makeState(session: Session): AppState {
         error: session.error,
         createdAt: session.createdAt,
         archivedAt: session.archivedAt,
+        settledOverride: session.settledOverride,
+        settledAt: session.settledAt,
         updatedAt: session.updatedAt,
         branch: session.branch,
         worktreePath: session.worktreePath,
@@ -443,6 +447,63 @@ describe("setSessionBranch", () => {
 });
 
 describe("incremental orchestration updates", () => {
+  it("projects settled lifecycle events without changing archive state", () => {
+    const session = makeSession();
+    const state = makeState(session);
+    const settledAt = "2026-02-27T00:00:01.000Z";
+
+    const settled = applyOrchestrationEvent(
+      state,
+      makeEvent("session.settled", {
+        sessionId: session.id,
+        settledAt,
+        updatedAt: settledAt,
+      }),
+      localEnvironmentId,
+    );
+    expect(
+      selectSessionByRef(settled, scopeSessionRef(localEnvironmentId, session.id)),
+    ).toMatchObject({
+      archivedAt: null,
+      settledOverride: "settled",
+      settledAt,
+    });
+
+    const active = applyOrchestrationEvent(
+      settled,
+      makeEvent("session.unsettled", {
+        sessionId: session.id,
+        reason: "user",
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      }),
+      localEnvironmentId,
+    );
+    expect(
+      selectSessionByRef(active, scopeSessionRef(localEnvironmentId, session.id)),
+    ).toMatchObject({
+      archivedAt: null,
+      settledOverride: "active",
+      settledAt: null,
+    });
+
+    const activityReset = applyOrchestrationEvent(
+      settled,
+      makeEvent("session.unsettled", {
+        sessionId: session.id,
+        reason: "activity",
+        updatedAt: "2026-02-27T00:00:03.000Z",
+      }),
+      localEnvironmentId,
+    );
+    expect(
+      selectSessionByRef(activityReset, scopeSessionRef(localEnvironmentId, session.id)),
+    ).toMatchObject({
+      archivedAt: null,
+      settledOverride: null,
+      settledAt: null,
+    });
+  });
+
   it("does not mark bootstrap complete for incremental events", () => {
     const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(makeSession())), {
       bootstrapComplete: false,

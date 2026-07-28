@@ -152,6 +152,8 @@ export function mapSession(session: OrchestrationSession, environmentId: Environ
     error: sanitizeSessionErrorMessage(session.session?.lastError),
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
+    settledOverride: session.settledOverride,
+    settledAt: session.settledAt,
     updatedAt: session.updatedAt,
     latestTurn: session.latestTurn,
     pendingSourceProposedPlan: session.latestTurn?.sourceProposedPlan,
@@ -185,6 +187,8 @@ export function mapSessionShell(
     error: sanitizeSessionErrorMessage(session.session?.lastError),
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
+    settledOverride: session.settledOverride,
+    settledAt: session.settledAt,
     updatedAt: session.updatedAt,
     branch: session.branch,
     worktreePath: session.worktreePath,
@@ -205,6 +209,8 @@ export function mapSessionShell(
     session: providerRuntime,
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
+    settledOverride: session.settledOverride,
+    settledAt: session.settledAt,
     updatedAt: session.updatedAt,
     latestTurn: session.latestTurn,
     branch: session.branch,
@@ -237,6 +243,8 @@ export function toSessionShell(session: Session): SessionShell {
     error: session.error,
     createdAt: session.createdAt,
     archivedAt: session.archivedAt,
+    settledOverride: session.settledOverride,
+    settledAt: session.settledAt,
     updatedAt: session.updatedAt,
     branch: session.branch,
     worktreePath: session.worktreePath,
@@ -310,6 +318,8 @@ export function sidebarSessionSummariesEqual(
     providerRuntimesEqual(left.session, right.session) &&
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&
+    left.settledOverride === right.settledOverride &&
+    left.settledAt === right.settledAt &&
     left.updatedAt === right.updatedAt &&
     latestTurnsEqual(left.latestTurn, right.latestTurn) &&
     left.branch === right.branch &&
@@ -337,6 +347,8 @@ export function sessionShellsEqual(left: SessionShell | undefined, right: Sessio
     left.error === right.error &&
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&
+    left.settledOverride === right.settledOverride &&
+    left.settledAt === right.settledAt &&
     left.updatedAt === right.updatedAt &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath

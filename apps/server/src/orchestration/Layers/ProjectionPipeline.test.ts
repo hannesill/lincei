@@ -285,6 +285,157 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 
+  it.effect("persists settled state without mutating archived_at", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const sessionId = SessionId.make("session-settled-persistence");
+      const projectId = ProjectId.make("project-settled-persistence");
+      const createdAt = "2026-07-28T00:00:00.000Z";
+      const archivedAt = "2026-07-28T00:01:00.000Z";
+      const settledAt = "2026-07-28T00:02:00.000Z";
+      type LifecycleRow = {
+        readonly archivedAt: string | null;
+        readonly settledOverride: string | null;
+        readonly settledAt: string | null;
+      };
+
+      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+        eventStore
+          .append(event)
+          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.make("evt-settled-project"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: createdAt,
+        commandId: CommandId.make("cmd-settled-project"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-settled-project"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Settled Project",
+          workspaceRoot: "/tmp/settled-project",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+      yield* appendAndProject({
+        type: "session.created",
+        eventId: EventId.make("evt-settled-session"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: createdAt,
+        commandId: CommandId.make("cmd-settled-session"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-settled-session"),
+        metadata: {},
+        payload: {
+          sessionId,
+          projectId,
+          title: "Settled Session",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+      yield* appendAndProject({
+        type: "session.archived",
+        eventId: EventId.make("evt-settled-archive"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: archivedAt,
+        commandId: CommandId.make("cmd-settled-archive"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-settled-archive"),
+        metadata: {},
+        payload: {
+          sessionId,
+          archivedAt,
+          updatedAt: archivedAt,
+        },
+      });
+      yield* appendAndProject({
+        type: "session.settled",
+        eventId: EventId.make("evt-settled"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: settledAt,
+        commandId: CommandId.make("cmd-settled"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-settled"),
+        metadata: {},
+        payload: {
+          sessionId,
+          settledAt,
+          updatedAt: settledAt,
+        },
+      });
+
+      let rows = yield* sql<LifecycleRow>`
+        SELECT
+          archived_at AS "archivedAt",
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt"
+        FROM projection_sessions
+        WHERE session_id = ${sessionId}
+      `;
+      assert.deepEqual(rows, [
+        {
+          archivedAt,
+          settledOverride: "settled",
+          settledAt,
+        },
+      ]);
+
+      yield* appendAndProject({
+        type: "session.unsettled",
+        eventId: EventId.make("evt-unsettled"),
+        aggregateKind: "session",
+        aggregateId: sessionId,
+        occurredAt: "2026-07-28T00:03:00.000Z",
+        commandId: CommandId.make("cmd-unsettled"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-unsettled"),
+        metadata: {},
+        payload: {
+          sessionId,
+          reason: "user",
+          updatedAt: "2026-07-28T00:03:00.000Z",
+        },
+      });
+
+      rows = yield* sql<LifecycleRow>`
+        SELECT
+          archived_at AS "archivedAt",
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt"
+        FROM projection_sessions
+        WHERE session_id = ${sessionId}
+      `;
+      assert.deepEqual(rows, [
+        {
+          archivedAt,
+          settledOverride: "active",
+          settledAt: null,
+        },
+      ]);
+    }),
+  );
+
   it.effect("clears a pending turn start when provider startup becomes terminal", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;

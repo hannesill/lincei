@@ -15,6 +15,7 @@ import {
   ProjectMetaUpdatedPayload,
   OrchestrationProposedPlan,
   OrchestrationProviderRuntime,
+  OrchestrationSession,
   ProjectCreateCommand,
   SessionMetaUpdatedPayload,
   SessionTurnStartCommand,
@@ -37,6 +38,7 @@ const decodeSessionTurnStartRequestedPayload = Schema.decodeUnknownEffect(
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationProviderRuntime = Schema.decodeUnknownEffect(OrchestrationProviderRuntime);
+const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
 const encodeSessionCreatedPayload = Schema.encodeEffect(SessionCreatedPayload);
 
 function getOptionValue(
@@ -679,6 +681,77 @@ it.effect("preserves proposed plan implementation metadata when present", () =>
     });
     assert.strictEqual(parsed.implementedAt, "2026-01-02T00:00:00.000Z");
     assert.strictEqual(parsed.implementationSessionId, "session-2");
+  }),
+);
+
+it.effect("decodes settled lifecycle commands and activity reset events", () =>
+  Effect.gen(function* () {
+    const settle = yield* decodeOrchestrationCommand({
+      type: "session.settle",
+      commandId: "cmd-settle",
+      sessionId: "session-1",
+    });
+    assert.strictEqual(settle.type, "session.settle");
+
+    const unsettle = yield* decodeOrchestrationCommand({
+      type: "session.unsettle",
+      commandId: "cmd-unsettle",
+      sessionId: "session-1",
+      reason: "user",
+    });
+    assert.strictEqual(unsettle.type, "session.unsettle");
+
+    const event = yield* decodeOrchestrationEvent({
+      sequence: 1,
+      eventId: "event-unsettled",
+      aggregateKind: "session",
+      aggregateId: "session-1",
+      occurredAt: "2026-07-28T00:00:00.000Z",
+      commandId: "cmd-provider-activity",
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      type: "session.unsettled",
+      payload: {
+        sessionId: "session-1",
+        reason: "activity",
+        updatedAt: "2026-07-28T00:00:00.000Z",
+      },
+    });
+    assert.strictEqual(event.type, "session.unsettled");
+    if (event.type === "session.unsettled") {
+      assert.strictEqual(event.payload.reason, "activity");
+    }
+  }),
+);
+
+it.effect("defaults settled lifecycle state when decoding historical sessions", () =>
+  Effect.gen(function* () {
+    const session = yield* decodeOrchestrationSession({
+      id: "session-1",
+      projectId: "project-1",
+      title: "Historical session",
+      modelSelection: {
+        instanceId: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-07-20T00:00:00.000Z",
+      updatedAt: "2026-07-20T00:00:00.000Z",
+      archivedAt: null,
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      activities: [],
+      checkpoints: [],
+      session: null,
+    });
+    assert.strictEqual(session.settledOverride, null);
+    assert.strictEqual(session.settledAt, null);
   }),
 );
 
