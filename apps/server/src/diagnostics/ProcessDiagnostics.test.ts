@@ -182,16 +182,29 @@ describe("ProcessDiagnostics", () => {
 
   it.effect("queries processes through the ChildProcessSpawner service", () =>
     Effect.gen(function* () {
-      const commands: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }> =
-        [];
+      const commands: Array<{
+        readonly command: string;
+        readonly args: ReadonlyArray<string>;
+        readonly cwd: string | undefined;
+        readonly shell: boolean | string | undefined;
+      }> = [];
       const spawnerLayer = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make((command) => {
           const childProcess = command as unknown as {
             readonly command: string;
             readonly args: ReadonlyArray<string>;
+            readonly options: {
+              readonly cwd?: string;
+              readonly shell?: boolean | string;
+            };
           };
-          commands.push({ command: childProcess.command, args: childProcess.args });
+          commands.push({
+            command: childProcess.command,
+            args: childProcess.args,
+            cwd: childProcess.options.cwd,
+            shell: childProcess.options.shell,
+          });
           return Effect.succeed(
             mockHandle({
               stdout: [
@@ -214,6 +227,8 @@ describe("ProcessDiagnostics", () => {
         {
           command: "ps",
           args: ["-axo", "pid=,ppid=,pgid=,stat=,pcpu=,rss=,etime=,command="],
+          cwd: process.cwd(),
+          shell: undefined,
         },
       ]);
     }),

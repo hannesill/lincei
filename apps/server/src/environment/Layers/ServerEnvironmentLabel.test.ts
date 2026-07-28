@@ -73,6 +73,7 @@ describe("resolveServerEnvironmentLabel", () => {
           timeoutBehavior: "timedOutResult",
         }),
       );
+      expect(runMock.mock.calls[0]?.[0].shell).toBeUndefined();
     }),
   );
 
@@ -116,6 +117,7 @@ describe("resolveServerEnvironmentLabel", () => {
           timeoutBehavior: "timedOutResult",
         }),
       );
+      expect(runMock.mock.calls[0]?.[0].shell).toBeUndefined();
     }),
   );
 
