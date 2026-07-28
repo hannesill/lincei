@@ -21,8 +21,10 @@ import {
 import { compareSemverVersions } from "@t3tools/shared/semver";
 import {
   query as claudeQuery,
+  type Options as ClaudeQueryOptions,
   type SlashCommand as ClaudeSlashCommand,
   type SDKUserMessage,
+  type SettingSource,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import {
@@ -420,6 +422,44 @@ function claudeAuthMetadata(input: {
 
 const CAPABILITIES_PROBE_TIMEOUT_MS = 8_000;
 
+/**
+ * Keep workspace-scoped command discovery intact while isolating the periodic
+ * health check from configured MCP servers.
+ */
+export const CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES = [
+  "user",
+  "project",
+  "local",
+] as const satisfies ReadonlyArray<SettingSource>;
+
+/** Build the exact SDK options used by the periodic Claude capability probe. */
+export function buildClaudeCapabilitiesProbeQueryOptions(input: {
+  readonly executablePath: string;
+  readonly abortController: AbortController;
+  readonly environment: NodeJS.ProcessEnv;
+  readonly cwd: string | undefined;
+}): ClaudeQueryOptions {
+  return {
+    persistSession: false,
+    pathToClaudeCodeExecutable: input.executablePath,
+    abortController: input.abortController,
+    settingSources: [...CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES],
+    allowedTools: [],
+    // Ignore MCP definitions from every filesystem setting source above. The
+    // SDK combines this empty explicit map with --strict-mcp-config.
+    mcpServers: {},
+    strictMcpConfig: true,
+    env: {
+      ...input.environment,
+      // Connected claude.ai MCP servers are discovered outside filesystem
+      // config; disable them independently for this health check.
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+    },
+    ...(input.cwd ? { cwd: input.cwd } : {}),
+    stderr: () => {},
+  };
+}
+
 function nonEmptyProbeString(value: string): string | undefined {
   const candidate = value.trim();
   return candidate ? candidate : undefined;
@@ -520,6 +560,7 @@ function waitForAbortSignal(signal: AbortSignal): Promise<void> {
 const probeClaudeCapabilities = (
   claudeSettings: ClaudeSettings,
   environment: NodeJS.ProcessEnv = process.env,
+  cwd?: string,
 ) => {
   const abort = new AbortController();
   return Effect.gen(function* () {
@@ -532,15 +573,12 @@ const probeClaudeCapabilities = (
         prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
           await waitForAbortSignal(abort.signal);
         })(),
-        options: {
-          persistSession: false,
-          pathToClaudeCodeExecutable: claudeSettings.binaryPath,
+        options: buildClaudeCapabilitiesProbeQueryOptions({
+          executablePath: claudeSettings.binaryPath,
           abortController: abort,
-          settingSources: ["user", "project", "local"],
-          allowedTools: [],
-          env: claudeEnvironment,
-          stderr: () => {},
-        },
+          environment: claudeEnvironment,
+          cwd,
+        }),
       });
       const init = await q.initializationResult();
       const account = init.account as
