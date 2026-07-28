@@ -22,6 +22,7 @@ import {
   OpenCodeRuntime,
   openCodeRuntimeErrorDetail,
   type OpenCodeInventory,
+  type OpenCodeInventoryDiagnostic,
 } from "../opencodeRuntime.ts";
 import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
 
@@ -61,6 +62,18 @@ function normalizedErrorMessage(cause: unknown): string | undefined {
   }
 
   return normalizeProbeMessage(cause.message);
+}
+
+function formatOpenCodeInventoryDiagnostics(
+  diagnostics: ReadonlyArray<OpenCodeInventoryDiagnostic>,
+): string {
+  return diagnostics
+    .map((diagnostic) => {
+      const command =
+        diagnostic.command === "models" ? "`opencode models --verbose`" : "`opencode agent list`";
+      return `${command} failed after ${diagnostic.attempts} attempts: ${diagnostic.detail}`;
+    })
+    .join("; ");
 }
 
 function formatOpenCodeProbeError(input: {
@@ -448,6 +461,17 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     DEFAULT_OPENCODE_MODEL_CAPABILITIES,
   );
   const connectedCount = inventoryExit.value.providerList.connected.length;
+  const inventoryDiagnostics = inventoryExit.value.diagnostics;
+  const availabilityMessage =
+    connectedCount > 0
+      ? `${connectedCount} upstream provider${connectedCount === 1 ? "" : "s"} connected through ${isExternalServer ? "the configured OpenCode server" : "OpenCode"}.`
+      : isExternalServer
+        ? "Connected to the configured OpenCode server, but it did not report any connected upstream providers."
+        : "OpenCode is available, but it did not report any connected upstream providers.";
+  const inventoryMessage =
+    inventoryDiagnostics.length > 0
+      ? `${availabilityMessage} Inventory is incomplete: ${formatOpenCodeInventoryDiagnostics(inventoryDiagnostics)}`
+      : availabilityMessage;
   return buildServerProvider({
     presentation: OPENCODE_PRESENTATION,
     enabled: true,
@@ -456,17 +480,12 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     probe: {
       installed: true,
       version,
-      status: connectedCount > 0 ? "ready" : "warning",
+      status: connectedCount > 0 && inventoryDiagnostics.length === 0 ? "ready" : "warning",
       auth: {
         status: connectedCount > 0 ? "authenticated" : "unknown",
         type: "opencode",
       },
-      message:
-        connectedCount > 0
-          ? `${connectedCount} upstream provider${connectedCount === 1 ? "" : "s"} connected through ${isExternalServer ? "the configured OpenCode server" : "OpenCode"}.`
-          : isExternalServer
-            ? "Connected to the configured OpenCode server, but it did not report any connected upstream providers."
-            : "OpenCode is available, but it did not report any connected upstream providers.",
+      message: inventoryMessage,
     },
   });
 });
