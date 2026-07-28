@@ -1182,7 +1182,16 @@ export function makeOpenCodeAdapter(
                   ? yield* runOpenCodeSdk("session.get", () =>
                       client.session.get({ sessionID: resumeSessionId }),
                     ).pipe(
-                      Effect.map((response) => response.data),
+                      Effect.flatMap((response) =>
+                        response.data
+                          ? Effect.succeed(response.data)
+                          : Effect.fail(
+                              new OpenCodeRuntimeError({
+                                operation: "session.get",
+                                detail: "OpenCode session.get returned no session payload.",
+                              }),
+                            ),
+                      ),
                       Effect.catchIf(
                         (cause) => isOpenCodeNotFound(cause),
                         () => Effect.void,
