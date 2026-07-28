@@ -117,6 +117,7 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
       const persistedRecords: ReadonlyArray<SavedEnvironmentRecord> =
         await ensureLocalApi().persistence.getSavedEnvironmentRegistry();
       const supportedRecords = persistedRecords.filter(isSupportedSavedEnvironmentRecord);
+      replaceSavedEnvironmentRegistryState(supportedRecords);
       if (supportedRecords.length !== persistedRecords.length) {
         const rejectedEnvironmentIds = persistedRecords
           .filter((record) => !isSupportedSavedEnvironmentRecord(record))
@@ -124,11 +125,18 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
         console.warn("[SAVED_ENVIRONMENTS] removed unsupported persisted targets", {
           environmentIds: rejectedEnvironmentIds,
         });
-        await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
-          supportedRecords.map(toPersistedSavedEnvironmentRecord),
-        );
+        try {
+          await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
+            valuesOfSavedEnvironmentRegistry(useSavedEnvironmentRegistryStore.getState().byId).map(
+              toPersistedSavedEnvironmentRecord,
+            ),
+          );
+        } catch {
+          console.error("[SAVED_ENVIRONMENTS] failed to persist filtered registry", {
+            environmentIds: rejectedEnvironmentIds,
+          });
+        }
       }
-      replaceSavedEnvironmentRegistryState(supportedRecords);
     } catch (error) {
       console.error("[SAVED_ENVIRONMENTS] hydrate failed", error);
     } finally {
