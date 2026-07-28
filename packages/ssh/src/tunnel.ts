@@ -402,9 +402,11 @@ ensure_remote_node_path() {
   export FNM_DIR
   prepend_path_if_dir "$FNM_DIR"
   prepend_path_if_dir "$HOME/.fnm"
-  if ! command -v node >/dev/null 2>&1 && command -v fnm >/dev/null 2>&1; then
-    eval "$(fnm env --shell bash)" >/dev/null 2>&1 || true
-    fnm use --silent-if-unchanged >/dev/null 2>&1 || fnm use default >/dev/null 2>&1 || true
+  if command -v fnm >/dev/null 2>&1; then
+    if ! command -v node >/dev/null 2>&1 || ! remote_node_satisfies_engine >/dev/null 2>&1; then
+      eval "$(fnm env --shell bash)" >/dev/null 2>&1 || true
+      fnm use --silent-if-unchanged >/dev/null 2>&1 || fnm use default >/dev/null 2>&1 || true
+    fi
   fi
 
   prepend_path_if_dir "$HOME/.nodenv/bin"

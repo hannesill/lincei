@@ -21,6 +21,7 @@ import {
   describeReadinessCause,
   issueRemotePairingToken,
   launchOrReuseRemoteServer,
+  REMOTE_NODE_ENV_SCRIPT,
   REMOTE_PICK_PORT_SCRIPT,
   SshEnvironmentManager,
   waitForHttpReady,
@@ -120,6 +121,73 @@ describe("ssh tunnel scripts", () => {
 
     assert.include(script, "T3_NODE_ENGINE_RANGE=''");
     assert.notInclude(script, TEST_NODE_ENGINE_RANGE);
+  });
+
+  it.effect("activates fnm when the current node does not satisfy the engine range", () => {
+    if (process.platform === "win32") {
+      return Effect.void;
+    }
+
+    return Effect.gen(function* () {
+      const nodeEnvironmentScript = REMOTE_NODE_ENV_SCRIPT.replace(
+        "@@T3_NODE_ENGINE_RANGE@@",
+        "'test-engine-range'",
+      ).replace("@@T3_NODE_ENGINE_CHECK_SCRIPT@@", "/* handled by the fake node function */");
+      const harness = `set -eu
+${nodeEnvironmentScript}
+FNM_ACTIVE=0
+FNM_USE_CALLED=0
+node() {
+  [ "$FNM_ACTIVE" = "1" ]
+}
+fnm() {
+  case "\${1:-}" in
+    env)
+      printf '%s\\n' 'FNM_ACTIVE=1'
+      printf '%s\\n' 'export FNM_ACTIVE'
+      ;;
+    use)
+      FNM_USE_CALLED=1
+      ;;
+  esac
+}
+ensure_remote_node_path
+printf 'fnm-active=%s fnm-use=%s\\n' "$FNM_ACTIVE" "$FNM_USE_CALLED"
+`;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const child = yield* spawner.spawn(
+        ChildProcess.make("/bin/sh", ["-s"], {
+          env: {
+            HOME: "/nonexistent/lincei-fnm-harness",
+            PATH: process.env.PATH ?? "/usr/bin:/bin",
+          },
+        }),
+      );
+      yield* Stream.run(Stream.encodeText(Stream.make(harness)), child.stdin);
+      const [stdout, stderr, exitCode] = yield* Effect.all(
+        [
+          child.stdout.pipe(
+            Stream.decodeText(),
+            Stream.runFold(
+              () => "",
+              (output, chunk) => output + chunk,
+            ),
+          ),
+          child.stderr.pipe(
+            Stream.decodeText(),
+            Stream.runFold(
+              () => "",
+              (output, chunk) => output + chunk,
+            ),
+          ),
+          child.exitCode.pipe(Effect.map(Number)),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      assert.equal(exitCode, 0, stderr);
+      assert.include(stdout, "fnm-active=1 fnm-use=1");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
   });
 
   it("shell-quotes package specs in the remote t3 runner", () => {
