@@ -38,6 +38,7 @@ describe("environment runtime catalog stores", () => {
     const { __resetLocalApiForTests } = await import("../../localApi");
     await __resetLocalApiForTests();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("resets the saved environment registry store state", () => {
@@ -187,5 +188,65 @@ describe("environment runtime catalog stores", () => {
       "[SAVED_ENVIRONMENTS] removed unsupported persisted targets",
       { environmentIds: [invalidRecord.environmentId] },
     );
+  });
+
+  it("keeps valid records hydrated when filtered registry persistence fails", async () => {
+    const validRecord: PersistedSavedEnvironmentRecord = {
+      environmentId: EnvironmentId.make("environment-valid"),
+      label: "Valid remote",
+      httpBaseUrl: "https://valid.example.com/",
+      wsBaseUrl: "wss://valid.example.com/",
+      createdAt: "2026-04-09T00:00:00.000Z",
+      lastConnectedAt: null,
+    };
+    const invalidRecord: PersistedSavedEnvironmentRecord = {
+      environmentId: EnvironmentId.make("environment-invalid"),
+      label: "Invalid remote",
+      httpBaseUrl: "ftp://invalid.example.com/",
+      wsBaseUrl: "wss://invalid.example.com/",
+      createdAt: "2026-04-09T00:00:00.000Z",
+      lastConnectedAt: null,
+    };
+    const cleanupError = new Error(`failed to remove ${invalidRecord.httpBaseUrl}`);
+    const setSavedEnvironmentRegistry = vi.fn(async () => {
+      throw cleanupError;
+    });
+    const warningSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("window", {
+      nativeApi: {
+        persistence: {
+          getClientSettings: async () => null,
+          setClientSettings: async () => undefined,
+          getSavedEnvironmentRegistry: async () => [validRecord, invalidRecord],
+          setSavedEnvironmentRegistry,
+          getSavedEnvironmentSecret: async () => null,
+          setSavedEnvironmentSecret: async () => true,
+          removeSavedEnvironmentSecret: async () => undefined,
+        },
+      } satisfies Pick<LocalApi, "persistence">,
+    });
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    await waitForSavedEnvironmentRegistryHydration();
+
+    expect(useSavedEnvironmentRegistryStore.getState().byId[validRecord.environmentId]).toEqual(
+      validRecord,
+    );
+    expect(
+      useSavedEnvironmentRegistryStore.getState().byId[invalidRecord.environmentId],
+    ).toBeUndefined();
+    expect(setSavedEnvironmentRegistry).toHaveBeenCalledWith([validRecord]);
+    expect(warningSpy).toHaveBeenCalledWith(
+      "[SAVED_ENVIRONMENTS] removed unsupported persisted targets",
+      { environmentIds: [invalidRecord.environmentId] },
+    );
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[SAVED_ENVIRONMENTS] failed to persist filtered registry",
+      { environmentIds: [invalidRecord.environmentId] },
+    );
+    expect(errorSpy).not.toHaveBeenCalledWith(expect.anything(), cleanupError);
   });
 });
