@@ -1633,6 +1633,57 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status does not reuse a PR after only the remote path casing changes", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("example-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-path-case-repointed"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-path-case-repointed"]);
+      yield* runGit(repoDir, [
+        "remote",
+        "set-url",
+        "origin",
+        "https://github.com/Example-Workspace/Example-App.git",
+      ]);
+      yield* runGit(repoDir, ["branch", "--unset-upstream"]);
+
+      const existingPr = {
+        number: 219,
+        title: "Case-sensitive remote PR",
+        url: "https://github.com/Example-Workspace/Example-App/pull/219",
+        baseRefName: "main",
+        headRefName: "feature/pr-path-case-repointed",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub API rate limited the PR lookup.",
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(219);
+
+      yield* runGit(repoDir, [
+        "remote",
+        "set-url",
+        "origin",
+        "https://github.com/example-workspace/example-app.git",
+      ]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr).toBeNull();
+    }),
+  );
+
   it.effect("creates a commit when working tree is dirty", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
