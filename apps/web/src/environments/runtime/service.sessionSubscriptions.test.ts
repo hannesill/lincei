@@ -40,6 +40,7 @@ vi.mock("../remote/api", () => ({
 }));
 
 vi.mock("./catalog", () => ({
+  assertSupportedSavedEnvironmentRecord: vi.fn(),
   getSavedEnvironmentRecord: mockGetSavedEnvironmentRecord,
   hasSavedEnvironmentRegistryHydrated: vi.fn(() => true),
   listSavedEnvironmentRecords: mockListSavedEnvironmentRecords,
