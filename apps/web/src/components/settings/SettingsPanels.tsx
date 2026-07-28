@@ -426,6 +426,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions
         ? ["Custom agent instructions"]
         : []),
+      ...(settings.vitrine.executablePath !== DEFAULT_UNIFIED_SETTINGS.vitrine.executablePath
+        ? ["Vitrine executable"]
+        : []),
       ...(settings.confirmSessionArchive !== DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive
         ? ["Archive confirmation"]
         : []),
@@ -441,6 +444,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmSessionDelete,
       settings.addProjectBaseDirectory,
       settings.linceiAgentCustomInstructions,
+      settings.vitrine.executablePath,
       settings.defaultSessionEnvMode,
       settings.diffIgnoreWhitespace,
       settings.diffWordWrap,
@@ -474,6 +478,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       defaultSessionEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultSessionEnvMode,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
       linceiAgentCustomInstructions: DEFAULT_UNIFIED_SETTINGS.linceiAgentCustomInstructions,
+      vitrine: DEFAULT_UNIFIED_SETTINGS.vitrine,
       confirmSessionArchive: DEFAULT_UNIFIED_SETTINGS.confirmSessionArchive,
       confirmSessionDelete: DEFAULT_UNIFIED_SETTINGS.confirmSessionDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,

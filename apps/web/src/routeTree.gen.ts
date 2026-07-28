@@ -17,6 +17,7 @@ import { Route as ChatIndexRouteImport } from './routes/_chat.index'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsShortcutsRouteImport } from './routes/settings.shortcuts'
+import { Route as SettingsResearchRouteImport } from './routes/settings.research'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
@@ -63,6 +64,11 @@ const SettingsSkillsRoute = SettingsSkillsRouteImport.update({
 const SettingsShortcutsRoute = SettingsShortcutsRouteImport.update({
   id: '/shortcuts',
   path: '/shortcuts',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsResearchRoute = SettingsResearchRouteImport.update({
+  id: '/research',
+  path: '/research',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/research': typeof SettingsResearchRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/research': typeof SettingsResearchRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -153,6 +161,7 @@ export interface FileRoutesById {
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/research': typeof SettingsResearchRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/settings/skills': typeof SettingsSkillsRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
@@ -173,6 +182,7 @@ export interface FileRouteTypes {
     | '/settings/diagnostics'
     | '/settings/general'
     | '/settings/providers'
+    | '/settings/research'
     | '/settings/shortcuts'
     | '/settings/skills'
     | '/settings/source-control'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/settings/diagnostics'
     | '/settings/general'
     | '/settings/providers'
+    | '/settings/research'
     | '/settings/shortcuts'
     | '/settings/skills'
     | '/settings/source-control'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/settings/diagnostics'
     | '/settings/general'
     | '/settings/providers'
+    | '/settings/research'
     | '/settings/shortcuts'
     | '/settings/skills'
     | '/settings/source-control'
@@ -278,6 +290,13 @@ declare module '@tanstack/react-router' {
       path: '/shortcuts'
       fullPath: '/settings/shortcuts'
       preLoaderRoute: typeof SettingsShortcutsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/research': {
+      id: '/settings/research'
+      path: '/research'
+      fullPath: '/settings/research'
+      preLoaderRoute: typeof SettingsResearchRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/providers': {
@@ -360,6 +379,7 @@ interface SettingsRouteChildren {
   SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
+  SettingsResearchRoute: typeof SettingsResearchRoute
   SettingsShortcutsRoute: typeof SettingsShortcutsRoute
   SettingsSkillsRoute: typeof SettingsSkillsRoute
   SettingsSourceControlRoute: typeof SettingsSourceControlRoute
@@ -372,6 +392,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
+  SettingsResearchRoute: SettingsResearchRoute,
   SettingsShortcutsRoute: SettingsShortcutsRoute,
   SettingsSkillsRoute: SettingsSkillsRoute,
   SettingsSourceControlRoute: SettingsSourceControlRoute,
