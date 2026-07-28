@@ -1591,6 +1591,48 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status keeps the last known PR when the current remote URL is unknown", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("example-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/pr-config-hiccup"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-config-hiccup"]);
+
+      const existingPr = {
+        number: 218,
+        title: "Config hiccup PR",
+        url: "https://github.com/example-workspace/example-app/pull/218",
+        baseRefName: "main",
+        headRefName: "feature/pr-config-hiccup",
+      };
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          prListSequence: [JSON.stringify([existingPr])],
+          failWith: new GitHubCliError({
+            operation: "execute",
+            detail: "GitHub API rate limited the PR lookup.",
+          }),
+          failAfterCalls: 1,
+        },
+      });
+
+      const first = yield* manager.status({ cwd: repoDir });
+      expect(first.pr?.number).toBe(218);
+
+      // Missing configuration and transient git-config failures both resolve
+      // to null. Keep branch tracking intact so the unknown URL does not look
+      // like a known remote identity change.
+      yield* runGit(repoDir, ["config", "--unset", "remote.origin.url"]);
+      yield* manager.invalidateStatus(repoDir);
+
+      const second = yield* manager.status({ cwd: repoDir });
+      expect(second.pr?.number).toBe(218);
+    }),
+  );
+
   it.effect("creates a commit when working tree is dirty", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("example-git-manager-");
