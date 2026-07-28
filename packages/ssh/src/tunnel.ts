@@ -36,6 +36,7 @@ import {
   remoteStateKey,
   resolveSshTarget,
   runSshCommand,
+  SSH_COMMAND,
   targetConnectionKey,
 } from "./command.ts";
 import {
@@ -98,7 +99,7 @@ type SshEnvironmentEffectError =
 
 function makeSshTunnelCancelledError(target: DesktopSshEnvironmentTarget): SshCommandError {
   return new SshCommandError({
-    command: ["ssh"],
+    command: [SSH_COMMAND],
     exitCode: null,
     stderr: "",
     message: `SSH environment connection was cancelled for ${target.alias || target.hostname}.`,
@@ -1115,7 +1116,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     Effect.mapError(
       (cause) =>
         new SshCommandError({
-          command: ["ssh"],
+          command: [SSH_COMMAND],
           exitCode: null,
           stderr: "",
           message: "Failed to prepare SSH authentication helpers.",
@@ -1139,7 +1140,7 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
     `${input.localPort}:127.0.0.1:${input.remotePort}`,
     hostSpec,
   ];
-  const tunnelCommand = ["ssh", ...args];
+  const tunnelCommand = [SSH_COMMAND, ...args];
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Scope.Scope;
   yield* Effect.logDebug("ssh.tunnel.spawn.start", {
@@ -1152,9 +1153,8 @@ const startSshTunnel = Effect.fn("ssh/tunnel.startSshTunnel")(function* (input: 
   });
   const child = yield* spawner
     .spawn(
-      ChildProcess.make("ssh", args, {
+      ChildProcess.make(SSH_COMMAND, args, {
         env: childEnvironment,
-        shell: process.platform === "win32",
         stdin: {
           stream: Stream.empty,
           endOnDone: true,
