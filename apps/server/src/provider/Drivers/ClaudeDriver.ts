@@ -56,6 +56,16 @@ const DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
 const CAPABILITIES_PROBE_TTL = Duration.minutes(5);
 
+export const resolveClaudeCapabilitiesProbeContext = Effect.fn(
+  "resolveClaudeCapabilitiesProbeContext",
+)(function* (config: Pick<ClaudeSettings, "binaryPath" | "homePath">) {
+  const { cwd } = yield* ServerConfig;
+  return {
+    cwd,
+    cacheKey: yield* makeClaudeCapabilitiesCacheKey(config, cwd),
+  };
+});
+
 function isClaudeNativeCommandPath(commandPath: string): boolean {
   const normalized = normalizeCommandPath(commandPath);
   return (
@@ -128,6 +138,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         env: processEnv,
       });
       const continuationGroupKey = yield* makeClaudeContinuationGroupKey(effectiveConfig);
+      const capabilitiesProbeContext =
+        yield* resolveClaudeCapabilitiesProbeContext(effectiveConfig);
       const stampIdentity = withInstanceIdentity({
         instanceId,
         displayName,
@@ -143,21 +155,20 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       const adapter = yield* makeClaudeAdapter(effectiveConfig, adapterOptions);
       const textGeneration = yield* makeClaudeTextGeneration(effectiveConfig, processEnv);
 
-      // Per-instance capabilities cache: keyed on binary + resolved HOME so
-      // account-specific probes never share auth metadata across instances.
+      // Per-instance capabilities cache: keyed on binary + resolved HOME + cwd
+      // so project-scoped command discovery never crosses workspaces.
       const capabilitiesProbeCache = yield* Cache.make({
         capacity: 1,
         timeToLive: CAPABILITIES_PROBE_TTL,
         lookup: () =>
-          probeClaudeCapabilities(effectiveConfig, processEnv).pipe(
+          probeClaudeCapabilities(effectiveConfig, processEnv, capabilitiesProbeContext.cwd).pipe(
             Effect.provideService(Path.Path, path),
           ),
       });
-      const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(effectiveConfig);
 
       const checkProvider = checkClaudeProviderStatus(
         effectiveConfig,
-        () => Cache.get(capabilitiesProbeCache, capabilitiesCacheKey),
+        () => Cache.get(capabilitiesProbeCache, capabilitiesProbeContext.cacheKey),
         processEnv,
       ).pipe(
         Effect.map(stampIdentity),

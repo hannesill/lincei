@@ -34,8 +34,20 @@ it.layer(NodeServices.layer)("ClaudeHome", (it) => {
         expect((yield* makeClaudeEnvironment({ homePath })).HOME).toBe(resolved);
         expect(yield* makeClaudeContinuationGroupKey({ homePath })).toBe(`claude:home:${resolved}`);
         expect(yield* makeClaudeCapabilitiesCacheKey({ binaryPath: "claude", homePath })).toBe(
-          `claude\0${resolved}`,
+          `claude\0${resolved}\0`,
         );
+      }),
+    );
+
+    it.effect("separates capability probes by cwd", () =>
+      Effect.gen(function* () {
+        const config = { binaryPath: "claude", homePath: "" };
+        const first = yield* makeClaudeCapabilitiesCacheKey(config, "/repo-a");
+        const second = yield* makeClaudeCapabilitiesCacheKey(config, "/repo-b");
+
+        expect(first).not.toBe(second);
+        expect(first.endsWith("\0/repo-a")).toBe(true);
+        expect(second.endsWith("\0/repo-b")).toBe(true);
       }),
     );
 
