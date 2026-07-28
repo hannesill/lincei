@@ -13,6 +13,7 @@ export class SshCommandError extends Data.TaggedError("SshCommandError")<{
   readonly message: string;
   readonly command: readonly string[];
   readonly exitCode: number | null;
+  readonly stdout?: string;
   readonly stderr: string;
   readonly cause?: unknown;
 }> {}
