@@ -742,6 +742,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     updatedAt: "2026-03-09T10:00:00.000Z",
     latestTurn: null,
     branch: null,

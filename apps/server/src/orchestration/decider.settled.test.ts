@@ -44,6 +44,8 @@ function makeSession(overrides: Partial<OrchestrationSession> = {}): Orchestrati
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     deletedAt: null,
     messages: [],
     proposedPlans: [],

@@ -95,6 +95,8 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         archivedAt: null,
         settledOverride: null,
         settledAt: null,
+        snoozedUntil: "2026-03-26T00:00:00.000Z",
+        snoozedAt: "2026-03-24T00:00:01.000Z",
         latestUserMessageAt: null,
         pendingApprovalCount: 0,
         pendingUserInputCount: 0,
@@ -130,6 +132,16 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         instanceId: ProviderInstanceId.make("claudeAgent"),
         model: "claude-opus-4-6",
       });
+      assert.deepStrictEqual(
+        {
+          snoozedUntil: Option.getOrNull(persisted)?.snoozedUntil,
+          snoozedAt: Option.getOrNull(persisted)?.snoozedAt,
+        },
+        {
+          snoozedUntil: "2026-03-26T00:00:00.000Z",
+          snoozedAt: "2026-03-24T00:00:01.000Z",
+        },
+      );
     }),
   );
 });

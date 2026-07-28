@@ -6,12 +6,14 @@ import {
   SessionCreatedPayload as ContractsSessionCreatedPayloadSchema,
   SessionArchivedPayload as ContractsSessionArchivedPayloadSchema,
   SessionSettledPayload as ContractsSessionSettledPayloadSchema,
+  SessionSnoozedPayload as ContractsSessionSnoozedPayloadSchema,
   SessionMetaUpdatedPayload as ContractsSessionMetaUpdatedPayloadSchema,
   SessionRuntimeModeSetPayload as ContractsSessionRuntimeModeSetPayloadSchema,
   SessionInteractionModeSetPayload as ContractsSessionInteractionModeSetPayloadSchema,
   SessionDeletedPayload as ContractsSessionDeletedPayloadSchema,
   SessionUnarchivedPayload as ContractsSessionUnarchivedPayloadSchema,
   SessionUnsettledPayload as ContractsSessionUnsettledPayloadSchema,
+  SessionUnsnoozedPayload as ContractsSessionUnsnoozedPayloadSchema,
   SessionMessageSentPayload as ContractsSessionMessageSentPayloadSchema,
   SessionProposedPlanUpsertedPayload as ContractsSessionProposedPlanUpsertedPayloadSchema,
   ProviderRuntimeSetPayload as ContractsProviderRuntimeSetPayloadSchema,
@@ -34,12 +36,14 @@ export const ProjectPurgedPayload = ContractsProjectPurgedPayloadSchema;
 export const SessionCreatedPayload = ContractsSessionCreatedPayloadSchema;
 export const SessionArchivedPayload = ContractsSessionArchivedPayloadSchema;
 export const SessionSettledPayload = ContractsSessionSettledPayloadSchema;
+export const SessionSnoozedPayload = ContractsSessionSnoozedPayloadSchema;
 export const SessionMetaUpdatedPayload = ContractsSessionMetaUpdatedPayloadSchema;
 export const SessionRuntimeModeSetPayload = ContractsSessionRuntimeModeSetPayloadSchema;
 export const SessionInteractionModeSetPayload = ContractsSessionInteractionModeSetPayloadSchema;
 export const SessionDeletedPayload = ContractsSessionDeletedPayloadSchema;
 export const SessionUnarchivedPayload = ContractsSessionUnarchivedPayloadSchema;
 export const SessionUnsettledPayload = ContractsSessionUnsettledPayloadSchema;
+export const SessionUnsnoozedPayload = ContractsSessionUnsnoozedPayloadSchema;
 
 export const MessageSentPayloadSchema = ContractsSessionMessageSentPayloadSchema;
 export const SessionProposedPlanUpsertedPayload = ContractsSessionProposedPlanUpsertedPayloadSchema;

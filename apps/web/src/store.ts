@@ -943,6 +943,8 @@ function applyEnvironmentOrchestrationEvent(
           archivedAt: null,
           settledOverride: null,
           settledAt: null,
+          snoozedUntil: null,
+          snoozedAt: null,
           deletedAt: null,
           messages: [],
           proposedPlans: [],
@@ -985,6 +987,22 @@ function applyEnvironmentOrchestrationEvent(
         ...session,
         settledOverride: event.payload.reason === "user" ? "active" : null,
         settledAt: null,
+        updatedAt: event.payload.updatedAt,
+      }));
+
+    case "session.snoozed":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
+        snoozedUntil: event.payload.snoozedUntil,
+        snoozedAt: event.payload.snoozedAt,
+        updatedAt: event.payload.updatedAt,
+      }));
+
+    case "session.unsnoozed":
+      return updateSessionState(state, event.payload.sessionId, (session) => ({
+        ...session,
+        snoozedUntil: null,
+        snoozedAt: null,
         updatedAt: event.payload.updatedAt,
       }));
 

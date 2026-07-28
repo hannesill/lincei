@@ -19,6 +19,8 @@ export interface SessionLifecycleShell {
   readonly hasPendingUserInput: boolean;
   readonly settledOverride: "settled" | "active" | null;
   readonly settledAt: string | null;
+  readonly snoozedUntil: string | null;
+  readonly snoozedAt: string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -96,6 +98,87 @@ export function canSettleSession(
     return false;
   }
   return !hasQueuedSessionTurnStart(shell, options);
+}
+
+export type SessionSnoozeShell = Pick<
+  SessionLifecycleShell,
+  | "snoozedUntil"
+  | "snoozedAt"
+  | "hasPendingApprovals"
+  | "hasPendingUserInput"
+  | "session"
+  | "latestTurn"
+>;
+
+export function sessionRaisedHandWhileSnoozed(shell: SessionSnoozeShell): boolean {
+  if (shell.hasPendingApprovals || shell.hasPendingUserInput) {
+    return true;
+  }
+  if (
+    runtimeStatus(shell.session) === "error" &&
+    (shell.snoozedAt === null ||
+      Date.parse(shell.session?.updatedAt ?? "") > Date.parse(shell.snoozedAt))
+  ) {
+    return true;
+  }
+  return (
+    shell.snoozedAt !== null &&
+    shell.latestTurn?.state === "completed" &&
+    shell.latestTurn.completedAt !== null &&
+    Date.parse(shell.latestTurn.completedAt) > Date.parse(shell.snoozedAt)
+  );
+}
+
+export function canSnoozeSession(
+  shell: Pick<
+    SessionLifecycleShell,
+    "hasPendingApprovals" | "hasPendingUserInput" | "latestUserMessageAt" | "latestTurn" | "session"
+  >,
+  options: { readonly now: string },
+): boolean {
+  if (shell.hasPendingApprovals || shell.hasPendingUserInput) {
+    return false;
+  }
+  return !hasQueuedSessionTurnStart(shell, options);
+}
+
+export function effectiveSessionSnoozed(
+  shell: SessionSnoozeShell,
+  options: { readonly now: string },
+): boolean {
+  if (shell.snoozedUntil === null) {
+    return false;
+  }
+  const wakeAtMs = Date.parse(shell.snoozedUntil);
+  if (!Number.isFinite(wakeAtMs) || wakeAtMs <= Date.parse(options.now)) {
+    return false;
+  }
+  return !sessionRaisedHandWhileSnoozed(shell);
+}
+
+export function sessionWokeAt(
+  shell: SessionSnoozeShell,
+  options: { readonly now: string },
+): string | null {
+  if (shell.snoozedUntil === null) {
+    return null;
+  }
+  const wakeAtMs = Date.parse(shell.snoozedUntil);
+  if (!Number.isFinite(wakeAtMs)) {
+    return null;
+  }
+  if (sessionRaisedHandWhileSnoozed(shell)) {
+    if (
+      shell.snoozedAt !== null &&
+      shell.latestTurn?.state === "completed" &&
+      shell.latestTurn.completedAt !== null &&
+      Date.parse(shell.latestTurn.completedAt) > Date.parse(shell.snoozedAt)
+    ) {
+      return shell.latestTurn.completedAt;
+    }
+    return shell.session?.updatedAt ?? shell.snoozedAt;
+  }
+  return wakeAtMs <= Date.parse(options.now) ? shell.snoozedUntil : null;
 }
 
 /**

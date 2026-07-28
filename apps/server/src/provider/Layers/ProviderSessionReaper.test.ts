@@ -105,6 +105,8 @@ function makeReadModel(
       archivedAt: null,
       settledOverride: null,
       settledAt: null,
+      snoozedUntil: null,
+      snoozedAt: null,
       latestUserMessageAt: null,
       hasPendingApprovals: false,
       hasPendingUserInput: false,

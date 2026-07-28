@@ -82,6 +82,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     latestTurn: null,
     branch: null,
     worktreePath: null,
@@ -129,6 +131,8 @@ function makeState(session: Session): AppState {
         archivedAt: session.archivedAt,
         settledOverride: session.settledOverride,
         settledAt: session.settledAt,
+        snoozedUntil: session.snoozedUntil,
+        snoozedAt: session.snoozedAt,
         updatedAt: session.updatedAt,
         branch: session.branch,
         worktreePath: session.worktreePath,
@@ -501,6 +505,58 @@ describe("incremental orchestration updates", () => {
       archivedAt: null,
       settledOverride: null,
       settledAt: null,
+    });
+  });
+
+  it("projects snooze independently from archived and settled state", () => {
+    const archivedAt = "2026-02-26T00:00:00.000Z";
+    const settledAt = "2026-02-26T00:00:01.000Z";
+    const snoozedAt = "2026-02-27T00:00:00.000Z";
+    const snoozedUntil = "2026-02-28T00:00:00.000Z";
+    const session = makeSession({
+      archivedAt,
+      settledOverride: "settled",
+      settledAt,
+    });
+    const state = makeState(session);
+
+    const snoozed = applyOrchestrationEvent(
+      state,
+      makeEvent("session.snoozed", {
+        sessionId: session.id,
+        snoozedUntil,
+        snoozedAt,
+        updatedAt: snoozedAt,
+      }),
+      localEnvironmentId,
+    );
+    expect(
+      selectSessionByRef(snoozed, scopeSessionRef(localEnvironmentId, session.id)),
+    ).toMatchObject({
+      archivedAt,
+      settledOverride: "settled",
+      settledAt,
+      snoozedUntil,
+      snoozedAt,
+    });
+
+    const awake = applyOrchestrationEvent(
+      snoozed,
+      makeEvent("session.unsnoozed", {
+        sessionId: session.id,
+        reason: "user",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+      localEnvironmentId,
+    );
+    expect(
+      selectSessionByRef(awake, scopeSessionRef(localEnvironmentId, session.id)),
+    ).toMatchObject({
+      archivedAt,
+      settledOverride: "settled",
+      settledAt,
+      snoozedUntil: null,
+      snoozedAt: null,
     });
   });
 

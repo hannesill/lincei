@@ -242,6 +242,8 @@ const makeDefaultOrchestrationReadModel = () => {
         archivedAt: null,
         settledOverride: null,
         settledAt: null,
+        snoozedUntil: null,
+        snoozedAt: null,
         latestTurn: null,
         messages: [],
         session: null,
@@ -275,6 +277,8 @@ const makeDefaultOrchestrationSessionShell = (
     archivedAt: null,
     settledOverride: null,
     settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
     session: null,
     latestUserMessageAt: null,
     hasPendingApprovals: false,
@@ -3806,6 +3810,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             archivedAt: null,
             settledOverride: null,
             settledAt: null,
+            snoozedUntil: null,
+            snoozedAt: null,
             latestTurn: null,
             messages: [],
             session: null,
@@ -4183,6 +4189,61 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           : null,
         repositoryIdentity,
       );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("settles and snoozes without archive provider or terminal cleanup", () =>
+    Effect.gen(function* () {
+      const sessionId = SessionId.make("session-sidebar-lifecycle");
+      const effects: string[] = [];
+
+      yield* buildAppUnderTest({
+        layers: {
+          terminalManager: {
+            close: (input) =>
+              Effect.sync(() => {
+                effects.push(`terminal.close:${input.sessionId}`);
+              }),
+          },
+          orchestrationEngine: {
+            dispatch: (command) =>
+              Effect.sync(() => {
+                effects.push(`dispatch:${command.type}`);
+                return { sequence: effects.length };
+              }),
+          },
+          projectionSnapshotQuery: {
+            getSessionShellById: () =>
+              Effect.sync(() => {
+                effects.push("query:session-shell");
+                return Option.none();
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "session.settle",
+            commandId: CommandId.make("cmd-session-settle"),
+            sessionId,
+          }),
+        ),
+      );
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "session.snooze",
+            commandId: CommandId.make("cmd-session-snooze"),
+            sessionId,
+            snoozedUntil: "2027-01-01T00:00:00.000Z",
+          }),
+        ),
+      );
+
+      assert.deepEqual(effects, ["dispatch:session.settle", "dispatch:session.snooze"]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

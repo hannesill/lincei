@@ -112,6 +112,8 @@ export interface Session {
   archivedAt: string | null;
   settledOverride: "settled" | "active" | null;
   settledAt: string | null;
+  snoozedUntil: string | null;
+  snoozedAt: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
@@ -137,6 +139,8 @@ export interface SessionShell {
   archivedAt: string | null;
   settledOverride: "settled" | "active" | null;
   settledAt: string | null;
+  snoozedUntil: string | null;
+  snoozedAt: string | null;
   updatedAt?: string | undefined;
   branch: string | null;
   worktreePath: string | null;
@@ -160,6 +164,8 @@ export interface SidebarSessionSummary {
   archivedAt: string | null;
   settledOverride: "settled" | "active" | null;
   settledAt: string | null;
+  snoozedUntil: string | null;
+  snoozedAt: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
   branch: string | null;

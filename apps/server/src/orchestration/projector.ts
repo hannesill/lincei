@@ -24,8 +24,10 @@ import {
   SessionProposedPlanUpsertedPayload,
   SessionRuntimeModeSetPayload,
   SessionSettledPayload,
+  SessionSnoozedPayload,
   SessionUnarchivedPayload,
   SessionUnsettledPayload,
+  SessionUnsnoozedPayload,
   SessionRevertedPayload,
   ProviderRuntimeSetPayload,
   SessionTurnStartRequestedPayload,
@@ -280,6 +282,8 @@ export function projectEvent(
             archivedAt: null,
             settledOverride: null,
             settledAt: null,
+            snoozedUntil: null,
+            snoozedAt: null,
             deletedAt: null,
             messages: [],
             activities: [],
@@ -350,6 +354,30 @@ export function projectEvent(
           sessions: updateSession(nextBase.sessions, payload.sessionId, {
             settledOverride: payload.reason === "user" ? "active" : null,
             settledAt: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "session.snoozed":
+      return decodeForEvent(SessionSnoozedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            snoozedUntil: payload.snoozedUntil,
+            snoozedAt: payload.snoozedAt,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "session.unsnoozed":
+      return decodeForEvent(SessionUnsnoozedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          sessions: updateSession(nextBase.sessions, payload.sessionId, {
+            snoozedUntil: null,
+            snoozedAt: null,
             updatedAt: payload.updatedAt,
           }),
         })),

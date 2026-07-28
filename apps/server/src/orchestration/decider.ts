@@ -407,6 +407,77 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "session.snooze": {
+      const session = yield* requireSessionNotArchived({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      const occurredAt = yield* nowIso;
+      if (!(Date.parse(command.snoozedUntil) > Date.parse(occurredAt))) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' snooze wake time '${command.snoozedUntil}' is not in the future.`,
+        });
+      }
+      if (hasOpenBlockingRequest(session)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' has a pending approval or user-input request and cannot be snoozed.`,
+        });
+      }
+      if (hasQueuedTurnStart(session, occurredAt)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Session '${command.sessionId}' has a queued turn start and cannot be snoozed.`,
+        });
+      }
+
+      const existingSnoozedAt =
+        session.snoozedUntil === command.snoozedUntil && session.snoozedAt !== null
+          ? session.snoozedAt
+          : null;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "session.snoozed",
+        payload: {
+          sessionId: command.sessionId,
+          snoozedUntil: command.snoozedUntil,
+          snoozedAt: existingSnoozedAt ?? occurredAt,
+          updatedAt: existingSnoozedAt !== null ? session.updatedAt : occurredAt,
+        },
+      };
+    }
+
+    case "session.unsnooze": {
+      const session = yield* requireSessionNotArchived({
+        readModel,
+        command,
+        sessionId: command.sessionId,
+      });
+      const alreadyAwake = session.snoozedUntil === null;
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "session",
+          aggregateId: command.sessionId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "session.unsnoozed",
+        payload: {
+          sessionId: command.sessionId,
+          reason: command.reason,
+          updatedAt: alreadyAwake ? session.updatedAt : occurredAt,
+        },
+      };
+    }
+
     case "session.meta.update": {
       yield* requireSession({
         readModel,
@@ -563,24 +634,40 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           createdAt: command.createdAt,
         },
       };
-      if (targetSession.settledOverride === null) {
-        return [userMessageEvent, turnStartRequestedEvent];
+      const lifecycleResetEvents: Array<Omit<OrchestrationEvent, "sequence">> = [];
+      if (targetSession.settledOverride !== null) {
+        lifecycleResetEvents.push({
+          ...(yield* withEventBase({
+            aggregateKind: "session",
+            aggregateId: command.sessionId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          })),
+          type: "session.unsettled",
+          payload: {
+            sessionId: command.sessionId,
+            reason: "activity",
+            updatedAt: command.createdAt,
+          },
+        });
       }
-      const unsettledEvent: Omit<OrchestrationEvent, "sequence"> = {
-        ...(yield* withEventBase({
-          aggregateKind: "session",
-          aggregateId: command.sessionId,
-          occurredAt: command.createdAt,
-          commandId: command.commandId,
-        })),
-        type: "session.unsettled",
-        payload: {
-          sessionId: command.sessionId,
-          reason: "activity",
-          updatedAt: command.createdAt,
-        },
-      };
-      return [unsettledEvent, userMessageEvent, turnStartRequestedEvent];
+      if (targetSession.snoozedUntil !== null) {
+        lifecycleResetEvents.push({
+          ...(yield* withEventBase({
+            aggregateKind: "session",
+            aggregateId: command.sessionId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          })),
+          type: "session.unsnoozed",
+          payload: {
+            sessionId: command.sessionId,
+            reason: "activity",
+            updatedAt: command.createdAt,
+          },
+        });
+      }
+      return [...lifecycleResetEvents, userMessageEvent, turnStartRequestedEvent];
     }
 
     case "session.turn.interrupt": {

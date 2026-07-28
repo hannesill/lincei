@@ -93,6 +93,8 @@ describe("orchestration projector", () => {
         archivedAt: null,
         settledOverride: null,
         settledAt: null,
+        snoozedUntil: null,
+        snoozedAt: null,
         deletedAt: null,
         messages: [],
         proposedPlans: [],
@@ -137,9 +139,10 @@ describe("orchestration projector", () => {
     ).rejects.toBeDefined();
   });
 
-  it("applies session.archived and session.unarchived events", async () => {
+  it("projects archived and snoozed lifecycles independently", async () => {
     const now = "2026-01-01T00:00:00.000Z";
     const later = "2026-01-01T00:00:01.000Z";
+    const wakeAt = "2026-01-02T00:00:00.000Z";
     const created = await Effect.runPromise(
       projectEvent(
         createEmptyReadModel(now),
@@ -189,11 +192,60 @@ describe("orchestration projector", () => {
     );
     expect(archived.sessions[0]?.archivedAt).toBe(later);
 
-    const unarchived = await Effect.runPromise(
+    const snoozed = await Effect.runPromise(
       projectEvent(
         archived,
         makeEvent({
           sequence: 3,
+          type: "session.snoozed",
+          aggregateKind: "session",
+          aggregateId: "session-1",
+          occurredAt: later,
+          commandId: "cmd-session-snooze",
+          payload: {
+            sessionId: "session-1",
+            snoozedUntil: wakeAt,
+            snoozedAt: later,
+            updatedAt: later,
+          },
+        }),
+      ),
+    );
+    expect(snoozed.sessions[0]).toMatchObject({
+      archivedAt: later,
+      snoozedUntil: wakeAt,
+      snoozedAt: later,
+    });
+
+    const awake = await Effect.runPromise(
+      projectEvent(
+        snoozed,
+        makeEvent({
+          sequence: 4,
+          type: "session.unsnoozed",
+          aggregateKind: "session",
+          aggregateId: "session-1",
+          occurredAt: later,
+          commandId: "cmd-session-unsnooze",
+          payload: {
+            sessionId: "session-1",
+            reason: "user",
+            updatedAt: later,
+          },
+        }),
+      ),
+    );
+    expect(awake.sessions[0]).toMatchObject({
+      archivedAt: later,
+      snoozedUntil: null,
+      snoozedAt: null,
+    });
+
+    const unarchived = await Effect.runPromise(
+      projectEvent(
+        awake,
+        makeEvent({
+          sequence: 5,
           type: "session.unarchived",
           aggregateKind: "session",
           aggregateId: "session-1",

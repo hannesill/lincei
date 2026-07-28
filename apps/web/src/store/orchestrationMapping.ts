@@ -154,6 +154,8 @@ export function mapSession(session: OrchestrationSession, environmentId: Environ
     archivedAt: session.archivedAt,
     settledOverride: session.settledOverride,
     settledAt: session.settledAt,
+    snoozedUntil: session.snoozedUntil,
+    snoozedAt: session.snoozedAt,
     updatedAt: session.updatedAt,
     latestTurn: session.latestTurn,
     pendingSourceProposedPlan: session.latestTurn?.sourceProposedPlan,
@@ -189,6 +191,8 @@ export function mapSessionShell(
     archivedAt: session.archivedAt,
     settledOverride: session.settledOverride,
     settledAt: session.settledAt,
+    snoozedUntil: session.snoozedUntil,
+    snoozedAt: session.snoozedAt,
     updatedAt: session.updatedAt,
     branch: session.branch,
     worktreePath: session.worktreePath,
@@ -211,6 +215,8 @@ export function mapSessionShell(
     archivedAt: session.archivedAt,
     settledOverride: session.settledOverride,
     settledAt: session.settledAt,
+    snoozedUntil: session.snoozedUntil,
+    snoozedAt: session.snoozedAt,
     updatedAt: session.updatedAt,
     latestTurn: session.latestTurn,
     branch: session.branch,
@@ -245,6 +251,8 @@ export function toSessionShell(session: Session): SessionShell {
     archivedAt: session.archivedAt,
     settledOverride: session.settledOverride,
     settledAt: session.settledAt,
+    snoozedUntil: session.snoozedUntil,
+    snoozedAt: session.snoozedAt,
     updatedAt: session.updatedAt,
     branch: session.branch,
     worktreePath: session.worktreePath,
@@ -320,6 +328,8 @@ export function sidebarSessionSummariesEqual(
     left.archivedAt === right.archivedAt &&
     left.settledOverride === right.settledOverride &&
     left.settledAt === right.settledAt &&
+    left.snoozedUntil === right.snoozedUntil &&
+    left.snoozedAt === right.snoozedAt &&
     left.updatedAt === right.updatedAt &&
     latestTurnsEqual(left.latestTurn, right.latestTurn) &&
     left.branch === right.branch &&
@@ -349,6 +359,8 @@ export function sessionShellsEqual(left: SessionShell | undefined, right: Sessio
     left.archivedAt === right.archivedAt &&
     left.settledOverride === right.settledOverride &&
     left.settledAt === right.settledAt &&
+    left.snoozedUntil === right.snoozedUntil &&
+    left.snoozedAt === right.snoozedAt &&
     left.updatedAt === right.updatedAt &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath

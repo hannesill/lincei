@@ -79,6 +79,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           interaction_mode,
           workflow_id,
           workflow_version,
+          snoozed_until,
+          snoozed_at,
           branch,
           worktree_path,
           latest_turn_id,
@@ -99,6 +101,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           'default',
           'clinical-review',
           '2026-06-01',
+          '2026-02-25T00:00:00.000Z',
+          '2026-02-24T00:00:02.500Z',
           NULL,
           NULL,
           'turn-1',
@@ -316,6 +320,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           archivedAt: null,
           settledOverride: null,
           settledAt: null,
+          snoozedUntil: "2026-02-25T00:00:00.000Z",
+          snoozedAt: "2026-02-24T00:00:02.500Z",
           deletedAt: null,
           messages: [
             {
@@ -439,6 +445,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           archivedAt: null,
           settledOverride: null,
           settledAt: null,
+          snoozedUntil: "2026-02-25T00:00:00.000Z",
+          snoozedAt: "2026-02-24T00:00:02.500Z",
           session: {
             sessionId: SessionId.make("session-1"),
             status: "running",
