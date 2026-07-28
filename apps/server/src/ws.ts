@@ -21,7 +21,6 @@ import {
   type GitManagerServiceError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
-  type OrchestrationSessionStreamItem,
   type OrchestrationShellStreamEvent,
   OrchestrationGetFullSessionDiffError,
   OrchestrationGetSnapshotError,
@@ -869,7 +868,11 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcStreamEffect(
             ORCHESTRATION_WS_METHODS.subscribeSession,
             Effect.gen(function* () {
-              const liveStream = orchestrationEngine.streamDomainEvents.pipe(
+              // Acquire live delivery before reading snapshot state. The
+              // subscription buffers events until the snapshot is ready,
+              // closing the publish-before-subscribe gap left by a forked stream.
+              const liveSubscription = yield* orchestrationEngine.subscribeDomainEvents;
+              const liveStream = Stream.fromSubscription(liveSubscription).pipe(
                 Stream.filter(
                   (event) =>
                     event.aggregateKind === "session" &&
@@ -882,12 +885,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 })),
               );
 
-              // Attach live delivery before reading snapshot state. Otherwise an
-              // event published while the snapshot is loading is lost.
-              const liveBuffer = yield* Queue.unbounded<OrchestrationSessionStreamItem>();
-              yield* Effect.forkScoped(
-                liveStream.pipe(Stream.runForEach((item) => Queue.offer(liveBuffer, item))),
-              );
               const sessionSnapshot = yield* projectionSnapshotQuery
                 .getSessionDetailSnapshot(input.sessionId)
                 .pipe(
@@ -908,7 +905,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               }
 
               const { session, snapshotSequence } = sessionSnapshot.value;
-              const bufferedLiveStream = Stream.fromQueue(liveBuffer).pipe(
+              const bufferedLiveStream = liveStream.pipe(
                 Stream.filter(
                   (item) => item.kind !== "event" || item.event.sequence > snapshotSequence,
                 ),
