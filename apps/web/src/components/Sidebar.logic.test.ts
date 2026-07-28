@@ -13,12 +13,18 @@ import {
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
+  resolveSidebarV2Status,
   resolveSidebarNewSessionSeedContext,
   resolveSidebarNewSessionEnvMode,
+  resolveSettledTimestamp,
   resolveSessionRowClassName,
   resolveSessionStatusPill,
+  resolveWorkingStartedAt,
   shouldClearSessionSelectionOnMouseDown,
+  sortSessionsForSidebarV2,
+  sortSettledSessionsForSidebarV2,
   sortProjectsForSidebar,
+  formatWorkingDurationLabel,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
 import {
@@ -47,7 +53,10 @@ function makeLatestTurn(overrides?: {
     assistantMessageId: null,
     requestedAt: "2026-03-09T10:00:00.000Z",
     startedAt: overrides?.startedAt ?? "2026-03-09T10:00:00.000Z",
-    completedAt: overrides?.completedAt ?? "2026-03-09T10:05:00.000Z",
+    completedAt:
+      overrides && "completedAt" in overrides
+        ? (overrides.completedAt ?? null)
+        : "2026-03-09T10:05:00.000Z",
   };
 }
 
@@ -64,6 +73,82 @@ describe("hasUnseenCompletion", () => {
         session: null,
       }),
     ).toBe(true);
+  });
+});
+
+describe("Sidebar v2 session presentation", () => {
+  const runtime = {
+    provider: ProviderDriverKind.make("codex"),
+    status: "running" as const,
+    activeTurnId: "turn-1" as never,
+    createdAt: "2026-03-09T10:00:00.000Z",
+    updatedAt: "2026-03-09T10:02:00.000Z",
+    orchestrationStatus: "running" as const,
+  };
+
+  it("prioritizes approval, input, working, and failure status", () => {
+    const idle = { hasPendingApprovals: false, hasPendingUserInput: false };
+    expect(resolveSidebarV2Status({ ...idle, hasPendingApprovals: true, session: runtime })).toBe(
+      "approval",
+    );
+    expect(resolveSidebarV2Status({ ...idle, hasPendingUserInput: true, session: runtime })).toBe(
+      "input",
+    );
+    expect(resolveSidebarV2Status({ ...idle, session: runtime })).toBe("working");
+    expect(
+      resolveSidebarV2Status({
+        ...idle,
+        session: { ...runtime, status: "error", orchestrationStatus: "error" },
+      }),
+    ).toBe("failed");
+    expect(resolveSidebarV2Status({ ...idle, session: null })).toBe("ready");
+  });
+
+  it("keeps active session order stable by creation time", () => {
+    expect(
+      sortSessionsForSidebarV2([
+        { id: "old", createdAt: "2026-03-09T08:00:00.000Z" },
+        { id: "new", createdAt: "2026-03-09T12:00:00.000Z" },
+        { id: "mid", createdAt: "2026-03-09T10:00:00.000Z" },
+      ]).map((session) => session.id),
+    ).toEqual(["new", "mid", "old"]);
+  });
+
+  it("orders settled sessions by settle or latest activity time", () => {
+    const base = {
+      settledAt: null,
+      latestTurn: null,
+      updatedAt: "2026-03-09T09:00:00.000Z",
+    };
+    const sessions = [
+      { ...base, id: "message", latestUserMessageAt: "2026-03-09T10:00:00.000Z" },
+      { ...base, id: "explicit", latestUserMessageAt: null, settledAt: "2026-03-09T11:00:00.000Z" },
+      {
+        ...base,
+        id: "turn",
+        latestUserMessageAt: "2026-03-09T08:00:00.000Z",
+        latestTurn: makeLatestTurn({ completedAt: "2026-03-09T12:00:00.000Z" }),
+      },
+    ];
+
+    expect(sortSettledSessionsForSidebarV2(sessions).map((session) => session.id)).toEqual([
+      "turn",
+      "explicit",
+      "message",
+    ]);
+    expect(resolveSettledTimestamp(sessions[2]!)).toBe("2026-03-09T12:00:00.000Z");
+  });
+
+  it("anchors and formats working duration safely", () => {
+    expect(
+      resolveWorkingStartedAt({
+        latestTurn: makeLatestTurn({ completedAt: null }),
+        session: runtime,
+      }),
+    ).toBe("2026-03-09T10:00:00.000Z");
+    expect(formatWorkingDurationLabel(42_000)).toBe("42s");
+    expect(formatWorkingDurationLabel(90 * 60_000)).toBe("1h 30m");
+    expect(formatWorkingDurationLabel(Number.NaN)).toBe("0s");
   });
 });
 

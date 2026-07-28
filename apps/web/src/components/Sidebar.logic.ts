@@ -38,6 +38,106 @@ export interface SessionStatusPill {
   pulse: boolean;
 }
 
+export type SidebarV2Status = "approval" | "input" | "working" | "failed" | "ready";
+
+type SidebarV2StatusInput = Pick<
+  SidebarSessionSummary,
+  "hasPendingApprovals" | "hasPendingUserInput" | "session"
+>;
+
+export function resolveSidebarV2Status(session: SidebarV2StatusInput): SidebarV2Status {
+  if (session.hasPendingApprovals) return "approval";
+  if (session.hasPendingUserInput) return "input";
+  if (session.session?.status === "running" || session.session?.status === "connecting") {
+    return "working";
+  }
+  if (session.session?.status === "error") return "failed";
+  return "ready";
+}
+
+export function parseTimestampMs(isoDate: string): number {
+  const parsed = Date.parse(isoDate);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function firstValidTimestamp(
+  ...candidates: ReadonlyArray<string | null | undefined>
+): string | null {
+  for (const candidate of candidates) {
+    if (candidate !== null && candidate !== undefined && !Number.isNaN(Date.parse(candidate))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export function sortSessionsForSidebarV2<
+  T extends { readonly id: string; readonly createdAt: string },
+>(sessions: readonly T[]): T[] {
+  return [...sessions].toSorted(
+    (left, right) =>
+      parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
+type SettledTimestampInput = Pick<
+  SidebarSessionSummary,
+  "settledAt" | "latestUserMessageAt" | "latestTurn" | "updatedAt"
+>;
+
+export function resolveSettledTimestamp(session: SettledTimestampInput): string | null {
+  const settledAt = firstValidTimestamp(session.settledAt);
+  if (settledAt !== null) return settledAt;
+
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const candidate of [
+    session.latestUserMessageAt,
+    session.latestTurn?.requestedAt,
+    session.latestTurn?.startedAt,
+    session.latestTurn?.completedAt,
+  ]) {
+    if (candidate === null || candidate === undefined) continue;
+    const parsed = Date.parse(candidate);
+    if (!Number.isNaN(parsed) && parsed > latestMs) {
+      latest = candidate;
+      latestMs = parsed;
+    }
+  }
+  return latest ?? firstValidTimestamp(session.updatedAt);
+}
+
+export function sortSettledSessionsForSidebarV2<
+  T extends SettledTimestampInput & { readonly id: string },
+>(sessions: readonly T[]): T[] {
+  const timestampMs = (session: T) => {
+    const timestamp = resolveSettledTimestamp(session);
+    return timestamp === null ? 0 : Date.parse(timestamp);
+  };
+  return [...sessions].toSorted(
+    (left, right) => timestampMs(right) - timestampMs(left) || left.id.localeCompare(right.id),
+  );
+}
+
+export function resolveWorkingStartedAt(
+  session: Pick<SidebarSessionSummary, "latestTurn" | "session">,
+): string | null {
+  const turn = session.latestTurn;
+  if (turn && turn.completedAt === null) {
+    return firstValidTimestamp(turn.startedAt, turn.requestedAt, session.session?.updatedAt);
+  }
+  return firstValidTimestamp(session.session?.updatedAt);
+}
+
+export function formatWorkingDurationLabel(elapsedMs: number): string {
+  const seconds = Number.isFinite(elapsedMs) ? Math.max(0, Math.floor(elapsedMs / 1_000)) : 0;
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
 const THREAD_STATUS_PRIORITY: Record<SessionStatusPill["label"], number> = {
   "Pending Approval": 5,
   "Awaiting Input": 4,
