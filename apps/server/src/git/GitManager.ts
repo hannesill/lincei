@@ -854,11 +854,19 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       return null;
     }
 
-    if (lastKnown.headRemoteUrlKey !== null || current.headRemoteUrlKey !== null) {
+    // A null current key can also mean a transient git-config read failure,
+    // so only invalidate the sticky badge when both remote identities are
+    // known and differ.
+    if (lastKnown.headRemoteUrlKey !== null && current.headRemoteUrlKey !== null) {
       return lastKnown.headRemoteUrlKey === current.headRemoteUrlKey ? lastKnown.pr : null;
     }
 
-    if (lastKnown.upstreamRef !== null && current.upstreamRef !== null) {
+    if (
+      lastKnown.upstreamRef !== null &&
+      current.upstreamRef !== null &&
+      lastKnown.remoteName !== null &&
+      current.remoteName !== null
+    ) {
       return lastKnown.remoteName === current.remoteName ? lastKnown.pr : null;
     }
     return lastKnown.pr;
