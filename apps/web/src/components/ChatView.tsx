@@ -78,6 +78,7 @@ import {
 } from "../pendingUserInput";
 import {
   selectProjectsAcrossEnvironments,
+  selectSidebarSessionSummaryByRef,
   selectSessionsAcrossEnvironments,
   useStore,
 } from "../store";
@@ -99,6 +100,8 @@ import {
   type TurnDiffSummary,
 } from "../types";
 import { useTheme } from "../hooks/useTheme";
+import { useNowMinute } from "../hooks/useNowMinute";
+import { useSessionActions } from "../hooks/useSessionActions";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
@@ -108,7 +111,13 @@ import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../shortcuts";
 import PlanSidebar from "./PlanSidebar";
 import SessionTerminalDrawer from "./SessionTerminalDrawer";
-import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
+import {
+  AlarmClockIcon,
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  TriangleAlertIcon,
+  WifiOffIcon,
+} from "lucide-react";
 import { cn, randomHex, randomUUID } from "~/lib/utils";
 import { stackedSessionToast, toastManager } from "./ui/toast";
 import { decodeProjectScriptShortcutRule } from "~/lib/projectScriptShortcuts";
@@ -140,6 +149,10 @@ import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
+import {
+  environmentSupportsSessionSettlement,
+  environmentSupportsSessionSnooze,
+} from "../environments/capabilities";
 import { buildDraftSessionRouteParams } from "../sessionRoutes";
 import {
   type ComposerImageAttachment,
@@ -166,6 +179,9 @@ import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./Branch
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
 import { SessionErrorBanner } from "./chat/SessionErrorBanner";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
+import { resolveSessionPr } from "./SessionStatusIndicators";
+import { resolveParkedSessionComposerState } from "./SidebarV2.logic";
+import { snoozeWakeDescription } from "./Sidebar.snooze";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
@@ -558,12 +574,21 @@ export default function ChatView(props: ChatViewProps) {
       [routeKind, routeSessionRef],
     ),
   );
+  const sidebarSessionSummary = useStore(
+    useMemo(
+      () => (state: import("../store").AppState) =>
+        selectSidebarSessionSummaryByRef(state, routeKind === "server" ? routeSessionRef : null),
+      [routeKind, routeSessionRef],
+    ),
+  );
   const setStoreSessionError = useStore((store) => store.setError);
   const markSessionVisited = useUiStateStore((store) => store.markSessionVisited);
   const activeSessionLastVisitedAt = useUiStateStore((store) =>
     routeKind === "server" ? store.sessionLastVisitedAtById[routeSessionKey] : undefined,
   );
   const settings = useSettings();
+  const { unsettleSession, unsnoozeSession } = useSessionActions();
+  const parkedNowMinute = useNowMinute();
   const setStickyComposerModelSelection = useComposerDraftStore(
     (store) => store.setStickyModelSelection,
   );
@@ -816,6 +841,13 @@ export default function ChatView(props: ChatViewProps) {
   const activeProject = useStore(
     useMemo(() => createProjectSelectorByRef(activeProjectRef), [activeProjectRef]),
   );
+  const gitCwd = activeProject
+    ? projectScriptCwd({
+        project: { cwd: activeProject.cwd },
+        worktreePath: activeSession?.worktreePath ?? null,
+      })
+    : null;
+  const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
   const activeVitrineProjectKey = activeProject
     ? `${activeProject.environmentId}:${activeProject.id}`
     : null;
@@ -1194,6 +1226,30 @@ export default function ChatView(props: ChatViewProps) {
     savedEnvironmentRuntimeById,
     serverConfig?.environment.label,
   ]);
+  const parkedNowIso = `${parkedNowMinute}:00.000Z`;
+  const parkedSessionPr = sidebarSessionSummary
+    ? resolveSessionPr(sidebarSessionSummary.branch, gitStatusQuery.data)
+    : null;
+  const parkedComposerState = resolveParkedSessionComposerState({
+    session: sidebarSessionSummary,
+    now: parkedNowIso,
+    autoSettleAfterDays: settings.sidebarAutoSettleAfterDays,
+    changeRequestState: parkedSessionPr?.state ?? null,
+    settlementSupported:
+      sidebarSessionSummary !== undefined &&
+      environmentSupportsSessionSettlement(sidebarSessionSummary.environmentId),
+    snoozeSupported:
+      sidebarSessionSummary !== undefined &&
+      environmentSupportsSessionSnooze(sidebarSessionSummary.environmentId),
+  });
+  const handleWakeParkedSession = useCallback(() => {
+    if (routeKind !== "server") return;
+    void unsnoozeSession(routeSessionRef);
+  }, [routeKind, routeSessionRef, unsnoozeSession]);
+  const handleReactivateParkedSession = useCallback(() => {
+    if (routeKind !== "server") return;
+    void unsettleSession(routeSessionRef);
+  }, [routeKind, routeSessionRef, unsettleSession]);
   const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
     if (activeEnvironmentUnavailableState) {
@@ -1242,6 +1298,40 @@ export default function ChatView(props: ChatViewProps) {
         ),
       });
     }
+    if (
+      parkedComposerState === "snoozed" &&
+      sidebarSessionSummary?.snoozedUntil !== null &&
+      sidebarSessionSummary?.snoozedUntil !== undefined
+    ) {
+      items.push({
+        id: `session-snoozed:${routeSessionKey}`,
+        variant: "info",
+        icon: <AlarmClockIcon />,
+        title: "Session snoozed",
+        description: `This session wakes ${snoozeWakeDescription(
+          sidebarSessionSummary.snoozedUntil,
+          new Date(parkedNowIso),
+        )}. Sending a message also wakes it.`,
+        actions: (
+          <Button size="xs" variant="outline" onClick={handleWakeParkedSession}>
+            Wake now
+          </Button>
+        ),
+      });
+    } else if (parkedComposerState === "settled") {
+      items.push({
+        id: `session-settled:${routeSessionKey}`,
+        variant: "success",
+        icon: <CheckCircle2Icon />,
+        title: "Session settled",
+        description: "This session remains available for review. Sending a message reactivates it.",
+        actions: (
+          <Button size="xs" variant="outline" onClick={handleReactivateParkedSession}>
+            Reactivate
+          </Button>
+        ),
+      });
+    }
     if (showVersionMismatchBanner && versionMismatch && versionMismatchDismissKey) {
       items.push({
         id: `version-mismatch:${versionMismatchDismissKey}`,
@@ -1264,9 +1354,15 @@ export default function ChatView(props: ChatViewProps) {
     return items;
   }, [
     activeEnvironmentUnavailableState,
+    handleReactivateParkedSession,
     handleReconnectActiveEnvironment,
+    handleWakeParkedSession,
     navigate,
+    parkedComposerState,
+    parkedNowIso,
     reconnectingEnvironmentId,
+    routeSessionKey,
+    sidebarSessionSummary?.snoozedUntil,
     showVersionMismatchBanner,
     versionMismatch,
     versionMismatchDismissKey,
@@ -1641,13 +1737,6 @@ export default function ChatView(props: ChatViewProps) {
     if (!completionSummary) return null;
     return deriveCompletionDividerBeforeEntryId(timelineEntries, activeLatestTurn);
   }, [activeLatestTurn, completionSummary, latestTurnSettled, timelineEntries]);
-  const gitCwd = activeProject
-    ? projectScriptCwd({
-        project: { cwd: activeProject.cwd },
-        worktreePath: activeSession?.worktreePath ?? null,
-      })
-    : null;
-  const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
   const shortcuts = useServerShortcuts();
   const availableEditors = useServerAvailableEditors();
   // Prefer an instance-id match so a custom Codex instance (e.g.

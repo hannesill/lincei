@@ -6,6 +6,7 @@ import {
   canDispatchSessionLifecycleAction,
   parkedSessionsVisibleWhenCollapsed,
   partitionSidebarV2Sessions,
+  resolveParkedSessionComposerState,
 } from "./SidebarV2.logic";
 import type { SidebarSessionSummary } from "../types";
 
@@ -123,5 +124,43 @@ describe("Sidebar v2 lifecycle partition", () => {
         snoozeSupported: true,
       }),
     ).toBe(false);
+  });
+
+  it("parks the composer without conflating snoozed, settled, and archived sessions", () => {
+    const now = "2026-07-29T10:00:00.000Z";
+    expect(
+      resolveParkedSessionComposerState({
+        session: makeSession("snoozed-and-settled", {
+          settledOverride: "settled",
+          snoozedAt: "2026-07-29T09:00:00.000Z",
+          snoozedUntil: "2026-07-30T09:00:00.000Z",
+        }),
+        now,
+        autoSettleAfterDays: null,
+        settlementSupported: true,
+        snoozeSupported: true,
+      }),
+    ).toBe("snoozed");
+    expect(
+      resolveParkedSessionComposerState({
+        session: makeSession("settled", { settledOverride: "settled" }),
+        now,
+        autoSettleAfterDays: null,
+        settlementSupported: true,
+        snoozeSupported: true,
+      }),
+    ).toBe("settled");
+    expect(
+      resolveParkedSessionComposerState({
+        session: makeSession("archived", {
+          archivedAt: "2026-07-29T09:00:00.000Z",
+          settledOverride: "settled",
+        }),
+        now,
+        autoSettleAfterDays: null,
+        settlementSupported: true,
+        snoozeSupported: true,
+      }),
+    ).toBeNull();
   });
 });
