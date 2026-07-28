@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
+import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as ProcessRunner from "../../processRunner.ts";
 import { RepositoryIdentityResolver } from "../Services/RepositoryIdentityResolver.ts";
@@ -23,7 +24,6 @@ const git = (cwd: string, args: ReadonlyArray<string>) =>
     return yield* processRunner.run({
       command: "git",
       args: ["-C", cwd, ...args],
-      shell: process.platform === "win32",
     });
   }).pipe(Effect.provide(ProcessRunner.layer));
 
@@ -38,6 +38,47 @@ const makeRepositoryIdentityResolverTestLayer = (options: {
       ...options,
     }),
   ).pipe(Layer.provide(ProcessRunner.layer));
+
+it.effect("resolves repository identity with direct git argument spawning", () => {
+  const cwd = "/repo with spaces; printf not-executed";
+  const calls: ProcessRunner.ProcessRunInput[] = [];
+  const processRunnerLayer = Layer.succeed(
+    ProcessRunner.ProcessRunner,
+    ProcessRunner.ProcessRunner.of({
+      run: (input) =>
+        Effect.sync(() => {
+          calls.push(input);
+          const isTopLevelLookup = input.args.at(-1) === "--show-toplevel";
+          return {
+            stdout: isTopLevelLookup
+              ? `${cwd}\n`
+              : "origin\tgit@github.com:example-workspace/example-app.git (fetch)\n",
+            stderr: "",
+            code: ChildProcessSpawner.ExitCode(0),
+            timedOut: false,
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          };
+        }),
+    }),
+  );
+  const resolverLayer = Layer.effect(
+    RepositoryIdentityResolver,
+    makeRepositoryIdentityResolver({ cacheCapacity: 1 }),
+  ).pipe(Layer.provide(processRunnerLayer));
+
+  return Effect.gen(function* () {
+    const resolver = yield* RepositoryIdentityResolver;
+    const identity = yield* resolver.resolve(cwd);
+
+    expect(identity?.canonicalKey).toBe("github.com/example-workspace/example-app");
+    expect(calls).toHaveLength(2);
+    expect(calls.map((call) => call.command)).toEqual(["git", "git"]);
+    expect(calls.map((call) => call.shell)).toEqual([undefined, undefined]);
+    expect(calls[0]?.args).toEqual(["-C", cwd, "rev-parse", "--show-toplevel"]);
+    expect(calls[1]?.args).toEqual(["-C", cwd, "remote", "-v"]);
+  }).pipe(Effect.provide(resolverLayer));
+});
 
 it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
   it.effect("normalizes equivalent GitHub remotes into a stable repository identity", () =>
