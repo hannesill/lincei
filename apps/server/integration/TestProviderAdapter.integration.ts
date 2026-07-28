@@ -1,8 +1,10 @@
 import {
   ApprovalRequestId,
+  type CanonicalRequestType,
   EventId,
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
+  RuntimeRequestId,
   RuntimeSessionId,
   ProviderSession,
   ProviderTurnStartResult,
@@ -240,6 +242,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         readonly decision: ProviderApprovalDecision;
       }>
     >();
+    const requestTypesBySession = new Map<SessionId, Map<string, CanonicalRequestType>>();
 
     const emit = (event: ProviderRuntimeEvent) => Queue.offer(runtimeEvents, event);
     const randomUUIDv4 = (sessionId: SessionId) =>
@@ -333,6 +336,11 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
 
           const runtimeEvent = normalizeFixtureEvent(rawEvent);
           const runtimeType = (runtimeEvent as { type: string }).type;
+          if (runtimeEvent.type === "request.opened") {
+            const requestTypes = requestTypesBySession.get(input.sessionId) ?? new Map();
+            requestTypes.set(String(runtimeEvent.requestId), runtimeEvent.payload.requestType);
+            requestTypesBySession.set(input.sessionId, requestTypes);
+          }
           if (runtimeType === "content.delta") {
             const payload = runtimeEvent.payload as { delta?: unknown } | undefined;
             if (typeof payload?.delta === "string") {
@@ -418,7 +426,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
       decision,
     ) =>
       sessions.has(sessionId)
-        ? Effect.sync(() => {
+        ? Effect.gen(function* () {
             const existing = approvalResponsesBySession.get(sessionId) ?? [];
             existing.push({
               sessionId,
@@ -426,6 +434,21 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
               decision,
             });
             approvalResponsesBySession.set(sessionId, existing);
+            const requestTypes = requestTypesBySession.get(sessionId);
+            const requestType = requestTypes?.get(String(requestId)) ?? "unknown";
+            requestTypes?.delete(String(requestId));
+            yield* emit({
+              type: "request.resolved",
+              eventId: EventId.make(yield* randomUUIDv4(sessionId)),
+              provider,
+              createdAt: nowIso(),
+              sessionId,
+              requestId: RuntimeRequestId.make(String(requestId)),
+              payload: {
+                requestType,
+                decision,
+              },
+            });
           })
         : missingSessionEffect(provider, sessionId);
 
