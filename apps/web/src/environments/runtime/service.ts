@@ -141,7 +141,9 @@ const MAX_CACHED_THREAD_DETAIL_SUBSCRIPTIONS = 32;
 const BROWSER_RESUME_RECONNECT_COOLDOWN_MS = 2_000;
 const INITIAL_SERVER_CONFIG_SNAPSHOT_WAIT_MS = 150;
 const NOOP = () => undefined;
-const SSH_HTTP_STATUS_RE = /\[ssh_http:(\d+)\]\s/u;
+const SSH_HTTP_STATUS_RE = /^\[ssh_http:(\d+)\]\s/u;
+const ELECTRON_SSH_SESSION_STATE_HTTP_STATUS_RE =
+  /^Error invoking remote method 'desktop:fetch-ssh-session-state': [^\r\n]*?\[ssh_http:(\d+)\]\s/u;
 
 function createDeferredPromise<T>() {
   let resolve: ((value: T) => void) | null = null;
@@ -611,7 +613,9 @@ function readSshHttpErrorStatus(error: unknown): number | null {
     return null;
   }
 
-  const match = SSH_HTTP_STATUS_RE.exec(error.message);
+  const match =
+    SSH_HTTP_STATUS_RE.exec(error.message) ??
+    ELECTRON_SSH_SESSION_STATE_HTTP_STATUS_RE.exec(error.message);
   if (!match) {
     return null;
   }
