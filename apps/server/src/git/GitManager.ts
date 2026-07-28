@@ -51,6 +51,7 @@ import type { GitManagerServiceError } from "@t3tools/contracts";
 import { GitVcsDriver, type GitStatusDetails } from "../vcs/GitVcsDriver.ts";
 import { SourceControlProviderRegistry } from "../sourceControl/SourceControlProviderRegistry.ts";
 import type { ChangeRequest } from "@t3tools/contracts";
+import { makeBoundedKeyEpochs } from "./boundedKeyEpochs.ts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;
@@ -100,44 +101,7 @@ const PR_LOOKUP_CACHE_TTL = Duration.minutes(2);
 const PR_LOOKUP_FAILURE_TTL = Duration.seconds(20);
 const PR_LOOKUP_CACHE_CAPACITY = 2_048;
 
-export function makeBoundedPrLookupEpochs(capacity: number) {
-  if (!Number.isSafeInteger(capacity) || capacity < 1) {
-    throw new RangeError("PR lookup epoch capacity must be a positive safe integer.");
-  }
-
-  const epochByKey = new Map<string, number>();
-  let nextEpoch = 1;
-  const assignNextEpoch = (key: string) => {
-    if (epochByKey.has(key)) {
-      epochByKey.delete(key);
-    } else if (epochByKey.size >= capacity) {
-      const oldestKey = epochByKey.keys().next().value;
-      if (oldestKey !== undefined) {
-        epochByKey.delete(oldestKey);
-      }
-    }
-
-    const epoch = nextEpoch;
-    nextEpoch += 1;
-    epochByKey.set(key, epoch);
-    return epoch;
-  };
-
-  return {
-    get: (key: string) => {
-      const epoch = epochByKey.get(key);
-      if (epoch === undefined) {
-        return assignNextEpoch(key);
-      }
-
-      epochByKey.delete(key);
-      epochByKey.set(key, epoch);
-      return epoch;
-    },
-    bump: assignNextEpoch,
-    size: () => epochByKey.size,
-  };
-}
+export const makeBoundedPrLookupEpochs = makeBoundedKeyEpochs;
 
 type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
 type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
@@ -801,8 +765,11 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         prLookupEpochs.bump(cacheKey);
       }),
     );
-  const prLookupCacheKey = (cwd: string, details: { branch: string; upstreamRef: string | null }) =>
-    [cwd, details.branch, details.upstreamRef ?? "", String(prLookupEpoch(cwd))].join("\u0000");
+  const prLookupCacheKey = (
+    cwd: string,
+    details: { branch: string; upstreamRef: string | null },
+    epoch: number,
+  ) => [cwd, details.branch, details.upstreamRef ?? "", String(epoch)].join("\u0000");
   const prLookupCache = yield* Cache.makeWith(
     (key: string) => {
       const [cwd = "", branch = "", upstreamRef = ""] = key.split("\u0000");
@@ -876,7 +843,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     details: { branch: string; upstreamRef: string | null; isDefaultBranch: boolean },
   ) {
     const branchKey = `${cwd}\u0000${details.branch}`;
-    return yield* Cache.get(prLookupCache, prLookupCacheKey(cwd, details)).pipe(
+    const lookupEpoch = prLookupEpoch(cwd);
+    return yield* Cache.get(prLookupCache, prLookupCacheKey(cwd, details, lookupEpoch)).pipe(
       Effect.map(({ latest, headContext }) => {
         if (!latest || (details.isDefaultBranch && latest.state !== "open")) {
           return { pr: null, headContext };
@@ -884,15 +852,18 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         return { pr: toStatusPr(latest), headContext };
       }),
       Effect.tap(({ pr, headContext }) =>
-        Effect.sync(() =>
+        Effect.sync(() => {
+          if (!prLookupEpochs.isCurrent(cwd, lookupEpoch)) {
+            return;
+          }
           rememberLastKnownPr(branchKey, {
             pr,
             upstreamRef: details.upstreamRef,
             headBranch: headContext.headBranch,
             remoteName: headContext.remoteName,
             headRemoteUrlKey: headContext.headRemoteUrlKey,
-          }),
-        ),
+          });
+        }),
       ),
       Effect.map(({ pr }) => pr),
       Effect.catch((error) =>
