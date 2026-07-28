@@ -1,0 +1,127 @@
+import { scopeSessionRef, scopedSessionKey } from "@t3tools/client-runtime";
+import { EnvironmentId, ProjectId, SessionId } from "@t3tools/contracts";
+import { describe, expect, it } from "vitest";
+
+import {
+  canDispatchSessionLifecycleAction,
+  parkedSessionsVisibleWhenCollapsed,
+  partitionSidebarV2Sessions,
+} from "./SidebarV2.logic";
+import type { SidebarSessionSummary } from "../types";
+
+const environmentId = EnvironmentId.make("environment");
+
+function makeSession(
+  id: string,
+  overrides: Partial<SidebarSessionSummary> = {},
+): SidebarSessionSummary {
+  return {
+    id: SessionId.make(id),
+    environmentId,
+    projectId: ProjectId.make("project"),
+    title: id,
+    interactionMode: "default",
+    workflowId: null,
+    workflowVersion: null,
+    session: null,
+    createdAt: `2026-07-29T0${id.length}:00:00.000Z`,
+    archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
+    snoozedUntil: null,
+    snoozedAt: null,
+    updatedAt: "2026-07-29T08:00:00.000Z",
+    latestTurn: null,
+    branch: null,
+    worktreePath: null,
+    latestUserMessageAt: "2026-07-29T08:00:00.000Z",
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    pendingRequestRaisedAt: null,
+    hasActionableProposedPlan: false,
+    ...overrides,
+  };
+}
+
+describe("Sidebar v2 lifecycle partition", () => {
+  it("keeps archived, snoozed, settled, and active semantics distinct", () => {
+    const result = partitionSidebarV2Sessions({
+      sessions: [
+        makeSession("active"),
+        makeSession("settled", {
+          settledOverride: "settled",
+          settledAt: "2026-07-29T09:00:00.000Z",
+        }),
+        makeSession("snoozed", {
+          settledOverride: "settled",
+          settledAt: "2026-07-29T09:00:00.000Z",
+          snoozedAt: "2026-07-29T09:00:00.000Z",
+          snoozedUntil: "2026-07-30T09:00:00.000Z",
+        }),
+        makeSession("archived", {
+          archivedAt: "2026-07-29T09:00:00.000Z",
+        }),
+      ],
+      now: "2026-07-29T10:00:00.000Z",
+      autoSettleAfterDays: null,
+      settlementSupported: () => true,
+      snoozeSupported: () => true,
+    });
+
+    expect(result.active.map((session) => session.title)).toEqual(["active"]);
+    expect(result.snoozed.map((session) => session.title)).toEqual(["snoozed"]);
+    expect(result.settled.map((session) => session.title)).toEqual(["settled"]);
+  });
+
+  it("settles merged change requests immediately without an age guard", () => {
+    const merged = makeSession("merged");
+    const result = partitionSidebarV2Sessions({
+      sessions: [merged],
+      now: "2026-07-29T10:00:00.000Z",
+      autoSettleAfterDays: null,
+      changeRequestStateBySessionKey: new Map([
+        [scopedSessionKey(scopeSessionRef(environmentId, merged.id)), "merged"],
+      ]),
+      settlementSupported: () => true,
+      snoozeSupported: () => true,
+    });
+
+    expect(result.settled).toEqual([merged]);
+  });
+
+  it("keeps a deep-linked parked session visible through a collapsed shelf", () => {
+    const parked = makeSession("parked");
+    expect(
+      parkedSessionsVisibleWhenCollapsed({
+        sessions: [parked],
+        expanded: false,
+        routeSessionRef: {
+          environmentId,
+          sessionId: parked.id,
+        },
+      }),
+    ).toEqual([parked]);
+  });
+
+  it("gates lifecycle dispatch at the action boundary", () => {
+    const session = makeSession("gated");
+    expect(
+      canDispatchSessionLifecycleAction({
+        action: "settle",
+        session,
+        now: "2026-07-29T10:00:00.000Z",
+        settlementSupported: false,
+        snoozeSupported: true,
+      }),
+    ).toBe(false);
+    expect(
+      canDispatchSessionLifecycleAction({
+        action: "snooze",
+        session: makeSession("blocked", { hasPendingApprovals: true }),
+        now: "2026-07-29T10:00:00.000Z",
+        settlementSupported: true,
+        snoozeSupported: true,
+      }),
+    ).toBe(false);
+  });
+});

@@ -1,13 +1,21 @@
 import { parseScopedSessionKey, scopeProjectRef, scopeSessionRef } from "@t3tools/client-runtime";
-import { type ScopedSessionRef, SessionId } from "@t3tools/contracts";
+import { type EnvironmentApi, type ScopedSessionRef, SessionId } from "@t3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
 
 import { getFallbackSessionIdAfterDelete } from "../components/Sidebar.logic";
+import {
+  canDispatchSessionLifecycleAction,
+  type SessionLifecycleAction,
+} from "../components/SidebarV2.logic";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewSessionHandler } from "./useHandleNewSession";
 import { ensureEnvironmentApi, readEnvironmentApi } from "../environmentApi";
+import {
+  environmentSupportsSessionSettlement,
+  environmentSupportsSessionSnooze,
+} from "../environments/capabilities";
 import { invalidateGitQueries } from "../lib/gitReactQuery";
 import { refreshArchivedSessionsForEnvironment } from "../lib/archivedSessionsState";
 import { newCommandId } from "../lib/utils";
@@ -15,6 +23,7 @@ import { readLocalApi } from "../localApi";
 import {
   selectProjectByRef,
   selectSessionByRef,
+  selectSidebarSessionSummaryByRef,
   selectSessionsForEnvironment,
   useStore,
 } from "../store";
@@ -26,6 +35,106 @@ import {
 } from "../worktreeCleanup";
 import { stackedSessionToast, toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
+
+type SessionLifecycleEnvironmentApi = {
+  orchestration: Pick<EnvironmentApi["orchestration"], "dispatchCommand">;
+};
+
+export type SessionLifecycleDispatchRequest =
+  | {
+      action: Exclude<SessionLifecycleAction, "snooze">;
+      target: ScopedSessionRef;
+    }
+  | {
+      action: "snooze";
+      target: ScopedSessionRef;
+      snoozedUntil: string;
+    };
+
+export interface SessionLifecycleDispatchDependencies {
+  readEnvironmentApi: (
+    environmentId: ScopedSessionRef["environmentId"],
+  ) => SessionLifecycleEnvironmentApi | undefined;
+  readSession: (target: ScopedSessionRef) => ReturnType<typeof selectSidebarSessionSummaryByRef>;
+  environmentSupportsSessionSettlement: (
+    environmentId: ScopedSessionRef["environmentId"],
+  ) => boolean;
+  environmentSupportsSessionSnooze: (environmentId: ScopedSessionRef["environmentId"]) => boolean;
+  now: () => string;
+}
+
+const defaultSessionLifecycleDispatchDependencies: SessionLifecycleDispatchDependencies = {
+  readEnvironmentApi,
+  readSession: (target) => selectSidebarSessionSummaryByRef(useStore.getState(), target),
+  environmentSupportsSessionSettlement,
+  environmentSupportsSessionSnooze,
+  now: () => new Date().toISOString(),
+};
+
+export async function dispatchSessionLifecycleAction(
+  request: SessionLifecycleDispatchRequest,
+  dependencies: SessionLifecycleDispatchDependencies = defaultSessionLifecycleDispatchDependencies,
+): Promise<boolean> {
+  const api = dependencies.readEnvironmentApi(request.target.environmentId);
+  if (!api) return false;
+
+  // Re-read the summary and target environment capabilities synchronously at
+  // the action boundary. There must be no asynchronous gap between this check
+  // and dispatch, or a stale row could settle/snooze a newly actionable session.
+  const session = dependencies.readSession(request.target);
+  if (!session) return false;
+  const settlementSupported = dependencies.environmentSupportsSessionSettlement(
+    request.target.environmentId,
+  );
+  const snoozeSupported = dependencies.environmentSupportsSessionSnooze(
+    request.target.environmentId,
+  );
+  if (
+    !canDispatchSessionLifecycleAction({
+      action: request.action,
+      session,
+      now: dependencies.now(),
+      settlementSupported,
+      snoozeSupported,
+    })
+  ) {
+    return false;
+  }
+
+  switch (request.action) {
+    case "settle":
+      await api.orchestration.dispatchCommand({
+        type: "session.settle",
+        commandId: newCommandId(),
+        sessionId: request.target.sessionId,
+      });
+      return true;
+    case "unsettle":
+      await api.orchestration.dispatchCommand({
+        type: "session.unsettle",
+        commandId: newCommandId(),
+        sessionId: request.target.sessionId,
+        reason: "user",
+      });
+      return true;
+    case "snooze":
+      await api.orchestration.dispatchCommand({
+        type: "session.snooze",
+        commandId: newCommandId(),
+        sessionId: request.target.sessionId,
+        snoozedUntil: request.snoozedUntil,
+      });
+      return true;
+    case "unsnooze":
+      await api.orchestration.dispatchCommand({
+        type: "session.unsnooze",
+        commandId: newCommandId(),
+        sessionId: request.target.sessionId,
+        reason: "user",
+      });
+      return true;
+  }
+}
 
 export function useSessionActions() {
   const sidebarSessionSortOrder = useSettings((settings) => settings.sidebarSessionSortOrder);
@@ -293,10 +402,38 @@ export function useSessionActions() {
     [confirmSessionDelete, deleteSession, resolveSessionTarget],
   );
 
+  const settleSession = useCallback(
+    (target: ScopedSessionRef): Promise<boolean> =>
+      dispatchSessionLifecycleAction({ action: "settle", target }),
+    [],
+  );
+
+  const unsettleSession = useCallback(
+    (target: ScopedSessionRef): Promise<boolean> =>
+      dispatchSessionLifecycleAction({ action: "unsettle", target }),
+    [],
+  );
+
+  const snoozeSession = useCallback(
+    (target: ScopedSessionRef, snoozedUntil: string): Promise<boolean> =>
+      dispatchSessionLifecycleAction({ action: "snooze", target, snoozedUntil }),
+    [],
+  );
+
+  const unsnoozeSession = useCallback(
+    (target: ScopedSessionRef): Promise<boolean> =>
+      dispatchSessionLifecycleAction({ action: "unsnooze", target }),
+    [],
+  );
+
   return {
     archiveSession,
     unarchiveSession,
     deleteSession,
     confirmAndDeleteSession,
+    settleSession,
+    unsettleSession,
+    snoozeSession,
+    unsnoozeSession,
   };
 }
