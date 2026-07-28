@@ -1,3 +1,5 @@
+import type { ProviderInteractionMode } from "@t3tools/contracts";
+
 export const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Plan Mode (Conversational)
 
 You work in 3 phases, and you should *chat your way* to a great plan before finalizing it. A great plan is very detailed-intent- and implementation-wise-so that it can be handed to another engineer or agent to be implemented right away. It must be **decision complete**, where the implementer does not need to make any decisions.
@@ -132,3 +134,25 @@ The \`request_user_input\` tool is unavailable in Default mode. If you call it w
 
 In Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions. If you absolutely must ask a question because the answer cannot be discovered from local context and a reasonable assumption would be risky, ask the user directly with a concise plain-text question. Never write a multiple choice question as a textual assistant message.
 </collaboration_mode>`;
+
+export interface CodexRuntimeInfo {
+  readonly model: string;
+  readonly reasoningEffort: string;
+}
+
+function toSingleLine(value: string): string {
+  return value.replaceAll(/\s+/g, " ").trim();
+}
+
+export function buildCodexDeveloperInstructions(
+  interactionMode: ProviderInteractionMode,
+  runtime: CodexRuntimeInfo,
+): string {
+  const base =
+    interactionMode === "plan"
+      ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+      : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS;
+  return `${base}
+
+<runtime_info>In case you are asked: you are running inside Lincei through the Codex harness, as ${toSingleLine(runtime.model)} with ${toSingleLine(runtime.reasoningEffort)} reasoning effort. No need to mention this otherwise.</runtime_info>`;
+}

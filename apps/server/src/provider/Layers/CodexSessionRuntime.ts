@@ -39,10 +39,7 @@ import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
-import {
-  CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
-  CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
-} from "../CodexDeveloperInstructions.ts";
+import { buildCodexDeveloperInstructions } from "../CodexDeveloperInstructions.ts";
 import { appendLinceiAgentInstructions } from "../LinceiAgentInstructions.ts";
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
@@ -341,27 +338,22 @@ function buildCodexCollaborationMode(input: {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
+  const reasoningEffort = input.effort ?? "medium";
   return {
     mode: input.interactionMode,
     settings: {
       model,
-      reasoning_effort: input.effort ?? "medium",
-      developer_instructions:
-        input.interactionMode === "plan"
-          ? appendLinceiAgentInstructions(
-              CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
-              input.linceiAgentCustomInstructions,
-              input.linceiWorkflowId,
-              input.linceiSkillSettings,
-              input.linceiWorkflowSettings,
-            )
-          : appendLinceiAgentInstructions(
-              CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
-              input.linceiAgentCustomInstructions,
-              input.linceiWorkflowId,
-              input.linceiSkillSettings,
-              input.linceiWorkflowSettings,
-            ),
+      reasoning_effort: reasoningEffort,
+      developer_instructions: appendLinceiAgentInstructions(
+        buildCodexDeveloperInstructions(input.interactionMode, {
+          model,
+          reasoningEffort,
+        }),
+        input.linceiAgentCustomInstructions,
+        input.linceiWorkflowId,
+        input.linceiSkillSettings,
+        input.linceiWorkflowSettings,
+      ),
     },
   };
 }
