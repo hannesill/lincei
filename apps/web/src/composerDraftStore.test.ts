@@ -552,6 +552,8 @@ describe("composerDraftStore project draft session mapping", () => {
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       createdAt: "2026-01-01T00:00:00.000Z",
+      workflowId: "structured-clinical-study",
+      workflowVersion: "2.0.0",
     });
     expect(useComposerDraftStore.getState().getDraftSessionByProjectRef(projectRef)).toMatchObject({
       sessionId,
@@ -563,6 +565,8 @@ describe("composerDraftStore project draft session mapping", () => {
       envMode: "worktree",
       runtimeMode: "full-access",
       interactionMode: "default",
+      workflowId: "structured-clinical-study",
+      workflowVersion: "2.0.0",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     expect(useComposerDraftStore.getState().getDraftSession(draftId)).toMatchObject({
@@ -574,6 +578,8 @@ describe("composerDraftStore project draft session mapping", () => {
       envMode: "worktree",
       runtimeMode: "full-access",
       interactionMode: "default",
+      workflowId: "structured-clinical-study",
+      workflowVersion: "2.0.0",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
   });
@@ -963,6 +969,25 @@ describe("composerDraftStore modelSelection", () => {
   it("keeps default-only model selections on the draft", () => {
     const store = useComposerDraftStore.getState();
     store.setModelSelection(sessionRef, modelSelection(CODEX_DRIVER, "gpt-5.4"));
+
+    expect(
+      draftFor(sessionId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CODEX_INSTANCE],
+    ).toEqual(modelSelection(CODEX_DRIVER, "gpt-5.4"));
+  });
+
+  it("replaces stale model options when carrying a complete selection", () => {
+    const store = useComposerDraftStore.getState();
+    store.setModelSelection(
+      sessionRef,
+      modelSelection(CODEX_DRIVER, "gpt-5.3-codex", {
+        reasoningEffort: "xhigh",
+        fastMode: true,
+      }),
+    );
+
+    store.setModelSelection(sessionRef, modelSelection(CODEX_DRIVER, "gpt-5.4"), {
+      replaceOptions: true,
+    });
 
     expect(
       draftFor(sessionId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CODEX_INSTANCE],

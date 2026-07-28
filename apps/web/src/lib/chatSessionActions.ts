@@ -5,12 +5,12 @@ import type { DraftSessionEnvMode } from "../composerDraftStore";
 interface SessionContextLike {
   environmentId: EnvironmentId;
   projectId: ProjectId;
-  branch: string | null;
-  worktreePath: string | null;
+  branch?: string | null;
+  worktreePath?: string | null;
 }
 
 interface DraftSessionContextLike extends SessionContextLike {
-  envMode: DraftSessionEnvMode;
+  envMode?: DraftSessionEnvMode;
 }
 
 interface NewSessionHandler {
@@ -49,19 +49,10 @@ export function resolveSessionActionProjectRef(
   return context.defaultProjectRef;
 }
 
-function buildContextualSessionOptions(context: ChatSessionActionContext): NewSessionOptions {
-  return {
-    branch: context.activeSession?.branch ?? context.activeDraftSession?.branch ?? null,
-    worktreePath:
-      context.activeSession?.worktreePath ?? context.activeDraftSession?.worktreePath ?? null,
-    envMode:
-      context.activeDraftSession?.envMode ??
-      (context.activeSession?.worktreePath ? "worktree" : "local"),
-  };
-}
-
 function buildDefaultSessionOptions(context: ChatSessionActionContext): NewSessionOptions {
   return {
+    branch: null,
+    worktreePath: null,
     envMode: context.defaultSessionEnvMode,
   };
 }
@@ -70,7 +61,7 @@ export async function startNewSessionInProjectFromContext(
   context: ChatSessionActionContext,
   projectRef: ScopedProjectRef,
 ): Promise<void> {
-  await context.handleNewSession(projectRef, buildContextualSessionOptions(context));
+  await context.handleNewSession(projectRef, buildDefaultSessionOptions(context));
 }
 
 export async function startNewSessionFromContext(

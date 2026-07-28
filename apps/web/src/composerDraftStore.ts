@@ -176,6 +176,8 @@ const PersistedDraftSessionState = Schema.Struct({
   createdAt: Schema.String,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  workflowId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  workflowVersion: Schema.optionalKey(Schema.NullOr(Schema.String)),
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   envMode: DraftSessionEnvModeSchema,
@@ -245,6 +247,8 @@ export interface DraftSessionState {
   createdAt: string;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  workflowId?: string | null;
+  workflowVersion?: string | null;
   branch: string | null;
   worktreePath: string | null;
   envMode: DraftSessionEnvMode;
@@ -305,6 +309,8 @@ interface ComposerDraftStoreState {
       envMode?: DraftSessionEnvMode;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      workflowId?: string | null;
+      workflowVersion?: string | null;
     },
   ) => void;
   /** Creates or updates the draft session tracked for a concrete project ref. */
@@ -319,6 +325,8 @@ interface ComposerDraftStoreState {
       envMode?: DraftSessionEnvMode;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      workflowId?: string | null;
+      workflowVersion?: string | null;
     },
   ) => void;
   /** Updates mutable draft-session metadata without touching composer content. */
@@ -332,6 +340,8 @@ interface ComposerDraftStoreState {
       envMode?: DraftSessionEnvMode;
       runtimeMode?: RuntimeMode;
       interactionMode?: ProviderInteractionMode;
+      workflowId?: string | null;
+      workflowVersion?: string | null;
     },
   ) => void;
   clearProjectDraftSessionId: (projectRef: ScopedProjectRef) => void;
@@ -356,6 +366,9 @@ interface ComposerDraftStoreState {
   setModelSelection: (
     sessionRef: ComposerSessionTarget,
     modelSelection: ModelSelection | null | undefined,
+    options?: {
+      replaceOptions?: boolean;
+    },
   ) => void;
   /** Replace the model options for one or more providers in the draft. */
   setModelOptions: (
@@ -1163,6 +1176,8 @@ function createDraftSessionState(
     envMode?: DraftSessionEnvMode;
     runtimeMode?: RuntimeMode;
     interactionMode?: ProviderInteractionMode;
+    workflowId?: string | null;
+    workflowVersion?: string | null;
   },
 ): DraftSessionState {
   const projectChanged =
@@ -1190,6 +1205,14 @@ function createDraftSessionState(
     runtimeMode: options?.runtimeMode ?? existingSession?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode:
       options?.interactionMode ?? existingSession?.interactionMode ?? DEFAULT_INTERACTION_MODE,
+    workflowId:
+      options?.workflowId === undefined
+        ? (existingSession?.workflowId ?? null)
+        : options.workflowId,
+    workflowVersion:
+      options?.workflowVersion === undefined
+        ? (existingSession?.workflowVersion ?? null)
+        : options.workflowVersion,
     branch: nextBranch,
     worktreePath: nextWorktreePath,
     envMode:
@@ -1230,6 +1253,8 @@ function draftSessionsEqual(
     left.createdAt === right.createdAt &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
+    left.workflowId === right.workflowId &&
+    left.workflowVersion === right.workflowVersion &&
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath &&
     left.envMode === right.envMode &&
@@ -1942,6 +1967,8 @@ function toHydratedDraftSessionState(
     createdAt: persistedDraftSession.createdAt,
     runtimeMode: persistedDraftSession.runtimeMode,
     interactionMode: persistedDraftSession.interactionMode,
+    workflowId: persistedDraftSession.workflowId ?? null,
+    workflowVersion: persistedDraftSession.workflowVersion ?? null,
     branch: persistedDraftSession.branch,
     worktreePath: persistedDraftSession.worktreePath,
     envMode: persistedDraftSession.envMode,
@@ -2131,6 +2158,14 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                   : options.createdAt || existing.createdAt,
               runtimeMode: options.runtimeMode ?? existing.runtimeMode,
               interactionMode: options.interactionMode ?? existing.interactionMode,
+              workflowId:
+                options.workflowId === undefined
+                  ? (existing.workflowId ?? null)
+                  : options.workflowId,
+              workflowVersion:
+                options.workflowVersion === undefined
+                  ? (existing.workflowVersion ?? null)
+                  : options.workflowVersion,
               branch: nextBranch,
               worktreePath: nextWorktreePath,
               envMode:
@@ -2149,6 +2184,8 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               nextDraftSession.createdAt === existing.createdAt &&
               nextDraftSession.runtimeMode === existing.runtimeMode &&
               nextDraftSession.interactionMode === existing.interactionMode &&
+              nextDraftSession.workflowId === existing.workflowId &&
+              nextDraftSession.workflowVersion === existing.workflowVersion &&
               nextDraftSession.branch === existing.branch &&
               nextDraftSession.worktreePath === existing.worktreePath &&
               nextDraftSession.envMode === existing.envMode &&
@@ -2364,7 +2401,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             return { draftsBySessionKey: nextDraftsBySessionKey };
           });
         },
-        setModelSelection: (sessionRef, modelSelection) => {
+        setModelSelection: (sessionRef, modelSelection, options) => {
           const sessionKey = resolveComposerDraftKey(get(), sessionRef) ?? "";
           if (sessionKey.length === 0) {
             return;
@@ -2379,7 +2416,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const nextMap = { ...base.modelSelectionByProvider };
             if (normalized) {
               const current = nextMap[normalized.instanceId];
-              if (normalized.options !== undefined) {
+              if (normalized.options !== undefined || options?.replaceOptions) {
                 // Explicit options provided → use them
                 nextMap[normalized.instanceId] = normalized as ModelSelection;
               } else {
