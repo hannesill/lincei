@@ -2678,9 +2678,11 @@ describe("ProviderRuntimeIngestion", () => {
     expect(activityPayload?.message).toBe("runtime activity exploded");
   });
 
-  it("keeps the session running and preserves runtime.warning text during an active turn", async () => {
+  it("keeps the session running and caps runtime.warning text during an active turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
+    const longWarning = `context window nearly full: ${"x".repeat(220)} RAW_SDK_NOTIFICATION_TEXT`;
+    const truncatedWarning = `${longWarning.slice(0, 177)}...`;
 
     harness.emit({
       type: "turn.started",
@@ -2700,9 +2702,26 @@ describe("ProviderRuntimeIngestion", () => {
       sessionId: asSessionId("session-1"),
       turnId: asTurnId("turn-warning"),
       payload: {
-        message: "context window nearly full",
+        message: longWarning,
         detail: {
           priority: "high",
+          timeoutMs: 4_500,
+        },
+      },
+      raw: {
+        source: "claude.sdk.message",
+        method: "claude/system/notification",
+        messageType: "system:notification",
+        payload: {
+          type: "system",
+          subtype: "notification",
+          key: "private-notification-key",
+          text: longWarning,
+          priority: "high",
+          color: "private-notification-color",
+          timeout_ms: 4_500,
+          session_id: "private-sdk-session-id",
+          uuid: "private-sdk-notification-uuid",
         },
       },
     });
@@ -2727,8 +2746,17 @@ describe("ProviderRuntimeIngestion", () => {
       warning?.payload && typeof warning.payload === "object"
         ? (warning.payload as Record<string, unknown>)
         : undefined;
-    expect(warning?.summary).toBe("context window nearly full");
-    expect(warningPayload?.message).toBe("context window nearly full");
+    expect(warning?.summary).toBe(truncatedWarning);
+    expect(warning?.summary).toHaveLength(180);
+    expect(warningPayload?.message).toBe(truncatedWarning);
+    expect(warningPayload?.message).toHaveLength(180);
+    expect(warningPayload?.detail).toEqual({
+      priority: "high",
+      timeoutMs: 4_500,
+    });
+    expect(warning).not.toHaveProperty("raw");
+    expect(warning?.summary).not.toContain("RAW_SDK_NOTIFICATION_TEXT");
+    expect(warningPayload?.message).not.toContain("RAW_SDK_NOTIFICATION_TEXT");
   });
 
   it("maps session/session lifecycle and item.started into session/activity projections", async () => {

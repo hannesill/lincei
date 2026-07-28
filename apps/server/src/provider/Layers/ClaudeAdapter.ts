@@ -98,10 +98,33 @@ type ClaudeToolResultStreamKind = Extract<
   "command_output" | "file_change_output"
 >;
 type ClaudeSdkEffort = NonNullable<ClaudeQueryOptions["effort"]>;
+type ClaudeNotificationMessage = Extract<
+  SDKMessage,
+  { readonly type: "system"; readonly subtype: "notification" }
+>;
 
 function encodeJsonStringForDiagnostics(input: unknown): string | undefined {
   const result = encodeUnknownJsonStringExit(input);
   return Exit.isSuccess(result) ? result.value : undefined;
+}
+
+function notificationWarningDetail(message: ClaudeNotificationMessage): {
+  readonly priority: ClaudeNotificationMessage["priority"];
+  readonly timeoutMs?: number;
+} {
+  // Warning detail is persisted in session activities. Keep only bounded,
+  // display-safe metadata rather than copying the raw SDK notification.
+  const timeoutMs =
+    typeof message.timeout_ms === "number" &&
+    Number.isSafeInteger(message.timeout_ms) &&
+    message.timeout_ms >= 0
+      ? message.timeout_ms
+      : undefined;
+
+  return {
+    priority: message.priority,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  };
 }
 
 type PromptQueueItem =
@@ -2323,7 +2346,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       case "notification":
         // Only urgent user-facing CLI notifications warrant a warning row.
         if (message.priority === "high" || message.priority === "immediate") {
-          yield* emitRuntimeWarning(context, message.text, message);
+          yield* emitRuntimeWarning(context, message.text, notificationWarningDetail(message));
         }
         return;
       // Inner protocol details with no Lincei surface today.
