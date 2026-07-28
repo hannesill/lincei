@@ -12,6 +12,7 @@ import {
   ShortcutRule,
   MessageId,
   ExternalLauncherError,
+  type OrchestrationSession,
   type OrchestrationSessionShell,
   TerminalNotRunningError,
   type OrchestrationCommand,
@@ -42,9 +43,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   Cookies,
@@ -843,6 +842,7 @@ const buildAppUnderTest = (options?: {
           getProjectShellById: () => Effect.succeed(Option.none()),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
+          getSessionDetailSnapshot: () => Effect.succeed(Option.none()),
           getCounts: () => Effect.succeed({ projectCount: 0, sessionCount: 0 }),
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveSessionIdByProjectId: () => Effect.succeed(Option.none()),
@@ -3879,10 +3879,119 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("buffers session events published while the initial snapshot loads", () =>
+  it.effect("suppresses buffered streaming deltas already present in the atomic snapshot", () =>
+    Effect.gen(function* () {
+      const turnId = TurnId.make("turn-stream");
+      const messageId = MessageId.make("assistant-stream");
+      const session: OrchestrationSession = {
+        ...makeDefaultOrchestrationReadModel().sessions[0]!,
+        messages: [
+          {
+            id: messageId,
+            role: "assistant",
+            text: "hello world",
+            turnId,
+            streaming: true,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:01.000Z",
+          },
+        ],
+      };
+      const includedStreamingDelta = {
+        sequence: 2,
+        eventId: EventId.make("event-streaming-delta"),
+        aggregateKind: "session",
+        aggregateId: defaultSessionId,
+        occurredAt: "2026-01-01T00:00:01.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "session.message-sent",
+        payload: {
+          sessionId: defaultSessionId,
+          messageId,
+          role: "assistant",
+          text: " world",
+          turnId,
+          streaming: true,
+          createdAt: "2026-01-01T00:00:01.000Z",
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        },
+      } satisfies Extract<OrchestrationEvent, { type: "session.message-sent" }>;
+      const laterEvent = {
+        sequence: 3,
+        eventId: EventId.make("event-later"),
+        aggregateKind: "session",
+        aggregateId: defaultSessionId,
+        occurredAt: "2026-01-01T00:00:02.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "session.message-sent",
+        payload: {
+          sessionId: defaultSessionId,
+          messageId: MessageId.make("message-later"),
+          role: "user",
+          text: "Follow-up",
+          turnId: null,
+          streaming: false,
+          createdAt: "2026-01-01T00:00:02.000Z",
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+      } satisfies Extract<OrchestrationEvent, { type: "session.message-sent" }>;
+      const liveSubscribed = yield* Deferred.make<void>();
+      const releaseLiveEvents = yield* Deferred.make<void>();
+      const liveEvents = Stream.fromEffect(
+        Effect.gen(function* () {
+          yield* Deferred.succeed(liveSubscribed, undefined);
+          yield* Deferred.await(releaseLiveEvents);
+          return [includedStreamingDelta, laterEvent] as const;
+        }),
+      ).pipe(Stream.flatMap(Stream.fromIterable));
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            streamDomainEvents: liveEvents,
+          },
+          projectionSnapshotQuery: {
+            getSessionDetailSnapshot: () =>
+              Effect.gen(function* () {
+                yield* Deferred.await(liveSubscribed);
+                yield* Deferred.succeed(releaseLiveEvents, undefined);
+                yield* Effect.yieldNow;
+                return Option.some({
+                  snapshotSequence: includedStreamingDelta.sequence,
+                  session,
+                });
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const items = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeSession]({
+            sessionId: defaultSessionId,
+          }).pipe(Stream.take(2), Stream.runCollect),
+        ),
+      ).pipe(Effect.timeout("2 seconds"));
+
+      assert.equal(items[0]?.kind, "snapshot");
+      if (items[0]?.kind === "snapshot") {
+        assert.equal(items[0].snapshot.session.messages[0]?.text, "hello world");
+      }
+      assert.equal(items[1]?.kind, "event");
+      assert.equal(items[1]?.kind === "event" ? items[1].event.sequence : null, 3);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("retains buffered session events absent from the atomic snapshot", () =>
     Effect.gen(function* () {
       const session = makeDefaultOrchestrationReadModel().sessions[0]!;
-      const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
       const messageEvent = {
         sequence: 2,
         eventId: EventId.make("event-message"),
@@ -3905,20 +4014,32 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           updatedAt: "2026-01-01T00:00:01.000Z",
         },
       } satisfies Extract<OrchestrationEvent, { type: "session.message-sent" }>;
+      const liveSubscribed = yield* Deferred.make<void>();
+      const releaseLiveEvent = yield* Deferred.make<void>();
+      const liveEvents = Stream.fromEffect(
+        Effect.gen(function* () {
+          yield* Deferred.succeed(liveSubscribed, undefined);
+          yield* Deferred.await(releaseLiveEvent);
+          return messageEvent;
+        }),
+      );
 
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
-            streamDomainEvents: Stream.fromPubSub(liveEvents),
+            streamDomainEvents: liveEvents,
           },
           projectionSnapshotQuery: {
-            getSessionDetailById: () =>
+            getSessionDetailSnapshot: () =>
               Effect.gen(function* () {
-                yield* Effect.sleep("25 millis");
-                yield* PubSub.publish(liveEvents, messageEvent);
-                return Option.some(session);
+                yield* Deferred.await(liveSubscribed);
+                yield* Deferred.succeed(releaseLiveEvent, undefined);
+                yield* Effect.yieldNow;
+                return Option.some({
+                  snapshotSequence: messageEvent.sequence - 1,
+                  session,
+                });
               }),
-            getSnapshotSequence: () => Effect.succeed({ snapshotSequence: 1 }),
           },
         },
       });
@@ -3935,7 +4056,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(items[0]?.kind, "snapshot");
       assert.equal(items[1]?.kind, "event");
       assert.equal(items[1]?.kind === "event" ? items[1].event.sequence : null, 2);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("routes websocket rpc orchestration shell snapshot errors", () =>

@@ -202,6 +202,7 @@ describe("OrchestrationEngine", () => {
           getFullSessionDiffContext: () => Effect.succeed(Option.none()),
           getSessionShellById: () => Effect.succeed(Option.none()),
           getSessionDetailById: () => Effect.succeed(Option.none()),
+          getSessionDetailSnapshot: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(

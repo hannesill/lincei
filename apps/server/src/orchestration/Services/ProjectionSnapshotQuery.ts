@@ -12,6 +12,7 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
+  OrchestrationSessionDetailSnapshot,
   OrchestrationShellSnapshot,
   OrchestrationSession,
   OrchestrationSessionShell,
@@ -157,6 +158,14 @@ export interface ProjectionSnapshotQueryShape {
   readonly getSessionDetailById: (
     sessionId: SessionId,
   ) => Effect.Effect<Option.Option<OrchestrationSession>, ProjectionRepositoryError>;
+
+  /**
+   * Read a single active session detail and its projection sequence from one
+   * database snapshot.
+   */
+  readonly getSessionDetailSnapshot: (
+    sessionId: SessionId,
+  ) => Effect.Effect<Option.Option<OrchestrationSessionDetailSnapshot>, ProjectionRepositoryError>;
 }
 
 /**

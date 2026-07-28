@@ -888,10 +888,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               yield* Effect.forkScoped(
                 liveStream.pipe(Stream.runForEach((item) => Queue.offer(liveBuffer, item))),
               );
-              const bufferedLiveStream = Stream.fromQueue(liveBuffer);
-
-              const [sessionDetail, snapshotSequence] = yield* Effect.all([
-                projectionSnapshotQuery.getSessionDetailById(input.sessionId).pipe(
+              const sessionSnapshot = yield* projectionSnapshotQuery
+                .getSessionDetailSnapshot(input.sessionId)
+                .pipe(
                   Effect.mapError(
                     (cause) =>
                       new OrchestrationGetSnapshotError({
@@ -899,32 +898,28 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                         cause,
                       }),
                   ),
-                ),
-                projectionSnapshotQuery.getSnapshotSequence().pipe(
-                  Effect.map(({ snapshotSequence }) => snapshotSequence),
-                  Effect.mapError(
-                    (cause) =>
-                      new OrchestrationGetSnapshotError({
-                        message: "Failed to load orchestration snapshot sequence",
-                        cause,
-                      }),
-                  ),
-                ),
-              ]);
+                );
 
-              if (Option.isNone(sessionDetail)) {
+              if (Option.isNone(sessionSnapshot)) {
                 return yield* new OrchestrationGetSnapshotError({
                   message: `Session ${input.sessionId} was not found`,
                   cause: input.sessionId,
                 });
               }
 
+              const { session, snapshotSequence } = sessionSnapshot.value;
+              const bufferedLiveStream = Stream.fromQueue(liveBuffer).pipe(
+                Stream.filter(
+                  (item) => item.kind !== "event" || item.event.sequence > snapshotSequence,
+                ),
+              );
+
               return Stream.concat(
                 Stream.make({
                   kind: "snapshot" as const,
                   snapshot: projectSessionDetailSnapshot({
                     snapshotSequence,
-                    session: sessionDetail.value,
+                    session,
                   }),
                 }),
                 bufferedLiveStream,

@@ -11,6 +11,7 @@ import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
@@ -369,6 +370,15 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           },
         },
       ]);
+
+      const sessionDetailSnapshot = yield* snapshotQuery.getSessionDetailSnapshot(
+        SessionId.make("session-1"),
+      );
+      assert.equal(Option.isSome(sessionDetailSnapshot), true);
+      if (Option.isSome(sessionDetailSnapshot)) {
+        assert.equal(sessionDetailSnapshot.value.snapshotSequence, 5);
+        assert.deepEqual(sessionDetailSnapshot.value.session, snapshot.sessions[0]);
+      }
 
       const shellSnapshot = yield* snapshotQuery.getShellSnapshot();
       assert.equal(shellSnapshot.snapshotSequence, 5);
