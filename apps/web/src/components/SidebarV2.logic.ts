@@ -20,6 +20,8 @@ export interface SidebarV2Partition {
   settled: SidebarSessionSummary[];
 }
 
+export type ParkedSessionComposerState = "snoozed" | "settled";
+
 export function toSessionLifecycleShell(session: SidebarSessionSummary): SessionLifecycleShell {
   return {
     ...session,
@@ -71,6 +73,32 @@ export function partitionSidebarV2Sessions(input: {
     snoozed: sortSessionsForSidebarV2(snoozed),
     settled: sortSettledSessionsForSidebarV2(settled),
   };
+}
+
+export function resolveParkedSessionComposerState(input: {
+  session: SidebarSessionSummary | null | undefined;
+  now: string;
+  autoSettleAfterDays: number | null;
+  changeRequestState?: ChangeRequestStateLike | null;
+  settlementSupported: boolean;
+  snoozeSupported: boolean;
+}): ParkedSessionComposerState | null {
+  if (!input.session || input.session.archivedAt !== null) return null;
+  const shell = toSessionLifecycleShell(input.session);
+  if (input.snoozeSupported && effectiveSessionSnoozed(shell, { now: input.now })) {
+    return "snoozed";
+  }
+  if (
+    input.settlementSupported &&
+    effectiveSessionSettled(shell, {
+      now: input.now,
+      autoSettleAfterDays: input.autoSettleAfterDays,
+      changeRequestState: input.changeRequestState ?? null,
+    })
+  ) {
+    return "settled";
+  }
+  return null;
 }
 
 export function parkedSessionsVisibleWhenCollapsed(input: {
