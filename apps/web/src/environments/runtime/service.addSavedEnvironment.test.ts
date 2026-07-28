@@ -77,6 +77,7 @@ vi.mock("~/localApi", () => ({
 }));
 
 vi.mock("./catalog", () => ({
+  assertSupportedSavedEnvironmentRecord: vi.fn(),
   getSavedEnvironmentRecord: mockGetSavedEnvironmentRecord,
   hasSavedEnvironmentRegistryHydrated: vi.fn(),
   listSavedEnvironmentRecords: mockListSavedEnvironmentRecords,
