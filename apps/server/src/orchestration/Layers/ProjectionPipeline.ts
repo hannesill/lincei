@@ -58,8 +58,9 @@ import {
   toSafeSessionAttachmentSegment,
 } from "../../attachmentStore.ts";
 import {
+  derivePendingRequestCounts,
+  extractLifecycleRequestId,
   isStalePendingApprovalFailureDetail,
-  isStalePendingUserInputFailureDetail,
 } from "../sessionLifecycle.ts";
 
 export const ORCHESTRATION_PROJECTOR_NAMES = {
@@ -96,53 +97,8 @@ const materializeAttachmentsForProjection = Effect.fn("materializeAttachmentsFor
 );
 
 function extractActivityRequestId(payload: unknown): ApprovalRequestId | null {
-  if (typeof payload !== "object" || payload === null) {
-    return null;
-  }
-  const requestId = (payload as Record<string, unknown>).requestId;
-  return typeof requestId === "string" ? ApprovalRequestId.make(requestId) : null;
-}
-
-function derivePendingUserInputCountFromActivities(
-  activities: ReadonlyArray<ProjectionSessionActivity>,
-): number {
-  const openRequestIds = new Set<string>();
-  const ordered = [...activities].toSorted(
-    (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) ||
-      left.activityId.localeCompare(right.activityId),
-  );
-
-  for (const activity of ordered) {
-    const requestId = extractActivityRequestId(activity.payload);
-    if (requestId === null) {
-      continue;
-    }
-    const payload =
-      typeof activity.payload === "object" && activity.payload !== null
-        ? (activity.payload as Record<string, unknown>)
-        : null;
-    const detail = typeof payload?.detail === "string" ? payload.detail.toLowerCase() : null;
-
-    if (activity.kind === "user-input.requested") {
-      openRequestIds.add(requestId);
-      continue;
-    }
-
-    if (activity.kind === "user-input.resolved") {
-      openRequestIds.delete(requestId);
-      continue;
-    }
-
-    if (
-      activity.kind === "provider.user-input.respond.failed" &&
-      isStalePendingUserInputFailureDetail(detail)
-    ) {
-      openRequestIds.delete(requestId);
-    }
-  }
-
-  return openRequestIds.size;
+  const requestId = extractLifecycleRequestId(payload);
+  return requestId === null ? null : ApprovalRequestId.make(requestId);
 }
 
 function deriveHasActionableProposedPlan(input: {
@@ -531,11 +487,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         return;
       }
 
-      const [messages, proposedPlans, activities, pendingApprovals] = yield* Effect.all([
+      const [messages, proposedPlans, activities] = yield* Effect.all([
         projectionSessionMessageRepository.listBySessionId({ sessionId }),
         projectionSessionProposedPlanRepository.listBySessionId({ sessionId }),
         projectionSessionActivityRepository.listBySessionId({ sessionId }),
-        projectionPendingApprovalRepository.listBySessionId({ sessionId }),
       ]);
 
       let latestUserMessageAt: string | null = null;
@@ -548,10 +503,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         }
       }
 
-      const pendingApprovalCount = pendingApprovals.filter(
-        (approval) => approval.status === "pending",
-      ).length;
-      const pendingUserInputCount = derivePendingUserInputCountFromActivities(activities);
+      const { pendingApprovalCount, pendingUserInputCount } =
+        derivePendingRequestCounts(activities);
       const hasActionableProposedPlan = deriveHasActionableProposedPlan({
         latestTurnId: existingRow.value.latestTurnId,
         proposedPlans,
@@ -1042,9 +995,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             kind: event.payload.activity.kind,
             summary: event.payload.activity.summary,
             payload: event.payload.activity.payload,
-            ...(event.payload.activity.sequence !== undefined
-              ? { sequence: event.payload.activity.sequence }
-              : {}),
+            sequence: event.sequence,
             createdAt: event.payload.activity.createdAt,
           });
           return;
@@ -1443,8 +1394,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           // Only approval-requested activities should create pending-approval
           // rows.  Other activity kinds that happen to carry a requestId
           // (e.g. user-input.requested / user-input.resolved) must not
-          // pollute this projection — they have their own accounting via
-          // derivePendingUserInputCountFromActivities.
+          // pollute this compatibility projection.
           if (event.payload.activity.kind !== "approval.requested") {
             return;
           }
@@ -1469,18 +1419,21 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           const existingRow = yield* projectionPendingApprovalRepository.getByRequestId({
             requestId: event.payload.requestId,
           });
+          if (Option.isSome(existingRow) && existingRow.value.status === "resolved") {
+            return;
+          }
           yield* projectionPendingApprovalRepository.upsert({
             requestId: event.payload.requestId,
             sessionId: Option.isSome(existingRow)
               ? existingRow.value.sessionId
               : event.payload.sessionId,
             turnId: Option.isSome(existingRow) ? existingRow.value.turnId : null,
-            status: "resolved",
+            status: "pending",
             decision: event.payload.decision,
             createdAt: Option.isSome(existingRow)
               ? existingRow.value.createdAt
               : event.payload.createdAt,
-            resolvedAt: event.payload.createdAt,
+            resolvedAt: null,
           });
           return;
         }
@@ -1594,10 +1547,29 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       Effect.forEach(projectors, (projector) => runProjectorForEvent(projector, event), {
         concurrency: 1,
       }).pipe(
+        Effect.flatMap(() => {
+          if (event.aggregateKind !== "session") {
+            return Effect.succeed(null);
+          }
+          return projectionSessionRepository
+            .getById({ sessionId: SessionId.make(event.aggregateId) })
+            .pipe(
+              Effect.map(
+                Option.match({
+                  onNone: () => null,
+                  onSome: (row) => ({
+                    sessionId: row.sessionId,
+                    latestUserMessageAt: row.latestUserMessageAt,
+                    pendingApprovalCount: row.pendingApprovalCount,
+                    pendingUserInputCount: row.pendingUserInputCount,
+                  }),
+                }),
+              ),
+            );
+        }),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
         Effect.provideService(ServerConfig, serverConfig),
-        Effect.asVoid,
         Effect.catchTag("SqlError", (sqlError) =>
           Effect.fail(toPersistenceSqlError("ProjectionPipeline.projectEvent:query")(sqlError)),
         ),

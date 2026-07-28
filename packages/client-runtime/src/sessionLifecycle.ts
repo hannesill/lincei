@@ -12,6 +12,7 @@ interface SessionLifecycleRuntime {
 }
 
 export interface SessionLifecycleShell {
+  readonly updatedAt: string;
   readonly latestUserMessageAt: string | null;
   readonly latestTurn: OrchestrationLatestTurn | null;
   readonly session: SessionLifecycleRuntime | null;
@@ -102,6 +103,7 @@ export function canSettleSession(
 
 export type SessionSnoozeShell = Pick<
   SessionLifecycleShell,
+  | "updatedAt"
   | "snoozedUntil"
   | "snoozedAt"
   | "hasPendingApprovals"
@@ -168,6 +170,9 @@ export function sessionWokeAt(
     return null;
   }
   if (sessionRaisedHandWhileSnoozed(shell)) {
+    if (shell.hasPendingApprovals || shell.hasPendingUserInput) {
+      return shell.updatedAt;
+    }
     if (
       shell.snoozedAt !== null &&
       shell.latestTurn?.state === "completed" &&
@@ -176,7 +181,7 @@ export function sessionWokeAt(
     ) {
       return shell.latestTurn.completedAt;
     }
-    return shell.session?.updatedAt ?? shell.snoozedAt;
+    return shell.session?.updatedAt ?? shell.updatedAt;
   }
   return wakeAtMs <= Date.parse(options.now) ? shell.snoozedUntil : null;
 }

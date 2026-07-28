@@ -9,10 +9,11 @@ export function isStalePendingApprovalFailureDetail(detail: string | null): bool
   if (detail === null) {
     return false;
   }
+  const normalizedDetail = detail.toLowerCase();
   return (
-    detail.includes("stale pending approval request") ||
-    detail.includes("unknown pending approval request") ||
-    detail.includes("unknown pending permission request")
+    normalizedDetail.includes("stale pending approval request") ||
+    normalizedDetail.includes("unknown pending approval request") ||
+    normalizedDetail.includes("unknown pending permission request")
   );
 }
 
@@ -20,34 +21,58 @@ export function isStalePendingUserInputFailureDetail(detail: string | null): boo
   if (detail === null) {
     return false;
   }
+  const normalizedDetail = detail.toLowerCase();
   return (
-    detail.includes("stale pending user-input request") ||
-    detail.includes("unknown pending user-input request") ||
-    detail.includes("unknown pending user input request") ||
-    detail.includes("unknown pending codex user input request")
+    normalizedDetail.includes("stale pending user-input request") ||
+    normalizedDetail.includes("unknown pending user-input request") ||
+    normalizedDetail.includes("unknown pending user input request") ||
+    normalizedDetail.includes("unknown pending codex user input request")
   );
 }
 
+interface RequestLifecycleActivity {
+  readonly kind: string;
+  readonly payload: unknown;
+}
+
+export interface PendingRequestCounts {
+  readonly pendingApprovalCount: number;
+  readonly pendingUserInputCount: number;
+}
+
+export function extractLifecycleRequestId(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const requestId = (payload as Record<string, unknown>).requestId;
+  return typeof requestId === "string" ? requestId : null;
+}
+
+function extractFailureDetail(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const detail = (payload as Record<string, unknown>).detail;
+  return typeof detail === "string" ? detail : null;
+}
+
 /**
- * Reconstruct blocked-on-user work from retained activities. These clearing
- * rules are shared with the projection pending counters so command invariants
- * and shell visibility cannot disagree.
+ * Reconstruct blocked-on-user work from a sequence-ordered durable activity
+ * stream. Request identity, rather than timestamps, determines transitions.
  */
-export function hasOpenBlockingRequest(session: Pick<OrchestrationSession, "activities">): boolean {
+export function derivePendingRequestCounts(
+  activities: ReadonlyArray<RequestLifecycleActivity>,
+): PendingRequestCounts {
   const pendingApprovalIds = new Set<string>();
   const pendingUserInputIds = new Set<string>();
 
-  for (const activity of session.activities) {
-    const payload =
-      typeof activity.payload === "object" && activity.payload !== null
-        ? (activity.payload as Record<string, unknown>)
-        : null;
-    const requestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+  for (const activity of activities) {
+    const requestId = extractLifecycleRequestId(activity.payload);
     if (requestId === null) {
       continue;
     }
 
-    const detail = typeof payload?.detail === "string" ? payload.detail.toLowerCase() : null;
+    const detail = extractFailureDetail(activity.payload);
     switch (activity.kind) {
       case "approval.requested":
         pendingApprovalIds.add(requestId);
@@ -74,7 +99,70 @@ export function hasOpenBlockingRequest(session: Pick<OrchestrationSession, "acti
     }
   }
 
-  return pendingApprovalIds.size > 0 || pendingUserInputIds.size > 0;
+  return {
+    pendingApprovalCount: pendingApprovalIds.size,
+    pendingUserInputCount: pendingUserInputIds.size,
+  };
+}
+
+/**
+ * Advance the uncapped in-memory summary for a newly appended activity. The
+ * durable projection remains authoritative and is rehydrated after commit.
+ */
+export function advancePendingRequestCounts(
+  counts: PendingRequestCounts,
+  activity: RequestLifecycleActivity,
+): PendingRequestCounts {
+  const requestId = extractLifecycleRequestId(activity.payload);
+  if (requestId === null) {
+    return counts;
+  }
+  const detail = extractFailureDetail(activity.payload);
+
+  switch (activity.kind) {
+    case "approval.requested":
+      return {
+        ...counts,
+        pendingApprovalCount: counts.pendingApprovalCount + 1,
+      };
+    case "approval.resolved":
+      return {
+        ...counts,
+        pendingApprovalCount: Math.max(0, counts.pendingApprovalCount - 1),
+      };
+    case "provider.approval.respond.failed":
+      return isStalePendingApprovalFailureDetail(detail)
+        ? {
+            ...counts,
+            pendingApprovalCount: Math.max(0, counts.pendingApprovalCount - 1),
+          }
+        : counts;
+    case "user-input.requested":
+      return {
+        ...counts,
+        pendingUserInputCount: counts.pendingUserInputCount + 1,
+      };
+    case "user-input.resolved":
+      return {
+        ...counts,
+        pendingUserInputCount: Math.max(0, counts.pendingUserInputCount - 1),
+      };
+    case "provider.user-input.respond.failed":
+      return isStalePendingUserInputFailureDetail(detail)
+        ? {
+            ...counts,
+            pendingUserInputCount: Math.max(0, counts.pendingUserInputCount - 1),
+          }
+        : counts;
+    default:
+      return counts;
+  }
+}
+
+export function hasOpenBlockingRequest(
+  session: Pick<OrchestrationSession, "pendingApprovalCount" | "pendingUserInputCount">,
+): boolean {
+  return (session.pendingApprovalCount ?? 0) > 0 || (session.pendingUserInputCount ?? 0) > 0;
 }
 
 /**
@@ -82,18 +170,17 @@ export function hasOpenBlockingRequest(session: Pick<OrchestrationSession, "acti
  * bound handles client clocks on either side of the server clock.
  */
 export function hasQueuedTurnStart(
-  session: Pick<OrchestrationSession, "messages" | "latestTurn" | "session">,
+  session: Pick<OrchestrationSession, "latestUserMessageAt" | "latestTurn" | "session">,
   occurredAt: string,
 ): boolean {
   if (session.session?.status === "error") {
     return false;
   }
 
-  const latestUserMessageAtMs = session.messages.reduce(
-    (latest, message) =>
-      message.role === "user" ? Math.max(latest, Date.parse(message.createdAt)) : latest,
-    Number.NEGATIVE_INFINITY,
-  );
+  const latestUserMessageAtMs =
+    session.latestUserMessageAt == null
+      ? Number.NEGATIVE_INFINITY
+      : Date.parse(session.latestUserMessageAt);
   if (!Number.isFinite(latestUserMessageAtMs)) {
     return false;
   }

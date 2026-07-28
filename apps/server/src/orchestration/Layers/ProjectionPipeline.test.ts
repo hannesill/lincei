@@ -1,4 +1,5 @@
 import {
+  ApprovalRequestId,
   CheckpointRef,
   CommandId,
   CorrelationId,
@@ -2219,6 +2220,24 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       });
 
       yield* appendAndProject({
+        type: "session.approval-response-requested",
+        eventId: EventId.make("evt-nonstale-approval-response"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-nonstale-approval"),
+        occurredAt: "2026-02-26T12:45:02.500Z",
+        commandId: CommandId.make("cmd-nonstale-approval-response"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-nonstale-approval-response"),
+        metadata: {},
+        payload: {
+          sessionId: SessionId.make("session-nonstale-approval"),
+          requestId: ApprovalRequestId.make("approval-request-nonstale-existing"),
+          decision: "accept",
+          createdAt: "2026-02-26T12:45:02.500Z",
+        },
+      });
+
+      yield* appendAndProject({
         type: "session.activity-appended",
         eventId: EventId.make("evt-nonstale-approval-4"),
         aggregateKind: "session",
@@ -2310,6 +2329,136 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         WHERE session_id = 'session-nonstale-approval'
       `;
       assert.deepEqual(sessionRows, [{ pendingApprovalCount: 1 }]);
+    }),
+  );
+
+  it.effect("uses event sequence rather than request timestamps for user-input resolution", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+        eventStore
+          .append(event)
+          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.make("evt-clock-skew-1"),
+        aggregateKind: "project",
+        aggregateId: ProjectId.make("project-clock-skew"),
+        occurredAt: "2026-02-26T12:00:00.000Z",
+        commandId: CommandId.make("cmd-clock-skew-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-clock-skew-1"),
+        metadata: {},
+        payload: {
+          projectId: ProjectId.make("project-clock-skew"),
+          title: "Project Clock Skew",
+          workspaceRoot: "/tmp/project-clock-skew",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: "2026-02-26T12:00:00.000Z",
+          updatedAt: "2026-02-26T12:00:00.000Z",
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.created",
+        eventId: EventId.make("evt-clock-skew-2"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-clock-skew"),
+        occurredAt: "2026-02-26T12:00:01.000Z",
+        commandId: CommandId.make("cmd-clock-skew-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-clock-skew-2"),
+        metadata: {},
+        payload: {
+          sessionId: SessionId.make("session-clock-skew"),
+          projectId: ProjectId.make("project-clock-skew"),
+          title: "Session Clock Skew",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          runtimeMode: "approval-required",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: "2026-02-26T12:00:01.000Z",
+          updatedAt: "2026-02-26T12:00:01.000Z",
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.activity-appended",
+        eventId: EventId.make("evt-clock-skew-3"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-clock-skew"),
+        occurredAt: "2026-02-26T12:00:02.000Z",
+        commandId: CommandId.make("cmd-clock-skew-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-clock-skew-3"),
+        metadata: {},
+        payload: {
+          sessionId: SessionId.make("session-clock-skew"),
+          activity: {
+            id: EventId.make("activity-clock-skew-request"),
+            tone: "approval",
+            kind: "user-input.requested",
+            summary: "Input requested",
+            payload: { requestId: "input-clock-skew" },
+            turnId: null,
+            createdAt: "2026-02-26T12:00:00.000Z",
+          },
+        },
+      });
+
+      yield* appendAndProject({
+        type: "session.activity-appended",
+        eventId: EventId.make("evt-clock-skew-4"),
+        aggregateKind: "session",
+        aggregateId: SessionId.make("session-clock-skew"),
+        occurredAt: "2026-02-26T12:00:03.000Z",
+        commandId: CommandId.make("cmd-clock-skew-4"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-clock-skew-4"),
+        metadata: {},
+        payload: {
+          sessionId: SessionId.make("session-clock-skew"),
+          activity: {
+            id: EventId.make("activity-clock-skew-resolved"),
+            tone: "info",
+            kind: "user-input.resolved",
+            summary: "Input resolved",
+            payload: { requestId: "input-clock-skew" },
+            turnId: null,
+            createdAt: "2026-02-26T11:00:00.000Z",
+          },
+        },
+      });
+
+      const activityRows = yield* sql<{
+        readonly activityId: string;
+        readonly sequence: number;
+      }>`
+        SELECT activity_id AS "activityId", sequence
+        FROM projection_session_activities
+        WHERE session_id = 'session-clock-skew'
+        ORDER BY sequence ASC
+      `;
+      assert.deepEqual(
+        activityRows.map((row) => row.activityId),
+        ["activity-clock-skew-request", "activity-clock-skew-resolved"],
+      );
+      assert.equal(activityRows[1]?.sequence, (activityRows[0]?.sequence ?? 0) + 1);
+
+      const sessionRows = yield* sql<{ readonly pendingUserInputCount: number }>`
+        SELECT pending_user_input_count AS "pendingUserInputCount"
+        FROM projection_sessions
+        WHERE session_id = 'session-clock-skew'
+      `;
+      assert.deepEqual(sessionRows, [{ pendingUserInputCount: 0 }]);
     }),
   );
 

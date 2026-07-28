@@ -763,6 +763,23 @@ it.effect("decodes settled and snoozed lifecycle commands and activity reset eve
   }),
 );
 
+it.effect("rejects noncanonical and oversized snooze command timestamps", () =>
+  Effect.gen(function* () {
+    for (const snoozedUntil of [
+      "2026-07-29T00:00:00Z",
+      "2026-07-29 00:00:00.000Z",
+      "9".repeat(10_000),
+    ]) {
+      yield* decodeOrchestrationCommand({
+        type: "session.snooze",
+        commandId: "cmd-invalid-snooze",
+        sessionId: "session-1",
+        snoozedUntil,
+      }).pipe(Effect.flip);
+    }
+  }),
+);
+
 it.effect("defaults settled and snoozed lifecycle state when decoding historical sessions", () =>
   Effect.gen(function* () {
     const session = yield* decodeOrchestrationSession({

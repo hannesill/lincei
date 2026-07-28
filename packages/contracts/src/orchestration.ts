@@ -363,6 +363,11 @@ export const OrchestrationSession = Schema.Struct({
   // from the inbox without archiving or settling it.
   snoozedUntil: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   snoozedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  // Durable command-side lifecycle summary. Unlike the public message and
+  // activity timelines, these fields are never capped.
+  latestUserMessageAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
+  pendingApprovalCount: Schema.optionalKey(NonNegativeInt),
+  pendingUserInputCount: Schema.optionalKey(NonNegativeInt),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -560,11 +565,16 @@ const SessionUnsettleCommand = Schema.Struct({
   reason: Schema.Literal("user"),
 });
 
+export const SessionSnoozeUntil = IsoDateTime.check(
+  Schema.isMaxLength(24),
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+);
+
 const SessionSnoozeCommand = Schema.Struct({
   type: Schema.Literal("session.snooze"),
   commandId: CommandId,
   sessionId: SessionId,
-  snoozedUntil: IsoDateTime,
+  snoozedUntil: SessionSnoozeUntil,
 });
 
 const SessionUnsnoozeCommand = Schema.Struct({

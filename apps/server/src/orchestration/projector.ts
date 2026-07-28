@@ -33,6 +33,7 @@ import {
   SessionTurnStartRequestedPayload,
   SessionTurnDiffCompletedPayload,
 } from "./Schemas.ts";
+import { advancePendingRequestCounts, derivePendingRequestCounts } from "./sessionLifecycle.ts";
 
 type SessionPatch = Partial<Omit<OrchestrationSession, "id" | "projectId">>;
 const MAX_THREAD_MESSAGES = 2_000;
@@ -284,6 +285,9 @@ export function projectEvent(
             settledAt: null,
             snoozedUntil: null,
             snoozedAt: null,
+            latestUserMessageAt: null,
+            pendingApprovalCount: 0,
+            pendingUserInputCount: 0,
             deletedAt: null,
             messages: [],
             activities: [],
@@ -487,6 +491,12 @@ export function projectEvent(
           ...nextBase,
           sessions: updateSession(nextBase.sessions, payload.sessionId, {
             messages: cappedMessages,
+            latestUserMessageAt:
+              message.role === "user" &&
+              (targetSession.latestUserMessageAt == null ||
+                message.createdAt > targetSession.latestUserMessageAt)
+                ? message.createdAt
+                : (targetSession.latestUserMessageAt ?? null),
             updatedAt: event.occurredAt,
           }),
         };
@@ -691,6 +701,12 @@ export function projectEvent(
             session.activities,
             retainedTurnIds,
           );
+          const latestUserMessageAt =
+            messages
+              .filter((message) => message.role === "user")
+              .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
+              .at(-1)?.createdAt ?? null;
+          const pendingRequestCounts = derivePendingRequestCounts(activities);
 
           const latestCheckpoint = checkpoints.at(-1) ?? null;
           const latestTurn =
@@ -712,6 +728,8 @@ export function projectEvent(
               messages,
               proposedPlans,
               activities,
+              latestUserMessageAt,
+              ...pendingRequestCounts,
               latestTurn,
               updatedAt: event.occurredAt,
             }),
@@ -732,17 +750,38 @@ export function projectEvent(
             return nextBase;
           }
 
+          const activity = {
+            ...payload.activity,
+            sequence: event.sequence,
+          };
+          const existingActivity = session.activities.find(
+            (entry) => entry.id === payload.activity.id,
+          );
           const activities = [
             ...session.activities.filter((entry) => entry.id !== payload.activity.id),
-            payload.activity,
+            activity,
           ]
             .toSorted(compareSessionActivities)
             .slice(-500);
+          const pendingRequestCounts =
+            existingActivity === undefined
+              ? advancePendingRequestCounts(
+                  {
+                    pendingApprovalCount: session.pendingApprovalCount ?? 0,
+                    pendingUserInputCount: session.pendingUserInputCount ?? 0,
+                  },
+                  activity,
+                )
+              : {
+                  pendingApprovalCount: session.pendingApprovalCount ?? 0,
+                  pendingUserInputCount: session.pendingUserInputCount ?? 0,
+                };
 
           return {
             ...nextBase,
             sessions: updateSession(nextBase.sessions, payload.sessionId, {
               activities,
+              ...pendingRequestCounts,
               updatedAt: event.occurredAt,
             }),
           };
