@@ -286,29 +286,9 @@ export function resolveSidebarNewSessionSeedContext(input: {
   worktreePath?: string | null;
   envMode: SidebarNewSessionEnvMode;
 } {
-  if (input.defaultEnvMode === "worktree") {
-    return {
-      envMode: "worktree",
-    };
-  }
-
-  if (input.activeDraftSession?.projectId === input.projectId) {
-    return {
-      branch: input.activeDraftSession.branch,
-      worktreePath: input.activeDraftSession.worktreePath,
-      envMode: input.activeDraftSession.envMode,
-    };
-  }
-
-  if (input.activeSession?.projectId === input.projectId) {
-    return {
-      branch: input.activeSession.branch,
-      worktreePath: input.activeSession.worktreePath,
-      envMode: input.activeSession.worktreePath ? "worktree" : "local",
-    };
-  }
-
   return {
+    branch: null,
+    worktreePath: null,
     envMode: input.defaultEnvMode,
   };
 }

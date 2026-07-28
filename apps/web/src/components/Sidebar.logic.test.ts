@@ -294,11 +294,13 @@ describe("resolveSidebarNewSessionSeedContext", () => {
         },
       }),
     ).toEqual({
+      branch: null,
+      worktreePath: null,
       envMode: "worktree",
     });
   });
 
-  it("inherits the active server session context when creating a new session in the same project", () => {
+  it("does not inherit active server session workspace context", () => {
     expect(
       resolveSidebarNewSessionSeedContext({
         projectId: "project-1",
@@ -311,13 +313,13 @@ describe("resolveSidebarNewSessionSeedContext", () => {
         activeDraftSession: null,
       }),
     ).toEqual({
-      branch: "effect-atom",
+      branch: null,
       worktreePath: null,
       envMode: "local",
     });
   });
 
-  it("prefers the active draft session context when it matches the target project", () => {
+  it("does not inherit active draft workspace context", () => {
     expect(
       resolveSidebarNewSessionSeedContext({
         projectId: "project-1",
@@ -335,9 +337,9 @@ describe("resolveSidebarNewSessionSeedContext", () => {
         },
       }),
     ).toEqual({
-      branch: "feature/new-draft",
-      worktreePath: "/repo/worktree",
-      envMode: "worktree",
+      branch: null,
+      worktreePath: null,
+      envMode: "local",
     });
   });
 
@@ -354,6 +356,8 @@ describe("resolveSidebarNewSessionSeedContext", () => {
         activeDraftSession: null,
       }),
     ).toEqual({
+      branch: null,
+      worktreePath: null,
       envMode: "worktree",
     });
   });

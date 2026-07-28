@@ -39,6 +39,8 @@ export function buildLocalDraftSession(
     modelSelection: fallbackModelSelection,
     runtimeMode: draftSession.runtimeMode,
     interactionMode: draftSession.interactionMode,
+    workflowId: draftSession.workflowId ?? null,
+    workflowVersion: draftSession.workflowVersion ?? null,
     session: null,
     messages: [],
     error,

@@ -52,7 +52,7 @@ describe("chatSessionActions", () => {
     expect(projectRef).toEqual(scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID));
   });
 
-  it("starts a contextual new session from the active draft session", async () => {
+  it("keeps the project but resets workspace context for a new session", async () => {
     const handleNewSession = vi.fn<ChatSessionActionContext["handleNewSession"]>(async () => {});
 
     const didStart = await startNewSessionFromContext(
@@ -70,9 +70,9 @@ describe("chatSessionActions", () => {
 
     expect(didStart).toBe(true);
     expect(handleNewSession).toHaveBeenCalledWith(scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID), {
-      branch: "feature/refactor",
-      worktreePath: "/tmp/worktree",
-      envMode: "worktree",
+      branch: null,
+      worktreePath: null,
+      envMode: "local",
     });
   });
 
@@ -89,6 +89,8 @@ describe("chatSessionActions", () => {
 
     expect(didStart).toBe(true);
     expect(handleNewSession).toHaveBeenCalledWith(scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID), {
+      branch: null,
+      worktreePath: null,
       envMode: "worktree",
     });
   });
