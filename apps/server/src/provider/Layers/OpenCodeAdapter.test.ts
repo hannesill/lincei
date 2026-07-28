@@ -65,7 +65,7 @@ const runtimeMock = {
     sessionCreateUrls: [] as string[],
     sessionGetIds: [] as string[],
     sessionGetErrors: new Map<string, unknown>(),
-    resumableSessions: new Map<string, { id: string; directory?: string }>(),
+    resumableSessions: new Map<string, unknown>(),
     sessionUpdateCalls: [] as Array<{ sessionID: string; permission?: unknown }>,
     forkCalls: [] as Array<{ sessionID: string; directory: string }>,
     authHeaders: [] as Array<string | null>,
@@ -274,6 +274,14 @@ beforeEach(() => {
 const advanceTestClock = (ms: number) =>
   TestClock.adjust(`${ms} millis`).pipe(Effect.andThen(Effect.yieldNow));
 
+const assertNoOpenCodeSessionMutations = () => {
+  assert.deepEqual(runtimeMock.state.sessionCreateUrls, []);
+  assert.deepEqual(runtimeMock.state.sessionUpdateCalls, []);
+  assert.deepEqual(runtimeMock.state.forkCalls, []);
+  assert.deepEqual(runtimeMock.state.abortCalls, []);
+  assert.deepEqual(runtimeMock.state.authHeaders, []);
+};
+
 it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
   it.effect("reuses a configured OpenCode server URL instead of spawning a local server", () =>
     Effect.gen(function* () {
@@ -379,7 +387,40 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       assert.equal(error._tag, "ProviderAdapterProcessError");
       assert.equal(error.detail, "OpenCode session.get returned no session payload.");
       assert.deepEqual(runtimeMock.state.sessionGetIds, ["ses_empty"]);
-      assert.deepEqual(runtimeMock.state.sessionCreateUrls, []);
+      assertNoOpenCodeSessionMutations();
+    }),
+  );
+
+  it.effect("rejects malformed durable-session payloads before any upstream mutation", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const malformedPayloads: ReadonlyArray<readonly [string, unknown]> = [
+        ["ses_missing_id", {}],
+        ["ses_numeric_id", { id: 123 }],
+        ["ses_blank_id", { id: "  " }],
+        ["ses_invalid_directory", { id: "ses_invalid_directory", directory: 123 }],
+      ];
+
+      for (const [resumeSessionId, payload] of malformedPayloads) {
+        runtimeMock.state.resumableSessions.set(resumeSessionId, payload);
+        const error = yield* adapter
+          .startSession({
+            provider: ProviderDriverKind.make("opencode"),
+            sessionId: asSessionId(`session-opencode-malformed-${resumeSessionId}`),
+            runtimeMode: "full-access",
+            resumeCursor: { schemaVersion: 1, sessionId: resumeSessionId },
+          })
+          .pipe(Effect.flip);
+
+        assert.equal(error._tag, "ProviderAdapterProcessError");
+        assert.equal(error.detail, "OpenCode session.get returned no session payload.");
+      }
+
+      assert.deepEqual(
+        runtimeMock.state.sessionGetIds,
+        malformedPayloads.map(([sessionId]) => sessionId),
+      );
+      assertNoOpenCodeSessionMutations();
     }),
   );
 
