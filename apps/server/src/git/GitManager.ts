@@ -103,6 +103,14 @@ const PR_LOOKUP_CACHE_CAPACITY = 2_048;
 
 export const makeBoundedPrLookupEpochs = makeBoundedKeyEpochs;
 
+function prLookupCacheKey(
+  cwd: string,
+  details: { branch: string; upstreamRef: string | null },
+  epoch: number,
+) {
+  return [cwd, details.branch, details.upstreamRef ?? "", String(epoch)].join("\u0000");
+}
+
 type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
 type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
 type GitActionProgressEmitter = (event: GitActionProgressPayload) => Effect.Effect<void, never>;
@@ -765,11 +773,6 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         prLookupEpochs.bump(cacheKey);
       }),
     );
-  const prLookupCacheKey = (
-    cwd: string,
-    details: { branch: string; upstreamRef: string | null },
-    epoch: number,
-  ) => [cwd, details.branch, details.upstreamRef ?? "", String(epoch)].join("\u0000");
   const prLookupCache = yield* Cache.makeWith(
     (key: string) => {
       const [cwd = "", branch = "", upstreamRef = ""] = key.split("\u0000");
