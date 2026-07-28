@@ -1,11 +1,13 @@
 import { getKnownEnvironmentHttpBaseUrl } from "@t3tools/client-runtime";
-import type {
-  AuthSessionRole,
-  EnvironmentId,
-  ExecutionEnvironmentDescriptor,
-  PersistedSavedEnvironmentRecord,
-  ServerConfig,
+import {
+  PersistedSavedEnvironmentRecordSchema,
+  type AuthSessionRole,
+  type EnvironmentId,
+  type ExecutionEnvironmentDescriptor,
+  type PersistedSavedEnvironmentRecord,
+  type ServerConfig,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { create } from "zustand";
 
 import { ensureLocalApi } from "../../localApi";
@@ -19,6 +21,20 @@ export interface SavedEnvironmentRecord {
   readonly createdAt: string;
   readonly lastConnectedAt: string | null;
   readonly desktopSsh?: PersistedSavedEnvironmentRecord["desktopSsh"];
+}
+
+const isPersistedSavedEnvironmentRecord = Schema.is(PersistedSavedEnvironmentRecordSchema);
+
+function isSupportedSavedEnvironmentRecord(record: SavedEnvironmentRecord): boolean {
+  return isPersistedSavedEnvironmentRecord(record);
+}
+
+export function assertSupportedSavedEnvironmentRecord(record: SavedEnvironmentRecord): void {
+  if (!isSupportedSavedEnvironmentRecord(record)) {
+    throw new Error(
+      `Saved environment ${record.environmentId} has an unsupported or mismatched remote target.`,
+    );
+  }
 }
 
 interface SavedEnvironmentRegistryState {
@@ -39,6 +55,7 @@ let savedEnvironmentRegistryHydrationPromise: Promise<void> | null = null;
 export function toPersistedSavedEnvironmentRecord(
   record: SavedEnvironmentRecord,
 ): PersistedSavedEnvironmentRecord {
+  assertSupportedSavedEnvironmentRecord(record);
   return {
     environmentId: record.environmentId,
     label: record.label,
@@ -97,8 +114,21 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
 
   const nextHydration = (async () => {
     try {
-      const persistedRecords = await ensureLocalApi().persistence.getSavedEnvironmentRegistry();
-      replaceSavedEnvironmentRegistryState(persistedRecords);
+      const persistedRecords: ReadonlyArray<SavedEnvironmentRecord> =
+        await ensureLocalApi().persistence.getSavedEnvironmentRegistry();
+      const supportedRecords = persistedRecords.filter(isSupportedSavedEnvironmentRecord);
+      if (supportedRecords.length !== persistedRecords.length) {
+        const rejectedEnvironmentIds = persistedRecords
+          .filter((record) => !isSupportedSavedEnvironmentRecord(record))
+          .map((record) => record.environmentId);
+        console.warn("[SAVED_ENVIRONMENTS] removed unsupported persisted targets", {
+          environmentIds: rejectedEnvironmentIds,
+        });
+        await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
+          supportedRecords.map(toPersistedSavedEnvironmentRecord),
+        );
+      }
+      replaceSavedEnvironmentRegistryState(supportedRecords);
     } catch (error) {
       console.error("[SAVED_ENVIRONMENTS] hydrate failed", error);
     } finally {
@@ -118,7 +148,8 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
 
 export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryStore>()((set) => ({
   byId: {},
-  upsert: (record) =>
+  upsert: (record) => {
+    assertSupportedSavedEnvironmentRecord(record);
     set((state) => {
       const byId = {
         ...state.byId,
@@ -126,7 +157,8 @@ export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryS
       };
       persistSavedEnvironmentRegistryState(byId);
       return { byId };
-    }),
+    });
+  },
   remove: (environmentId) =>
     set((state) => {
       const { [environmentId]: _removed, ...remaining } = state.byId;
@@ -234,6 +266,7 @@ export function resetSavedEnvironmentRegistryStoreForTests() {
 }
 
 export async function persistSavedEnvironmentRecord(record: SavedEnvironmentRecord): Promise<void> {
+  assertSupportedSavedEnvironmentRecord(record);
   const byId = {
     ...useSavedEnvironmentRegistryStore.getState().byId,
     [record.environmentId]: record,
