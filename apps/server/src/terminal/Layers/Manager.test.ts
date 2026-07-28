@@ -1044,6 +1044,59 @@ it.layer(
     }),
   );
 
+  it.effect("strips AppImage runtime env from terminal sessions", () =>
+    Effect.gen(function* () {
+      const appDir = "/tmp/.mount_Linceiabc123";
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        env: {
+          APPIMAGE: "/home/user/Lincei.AppImage",
+          APPDIR: `${appDir}/`,
+          ARGV0: "/home/user/Lincei.AppImage",
+          OWD: "/home/user/project",
+          PATH: `${appDir}/usr/bin:${appDir}:/usr/local/bin:/usr/bin:/bin`,
+          LD_LIBRARY_PATH: `${appDir}/usr/lib:/home/user/.local/lib`,
+          VITRINE_DATA_DIR: "/home/user/project/.vitrine",
+          TEST_TERMINAL_KEEP: "keep-me",
+        },
+      });
+
+      yield* manager.open(openInput());
+      const spawnInput = ptyAdapter.spawnInputs[0];
+      expect(spawnInput).toBeDefined();
+      if (!spawnInput) return;
+
+      expect(spawnInput.env.APPIMAGE).toBeUndefined();
+      expect(spawnInput.env.APPDIR).toBeUndefined();
+      expect(spawnInput.env.ARGV0).toBeUndefined();
+      expect(spawnInput.env.OWD).toBeUndefined();
+      expect(spawnInput.env.PATH).toBe("/usr/local/bin:/usr/bin:/bin");
+      expect(spawnInput.env.LD_LIBRARY_PATH).toBe("/home/user/.local/lib");
+      expect(spawnInput.env.VITRINE_DATA_DIR).toBe("/home/user/project/.vitrine");
+      expect(spawnInput.env.TEST_TERMINAL_KEEP).toBe("keep-me");
+    }),
+  );
+
+  it.effect("keeps non-AppImage terminal environments unchanged", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        env: {
+          PATH: "/usr/local/bin:/usr/bin:/bin",
+          LD_LIBRARY_PATH: "/home/user/.local/lib",
+          OWD: "/home/user/keep-this",
+        },
+      });
+
+      yield* manager.open(openInput());
+      const spawnInput = ptyAdapter.spawnInputs[0];
+      expect(spawnInput).toBeDefined();
+      if (!spawnInput) return;
+
+      expect(spawnInput.env.PATH).toBe("/usr/local/bin:/usr/bin:/bin");
+      expect(spawnInput.env.LD_LIBRARY_PATH).toBe("/home/user/.local/lib");
+      expect(spawnInput.env.OWD).toBe("/home/user/keep-this");
+    }),
+  );
+
   it.effect("injects runtime env overrides into spawned terminals", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
