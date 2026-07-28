@@ -247,11 +247,22 @@ export const layer = Layer.effect(
       "VcsStatusBroadcaster.refreshStatus",
     )(function* (rawCwd) {
       const cwd = yield* withFileSystem(normalizeCwd(rawCwd));
-      const [local, remote] = yield* Effect.all([
-        refreshLocalStatus(cwd),
-        refreshRemoteStatus(cwd),
-      ]);
-      return mergeGitStatusParts(local, remote);
+      // Full invalidation also advances GitManager's slower PR lookup epoch.
+      // Partial invalidation remains appropriate for automatic local/remote
+      // polling, which should keep the PR cache warm.
+      yield* workflow.invalidateStatus(cwd);
+      const [local, remote] = yield* Effect.all(
+        [workflow.localStatus({ cwd }), workflow.remoteStatus({ cwd })],
+        { concurrency: "unbounded" },
+      );
+      const [cachedLocal, cachedRemote] = yield* Effect.all(
+        [
+          updateCachedLocalStatus(cwd, local, { publish: true }),
+          updateCachedRemoteStatus(cwd, remote, { publish: true }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return mergeGitStatusParts(cachedLocal, cachedRemote);
     });
 
     const makeRemoteRefreshLoop = (

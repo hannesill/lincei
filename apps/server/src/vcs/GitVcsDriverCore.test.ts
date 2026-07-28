@@ -327,6 +327,50 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   });
 
   describe("remote operations", () => {
+    it.effect("reuses an existing remote across ssh and https transport variants", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* git(cwd, [
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/example-workspace/example-app.git",
+        ]);
+
+        const reusedForScpSsh = yield* driver.ensureRemote({
+          cwd,
+          preferredName: "example-workspace",
+          url: "git@github.com:example-workspace/example-app.git",
+        });
+        assert.equal(reusedForScpSsh, "origin");
+
+        const reusedForSshScheme = yield* driver.ensureRemote({
+          cwd,
+          preferredName: "example-workspace",
+          url: "ssh://git@github.com/example-workspace/example-app",
+        });
+        assert.equal(reusedForSshScheme, "origin");
+
+        const reusedForDefaultSshPort = yield* driver.ensureRemote({
+          cwd,
+          preferredName: "example-workspace",
+          url: "ssh://git@github.com:22/example-workspace/example-app.git",
+        });
+        assert.equal(reusedForDefaultSshPort, "origin");
+
+        const addedForFork = yield* driver.ensureRemote({
+          cwd,
+          preferredName: "example-fork",
+          url: "git@github.com:example-fork/example-app.git",
+        });
+        assert.equal(addedForFork, "example-fork");
+        assert.equal(yield* git(cwd, ["remote"]), "example-fork\norigin");
+      }),
+    );
+
     it.effect("pushes with upstream setup and skips when already up to date", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

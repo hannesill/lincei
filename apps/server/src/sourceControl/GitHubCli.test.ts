@@ -186,6 +186,58 @@ describe("GitHubCli.layer", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("keeps pull requests from gh versions without headRepository.nameWithOwner", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify([
+              {
+                number: 2829,
+                title: "Session mapping",
+                url: "https://github.com/example-workspace/example-app/pull/2829",
+                baseRefName: "main",
+                headRefName: "feature/session-mapping",
+                state: "OPEN",
+                mergedAt: null,
+                isCrossRepository: false,
+                headRepository: {
+                  id: "R_example",
+                  name: "example-app",
+                },
+                headRepositoryOwner: {
+                  id: "O_example",
+                  login: "example-workspace",
+                },
+              },
+            ]),
+          ),
+        ),
+      );
+
+      const gh = yield* GitHubCli.GitHubCli;
+      const result = yield* gh.listOpenPullRequests({
+        cwd: "/repo",
+        headSelector: "feature/session-mapping",
+      });
+
+      assert.deepStrictEqual(result, [
+        {
+          number: 2829,
+          title: "Session mapping",
+          url: "https://github.com/example-workspace/example-app/pull/2829",
+          baseRefName: "main",
+          headRefName: "feature/session-mapping",
+          state: "open",
+          isCrossRepository: false,
+          headRepositoryNameWithOwner: "example-workspace/example-app",
+          headRepositoryOwnerLogin: "example-workspace",
+        },
+      ]);
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("reads repository clone URLs", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(
