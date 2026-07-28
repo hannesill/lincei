@@ -1,8 +1,44 @@
 import assert from "node:assert/strict";
 
+import * as Effect from "effect/Effect";
 import { describe, it } from "vitest";
 
-import { parseAgentListCliOutput, parseModelsCliOutput } from "./opencodeRuntime.ts";
+import {
+  loadOpenCodeInventoryFromCli,
+  parseAgentListCliOutput,
+  parseModelsCliOutput,
+} from "./opencodeRuntime.ts";
+
+const successfulModelsCliOutput = [
+  "openai/gpt-5.4",
+  JSON.stringify({
+    id: "gpt-5.4",
+    providerID: "openai",
+    name: "GPT-5.4",
+    family: "gpt",
+    capabilities: {
+      attachment: false,
+      reasoning: true,
+      temperature: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 1, output: 2, cache: { read: 0, write: 0 } },
+    limit: { context: 128_000, output: 16_000 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-01-01",
+    variants: { medium: {} },
+  }),
+].join("\n");
+
+const successfulAgentsCliOutput = [
+  "build (primary)",
+  JSON.stringify([{ permission: "*", action: "allow", pattern: "*" }]),
+].join("\n");
 
 describe("parseModelsCliOutput", () => {
   it("groups verbose model blocks by provider and preserves nested metadata", () => {
@@ -100,5 +136,75 @@ describe("parseAgentListCliOutput", () => {
 
   it("returns no agents for empty output", () => {
     assert.deepEqual(parseAgentListCliOutput(""), []);
+  });
+});
+
+describe("loadOpenCodeInventoryFromCli", () => {
+  it("bounds an exhausted agent command to two attempts and preserves models", async () => {
+    let modelAttempts = 0;
+    let agentAttempts = 0;
+    const inventory = await Effect.runPromise(
+      loadOpenCodeInventoryFromCli({
+        binaryPath: "opencode",
+        retryDelay: Effect.void,
+        runCommand: ({ args }) =>
+          Effect.sync(() => {
+            if (args[0] === "models") {
+              modelAttempts += 1;
+              return { stdout: successfulModelsCliOutput, stderr: "", code: 0 };
+            }
+            agentAttempts += 1;
+            return { stdout: "", stderr: "database is locked", code: 1 };
+          }),
+      }),
+    );
+
+    assert.equal(modelAttempts, 1);
+    assert.equal(agentAttempts, 2);
+    assert.deepEqual(inventory.providerList.connected, ["openai"]);
+    assert.equal(inventory.providerList.all[0]?.models["gpt-5.4"]?.name, "GPT-5.4");
+    assert.deepEqual(inventory.agents, []);
+    assert.deepEqual(inventory.diagnostics, [
+      {
+        command: "agents",
+        attempts: 2,
+        detail: "exited with code 1: database is locked",
+      },
+    ]);
+  });
+
+  it("bounds an exhausted models command to two attempts and preserves agents", async () => {
+    let modelAttempts = 0;
+    let agentAttempts = 0;
+    const inventory = await Effect.runPromise(
+      loadOpenCodeInventoryFromCli({
+        binaryPath: "opencode",
+        retryDelay: Effect.void,
+        runCommand: ({ args }) =>
+          Effect.sync(() => {
+            if (args[0] === "models") {
+              modelAttempts += 1;
+              return { stdout: "", stderr: "database is locked", code: 1 };
+            }
+            agentAttempts += 1;
+            return { stdout: successfulAgentsCliOutput, stderr: "", code: 0 };
+          }),
+      }),
+    );
+
+    assert.equal(modelAttempts, 2);
+    assert.equal(agentAttempts, 1);
+    assert.deepEqual(inventory.providerList.connected, []);
+    assert.deepEqual(
+      inventory.agents.map((agent) => agent.name),
+      ["build"],
+    );
+    assert.deepEqual(inventory.diagnostics, [
+      {
+        command: "models",
+        attempts: 2,
+        detail: "exited with code 1: database is locked",
+      },
+    ]);
   });
 });

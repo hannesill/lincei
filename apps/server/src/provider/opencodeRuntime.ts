@@ -135,6 +135,13 @@ export interface OpenCodeCommandResult {
 export interface OpenCodeInventory {
   readonly providerList: ProviderListResponse;
   readonly agents: ReadonlyArray<Agent>;
+  readonly diagnostics: ReadonlyArray<OpenCodeInventoryDiagnostic>;
+}
+
+export interface OpenCodeInventoryDiagnostic {
+  readonly command: "models" | "agents";
+  readonly attempts: number;
+  readonly detail: string;
 }
 
 export interface ParsedOpenCodeModelSlug {
@@ -349,6 +356,126 @@ export function parseAgentListCliOutput(stdout: string): ReadonlyArray<Agent> {
   flushAgent();
 
   return agents;
+}
+
+type OpenCodeCommandExit = Exit.Exit<OpenCodeCommandResult, OpenCodeRuntimeError>;
+
+function openCodeInventoryCommandFailed(result: OpenCodeCommandExit): boolean {
+  return Exit.isFailure(result) || result.value.code !== 0;
+}
+
+function toOpenCodeInventoryDiagnostic(
+  command: OpenCodeInventoryDiagnostic["command"],
+  attempts: number,
+  result: OpenCodeCommandExit,
+): OpenCodeInventoryDiagnostic {
+  if (Exit.isFailure(result)) {
+    return {
+      command,
+      attempts,
+      detail: openCodeRuntimeErrorDetail(Cause.squash(result.cause)),
+    };
+  }
+
+  const output = result.value.stderr.trim() || result.value.stdout.trim();
+  return {
+    command,
+    attempts,
+    detail:
+      output.length > 0
+        ? `exited with code ${result.value.code}: ${output}`
+        : `exited with code ${result.value.code}`,
+  };
+}
+
+export function loadOpenCodeInventoryFromCli(input: {
+  readonly binaryPath: string;
+  readonly environment?: NodeJS.ProcessEnv;
+  readonly runCommand: OpenCodeRuntimeShape["runOpenCodeCommand"];
+  readonly retryDelay?: Effect.Effect<void>;
+}): Effect.Effect<OpenCodeInventory> {
+  return Effect.gen(function* () {
+    const environment =
+      input.environment !== undefined ? { environment: input.environment } : ({} as {});
+    const runModels = () =>
+      input
+        .runCommand({
+          binaryPath: input.binaryPath,
+          args: ["models", "--verbose"],
+          ...environment,
+        })
+        .pipe(Effect.exit);
+    const runAgents = () =>
+      input
+        .runCommand({
+          binaryPath: input.binaryPath,
+          args: ["agent", "list"],
+          ...environment,
+        })
+        .pipe(Effect.exit);
+
+    let modelAttempts = 1;
+    let agentAttempts = 1;
+    let [modelsResult, agentsResult] = yield* Effect.all([runModels(), runAgents()], {
+      concurrency: "unbounded",
+    });
+    const retryModels = openCodeInventoryCommandFailed(modelsResult);
+    const retryAgents = openCodeInventoryCommandFailed(agentsResult);
+    if (retryModels || retryAgents) {
+      yield* input.retryDelay ?? Effect.sleep("1 second");
+      if (retryModels) {
+        modelAttempts += 1;
+      }
+      if (retryAgents) {
+        agentAttempts += 1;
+      }
+      [modelsResult, agentsResult] = yield* Effect.all(
+        [
+          retryModels ? runModels() : Effect.succeed(modelsResult),
+          retryAgents ? runAgents() : Effect.succeed(agentsResult),
+        ],
+        { concurrency: "unbounded" },
+      );
+    }
+
+    let connected: string[] = [];
+    let all: ProviderListResponse["all"] = [];
+    if (Exit.isSuccess(modelsResult) && modelsResult.value.code === 0) {
+      const parsed = parseModelsCliOutput(modelsResult.value.stdout);
+      connected = [...parsed.connected];
+      all = [...parsed.providers.values()].map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        source: "config" as const,
+        env: [],
+        options: {},
+        models: Object.fromEntries(
+          Object.entries(provider.models).map(([modelID, model]) => [
+            modelID,
+            toProviderListModel(model),
+          ]),
+        ),
+      }));
+    }
+
+    const agents =
+      Exit.isSuccess(agentsResult) && agentsResult.value.code === 0
+        ? parseAgentListCliOutput(agentsResult.value.stdout)
+        : [];
+    const diagnostics: Array<OpenCodeInventoryDiagnostic> = [];
+    if (openCodeInventoryCommandFailed(modelsResult)) {
+      diagnostics.push(toOpenCodeInventoryDiagnostic("models", modelAttempts, modelsResult));
+    }
+    if (openCodeInventoryCommandFailed(agentsResult)) {
+      diagnostics.push(toOpenCodeInventoryDiagnostic("agents", agentAttempts, agentsResult));
+    }
+
+    return {
+      providerList: { all, default: {}, connected },
+      agents,
+      diagnostics,
+    };
+  });
 }
 
 export function parseOpenCodeModelSlug(
@@ -724,71 +851,13 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
 
   const loadOpenCodeInventory: OpenCodeRuntimeShape["loadOpenCodeInventory"] = (client) =>
     Effect.all([loadProviders(client), loadAgents(client)], { concurrency: "unbounded" }).pipe(
-      Effect.map(([providerList, agents]) => ({ providerList, agents })),
+      Effect.map(([providerList, agents]) => ({ providerList, agents, diagnostics: [] })),
     );
 
   const loadInventoryFromCli: OpenCodeRuntimeShape["loadInventoryFromCli"] = (input) =>
-    Effect.gen(function* () {
-      const environment =
-        input.environment !== undefined ? { environment: input.environment } : ({} as {});
-      const runModels = () =>
-        runOpenCodeCommand({
-          binaryPath: input.binaryPath,
-          args: ["models", "--verbose"],
-          ...environment,
-        }).pipe(Effect.exit);
-      const runAgents = () =>
-        runOpenCodeCommand({
-          binaryPath: input.binaryPath,
-          args: ["agent", "list"],
-          ...environment,
-        }).pipe(Effect.exit);
-
-      let [modelsResult, agentsResult] = yield* Effect.all([runModels(), runAgents()], {
-        concurrency: "unbounded",
-      });
-      const retryModels = Exit.isFailure(modelsResult) || modelsResult.value.code !== 0;
-      const retryAgents = Exit.isFailure(agentsResult) || agentsResult.value.code !== 0;
-      if (retryModels || retryAgents) {
-        yield* Effect.sleep("1 second");
-        [modelsResult, agentsResult] = yield* Effect.all(
-          [
-            retryModels ? runModels() : Effect.succeed(modelsResult),
-            retryAgents ? runAgents() : Effect.succeed(agentsResult),
-          ],
-          { concurrency: "unbounded" },
-        );
-      }
-
-      let connected: string[] = [];
-      let all: ProviderListResponse["all"] = [];
-      if (Exit.isSuccess(modelsResult) && modelsResult.value.code === 0) {
-        const parsed = parseModelsCliOutput(modelsResult.value.stdout);
-        connected = [...parsed.connected];
-        all = [...parsed.providers.values()].map((provider) => ({
-          id: provider.id,
-          name: provider.name,
-          source: "config" as const,
-          env: [],
-          options: {},
-          models: Object.fromEntries(
-            Object.entries(provider.models).map(([modelID, model]) => [
-              modelID,
-              toProviderListModel(model),
-            ]),
-          ),
-        }));
-      }
-
-      const agents =
-        Exit.isSuccess(agentsResult) && agentsResult.value.code === 0
-          ? parseAgentListCliOutput(agentsResult.value.stdout)
-          : [];
-
-      return {
-        providerList: { all, default: {}, connected },
-        agents,
-      };
+    loadOpenCodeInventoryFromCli({
+      ...input,
+      runCommand: runOpenCodeCommand,
     });
 
   return {

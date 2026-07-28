@@ -39,6 +39,7 @@ const runtimeMock = {
     inventory: {
       providerList: { connected: [] as string[], all: [] as unknown[], default: {} },
       agents: [] as unknown[],
+      diagnostics: [],
     } as unknown,
   },
   reset() {
@@ -50,6 +51,7 @@ const runtimeMock = {
     this.state.inventory = {
       providerList: { connected: [], all: [] as unknown[], default: {} },
       agents: [] as unknown[],
+      diagnostics: [],
     };
   },
 };
@@ -104,6 +106,13 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
         ? ({
             providerList: { all: [], default: {}, connected: [] },
             agents: [],
+            diagnostics: [
+              {
+                command: "models",
+                attempts: 2,
+                detail: runtimeMock.state.inventoryError.message,
+              },
+            ],
           } as OpenCodeInventory)
         : (runtimeMock.state.inventory as OpenCodeInventory);
     }),
@@ -181,6 +190,7 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
           { name: "build", hidden: false, mode: "primary" },
           { name: "plan", hidden: false, mode: "primary" },
         ],
+        diagnostics: [],
       };
 
       const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
@@ -215,7 +225,7 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
     }),
   );
 
-  it.effect("degrades local CLI inventory failures to an installed warning", () =>
+  it.effect("reports exhausted local model inventory as an installed warning", () =>
     Effect.gen(function* () {
       runtimeMock.state.inventoryError = new Error("opencode models failed");
 
@@ -224,6 +234,51 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
       assert.equal(snapshot.status, "warning");
       assert.equal(snapshot.installed, true);
       assert.equal(snapshot.models.length, 0);
+      assert.ok(snapshot.message);
+      assert.match(snapshot.message, /`opencode models --verbose` failed after 2 attempts/);
+    }),
+  );
+
+  it.effect("warns on exhausted agent inventory without discarding successful models", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.inventory = {
+        providerList: {
+          connected: ["openai"],
+          all: [
+            {
+              id: "openai",
+              name: "OpenAI",
+              models: {
+                "gpt-5.4": {
+                  id: "gpt-5.4",
+                  name: "GPT-5.4",
+                  variants: { medium: {} },
+                },
+              },
+            },
+          ],
+          default: {},
+        },
+        agents: [],
+        diagnostics: [
+          {
+            command: "agents",
+            attempts: 2,
+            detail: "exited with code 1: database is locked",
+          },
+        ],
+      };
+
+      const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
+
+      assert.equal(snapshot.status, "warning");
+      assert.equal(snapshot.installed, true);
+      assert.equal(
+        snapshot.models.some((model) => model.slug === "openai/gpt-5.4"),
+        true,
+      );
+      assert.ok(snapshot.message);
+      assert.match(snapshot.message, /`opencode agent list` failed after 2 attempts/);
     }),
   );
 });
