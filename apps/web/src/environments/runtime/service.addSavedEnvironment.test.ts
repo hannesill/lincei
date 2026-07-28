@@ -407,6 +407,33 @@ describe("addSavedEnvironment", () => {
     await resetEnvironmentServiceForTests();
   });
 
+  it("does not retry desktop ssh auth for an unrelated config error containing ssh_http 401", async () => {
+    mockWriteSavedEnvironmentBearerToken.mockResolvedValue(true);
+    const configError = new Error(
+      "Unable to load server config: unrelated detail [ssh_http:401] Unauthorized",
+    );
+    mockClientGetConfig.mockRejectedValueOnce(configError);
+
+    const { connectDesktopSshEnvironment, resetEnvironmentServiceForTests } =
+      await import("./service");
+
+    await expect(
+      connectDesktopSshEnvironment({
+        alias: "devbox",
+        hostname: "devbox",
+        username: null,
+        port: null,
+      }),
+    ).rejects.toThrow(configError.message);
+
+    expect(mockEnsureSshEnvironment).toHaveBeenCalledTimes(2);
+    expect(mockBootstrapSshBearerSession).toHaveBeenCalledTimes(1);
+    expect(mockClientGetConfig).toHaveBeenCalledTimes(1);
+    expect(mockFetchSshSessionState).toHaveBeenCalledTimes(1);
+
+    await resetEnvironmentServiceForTests();
+  });
+
   it("does not attempt desktop ssh bearer recovery for non-ssh saved environments", async () => {
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(true);
     const authError = {
