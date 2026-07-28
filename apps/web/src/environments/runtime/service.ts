@@ -40,6 +40,7 @@ import {
 } from "../remote/api";
 import { resolveRemotePairingTarget } from "../remote/target";
 import {
+  assertSupportedSavedEnvironmentRecord,
   getSavedEnvironmentRecord,
   hasSavedEnvironmentRegistryHydrated,
   listSavedEnvironmentRecords,
@@ -752,6 +753,7 @@ async function prepareSavedEnvironmentRecordForConnection(
   readonly remotePort: number | null;
   readonly remoteServerKind: "external" | "managed" | null;
 }> {
+  assertSupportedSavedEnvironmentRecord(record);
   if (!record.desktopSsh) {
     return {
       record,
@@ -768,6 +770,7 @@ async function prepareSavedEnvironmentRecordForConnection(
     wsBaseUrl: bootstrap.wsBaseUrl,
     desktopSsh: bootstrap.target,
   };
+  assertSupportedSavedEnvironmentRecord(nextRecord);
 
   if (
     nextRecord.httpBaseUrl !== record.httpBaseUrl ||
@@ -1165,6 +1168,7 @@ function createSavedEnvironmentClient(
         if (!record) {
           throw new Error(`Saved environment ${environmentId} not found.`);
         }
+        assertSupportedSavedEnvironmentRecord(record);
         return record.desktopSsh
           ? await resolveDesktopSshWebSocketConnectionUrl(
               record.wsBaseUrl,
@@ -1232,6 +1236,7 @@ async function refreshSavedEnvironmentMetadata(
   if (!record) {
     throw new Error(`Saved environment ${environmentId} not found.`);
   }
+  assertSupportedSavedEnvironmentRecord(record);
 
   const [serverConfig, sessionState] = await Promise.all([
     configHint ? Promise.resolve(configHint) : client.server.getConfig(),
@@ -1313,6 +1318,13 @@ async function ensureSavedEnvironmentConnection(
     readonly serverConfig?: ServerConfig | null;
   },
 ): Promise<EnvironmentConnection> {
+  try {
+    assertSupportedSavedEnvironmentRecord(record);
+  } catch (error) {
+    setRuntimeError(record.environmentId, error);
+    throw error;
+  }
+
   const existing = environmentConnections.get(record.environmentId);
   if (existing) {
     return existing;
@@ -1601,6 +1613,7 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
   if (!connection) {
     setRuntimeConnecting(environmentId);
     try {
+      assertSupportedSavedEnvironmentRecord(record);
       await ensureSavedEnvironmentConnection(record);
       return;
     } catch (error) {
@@ -1614,6 +1627,7 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
 
   setRuntimeConnecting(environmentId);
   try {
+    assertSupportedSavedEnvironmentRecord(record);
     if (record.desktopSsh) {
       await prepareSavedEnvironmentRecordForConnection(record);
     }
@@ -1695,6 +1709,7 @@ export async function addSavedEnvironment(input: {
       ? { desktopSsh: input.desktopSsh ?? existingRecord?.desktopSsh }
       : {}),
   };
+  assertSupportedSavedEnvironmentRecord(record);
 
   await persistSavedEnvironmentRecord(record);
   const didPersistBearerToken = await writeSavedEnvironmentBearerToken(

@@ -10,6 +10,30 @@ const mockListSavedEnvironmentRecords = vi.fn();
 const mockSavedEnvironmentRegistrySubscribe = vi.fn();
 const mockReadSavedEnvironmentBearerToken = vi.fn();
 const mockGetSavedEnvironmentRecord = vi.fn();
+const mockAssertSupportedSavedEnvironmentRecord = vi.fn(
+  (record: {
+    readonly environmentId: string;
+    readonly httpBaseUrl: string;
+    readonly wsBaseUrl: string;
+  }) => {
+    const httpUrl = new URL(record.httpBaseUrl);
+    const wsUrl = new URL(record.wsBaseUrl);
+    if (
+      (httpUrl.protocol !== "http:" && httpUrl.protocol !== "https:") ||
+      (wsUrl.protocol !== "ws:" && wsUrl.protocol !== "wss:")
+    ) {
+      throw new Error(
+        `Saved environment ${record.environmentId} has an unsupported or mismatched remote target.`,
+      );
+    }
+    wsUrl.protocol = wsUrl.protocol === "ws:" ? "http:" : "https:";
+    if (httpUrl.origin !== wsUrl.origin) {
+      throw new Error(
+        `Saved environment ${record.environmentId} has an unsupported or mismatched remote target.`,
+      );
+    }
+  },
+);
 
 function MockWsTransport() {
   return undefined;
@@ -36,6 +60,7 @@ vi.mock("../remote/api", () => ({
 }));
 
 vi.mock("./catalog", () => ({
+  assertSupportedSavedEnvironmentRecord: mockAssertSupportedSavedEnvironmentRecord,
   getSavedEnvironmentRecord: mockGetSavedEnvironmentRecord,
   hasSavedEnvironmentRegistryHydrated: vi.fn(() => true),
   listSavedEnvironmentRecords: mockListSavedEnvironmentRecords,
@@ -323,4 +348,40 @@ describe("saved environment startup", () => {
     stop();
     await resetEnvironmentServiceForTests();
   });
+
+  it.each([
+    {
+      httpBaseUrl: "ftp://remote.example.test/",
+      wsBaseUrl: "wss://remote.example.test/",
+    },
+    {
+      httpBaseUrl: "https://remote.example.test/",
+      wsBaseUrl: "file:///tmp/lincei.sock",
+    },
+    {
+      httpBaseUrl: "https://remote-a.example.test/",
+      wsBaseUrl: "wss://remote-b.example.test/",
+    },
+  ])(
+    "rejects an unsafe persisted target before reconnect networking: %o",
+    async ({ httpBaseUrl, wsBaseUrl }) => {
+      const unsafeRecord = {
+        ...savedRecord,
+        httpBaseUrl,
+        wsBaseUrl,
+      };
+      mockGetSavedEnvironmentRecord.mockReturnValue(unsafeRecord);
+
+      const { reconnectSavedEnvironment } = await import("./service");
+
+      await expect(reconnectSavedEnvironment(unsafeRecord.environmentId)).rejects.toThrow(
+        "unsupported or mismatched remote target",
+      );
+      expect(mockReadSavedEnvironmentBearerToken).not.toHaveBeenCalled();
+      expect(mockFetchRemoteSessionState).not.toHaveBeenCalled();
+      expect(
+        mockCreateEnvironmentConnection.mock.calls.filter(([input]) => input.kind === "saved"),
+      ).toHaveLength(0);
+    },
+  );
 });

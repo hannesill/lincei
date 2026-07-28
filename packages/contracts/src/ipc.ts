@@ -348,15 +348,54 @@ export const DesktopSshPasswordPromptResolutionInputSchema = Schema.Struct({
   password: Schema.NullOr(Schema.String),
 });
 
+const SupportedRemoteHttpBaseUrlSchema = Schema.String.check(
+  Schema.makeFilter((value) => {
+    try {
+      const protocol = new URL(value).protocol;
+      return protocol === "http:" || protocol === "https:"
+        ? undefined
+        : "Expected an HTTP(S) remote base URL";
+    } catch {
+      return "Expected a valid HTTP(S) remote base URL";
+    }
+  }),
+);
+
+const SupportedRemoteWebSocketBaseUrlSchema = Schema.String.check(
+  Schema.makeFilter((value) => {
+    try {
+      const protocol = new URL(value).protocol;
+      return protocol === "ws:" || protocol === "wss:"
+        ? undefined
+        : "Expected a WS(S) remote base URL";
+    } catch {
+      return "Expected a valid WS(S) remote base URL";
+    }
+  }),
+);
+
 export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
   environmentId: EnvironmentId,
   label: Schema.String,
-  wsBaseUrl: Schema.String,
-  httpBaseUrl: Schema.String,
+  wsBaseUrl: SupportedRemoteWebSocketBaseUrlSchema,
+  httpBaseUrl: SupportedRemoteHttpBaseUrlSchema,
   createdAt: Schema.String,
   lastConnectedAt: Schema.NullOr(Schema.String),
   desktopSsh: Schema.optionalKey(DesktopSshEnvironmentTargetSchema),
-});
+}).check(
+  Schema.makeFilter((record) => {
+    try {
+      const httpUrl = new URL(record.httpBaseUrl);
+      const websocketAsHttpUrl = new URL(record.wsBaseUrl);
+      websocketAsHttpUrl.protocol = websocketAsHttpUrl.protocol === "ws:" ? "http:" : "https:";
+      return httpUrl.origin === websocketAsHttpUrl.origin
+        ? undefined
+        : "Expected HTTP and WebSocket remote base URLs for the same endpoint";
+    } catch {
+      return "Expected valid remote base URLs";
+    }
+  }),
+);
 export type PersistedSavedEnvironmentRecord = typeof PersistedSavedEnvironmentRecordSchema.Type;
 
 export type DesktopServerExposureMode = "local-only" | "network-accessible";

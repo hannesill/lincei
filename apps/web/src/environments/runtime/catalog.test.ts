@@ -138,4 +138,54 @@ describe("environment runtime catalog stores", () => {
 
     expect(useSavedEnvironmentRegistryStore.getState().byId[environmentId]).toEqual(record);
   });
+
+  it("removes unsupported persisted targets instead of hydrating them", async () => {
+    const validRecord: PersistedSavedEnvironmentRecord = {
+      environmentId: EnvironmentId.make("environment-valid"),
+      label: "Valid remote",
+      httpBaseUrl: "https://remote.example.com/",
+      wsBaseUrl: "wss://remote.example.com/",
+      createdAt: "2026-04-09T00:00:00.000Z",
+      lastConnectedAt: null,
+    };
+    const invalidRecord: PersistedSavedEnvironmentRecord = {
+      environmentId: EnvironmentId.make("environment-invalid"),
+      label: "Invalid remote",
+      httpBaseUrl: "ftp://remote.example.com/",
+      wsBaseUrl: "wss://remote.example.com/",
+      createdAt: "2026-04-09T00:00:00.000Z",
+      lastConnectedAt: null,
+    };
+    const setSavedEnvironmentRegistry = vi.fn(async () => undefined);
+    const warningSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.stubGlobal("window", {
+      nativeApi: {
+        persistence: {
+          getClientSettings: async () => null,
+          setClientSettings: async () => undefined,
+          getSavedEnvironmentRegistry: async () => [validRecord, invalidRecord],
+          setSavedEnvironmentRegistry,
+          getSavedEnvironmentSecret: async () => null,
+          setSavedEnvironmentSecret: async () => true,
+          removeSavedEnvironmentSecret: async () => undefined,
+        },
+      } satisfies Pick<LocalApi, "persistence">,
+    });
+    const { __resetLocalApiForTests } = await import("../../localApi");
+    await __resetLocalApiForTests();
+
+    await waitForSavedEnvironmentRegistryHydration();
+
+    expect(useSavedEnvironmentRegistryStore.getState().byId[validRecord.environmentId]).toEqual(
+      validRecord,
+    );
+    expect(
+      useSavedEnvironmentRegistryStore.getState().byId[invalidRecord.environmentId],
+    ).toBeUndefined();
+    expect(setSavedEnvironmentRegistry).toHaveBeenCalledWith([validRecord]);
+    expect(warningSpy).toHaveBeenCalledWith(
+      "[SAVED_ENVIRONMENTS] removed unsupported persisted targets",
+      { environmentIds: [invalidRecord.environmentId] },
+    );
+  });
 });
