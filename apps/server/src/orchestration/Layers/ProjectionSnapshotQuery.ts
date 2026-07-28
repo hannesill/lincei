@@ -2060,6 +2060,28 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       );
     });
 
+  const getSessionDetailSnapshot: ProjectionSnapshotQueryShape["getSessionDetailSnapshot"] = (
+    sessionId,
+  ) =>
+    // Session detail spans seven projection reads. The cursor must share their
+    // transaction so the WebSocket handoff has one unambiguous event boundary.
+    sql.withTransaction(Effect.all([getSessionDetailById(sessionId), getSnapshotSequence()])).pipe(
+      Effect.map(([sessionDetail, { snapshotSequence }]) =>
+        Option.map(sessionDetail, (session) => ({
+          snapshotSequence,
+          session,
+        })),
+      ),
+      Effect.mapError((error) => {
+        if (isPersistenceError(error)) {
+          return error;
+        }
+        return toPersistenceSqlError(
+          "ProjectionSnapshotQuery.getSessionDetailSnapshot:transaction",
+        )(error);
+      }),
+    );
+
   return {
     getCommandReadModel,
     getSnapshot,
@@ -2074,6 +2096,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getFullSessionDiffContext,
     getSessionShellById,
     getSessionDetailById,
+    getSessionDetailSnapshot,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

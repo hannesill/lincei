@@ -212,6 +212,7 @@ describe("ProviderSessionReaper", () => {
                 : Option.none(),
             ),
           getSessionDetailById: () => Effect.die("unused"),
+          getSessionDetailSnapshot: () => Effect.die("unused"),
         }),
       ),
       Layer.provideMerge(NodeServices.layer),

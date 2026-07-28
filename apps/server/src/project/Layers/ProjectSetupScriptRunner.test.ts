@@ -39,6 +39,7 @@ const makeProjectionSnapshotQueryLayer = (project: OrchestrationProject) =>
     getFullSessionDiffContext: () => Effect.die("unused"),
     getSessionShellById: () => Effect.die("unused"),
     getSessionDetailById: () => Effect.die("unused"),
+    getSessionDetailSnapshot: () => Effect.die("unused"),
   });
 
 describe("ProjectSetupScriptRunner", () => {
