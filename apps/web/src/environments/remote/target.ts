@@ -1,10 +1,18 @@
 import { getPairingTokenFromUrl } from "../../pairingUrl";
 import { readHostedPairingRequest } from "../../hostedPairing";
 
+const SUPPORTED_REMOTE_BACKEND_PROTOCOLS = new Set(["http:", "https:", "ws:", "wss:"]);
+
 export interface ResolvedRemotePairingTarget {
   readonly credential: string;
   readonly httpBaseUrl: string;
   readonly wsBaseUrl: string;
+}
+
+function assertSupportedRemoteBackendProtocol(url: URL): void {
+  if (!SUPPORTED_REMOTE_BACKEND_PROTOCOLS.has(url.protocol)) {
+    throw new Error(`Unsupported remote backend protocol: ${url.protocol}`);
+  }
 }
 
 function normalizeRemoteBaseUrl(rawValue: string): URL {
@@ -18,6 +26,7 @@ function normalizeRemoteBaseUrl(rawValue: string): URL {
       ? trimmed
       : `https://${trimmed}`;
   const url = new URL(normalizedInput, window.location.origin);
+  assertSupportedRemoteBackendProtocol(url);
   url.pathname = "/";
   url.search = "";
   url.hash = "";
@@ -58,6 +67,7 @@ export function resolveRemotePairingTarget(input: {
   const pairingUrl = input.pairingUrl?.trim() ?? "";
   if (pairingUrl.length > 0) {
     const url = new URL(pairingUrl, window.location.origin);
+    assertSupportedRemoteBackendProtocol(url);
     const hostedPairingRequest = readHostedPairingRequest(url);
     if (hostedPairingRequest) {
       const hostedBackendUrl = normalizeRemoteBaseUrl(hostedPairingRequest.host);

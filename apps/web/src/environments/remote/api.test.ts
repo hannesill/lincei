@@ -87,6 +87,32 @@ describe("remote environment api", () => {
     });
   });
 
+  it("rejects unsupported direct pairing URL protocols", () => {
+    expect(() =>
+      resolveRemotePairingTarget({
+        pairingUrl: "ftp://remote.example.com/pair#token=pairing-token",
+      }),
+    ).toThrow("Unsupported remote backend protocol: ftp:");
+  });
+
+  it("rejects unsupported hosted pairing backend protocols", () => {
+    expect(() =>
+      resolveRemotePairingTarget({
+        pairingUrl:
+          "https://app.example.com/pair?host=ftp%3A%2F%2Fremote.example.com#token=pairing-token",
+      }),
+    ).toThrow("Unsupported remote backend protocol: ftp:");
+  });
+
+  it("rejects unsupported direct host protocols", () => {
+    expect(() =>
+      resolveRemotePairingTarget({
+        host: "ftp://remote.example.com",
+        pairingCode: "pairing-token",
+      }),
+    ).toThrow("Unsupported remote backend protocol: ftp:");
+  });
+
   it("bootstraps bearer auth against a remote backend", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
