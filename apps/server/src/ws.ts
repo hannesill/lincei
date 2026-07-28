@@ -21,6 +21,7 @@ import {
   type GitManagerServiceError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
+  type OrchestrationSessionStreamItem,
   type OrchestrationShellStreamEvent,
   OrchestrationGetFullSessionDiffError,
   OrchestrationGetSnapshotError,
@@ -863,6 +864,27 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcStreamEffect(
             ORCHESTRATION_WS_METHODS.subscribeSession,
             Effect.gen(function* () {
+              const liveStream = orchestrationEngine.streamDomainEvents.pipe(
+                Stream.filter(
+                  (event) =>
+                    event.aggregateKind === "session" &&
+                    event.aggregateId === input.sessionId &&
+                    isSessionDetailEvent(event),
+                ),
+                Stream.map((event) => ({
+                  kind: "event" as const,
+                  event,
+                })),
+              );
+
+              // Attach live delivery before reading snapshot state. Otherwise an
+              // event published while the snapshot is loading is lost.
+              const liveBuffer = yield* Queue.unbounded<OrchestrationSessionStreamItem>();
+              yield* Effect.forkScoped(
+                liveStream.pipe(Stream.runForEach((item) => Queue.offer(liveBuffer, item))),
+              );
+              const bufferedLiveStream = Stream.fromQueue(liveBuffer);
+
               const [sessionDetail, snapshotSequence] = yield* Effect.all([
                 projectionSnapshotQuery.getSessionDetailById(input.sessionId).pipe(
                   Effect.mapError(
@@ -892,19 +914,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 });
               }
 
-              const liveStream = orchestrationEngine.streamDomainEvents.pipe(
-                Stream.filter(
-                  (event) =>
-                    event.aggregateKind === "session" &&
-                    event.aggregateId === input.sessionId &&
-                    isSessionDetailEvent(event),
-                ),
-                Stream.map((event) => ({
-                  kind: "event" as const,
-                  event,
-                })),
-              );
-
               return Stream.concat(
                 Stream.make({
                   kind: "snapshot" as const,
@@ -913,7 +922,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                     session: sessionDetail.value,
                   },
                 }),
-                liveStream,
+                bufferedLiveStream,
               );
             }),
             { "rpc.aggregate": "orchestration" },
