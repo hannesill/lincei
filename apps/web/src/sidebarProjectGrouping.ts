@@ -25,6 +25,12 @@ export interface SidebarProjectSnapshot extends Project {
   remoteEnvironmentLabels: readonly string[];
 }
 
+export interface SidebarProjectPickerEntry {
+  group: SidebarProjectSnapshot;
+  targetProject: SidebarProjectGroupMember;
+  isPreferred: boolean;
+}
+
 export function buildPhysicalToLogicalProjectKeyMap(input: {
   projects: ReadonlyArray<Project>;
   settings: ProjectGroupingSettings;
@@ -115,4 +121,43 @@ export function buildSidebarProjectSnapshots(input: {
   }
 
   return result;
+}
+
+export function buildSidebarProjectPickerEntries(input: {
+  groups: ReadonlyArray<SidebarProjectSnapshot>;
+  preferredProjectRef: ScopedProjectRef | null;
+}): SidebarProjectPickerEntry[] {
+  const entries = input.groups.flatMap((group): SidebarProjectPickerEntry[] => {
+    const isPreferred =
+      input.preferredProjectRef !== null &&
+      group.memberProjectRefs.some(
+        (projectRef) =>
+          projectRef.environmentId === input.preferredProjectRef?.environmentId &&
+          projectRef.projectId === input.preferredProjectRef.projectId,
+      );
+    const preferredProject = isPreferred
+      ? (group.memberProjects.find(
+          (project) =>
+            project.environmentId === input.preferredProjectRef?.environmentId &&
+            project.id === input.preferredProjectRef.projectId,
+        ) ??
+        group.memberProjects.find(
+          (project) => project.environmentId === input.preferredProjectRef?.environmentId,
+        ))
+      : null;
+    const targetProject =
+      preferredProject ??
+      group.memberProjects.find(
+        (project) => project.environmentId === group.environmentId && project.id === group.id,
+      ) ??
+      group.memberProjects[0];
+    return targetProject ? [{ group, targetProject, isPreferred }] : [];
+  });
+  const preferredIndex = entries.findIndex((entry) => entry.isPreferred);
+  if (preferredIndex <= 0) return entries;
+  return [
+    entries[preferredIndex]!,
+    ...entries.slice(0, preferredIndex),
+    ...entries.slice(preferredIndex + 1),
+  ];
 }
