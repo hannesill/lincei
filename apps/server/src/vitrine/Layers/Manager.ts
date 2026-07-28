@@ -73,13 +73,13 @@ function snapshotState(
 function actionableMessage(error: VitrineCliError): string {
   switch (error.code) {
     case "executable_unavailable":
-      return "Install Vitrine 0.1.x and ensure the vitrine executable is on PATH, or set LINCEI_VITRINE_EXECUTABLE.";
+      return error.detail;
     case "startup_timeout":
-      return "Vitrine did not become ready in time. Run `vitrine status --json` from the project root for details.";
+      return `Vitrine did not become ready in time. ${error.detail}`;
     case "process_exited":
       return `Vitrine exited before becoming ready. ${error.detail}`;
     case "invalid_status_payload":
-      return "Vitrine returned invalid lifecycle JSON. Install a compatible Vitrine 0.1.x release.";
+      return "Vitrine returned incompatible lifecycle JSON. Install Vitrine >=0.1.1 <0.2.0 with lifecycle contract 1.";
     case "non_loopback_url":
       return "Vitrine reported a non-loopback or malformed URL, so Lincei refused to embed it.";
     case "project_mismatch":

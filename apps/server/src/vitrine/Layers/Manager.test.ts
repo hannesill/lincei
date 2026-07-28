@@ -6,14 +6,19 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { vi } from "vitest";
 
-import { VitrineCli, type VitrineCliShape, type VitrineCliSnapshot } from "../Services/Cli.ts";
+import {
+  VitrineCli,
+  VitrineCliError,
+  type VitrineCliShape,
+  type VitrineCliSnapshot,
+} from "../Services/Cli.ts";
 import { makeVitrineManager } from "./Manager.ts";
 
 const PROJECT_A = ProjectId.make("project-a");
 const PROJECT_B = ProjectId.make("project-b");
 
 function stopped(root: string): VitrineCliSnapshot {
-  return { status: "stopped", dataDir: `${root}/.vitrine`, version: "0.1.0" };
+  return { status: "stopped", dataDir: `${root}/.vitrine`, version: "0.1.1" };
 }
 
 function running(root: string, port: number): VitrineCliSnapshot {
@@ -25,7 +30,7 @@ function running(root: string, port: number): VitrineCliSnapshot {
     port,
     sessionId: `session-${port}`,
     dataDir: `${root}/.vitrine`,
-    version: "0.1.0",
+    version: "0.1.1",
   };
 }
 
@@ -49,7 +54,11 @@ function statefulCli() {
       return current;
     }),
   );
-  return { cli: VitrineCli.of({ run }), run, starts };
+  return {
+    cli: VitrineCli.of({ run, runtimeStatus: Effect.die("runtime status not used") }),
+    run,
+    starts,
+  };
 }
 
 it.layer(NodeServices.layer)("VitrineManager", (it) => {
@@ -128,6 +137,38 @@ it.layer(NodeServices.layer)("VitrineManager", (it) => {
 
       expect(fake.starts).toEqual([canonicalRoot]);
       expect(state.dataDir).toBe(path.join(canonicalRoot, ".vitrine"));
+    }),
+  );
+
+  it.effect("preserves source-aware executable guidance in project state", () =>
+    Effect.gen(function* () {
+      const detail =
+        "Could not launch Vitrine executable `/configured/vitrine` configured in Settings. Choose a valid Vitrine executable path in Settings.";
+      const run = vi.fn<VitrineCliShape["run"]>((action) =>
+        Effect.fail(
+          new VitrineCliError({
+            action,
+            code: "executable_unavailable",
+            detail,
+          }),
+        ),
+      );
+      const cli = VitrineCli.of({
+        run,
+        runtimeStatus: Effect.die("runtime status not used"),
+      });
+      const manager = yield* makeVitrineManager.pipe(Effect.provideService(VitrineCli, cli));
+
+      const state = yield* manager.ensure({
+        projectId: PROJECT_A,
+        workspaceRoot: "/projects/a",
+      });
+
+      expect(state.status).toBe("unavailable");
+      expect(state.issueCode).toBe("executable_unavailable");
+      expect(state.message).toBe(detail);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith("status", { workspaceRoot: "/projects/a" });
     }),
   );
 });

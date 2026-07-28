@@ -18,6 +18,9 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
       preferredBackendId: "duckdb",
       m4Command: "",
     });
+    expect(DEFAULT_SERVER_SETTINGS.vitrine).toEqual({
+      executablePath: "",
+    });
   });
 
   it("decodes a fully empty config (legacy on-disk shape) without complaint", () => {
@@ -216,6 +219,9 @@ describe("ServerSettingsPatch string normalization", () => {
       observability: {
         otlpTracesUrl: "  http://localhost:4318/v1/traces  ",
       },
+      vitrine: {
+        executablePath: "  ~/.venvs/research/bin/vitrine  ",
+      },
       linceiAgentCustomInstructions: "  Prefer concise status updates.  ",
       providers: {
         codex: {
@@ -236,6 +242,7 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(patch.linceiAgentCustomInstructions).toBe("Prefer concise status updates.");
     expect(patch.textGenerationModelSelection?.model).toBe("gpt-5.4-mini");
     expect(patch.observability?.otlpTracesUrl).toBe("http://localhost:4318/v1/traces");
+    expect(patch.vitrine?.executablePath).toBe("~/.venvs/research/bin/vitrine");
     expect(patch.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
     expect(patch.providers?.codex?.homePath).toBe("~/.codex");
     expect(patch.providerInstances?.[ProviderInstanceId.make("codex_personal")]?.driver).toBe(
@@ -255,6 +262,9 @@ describe("ServerSettingsPatch string normalization", () => {
       ...defaultSettings,
       addProjectBaseDirectory: "  ~/Development  ",
       linceiAgentCustomInstructions: "  Prefer concise status updates.  ",
+      vitrine: {
+        executablePath: "  /opt/vitrine/bin/vitrine  ",
+      },
       providers: {
         ...defaultSettings.providers,
         codex: {
@@ -266,6 +276,23 @@ describe("ServerSettingsPatch string normalization", () => {
 
     expect(encoded.addProjectBaseDirectory).toBe("~/Development");
     expect(encoded.linceiAgentCustomInstructions).toBe("Prefer concise status updates.");
+    expect(encoded.vitrine?.executablePath).toBe("/opt/vitrine/bin/vitrine");
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
+  });
+});
+
+describe("ServerSettings.vitrine", () => {
+  it("decodes and patches a trimmed executable path", () => {
+    expect(
+      decodeServerSettings({
+        vitrine: { executablePath: "  /project/.venv/bin/vitrine  " },
+      }).vitrine,
+    ).toEqual({ executablePath: "/project/.venv/bin/vitrine" });
+
+    expect(
+      decodeServerSettingsPatch({
+        vitrine: { executablePath: "   " },
+      }).vitrine,
+    ).toEqual({ executablePath: "" });
   });
 });

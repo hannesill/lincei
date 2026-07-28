@@ -1,10 +1,36 @@
 import { describe, expect, it } from "vitest";
 import * as Schema from "effect/Schema";
 
-import { ProjectId, VitrineLifecycleError, VitrineProjectState } from "./index.ts";
+import {
+  ProjectId,
+  VitrineLifecycleError,
+  VitrineProjectState,
+  VitrineRuntimeStatus,
+} from "./index.ts";
 
 const decode = Schema.decodeUnknownSync(VitrineProjectState);
 const decodeLifecycleError = Schema.decodeUnknownSync(VitrineLifecycleError);
+const decodeRuntimeStatus = Schema.decodeUnknownSync(VitrineRuntimeStatus);
+
+describe("VitrineRuntimeStatus", () => {
+  it("decodes a compatible configured runtime", () => {
+    const status = decodeRuntimeStatus({
+      status: "ready",
+      source: "settings",
+      executable: "/project/.venv/bin/vitrine",
+      version: "0.1.1",
+      lifecycleContractVersion: 1,
+      pythonExecutable: "/project/.venv/bin/python",
+      supportedVersionRange: ">=0.1.1 <0.2.0",
+      requiredLifecycleContractVersion: 1,
+      message: null,
+      checkedAt: "2026-07-28T12:00:00.000Z",
+    });
+
+    expect(status.status).toBe("ready");
+    expect(status.source).toBe("settings");
+  });
+});
 
 describe("VitrineProjectState", () => {
   it("decodes a ready project server", () => {

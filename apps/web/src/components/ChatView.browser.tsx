@@ -53,7 +53,7 @@ import {
 import { isMacPlatform } from "../lib/utils";
 import { __resetLocalApiForTests } from "../localApi";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
-import { getServerConfig } from "../rpc/serverState";
+import { applySettingsUpdated, getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
 import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
 import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
@@ -101,6 +101,14 @@ const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
 const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
 const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/Projects/heart-failure)";
+
+function createDeferredPromise<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 interface TestFixture {
   snapshot: OrchestrationReadModel;
@@ -1480,6 +1488,49 @@ async function waitForServerConfigToApply(): Promise<void> {
     { timeout: 8_000, interval: 16 },
   );
   await waitForLayout();
+}
+
+function installDesktopPreviewBridge() {
+  const createPreviewTab = vi.fn().mockResolvedValue(undefined);
+  const registerPreviewWebview = vi.fn().mockResolvedValue(undefined);
+  const navigatePreview = vi.fn().mockResolvedValue(undefined);
+  window.desktopBridge = {
+    getAppBranding: vi.fn().mockReturnValue(null),
+    getLocalEnvironmentBootstrap: () => ({
+      label: "Local environment",
+      httpBaseUrl: "http://127.0.0.1:3773",
+      wsBaseUrl: "ws://127.0.0.1:3773",
+      bootstrapToken: "desktop-bootstrap-token",
+    }),
+    getClientSettings: vi.fn().mockResolvedValue(null),
+    setClientSettings: vi.fn().mockResolvedValue(undefined),
+    getSavedEnvironmentRegistry: vi.fn().mockResolvedValue([]),
+    setSavedEnvironmentRegistry: vi.fn().mockResolvedValue(undefined),
+    getSavedEnvironmentSecret: vi.fn().mockResolvedValue(null),
+    setSavedEnvironmentSecret: vi.fn().mockResolvedValue(true),
+    removeSavedEnvironmentSecret: vi.fn().mockResolvedValue(undefined),
+    preview: {
+      createTab: createPreviewTab,
+      closeTab: vi.fn().mockResolvedValue(undefined),
+      registerWebview: registerPreviewWebview,
+      navigate: navigatePreview,
+      goBack: vi.fn().mockResolvedValue(undefined),
+      goForward: vi.fn().mockResolvedValue(undefined),
+      refresh: vi.fn().mockResolvedValue(undefined),
+      zoomIn: vi.fn().mockResolvedValue(undefined),
+      zoomOut: vi.fn().mockResolvedValue(undefined),
+      resetZoom: vi.fn().mockResolvedValue(undefined),
+      hardReload: vi.fn().mockResolvedValue(undefined),
+      openDevTools: vi.fn().mockResolvedValue(undefined),
+      clearCookies: vi.fn().mockResolvedValue(undefined),
+      clearCache: vi.fn().mockResolvedValue(undefined),
+      getBrowserPartition: vi.fn().mockResolvedValue("persist:lincei-preview-local"),
+      onStateChange: vi.fn(() => () => undefined),
+    },
+    setTheme: vi.fn().mockResolvedValue(undefined),
+  } as unknown as NonNullable<typeof window.desktopBridge>;
+
+  return { createPreviewTab, navigatePreview, registerPreviewWebview };
 }
 
 function dispatchChatNewShortcut(): void {
@@ -6669,14 +6720,162 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
+  it("retries one silent automatic Research restore after the executable setting changes", async () => {
+    const unavailableMessage = "The configured Vitrine executable is unavailable.";
+    const unavailableState = {
+      projectId: PROJECT_ID,
+      status: "unavailable" as const,
+      dataDir: "/repo/project/.vitrine",
+      url: null,
+      apiUrl: null,
+      pid: null,
+      port: null,
+      sessionId: null,
+      version: null,
+      issueCode: "executable_unavailable" as const,
+      message: unavailableMessage,
+      updatedAt: NOW_ISO,
+    };
+    const firstEnsure = createDeferredPromise<typeof unavailableState>();
+    let ensureAttempt = 0;
+    installDesktopPreviewBridge();
+    rememberVitrineAutoOpenIntent(LOCAL_ENVIRONMENT_ID, PROJECT_ID);
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-vitrine-retry" as MessageId,
+        targetText: "retry project research after configuration",
+      }),
+      resolveRpc: (body) => {
+        if (body._tag === WS_METHODS.vitrineEnsure) {
+          ensureAttempt += 1;
+          return ensureAttempt === 1 ? firstEnsure.promise : unavailableState;
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(
+            wsRequests.filter((request) => request._tag === WS_METHODS.vitrineEnsure),
+          ).toHaveLength(1);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      const config = getServerConfig();
+      expect(config).not.toBeNull();
+      applySettingsUpdated({
+        ...config!.settings,
+        vitrine: { executablePath: "/repo/project/.venv/bin/vitrine" },
+      });
+      await waitForLayout();
+      expect(
+        wsRequests.filter((request) => request._tag === WS_METHODS.vitrineEnsure),
+      ).toHaveLength(1);
+      expect(document.querySelectorAll('[data-slot="toast-title"]')).toHaveLength(0);
+
+      firstEnsure.resolve(unavailableState);
+
+      await vi.waitFor(
+        () => {
+          expect(
+            wsRequests.filter((request) => request._tag === WS_METHODS.vitrineEnsure),
+          ).toHaveLength(2);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+      await page.getByRole("button", { name: "Open project research in Vitrine" }).hover();
+      await vi.waitFor(() => {
+        expect(
+          document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]')?.textContent,
+        ).toContain(unavailableMessage);
+      });
+      await waitForLayout();
+      expect(
+        wsRequests.filter((request) => request._tag === WS_METHODS.vitrineEnsure),
+      ).toHaveLength(2);
+      expect(document.querySelectorAll('[data-slot="toast-title"]')).toHaveLength(0);
+    } finally {
+      firstEnsure.resolve(unavailableState);
+      await mounted.cleanup();
+    }
+  });
+
+  it("offers Research configuration after an actionable manual failure", async () => {
+    const unavailableMessage = "The configured Vitrine executable is unavailable.";
+    installDesktopPreviewBridge();
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-vitrine-configure" as MessageId,
+        targetText: "configure project research",
+      }),
+      resolveRpc: (body) => {
+        if (body._tag === WS_METHODS.vitrineEnsure) {
+          return {
+            projectId: PROJECT_ID,
+            status: "unavailable",
+            dataDir: "/repo/project/.vitrine",
+            url: null,
+            apiUrl: null,
+            pid: null,
+            port: null,
+            sessionId: null,
+            version: null,
+            issueCode: "executable_unavailable",
+            message: unavailableMessage,
+            updatedAt: NOW_ISO,
+          };
+        }
+        if (body._tag === WS_METHODS.vitrineRuntimeStatus) {
+          return {
+            status: "unavailable",
+            source: "path",
+            executable: "vitrine",
+            version: null,
+            lifecycleContractVersion: null,
+            pythonExecutable: null,
+            supportedVersionRange: ">=0.1.1 <0.2.0",
+            requiredLifecycleContractVersion: 1,
+            message: unavailableMessage,
+            checkedAt: NOW_ISO,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await waitForServerConfigToApply();
+      await page.getByRole("button", { name: "Open project research in Vitrine" }).click();
+      await expect.element(page.getByRole("button", { name: "Configure" })).toBeInTheDocument();
+      await page.getByRole("button", { name: "Configure" }).click();
+
+      await vi.waitFor(
+        () => {
+          expect(mounted.router.state.location.pathname).toBe("/settings/research");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+      await expect.element(page.getByText("Vitrine runtime")).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("restores embedded Research and forgets intent when its exact tab closes", async () => {
     const discoveredUrl = "http://vitrine.localhost:8813/";
-    const createPreviewTab = vi.fn().mockResolvedValue(undefined);
     const previewInitializationOrder: string[] = [];
-    const registerPreviewWebview = vi.fn(async () => {
+    const { createPreviewTab, navigatePreview, registerPreviewWebview } =
+      installDesktopPreviewBridge();
+    registerPreviewWebview.mockImplementation(async () => {
       previewInitializationOrder.push("register");
     });
-    const navigatePreview = vi.fn(async () => {
+    navigatePreview.mockImplementation(async () => {
       previewInitializationOrder.push("navigate");
     });
     const previewSnapshot = {
@@ -6696,41 +6895,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
       canGoForward: false,
       updatedAt: "2026-03-04T12:00:00.500Z",
     };
-    window.desktopBridge = {
-      getAppBranding: vi.fn().mockReturnValue(null),
-      getLocalEnvironmentBootstrap: () => ({
-        label: "Local environment",
-        httpBaseUrl: "http://127.0.0.1:3773",
-        wsBaseUrl: "ws://127.0.0.1:3773",
-        bootstrapToken: "desktop-bootstrap-token",
-      }),
-      getClientSettings: vi.fn().mockResolvedValue(null),
-      setClientSettings: vi.fn().mockResolvedValue(undefined),
-      getSavedEnvironmentRegistry: vi.fn().mockResolvedValue([]),
-      setSavedEnvironmentRegistry: vi.fn().mockResolvedValue(undefined),
-      getSavedEnvironmentSecret: vi.fn().mockResolvedValue(null),
-      setSavedEnvironmentSecret: vi.fn().mockResolvedValue(true),
-      removeSavedEnvironmentSecret: vi.fn().mockResolvedValue(undefined),
-      preview: {
-        createTab: createPreviewTab,
-        closeTab: vi.fn().mockResolvedValue(undefined),
-        registerWebview: registerPreviewWebview,
-        navigate: navigatePreview,
-        goBack: vi.fn().mockResolvedValue(undefined),
-        goForward: vi.fn().mockResolvedValue(undefined),
-        refresh: vi.fn().mockResolvedValue(undefined),
-        zoomIn: vi.fn().mockResolvedValue(undefined),
-        zoomOut: vi.fn().mockResolvedValue(undefined),
-        resetZoom: vi.fn().mockResolvedValue(undefined),
-        hardReload: vi.fn().mockResolvedValue(undefined),
-        openDevTools: vi.fn().mockResolvedValue(undefined),
-        clearCookies: vi.fn().mockResolvedValue(undefined),
-        clearCache: vi.fn().mockResolvedValue(undefined),
-        getBrowserPartition: vi.fn().mockResolvedValue("persist:lincei-preview-local"),
-        onStateChange: vi.fn(() => () => undefined),
-      },
-      setTheme: vi.fn().mockResolvedValue(undefined),
-    } as unknown as NonNullable<typeof window.desktopBridge>;
     rememberVitrineAutoOpenIntent(LOCAL_ENVIRONMENT_ID, PROJECT_ID);
 
     const mounted = await mountChatView({

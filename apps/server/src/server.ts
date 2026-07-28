@@ -279,7 +279,10 @@ const DatasetGatewayLayerLive = LinceiDatasetGatewayLayer.layer.pipe(
   Layer.provideMerge(DatasetBaseLayerLive),
 );
 
-const VitrineCliLayerLive = VitrineCliLive.pipe(Layer.provideMerge(ProcessRunnerLive));
+const VitrineCliLayerLive = VitrineCliLive.pipe(
+  Layer.provideMerge(ProcessRunnerLive),
+  Layer.provideMerge(ServerSettingsLive),
+);
 const VitrineLayerLive = VitrineManagerLive.pipe(Layer.provideMerge(VitrineCliLayerLive));
 const ClinicalToolsLayerLive = Layer.mergeAll(
   DatasetGatewayLayerLive,

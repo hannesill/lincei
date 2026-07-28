@@ -11,24 +11,35 @@ relying on it remotely or migrating legacy native-card data.
 
 ## Runtime requirements
 
-Lincei requires Vitrine `>=0.1.0 <0.2.0`. The backend resolves the `vitrine` executable from its
-`PATH`, unless `LINCEI_VITRINE_EXECUTABLE` specifies an executable explicitly. Restart the Lincei
-backend after changing that variable.
+Lincei requires Vitrine `>=0.1.1 <0.2.0` and lifecycle contract version `1`. For every lifecycle
+operation, the backend resolves one executable in this order:
+
+1. `LINCEI_VITRINE_EXECUTABLE`
+2. The executable path saved under Settings → Research
+3. `vitrine` from the backend's `PATH`
+
+Changing the saved Research path applies to the next lifecycle operation without restarting the
+backend. Changing `LINCEI_VITRINE_EXECUTABLE` requires a backend restart. A configured value must
+be either an absolute executable path, such as `/path/to/.venv/bin/vitrine`, or a bare command name
+resolved from the backend's `PATH`. Relative path-like values such as `./.venv/bin/vitrine` and
+`.\Scripts\vitrine.exe` are rejected because diagnostics are project-independent while lifecycle
+operations run in a project directory. The value cannot be a shell command, contain arguments, or
+use `python -m vitrine`.
 
 ### The executable and Python environment are separate
 
 There are currently two environment boundaries:
 
-| Setting or environment      | What it controls                                          | What it does not control                                |
-| --------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
-| `LINCEI_VITRINE_EXECUTABLE` | The CLI Lincei invokes for `status`, `start`, and `stop`  | The Python interpreter used by an agent's analysis code |
-| Project analysis Python     | Whether `from vitrine import show, confirm, ask` succeeds | Which lifecycle CLI the Lincei backend invokes          |
+| Setting or environment                         | What it controls                                          | What it does not control                                |
+| ---------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| Environment override or saved Research setting | The CLI Lincei invokes for lifecycle and diagnostics      | The Python interpreter used by an agent's analysis code |
+| Project analysis Python                        | Whether `from vitrine import show, confirm, ask` succeeds | Which lifecycle CLI the Lincei backend invokes          |
 
 Pointing Lincei at `/path/to/.venv/bin/vitrine` therefore does not make Vitrine importable from a
 different Python environment. The compatible package must also be installed in the environment
 that runs the project's analysis code. The safest current setup is to use the same project virtual
-environment for both and point `LINCEI_VITRINE_EXECUTABLE` at that environment's `vitrine` entry
-point.
+environment for both and save that environment's `vitrine` entry point under Settings → Research.
+Use `LINCEI_VITRINE_EXECUTABLE` only when the backend-wide override is intentional.
 
 Lincei does not silently install or upgrade Vitrine.
 
@@ -56,16 +67,17 @@ store.
 - The desktop app embeds the loopback page. In a standalone loopback browser environment, Lincei
   asks the backend host to open the validated page in its default browser; the web client never
   navigates to a backend loopback URL.
-- Lincei validates the Vitrine version, data directory, process identity, and loopback URLs before
-  attaching.
+- Lincei validates the Vitrine version, lifecycle contract, data directory, process identity, and
+  loopback URLs before attaching.
 - Research is disabled for remote-reachable and unsafe primary-server policies, and for saved remote
   environments. A Vitrine daemon exposes a separate loopback HTTP/WebSocket service that the normal
   Lincei connection does not securely forward. A manually tunnelled loopback-browser connection can
   launch the page only on the backend host, not through the tunnel.
 
-If lifecycle startup fails, invoke the executable configured by `LINCEI_VITRINE_EXECUTABLE` (or
-`vitrine` when it is unset) with `status --json` from the project root and the same
-`VITRINE_DATA_DIR`. This avoids accidentally inspecting a different Vitrine installation.
+Runtime diagnostics invoke the resolved executable with `doctor --json`. Run the same command
+directly with the executable selected by the precedence above when diagnosing startup failures.
+`doctor` is project-independent; use `status --json` from the project root with the canonical
+`VITRINE_DATA_DIR` only when inspecting that project's daemon state.
 
 ## Current limitations
 

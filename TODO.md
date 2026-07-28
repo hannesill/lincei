@@ -1,9 +1,10 @@
 # TODO
 
-Last checked: 2026-07-22 across:
+Last checked: 2026-07-28 across:
 
 - `codex/vitrine-browser-pivot`
 - `codex/lincei-lifecycle-json` in Vitrine
+- `codex/vitrine-runtime-config`
 - `codex/card-handles-review-flow` as historical reference only
 - `codex/lincei-skills-workflows` at `de05f02e`
 
@@ -29,6 +30,8 @@ The current local-alpha contract and the executable-versus-Python-environment qu
 
 ### Runtime and environment
 
+- [x] Add project-independent `vitrine doctor --json` diagnostics and require Vitrine
+      `>=0.1.1 <0.2.0` with lifecycle contract version `1`.
 - [ ] Resolve Vitrine per project, or ship a pinned distribution, so the lifecycle CLI and the agent's analysis Python use the same compatible Vitrine without a silent install.
 - [ ] Support project/session environment injection for configured external OpenCode servers; Lincei cannot mutate the environment of a server process it does not own.
 - [ ] Make `VITRINE_DATA_DIR` server-authoritative for every raw terminal and provider launch path, rejecting or overwriting conflicting client input. Normal managed UI paths already use the canonical project value.
@@ -37,7 +40,7 @@ The current local-alpha contract and the executable-versus-Python-environment qu
 
 - [ ] Add explicit Research status, Stop, and Restart controls. Keep panel close presentation-only and serialize lifecycle actions per project.
 - [ ] Add bounded readiness polling and retry plus generation-aware reconnect handling. Do not retry deterministic version, identity, data-directory, or URL validation failures.
-- [ ] Add a Vitrine metadata migration or `doctor` path for legacy PID/status records while keeping ordinary Lincei lifecycle attachment fail-closed.
+- [ ] Add explicit migration and repair for legacy Vitrine PID/status metadata while keeping ordinary Lincei lifecycle attachment fail-closed. Runtime `doctor` diagnostics do not mutate project metadata.
 
 ### Remote access
 

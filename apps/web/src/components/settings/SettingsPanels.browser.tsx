@@ -33,12 +33,16 @@ import {
 
 import { __resetLocalApiForTests } from "../../localApi";
 import { AppAtomRegistryProvider, resetAppAtomRegistryForTests } from "../../rpc/atomRegistry";
-import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
+import {
+  getServerConfig,
+  resetServerStateForTests,
+  setServerConfigSnapshot,
+} from "../../rpc/serverState";
 import { useUiStateStore } from "../../uiStateStore";
 import { ConnectionsSettings } from "./ConnectionsSettings";
 import { DiagnosticsSettingsPanel } from "./DiagnosticsSettings";
 import { SkillsSettingsPanel } from "./SkillsSettings";
-import { GeneralSettingsPanel, ProviderSettingsPanel } from "./SettingsPanels";
+import { GeneralSettingsPanel, ProviderSettingsPanel, useSettingsRestore } from "./SettingsPanels";
 import { SourceControlSettingsPanel } from "./SourceControlSettings";
 
 function renderWithTestRouter(children: ReactNode) {
@@ -55,6 +59,18 @@ function renderWithTestRouter(children: ReactNode) {
   });
 
   return render(<RouterProvider router={router} />);
+}
+
+function SettingsRestoreHarness() {
+  const { changedSettingLabels, restoreDefaults } = useSettingsRestore();
+  return (
+    <>
+      <span aria-label="Changed settings">{changedSettingLabels.join(", ")}</span>
+      <button type="button" onClick={() => void restoreDefaults()}>
+        Restore defaults in test
+      </button>
+    </>
+  );
 }
 
 const authAccessHarness = vi.hoisted(() => {
@@ -499,6 +515,47 @@ describe("GeneralSettingsPanel observability", () => {
     resetServerStateForTests();
     await __resetLocalApiForTests();
     authAccessHarness.reset();
+  });
+
+  it("includes the Vitrine executable in the global settings restore", async () => {
+    const confirm = vi.fn().mockResolvedValue(true);
+    const updateSettings = vi.fn().mockResolvedValue(DEFAULT_SERVER_SETTINGS);
+    window.nativeApi = {
+      persistence: {
+        getClientSettings: vi.fn().mockResolvedValue(null),
+        setClientSettings: vi.fn().mockResolvedValue(undefined),
+      },
+      dialogs: { confirm },
+      server: { updateSettings },
+    } as unknown as LocalApi;
+    setServerConfigSnapshot({
+      ...createBaseServerConfig(),
+      settings: {
+        ...DEFAULT_SERVER_SETTINGS,
+        vitrine: { executablePath: "/repo/project/.venv/bin/vitrine" },
+      },
+    });
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <SettingsRestoreHarness />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect
+      .element(page.getByLabelText("Changed settings"))
+      .toHaveTextContent("Vitrine executable");
+    await page.getByRole("button", { name: "Restore defaults in test" }).click();
+
+    await vi.waitFor(() => {
+      expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Vitrine executable"));
+      expect(updateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vitrine: DEFAULT_SERVER_SETTINGS.vitrine,
+        }),
+      );
+      expect(getServerConfig()?.settings.vitrine).toEqual(DEFAULT_SERVER_SETTINGS.vitrine);
+    });
   });
 
   it("hides owner pairing tools in browser-served loopback builds without remote exposure", async () => {
