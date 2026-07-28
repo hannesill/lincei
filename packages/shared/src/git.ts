@@ -129,19 +129,23 @@ export function normalizeGitRemoteUrl(value: string): string {
           return `${url.hostname}/${repositoryPath}`;
         }
 
-        const sshUsername =
-          url.protocol === "ssh:" && url.username.length > 0 ? `${url.username}@` : "";
+        const endpointUsername = url.username.length > 0 ? `${url.username}@` : "";
         const endpointHost = url.protocol === "ssh:" && isDefaultSshPort ? url.hostname : url.host;
-        return `${url.protocol}//${sshUsername}${endpointHost}/${repositoryPath}`;
+        return `${url.protocol}//${endpointUsername}${endpointHost}/${repositoryPath}`;
       }
     } catch {
       return normalized;
     }
   }
 
-  const scpStyleHostAndPath = /^git@([^:/\s]+)[:/]([^/\s]+(?:\/[^/\s]+)+)$/i.exec(normalized);
-  if (scpStyleHostAndPath?.[1] && scpStyleHostAndPath[2]) {
-    return `${scpStyleHostAndPath[1].toLowerCase()}/${scpStyleHostAndPath[2]}`;
+  const scpStyleRemote = /^([^@:/\s]+)@([^:/\s]+)[:/]([^/\s]+(?:\/[^/\s]+)+)$/.exec(normalized);
+  if (scpStyleRemote?.[1] && scpStyleRemote[2] && scpStyleRemote[3]) {
+    const username = scpStyleRemote[1];
+    const hostname = scpStyleRemote[2].toLowerCase();
+    const repositoryPath = scpStyleRemote[3];
+    return username === "git"
+      ? `${hostname}/${repositoryPath}`
+      : `ssh://${username}@${hostname}/${repositoryPath}`;
   }
 
   return normalized;

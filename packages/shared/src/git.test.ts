@@ -44,6 +44,24 @@ describe("normalizeGitRemoteUrl", () => {
     );
   });
 
+  it("preserves authenticated HTTP and SCP usernames in remote identity", () => {
+    expect(normalizeGitRemoteUrl("https://alice@GITHUB.COM/Team/Project.git")).toBe(
+      "https://alice@github.com/Team/Project",
+    );
+    expect(normalizeGitRemoteUrl("https://alice@github.com/Team/Project.git")).not.toBe(
+      normalizeGitRemoteUrl("https://bob@github.com/Team/Project.git"),
+    );
+    expect(normalizeGitRemoteUrl("alice@GITHUB.COM:Team/Project.git")).toBe(
+      "ssh://alice@github.com/Team/Project",
+    );
+    expect(normalizeGitRemoteUrl("alice@GITHUB.COM:Team/Project.git")).not.toBe(
+      normalizeGitRemoteUrl("bob@github.com:Team/Project.git"),
+    );
+    expect(normalizeGitRemoteUrl("git@GITHUB.COM:Team/Project.git")).toBe(
+      normalizeGitRemoteUrl("https://github.com/Team/Project.git"),
+    );
+  });
+
   it("preserves non-default endpoint ports and transport identity", () => {
     expect(normalizeGitRemoteUrl("https://gitlab.company.com:8443/team/project.git")).toBe(
       "https://gitlab.company.com:8443/team/project",
