@@ -74,6 +74,36 @@ describe("DesktopSshRemoteApi", () => {
       assert.instanceOf(error, DesktopSshRemoteApi.DesktopSshRemoteApiError);
       assert.equal(error.operation, "fetch-environment-descriptor");
       assert.equal(error.cause instanceof SshHttpBridgeError, false);
+      assert.equal(error.sshHttpStatus, null);
+      assert.equal(
+        error.message,
+        "SSH remote API request failed during fetch-environment-descriptor.",
+      );
+    }).pipe(Effect.provide(layer));
+  });
+
+  it.effect("preserves SSH HTTP auth status in the typed remote api error", () => {
+    const layer = makeLayer((request) =>
+      Effect.succeed(jsonResponse(request, { error: "Authentication required." }, 401)),
+    );
+
+    return Effect.gen(function* () {
+      const remoteApi = yield* DesktopSshRemoteApi.DesktopSshRemoteApi;
+      const error = yield* remoteApi
+        .fetchSessionState({
+          httpBaseUrl: "http://127.0.0.1:41773/",
+          bearerToken: "expired-token",
+        })
+        .pipe(Effect.flip);
+
+      assert.instanceOf(error, DesktopSshRemoteApi.DesktopSshRemoteApiError);
+      assert.equal(error.operation, "fetch-session-state");
+      assert.instanceOf(error.cause, SshHttpBridgeError);
+      assert.equal(error.sshHttpStatus, 401);
+      assert.equal(
+        error.message,
+        "[ssh_http:401] SSH remote API request failed during fetch-session-state.",
+      );
     }).pipe(Effect.provide(layer));
   });
 });

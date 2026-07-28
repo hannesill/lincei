@@ -26,9 +26,11 @@ export type DesktopSshRemoteApiOperation =
 export class DesktopSshRemoteApiError extends Data.TaggedError("DesktopSshRemoteApiError")<{
   readonly operation: DesktopSshRemoteApiOperation;
   readonly cause: SshHttpBridgeError | Schema.SchemaError;
+  readonly sshHttpStatus: number | null;
 }> {
   override get message() {
-    return `SSH remote API request failed during ${this.operation}.`;
+    const prefix = this.sshHttpStatus === null ? "" : `[ssh_http:${this.sshHttpStatus}] `;
+    return `${prefix}SSH remote API request failed during ${this.operation}.`;
   }
 }
 
@@ -65,7 +67,11 @@ const decodeAuthWebSocketTokenResult = Schema.decodeUnknownEffect(AuthWebSocketT
 const mapError =
   (operation: DesktopSshRemoteApiOperation) =>
   (cause: SshHttpBridgeError | Schema.SchemaError): DesktopSshRemoteApiError =>
-    new DesktopSshRemoteApiError({ operation, cause });
+    new DesktopSshRemoteApiError({
+      operation,
+      cause,
+      sshHttpStatus: cause instanceof SshHttpBridgeError ? (cause.status ?? null) : null,
+    });
 
 const make = Effect.gen(function* () {
   const httpClient = yield* HttpClient.HttpClient;
