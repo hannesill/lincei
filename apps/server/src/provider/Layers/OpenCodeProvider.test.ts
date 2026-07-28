@@ -35,6 +35,7 @@ const runtimeMock = {
     versionStdout: DEFAULT_VERSION_STDOUT,
     inventoryError: null as Error | null,
     closeCalls: 0,
+    cliInventoryCalls: 0,
     inventory: {
       providerList: { connected: [] as string[], all: [] as unknown[], default: {} },
       agents: [] as unknown[],
@@ -45,6 +46,7 @@ const runtimeMock = {
     this.state.versionStdout = DEFAULT_VERSION_STDOUT;
     this.state.inventoryError = null;
     this.state.closeCalls = 0;
+    this.state.cliInventoryCalls = 0;
     this.state.inventory = {
       providerList: { connected: [], all: [] as unknown[], default: {} },
       agents: [] as unknown[],
@@ -95,6 +97,16 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
           }),
         )
       : Effect.succeed(runtimeMock.state.inventory as OpenCodeInventory),
+  loadInventoryFromCli: () =>
+    Effect.sync(() => {
+      runtimeMock.state.cliInventoryCalls += 1;
+      return runtimeMock.state.inventoryError
+        ? ({
+            providerList: { all: [], default: {}, connected: [] },
+            agents: [],
+          } as OpenCodeInventory)
+        : (runtimeMock.state.inventory as OpenCodeInventory);
+    }),
 };
 
 beforeEach(() => {
@@ -194,11 +206,24 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
     }),
   );
 
-  it.effect("closes the local OpenCode server scope after provider refresh", () =>
+  it.effect("uses the CLI inventory without spawning a local server", () =>
     Effect.gen(function* () {
       yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
 
-      assert.equal(runtimeMock.state.closeCalls, 1);
+      assert.equal(runtimeMock.state.cliInventoryCalls, 1);
+      assert.equal(runtimeMock.state.closeCalls, 0);
+    }),
+  );
+
+  it.effect("degrades local CLI inventory failures to an installed warning", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.inventoryError = new Error("opencode models failed");
+
+      const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
+
+      assert.equal(snapshot.status, "warning");
+      assert.equal(snapshot.installed, true);
+      assert.equal(snapshot.models.length, 0);
     }),
   );
 });
@@ -217,6 +242,7 @@ it.layer(testLayer)("checkOpenCodeProviderStatus with configured server URL", (i
 
       assert.equal(snapshot.status, "error");
       assert.equal(snapshot.installed, true);
+      assert.equal(runtimeMock.state.cliInventoryCalls, 0);
       assert.equal(
         snapshot.message,
         "OpenCode server rejected authentication. Check the server URL and password.",

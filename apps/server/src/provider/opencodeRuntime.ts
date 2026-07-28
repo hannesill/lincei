@@ -5,6 +5,7 @@ import {
   createOpencodeClient,
   type Agent,
   type FilePartInput,
+  type Model,
   type OpencodeClient,
   type PermissionRuleset,
   type ProviderListResponse,
@@ -181,6 +182,10 @@ export interface OpenCodeRuntimeShape {
   readonly loadOpenCodeInventory: (
     client: OpencodeClient,
   ) => Effect.Effect<OpenCodeInventory, OpenCodeRuntimeError>;
+  readonly loadInventoryFromCli: (input: {
+    readonly binaryPath: string;
+    readonly environment?: NodeJS.ProcessEnv;
+  }) => Effect.Effect<OpenCodeInventory, OpenCodeRuntimeError>;
 }
 
 function parseServerUrlFromOutput(output: string): string | null {
@@ -192,6 +197,158 @@ function parseServerUrlFromOutput(output: string): string | null {
     return match?.[1] ?? null;
   }
   return null;
+}
+
+const SLUG_LINE_RE = /^(\S+\/\S+)\s*$/;
+const AGENT_HEADER_RE = /^(.+)\s+\((\S+)\)\s*$/;
+const KNOWN_HIDDEN_AGENTS = new Set(["compaction", "summary", "title"]);
+type OpenCodeProviderListModel = ProviderListResponse["all"][number]["models"][string];
+type OpenCodeModality = "text" | "audio" | "image" | "video" | "pdf";
+
+function enabledModalities(
+  capabilities: Record<OpenCodeModality, boolean>,
+): Array<OpenCodeModality> {
+  return (Object.keys(capabilities) as Array<OpenCodeModality>).filter(
+    (modality) => capabilities[modality],
+  );
+}
+
+function toProviderListModel(model: Model): OpenCodeProviderListModel {
+  return {
+    id: model.id,
+    name: model.name,
+    ...(model.family ? { family: model.family } : {}),
+    release_date: model.release_date,
+    attachment: model.capabilities.attachment,
+    reasoning: model.capabilities.reasoning,
+    temperature: model.capabilities.temperature,
+    tool_call: model.capabilities.toolcall,
+    ...(model.capabilities.interleaved === false
+      ? {}
+      : { interleaved: model.capabilities.interleaved }),
+    cost: {
+      input: model.cost.input,
+      output: model.cost.output,
+      cache_read: model.cost.cache.read,
+      cache_write: model.cost.cache.write,
+      ...(model.cost.experimentalOver200K
+        ? {
+            context_over_200k: {
+              input: model.cost.experimentalOver200K.input,
+              output: model.cost.experimentalOver200K.output,
+              cache_read: model.cost.experimentalOver200K.cache.read,
+              cache_write: model.cost.experimentalOver200K.cache.write,
+            },
+          }
+        : {}),
+    },
+    limit: model.limit,
+    modalities: {
+      input: enabledModalities(model.capabilities.input),
+      output: enabledModalities(model.capabilities.output),
+    },
+    ...(model.status === "active" ? {} : { status: model.status }),
+    options: model.options,
+    headers: model.headers,
+    ...(model.variants ? { variants: model.variants } : {}),
+  };
+}
+
+export function parseModelsCliOutput(stdout: string): {
+  readonly providers: ReadonlyMap<
+    string,
+    { readonly id: string; readonly name: string; readonly models: { [key: string]: Model } }
+  >;
+  readonly connected: ReadonlyArray<string>;
+} {
+  const providers = new Map<
+    string,
+    { id: string; name: string; models: { [key: string]: Model } }
+  >();
+  const lines = stdout.split("\n");
+  let currentSlug: string | null = null;
+  const jsonLines: Array<string> = [];
+
+  const flushModel = () => {
+    if (currentSlug !== null && jsonLines.length > 0) {
+      const json = jsonLines.join("\n").trim();
+      if (json.length > 0) {
+        try {
+          const model = JSON.parse(json) as Model;
+          const separator = currentSlug.indexOf("/");
+          if (separator > 0) {
+            const providerID = currentSlug.slice(0, separator);
+            const modelID = currentSlug.slice(separator + 1);
+            let provider = providers.get(providerID);
+            if (!provider) {
+              provider = { id: providerID, name: providerID, models: {} };
+              providers.set(providerID, provider);
+            }
+            provider.models[modelID] = model;
+          }
+        } catch {
+          // Ignore malformed CLI blocks and retain the remaining inventory.
+        }
+      }
+    }
+    currentSlug = null;
+    jsonLines.length = 0;
+  };
+
+  for (const line of lines) {
+    const slugMatch = SLUG_LINE_RE.exec(line);
+    if (slugMatch) {
+      flushModel();
+      currentSlug = slugMatch[1]!;
+    } else if (currentSlug !== null) {
+      jsonLines.push(line);
+    }
+  }
+  flushModel();
+
+  return { providers, connected: [...providers.keys()] };
+}
+
+export function parseAgentListCliOutput(stdout: string): ReadonlyArray<Agent> {
+  const agents: Array<Agent> = [];
+  const lines = stdout.split("\n");
+  let currentHeader: { name: string; mode: string } | null = null;
+  const blockLines: Array<string> = [];
+
+  const flushAgent = () => {
+    if (currentHeader !== null) {
+      const json = blockLines.join("\n").trim();
+      if (json.length > 0) {
+        try {
+          const permission = JSON.parse(json);
+          agents.push({
+            name: currentHeader.name,
+            mode: currentHeader.mode as Agent["mode"],
+            hidden: KNOWN_HIDDEN_AGENTS.has(currentHeader.name),
+            permission,
+            options: {},
+          });
+        } catch {
+          // Ignore malformed CLI blocks and retain the remaining agents.
+        }
+      }
+    }
+    currentHeader = null;
+    blockLines.length = 0;
+  };
+
+  for (const line of lines) {
+    const match = AGENT_HEADER_RE.exec(line);
+    if (match) {
+      flushAgent();
+      currentHeader = { name: match[1]!, mode: match[2]! };
+    } else if (currentHeader !== null) {
+      blockLines.push(line);
+    }
+  }
+  flushAgent();
+
+  return agents;
 }
 
 export function parseOpenCodeModelSlug(
@@ -570,12 +727,77 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
       Effect.map(([providerList, agents]) => ({ providerList, agents })),
     );
 
+  const loadInventoryFromCli: OpenCodeRuntimeShape["loadInventoryFromCli"] = (input) =>
+    Effect.gen(function* () {
+      const environment =
+        input.environment !== undefined ? { environment: input.environment } : ({} as {});
+      const runModels = () =>
+        runOpenCodeCommand({
+          binaryPath: input.binaryPath,
+          args: ["models", "--verbose"],
+          ...environment,
+        }).pipe(Effect.exit);
+      const runAgents = () =>
+        runOpenCodeCommand({
+          binaryPath: input.binaryPath,
+          args: ["agent", "list"],
+          ...environment,
+        }).pipe(Effect.exit);
+
+      let [modelsResult, agentsResult] = yield* Effect.all([runModels(), runAgents()], {
+        concurrency: "unbounded",
+      });
+      const retryModels = Exit.isFailure(modelsResult) || modelsResult.value.code !== 0;
+      const retryAgents = Exit.isFailure(agentsResult) || agentsResult.value.code !== 0;
+      if (retryModels || retryAgents) {
+        yield* Effect.sleep("1 second");
+        [modelsResult, agentsResult] = yield* Effect.all(
+          [
+            retryModels ? runModels() : Effect.succeed(modelsResult),
+            retryAgents ? runAgents() : Effect.succeed(agentsResult),
+          ],
+          { concurrency: "unbounded" },
+        );
+      }
+
+      let connected: string[] = [];
+      let all: ProviderListResponse["all"] = [];
+      if (Exit.isSuccess(modelsResult) && modelsResult.value.code === 0) {
+        const parsed = parseModelsCliOutput(modelsResult.value.stdout);
+        connected = [...parsed.connected];
+        all = [...parsed.providers.values()].map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          source: "config" as const,
+          env: [],
+          options: {},
+          models: Object.fromEntries(
+            Object.entries(provider.models).map(([modelID, model]) => [
+              modelID,
+              toProviderListModel(model),
+            ]),
+          ),
+        }));
+      }
+
+      const agents =
+        Exit.isSuccess(agentsResult) && agentsResult.value.code === 0
+          ? parseAgentListCliOutput(agentsResult.value.stdout)
+          : [];
+
+      return {
+        providerList: { all, default: {}, connected },
+        agents,
+      };
+    });
+
   return {
     startOpenCodeServerProcess,
     connectToOpenCodeServer,
     runOpenCodeCommand,
     createOpenCodeSdkClient,
     loadOpenCodeInventory,
+    loadInventoryFromCli,
   } satisfies OpenCodeRuntimeShape;
 });
 
