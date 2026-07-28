@@ -2110,6 +2110,18 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       },
     };
 
+    // Some real wire subtypes are absent from the pinned SDK union. Consume
+    // roster and UX-only updates intentionally so they do not surface as
+    // spurious warning rows. Typed task lifecycle events remain authoritative.
+    const wireSubtype = message.subtype as string;
+    if (
+      wireSubtype === "background_tasks_changed" ||
+      wireSubtype === "commands_changed" ||
+      wireSubtype === "model_refusal_fallback"
+    ) {
+      return;
+    }
+
     switch (message.subtype) {
       case "init":
         yield* offerRuntimeEvent({
@@ -2221,6 +2233,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           },
         });
         return;
+      // Task state patch (status/backgrounded/end_time). The terminal
+      // task_notification reports the outcome; no separate runtime mapping is
+      // needed yet.
+      case "task_updated":
+        return;
       case "task_notification":
         if (message.usage) {
           const normalizedUsage = normalizeClaudeTokenUsage(
@@ -2274,13 +2291,99 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           },
         });
         return;
-      default:
-        yield* emitRuntimeWarning(
+      case "thinking_tokens":
+        return;
+      case "api_retry":
+        // A retry is a transport heartbeat, not a terminal failure. Keep the
+        // session visibly alive while the result/error path owns final status.
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "runtime.state.changed",
+          payload: {
+            state: "running",
+            reason: `api_retry:${message.attempt}/${message.max_retries}`,
+          },
+        });
+        return;
+      case "session_state_changed":
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "runtime.state.changed",
+          payload: {
+            state:
+              message.state === "running"
+                ? "running"
+                : message.state === "requires_action"
+                  ? "waiting"
+                  : "ready",
+            reason: `session_state:${message.state}`,
+          },
+        });
+        return;
+      case "notification":
+        // Only urgent user-facing CLI notifications warrant a warning row.
+        if (message.priority === "high" || message.priority === "immediate") {
+          yield* emitRuntimeWarning(context, message.text, message);
+        }
+        return;
+      // Inner protocol details with no Lincei surface today.
+      case "local_command_output":
+      case "plugin_install":
+      case "memory_recall":
+      case "elicitation_complete":
+        return;
+      case "permission_denied":
+        {
+          const inFlightToolEntry = Array.from(context.inFlightTools.entries()).find(
+            ([, tool]) => tool.itemId === message.tool_use_id,
+          );
+          const inFlightTool = inFlightToolEntry?.[1];
+          const itemType = inFlightTool?.itemType ?? classifyToolItemType(message.tool_name);
+          const detail = message.decision_reason ?? message.message;
+
+          yield* offerRuntimeEvent({
+            ...base,
+            type: "item.completed",
+            itemId: asRuntimeItemId(message.tool_use_id),
+            payload: {
+              itemType,
+              status: "declined",
+              title: inFlightTool?.title ?? titleForTool(itemType),
+              ...(detail ? { detail } : {}),
+              data: {
+                toolName: message.tool_name,
+                ...(message.agent_id ? { agentId: message.agent_id } : {}),
+              },
+            },
+            providerRefs: nativeProviderRefs(context, {
+              providerItemId: message.tool_use_id,
+            }),
+          });
+
+          if (inFlightToolEntry) {
+            context.inFlightTools.delete(inFlightToolEntry[0]);
+          }
+        }
+        return;
+      case "mirror_error":
+        yield* emitRuntimeError(
           context,
-          `Unhandled Claude system message subtype '${message.subtype}'.`,
+          `Claude workspace mirror error: ${message.error}`,
           message,
         );
         return;
+      default: {
+        // New typed SDK subtypes fail typecheck here. The runtime fallback still
+        // catches wire-only subtypes absent from the pinned SDK declaration.
+        message satisfies never;
+        const unknownMessage = message as never as { subtype: string };
+        yield* emitRuntimeWarning(
+          context,
+          `Unhandled Claude system message subtype '${unknownMessage.subtype}'.`,
+          message,
+        );
+        return;
+      }
     }
   });
 
@@ -2388,13 +2491,21 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       case "rate_limit_event":
         yield* handleSdkTelemetryMessage(context, message);
         return;
-      default:
+      // Composer prompt suggestions have no Lincei surface.
+      case "prompt_suggestion":
+        return;
+      default: {
+        // New typed top-level messages fail typecheck here; retain a runtime
+        // fallback for undeclared wire messages.
+        message satisfies never;
+        const unknownMessage = message as never as { type: string };
         yield* emitRuntimeWarning(
           context,
-          `Unhandled Claude SDK message type '${message.type}'.`,
+          `Unhandled Claude SDK message type '${unknownMessage.type}'.`,
           message,
         );
         return;
+      }
     }
   });
 

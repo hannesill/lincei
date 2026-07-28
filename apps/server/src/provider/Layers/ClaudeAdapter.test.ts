@@ -1569,6 +1569,208 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("handles SDK stream messages without spurious warning rows", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const runtimeEvents: Array<ProviderRuntimeEvent> = [];
+      const runtimeEventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+        Effect.sync(() => runtimeEvents.push(event)),
+      ).pipe(Effect.forkChild);
+
+      yield* adapter.startSession({
+        sessionId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+
+      // Wire-only roster/UX updates and typed protocol details are consumed
+      // without producing unknown-message warning rows.
+      for (const message of [
+        {
+          type: "system",
+          subtype: "background_tasks_changed",
+          tasks: [{ task_id: "t1", task_type: "local_agent", description: "Say hi" }],
+          session_id: "session",
+          uuid: "roster",
+        },
+        {
+          type: "system",
+          subtype: "task_updated",
+          task_id: "t1",
+          patch: { status: "running" },
+          session_id: "session",
+          uuid: "tu",
+        },
+        { type: "system", subtype: "commands_changed", session_id: "session", uuid: "cc" },
+        {
+          type: "system",
+          subtype: "model_refusal_fallback",
+          session_id: "session",
+          uuid: "mrf",
+        },
+        {
+          type: "system",
+          subtype: "local_command_output",
+          content: "local output",
+          session_id: "session",
+          uuid: "lco",
+        },
+        {
+          type: "system",
+          subtype: "plugin_install",
+          status: "completed",
+          session_id: "session",
+          uuid: "pi",
+        },
+        {
+          type: "system",
+          subtype: "memory_recall",
+          memories: [],
+          session_id: "session",
+          uuid: "mr",
+        },
+        {
+          type: "system",
+          subtype: "elicitation_complete",
+          elicitation_id: "elicit-1",
+          session_id: "session",
+          uuid: "ec",
+        },
+        {
+          type: "system",
+          subtype: "thinking_tokens",
+          estimated_tokens: 12,
+          estimated_tokens_delta: 3,
+          session_id: "session",
+          uuid: "tt",
+        },
+        {
+          type: "prompt_suggestion",
+          suggestion: "try this",
+          session_id: "session",
+          uuid: "ps",
+        },
+        {
+          type: "system",
+          subtype: "notification",
+          key: "context",
+          text: "low priority note",
+          priority: "low",
+          session_id: "session",
+          uuid: "notif",
+        },
+      ]) {
+        harness.query.emit(message as unknown as SDKMessage);
+      }
+
+      harness.query.emit({
+        type: "system",
+        subtype: "notification",
+        key: "limit",
+        text: "context window nearly full",
+        priority: "high",
+        session_id: "session",
+        uuid: "notif-high",
+      } as unknown as SDKMessage);
+
+      for (const [state, uuid] of [
+        ["running", "ssc-run"],
+        ["requires_action", "ssc-req"],
+        ["idle", "ssc-idle"],
+      ]) {
+        harness.query.emit({
+          type: "system",
+          subtype: "session_state_changed",
+          state,
+          session_id: "session",
+          uuid,
+        } as unknown as SDKMessage);
+      }
+
+      harness.query.emit({
+        type: "system",
+        subtype: "api_retry",
+        attempt: 3,
+        max_retries: 10,
+        retry_delay_ms: 1_000,
+        error_status: 502,
+        error: { type: "api_error" },
+        session_id: "session",
+        uuid: "retry",
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "system",
+        subtype: "permission_denied",
+        tool_name: "Bash",
+        tool_use_id: "tool-denied",
+        decision_reason: "Blocked by policy",
+        message: "Denied",
+        session_id: "session",
+        uuid: "denied",
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        type: "system",
+        subtype: "mirror_error",
+        error: "transcript write failed",
+        key: { projectKey: "project", sessionId: "session" },
+        session_id: "session",
+        uuid: "mirror",
+      } as unknown as SDKMessage);
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+
+      const warnings = runtimeEvents.filter((event) => event.type === "runtime.warning");
+      assert.deepEqual(
+        warnings.map((event) => event.payload.message),
+        ["context window nearly full"],
+      );
+
+      const sessionStates = runtimeEvents
+        .filter((event) => event.type === "runtime.state.changed")
+        .map((event) =>
+          event.type === "runtime.state.changed"
+            ? `${event.payload.state}:${event.payload.reason ?? ""}`
+            : "",
+        )
+        .filter((entry) => entry.includes("session_state"));
+      assert.deepEqual(sessionStates, [
+        "running:session_state:running",
+        "waiting:session_state:requires_action",
+        "ready:session_state:idle",
+      ]);
+
+      const heartbeat = runtimeEvents.find(
+        (event) =>
+          event.type === "runtime.state.changed" && event.payload.reason?.startsWith("api_retry:"),
+      );
+      assert.equal(heartbeat?.type, "runtime.state.changed");
+
+      const denial = runtimeEvents.find(
+        (event) => event.type === "item.completed" && String(event.itemId) === "tool-denied",
+      );
+      assert.equal(denial?.type, "item.completed");
+      if (denial?.type === "item.completed") {
+        assert.equal(denial.payload.itemType, "command_execution");
+        assert.equal(denial.payload.status, "declined");
+        assert.equal(denial.payload.detail, "Blocked by policy");
+      }
+
+      const mirrorError = runtimeEvents.find(
+        (event) =>
+          event.type === "runtime.error" &&
+          event.payload.message === "Claude workspace mirror error: transcript write failed",
+      );
+      assert.equal(mirrorError?.type, "runtime.error");
+
+      runtimeEventsFiber.interruptUnsafe();
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("emits session token usage updates from Claude task progress", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
