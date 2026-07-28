@@ -96,10 +96,27 @@ it.layer(NodeSqliteClient.layerMemory())("036_RebuildSessionLifecycleProjections
         FROM projection_state
         ORDER BY projector
       `;
+      const sessionColumns = yield* sql<{ readonly name: string }>`
+        PRAGMA table_info(projection_sessions)
+      `;
+      const activityColumns = yield* sql<{ readonly name: string }>`
+        PRAGMA table_info(projection_session_activities)
+      `;
 
       assert.deepStrictEqual(activityCount, [{ count: 0 }]);
       assert.deepStrictEqual(pendingApprovalCount, [{ count: 0 }]);
-      assert.deepStrictEqual(projectorRows, [{ projector: "projection.projects" }]);
+      assert.deepStrictEqual(projectorRows, [
+        { projector: "projection.projects" },
+        { projector: "projection.sessions" },
+      ]);
+      assert.equal(
+        sessionColumns.filter((column) => column.name === "pending_request_raised_at").length,
+        1,
+      );
+      assert.equal(
+        activityColumns.filter((column) => column.name === "event_occurred_at").length,
+        1,
+      );
     }),
   );
 });
@@ -196,6 +213,57 @@ it.layer(RebuildProjectionTestLayer)(
             createdAt: "2026-07-01T12:00:02.000Z",
           },
         });
+        yield* appendAndProject({
+          type: "session.activity-appended",
+          eventId: EventId.make("event-lifecycle-rebuild-newer-requested"),
+          aggregateKind: "session",
+          aggregateId: SessionId.make("session-lifecycle-rebuild"),
+          occurredAt: "2026-07-01T12:00:03.000Z",
+          commandId: CommandId.make("command-lifecycle-rebuild-newer-requested"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("command-lifecycle-rebuild-newer-requested"),
+          metadata: {},
+          payload: {
+            sessionId: SessionId.make("session-lifecycle-rebuild"),
+            activity: {
+              id: EventId.make("activity-lifecycle-rebuild-newer-requested"),
+              tone: "approval",
+              kind: "approval.requested",
+              summary: "Newer approval requested",
+              payload: { requestId: "request-lifecycle-rebuild-newer" },
+              turnId: null,
+              // Provider time is deliberately unrelated. Wake ordering is
+              // anchored to the durable orchestration event timestamp.
+              createdAt: "2030-07-01T12:00:03.000Z",
+            },
+          },
+        });
+        yield* appendAndProject({
+          type: "session.activity-appended",
+          eventId: EventId.make("event-lifecycle-rebuild-newer-resolved"),
+          aggregateKind: "session",
+          aggregateId: SessionId.make("session-lifecycle-rebuild"),
+          occurredAt: "2026-07-01T12:00:04.000Z",
+          commandId: CommandId.make("command-lifecycle-rebuild-newer-resolved"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("command-lifecycle-rebuild-newer-resolved"),
+          metadata: {},
+          payload: {
+            sessionId: SessionId.make("session-lifecycle-rebuild"),
+            activity: {
+              id: EventId.make("activity-lifecycle-rebuild-newer-resolved"),
+              tone: "info",
+              kind: "approval.resolved",
+              summary: "Newer approval resolved",
+              payload: {
+                requestId: "request-lifecycle-rebuild-newer",
+                decision: "accept",
+              },
+              turnId: null,
+              createdAt: "2030-07-01T12:00:04.000Z",
+            },
+          },
+        });
 
         // Reproduce migration-024-style state: response dispatch incorrectly
         // resolved the request and activity ordering used provider sequence.
@@ -221,26 +289,70 @@ it.layer(RebuildProjectionTestLayer)(
           FROM projection_pending_approvals
           WHERE request_id = 'request-lifecycle-rebuild'
         `;
-        const rebuiltActivities = yield* sql<{ readonly sequence: number }>`
-          SELECT sequence
+        const rebuiltActivities = yield* sql<{
+          readonly sequence: number;
+          readonly eventOccurredAt: string | null;
+        }>`
+          SELECT
+            sequence,
+            event_occurred_at AS "eventOccurredAt"
           FROM projection_session_activities
           WHERE activity_id = 'activity-lifecycle-rebuild-requested'
         `;
-        const rebuiltSessions = yield* sql<{ readonly pendingApprovalCount: number }>`
-          SELECT pending_approval_count AS "pendingApprovalCount"
+        const rebuiltSessions = yield* sql<{
+          readonly pendingApprovalCount: number;
+          readonly pendingRequestRaisedAt: string | null;
+        }>`
+          SELECT
+            pending_approval_count AS "pendingApprovalCount",
+            pending_request_raised_at AS "pendingRequestRaisedAt"
           FROM projection_sessions
           WHERE session_id = 'session-lifecycle-rebuild'
         `;
+        const lifecycleState = yield* sql<{
+          readonly projector: string;
+          readonly lastAppliedSequence: number;
+        }>`
+          SELECT
+            projector,
+            last_applied_sequence AS "lastAppliedSequence"
+          FROM projection_state
+          WHERE projector IN (
+            'projection.sessions',
+            'projection.session-lifecycle-summary-v36'
+          )
+          ORDER BY projector
+        `;
         assert.deepStrictEqual(rebuiltApprovals, [{ status: "pending", resolvedAt: null }]);
-        assert.deepStrictEqual(rebuiltActivities, [{ sequence: requestedEvent.sequence }]);
-        assert.deepStrictEqual(rebuiltSessions, [{ pendingApprovalCount: 1 }]);
+        assert.deepStrictEqual(rebuiltActivities, [
+          {
+            sequence: requestedEvent.sequence,
+            eventOccurredAt: "2026-07-01T12:00:01.000Z",
+          },
+        ]);
+        assert.deepStrictEqual(rebuiltSessions, [
+          {
+            pendingApprovalCount: 1,
+            pendingRequestRaisedAt: "2026-07-01T12:00:01.000Z",
+          },
+        ]);
+        assert.deepStrictEqual(lifecycleState, [
+          {
+            projector: "projection.session-lifecycle-summary-v36",
+            lastAppliedSequence: 5,
+          },
+          {
+            projector: "projection.sessions",
+            lastAppliedSequence: 5,
+          },
+        ]);
 
         yield* appendAndProject({
           type: "session.activity-appended",
           eventId: EventId.make("event-lifecycle-rebuild-resolved"),
           aggregateKind: "session",
           aggregateId: SessionId.make("session-lifecycle-rebuild"),
-          occurredAt: "2026-07-01T12:00:03.000Z",
+          occurredAt: "2026-07-01T12:00:05.000Z",
           commandId: CommandId.make("command-lifecycle-rebuild-resolved"),
           causationEventId: null,
           correlationId: CorrelationId.make("command-lifecycle-rebuild-resolved"),
@@ -257,7 +369,7 @@ it.layer(RebuildProjectionTestLayer)(
                 decision: "accept",
               },
               turnId: null,
-              createdAt: "2026-07-01T12:00:03.000Z",
+              createdAt: "2026-07-01T12:00:05.000Z",
             },
           },
         });
@@ -270,15 +382,22 @@ it.layer(RebuildProjectionTestLayer)(
           FROM projection_pending_approvals
           WHERE request_id = 'request-lifecycle-rebuild'
         `;
-        const confirmedSessions = yield* sql<{ readonly pendingApprovalCount: number }>`
-          SELECT pending_approval_count AS "pendingApprovalCount"
+        const confirmedSessions = yield* sql<{
+          readonly pendingApprovalCount: number;
+          readonly pendingRequestRaisedAt: string | null;
+        }>`
+          SELECT
+            pending_approval_count AS "pendingApprovalCount",
+            pending_request_raised_at AS "pendingRequestRaisedAt"
           FROM projection_sessions
           WHERE session_id = 'session-lifecycle-rebuild'
         `;
         assert.deepStrictEqual(confirmedApprovals, [
-          { status: "resolved", resolvedAt: "2026-07-01T12:00:03.000Z" },
+          { status: "resolved", resolvedAt: "2026-07-01T12:00:05.000Z" },
         ]);
-        assert.deepStrictEqual(confirmedSessions, [{ pendingApprovalCount: 0 }]);
+        assert.deepStrictEqual(confirmedSessions, [
+          { pendingApprovalCount: 0, pendingRequestRaisedAt: null },
+        ]);
       }),
     );
   },

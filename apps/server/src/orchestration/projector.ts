@@ -288,6 +288,7 @@ export function projectEvent(
             latestUserMessageAt: null,
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
+            pendingRequestRaisedAt: null,
             deletedAt: null,
             messages: [],
             activities: [],
@@ -769,12 +770,17 @@ export function projectEvent(
                   {
                     pendingApprovalCount: session.pendingApprovalCount ?? 0,
                     pendingUserInputCount: session.pendingUserInputCount ?? 0,
+                    pendingRequestRaisedAt: session.pendingRequestRaisedAt ?? null,
                   },
-                  activity,
+                  {
+                    ...activity,
+                    eventOccurredAt: event.occurredAt,
+                  },
                 )
               : {
                   pendingApprovalCount: session.pendingApprovalCount ?? 0,
                   pendingUserInputCount: session.pendingUserInputCount ?? 0,
+                  pendingRequestRaisedAt: session.pendingRequestRaisedAt ?? null,
                 };
 
           return {

@@ -45,6 +45,7 @@ export const ProjectionSession = Schema.Struct({
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   pendingApprovalCount: NonNegativeInt,
   pendingUserInputCount: NonNegativeInt,
+  pendingRequestRaisedAt: Schema.NullOr(IsoDateTime),
   hasActionableProposedPlan: NonNegativeInt,
   deletedAt: Schema.NullOr(IsoDateTime),
 });
@@ -91,6 +92,14 @@ export interface ProjectionSessionRepositoryShape {
   readonly listByProjectId: (
     input: ListProjectionSessionsByProjectInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionSession>, ProjectionRepositoryError>;
+
+  /**
+   * List every projected session in deterministic creation order.
+   */
+  readonly listAll: () => Effect.Effect<
+    ReadonlyArray<ProjectionSession>,
+    ProjectionRepositoryError
+  >;
 
   /**
    * Soft-delete a projected session row by id.

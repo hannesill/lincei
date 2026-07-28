@@ -368,6 +368,7 @@ export const OrchestrationSession = Schema.Struct({
   latestUserMessageAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
   pendingApprovalCount: Schema.optionalKey(NonNegativeInt),
   pendingUserInputCount: Schema.optionalKey(NonNegativeInt),
+  pendingRequestRaisedAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -430,6 +431,7 @@ export const OrchestrationSessionShell = Schema.Struct({
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   hasPendingApprovals: Schema.Boolean,
   hasPendingUserInput: Schema.Boolean,
+  pendingRequestRaisedAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
   hasActionableProposedPlan: Schema.Boolean,
 });
 export type OrchestrationSessionShell = typeof OrchestrationSessionShell.Type;
@@ -565,9 +567,46 @@ const SessionUnsettleCommand = Schema.Struct({
   reason: Schema.Literal("user"),
 });
 
-export const SessionSnoozeUntil = IsoDateTime.check(
-  Schema.isMaxLength(24),
-  Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+const SESSION_SNOOZE_UNTIL_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const INVALID_SESSION_SNOOZE_UNTIL = "<invalid-snooze-until>";
+
+function isCanonicalSessionSnoozeUntil(value: unknown): value is string {
+  return (
+    typeof value === "string" && value.length <= 24 && SESSION_SNOOZE_UNTIL_PATTERN.test(value)
+  );
+}
+
+function sanitizeSessionSnoozeCommand(value: unknown): unknown {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    (value as { readonly type?: unknown }).type !== "session.snooze"
+  ) {
+    return value;
+  }
+  const command = value as Record<string, unknown>;
+  return isCanonicalSessionSnoozeUntil(command.snoozedUntil)
+    ? value
+    : {
+        ...command,
+        snoozedUntil: INVALID_SESSION_SNOOZE_UNTIL,
+      };
+}
+
+export const SessionSnoozeUntil = Schema.redact(
+  Schema.Unknown.pipe(
+    Schema.decodeTo(
+      IsoDateTime.check(Schema.isMaxLength(24), Schema.isPattern(SESSION_SNOOZE_UNTIL_PATTERN)),
+      SchemaTransformation.transformOrFail({
+        decode: (value) =>
+          Effect.succeed(
+            isCanonicalSessionSnoozeUntil(value) ? value : INVALID_SESSION_SNOOZE_UNTIL,
+          ),
+        encode: (value) => Effect.succeed(value),
+      }),
+    ),
+  ),
 );
 
 const SessionSnoozeCommand = Schema.Struct({
@@ -756,7 +795,7 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
 
-export const ClientOrchestrationCommand = Schema.Union([
+const ClientOrchestrationCommandSchema = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
@@ -778,6 +817,20 @@ export const ClientOrchestrationCommand = Schema.Union([
   SessionCheckpointRevertCommand,
   ProviderRuntimeStopCommand,
 ]);
+export const ClientOrchestrationCommand = Schema.redact(
+  Schema.Unknown.pipe(
+    Schema.decodeTo(
+      ClientOrchestrationCommandSchema,
+      SchemaTransformation.transformOrFail({
+        decode: (value) =>
+          Effect.succeed(
+            sanitizeSessionSnoozeCommand(value) as typeof ClientOrchestrationCommandSchema.Encoded,
+          ),
+        encode: (value) => Effect.succeed(value),
+      }),
+    ),
+  ),
+);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
 const ProviderRuntimeSetCommand = Schema.Struct({
@@ -870,10 +923,24 @@ const InternalOrchestrationCommand = Schema.Union([
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
-export const OrchestrationCommand = Schema.Union([
+const OrchestrationCommandSchema = Schema.Union([
   DispatchableClientOrchestrationCommand,
   InternalOrchestrationCommand,
 ]);
+export const OrchestrationCommand = Schema.redact(
+  Schema.Unknown.pipe(
+    Schema.decodeTo(
+      OrchestrationCommandSchema,
+      SchemaTransformation.transformOrFail({
+        decode: (value) =>
+          Effect.succeed(
+            sanitizeSessionSnoozeCommand(value) as typeof OrchestrationCommandSchema.Encoded,
+          ),
+        encode: (value) => Effect.succeed(value),
+      }),
+    ),
+  ),
+);
 export type OrchestrationCommand = typeof OrchestrationCommand.Type;
 
 export const OrchestrationEventType = Schema.Literals([

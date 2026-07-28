@@ -342,6 +342,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_sessions
@@ -376,6 +377,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_sessions
@@ -412,6 +414,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_sessions
@@ -474,6 +477,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           summary,
           payload_json AS "payload",
           sequence,
+          event_occurred_at AS "eventOccurredAt",
           created_at AS "createdAt"
         FROM projection_session_activities
         ORDER BY
@@ -777,6 +781,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
+          pending_request_raised_at AS "pendingRequestRaisedAt",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_sessions
@@ -842,6 +847,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           summary,
           payload_json AS "payload",
           sequence,
+          event_occurred_at AS "eventOccurredAt",
           created_at AS "createdAt"
         FROM projection_session_activities
         WHERE session_id = ${sessionId}
@@ -1215,6 +1221,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 latestUserMessageAt: row.latestUserMessageAt,
                 pendingApprovalCount: row.pendingApprovalCount,
                 pendingUserInputCount: row.pendingUserInputCount,
+                pendingRequestRaisedAt: row.pendingRequestRaisedAt,
                 deletedAt: row.deletedAt,
                 messages: messagesBySession.get(row.sessionId) ?? [],
                 proposedPlans: proposedPlansBySession.get(row.sessionId) ?? [],
@@ -1429,6 +1436,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   latestUserMessageAt: row.latestUserMessageAt,
                   pendingApprovalCount: row.pendingApprovalCount,
                   pendingUserInputCount: row.pendingUserInputCount,
+                  pendingRequestRaisedAt: row.pendingRequestRaisedAt,
                   deletedAt: row.deletedAt,
                   messages: [],
                   proposedPlans: proposedPlansBySession.get(row.sessionId) ?? [],
@@ -1570,6 +1578,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                         latestUserMessageAt: row.latestUserMessageAt,
                         hasPendingApprovals: row.pendingApprovalCount > 0,
                         hasPendingUserInput: row.pendingUserInputCount > 0,
+                        pendingRequestRaisedAt: row.pendingRequestRaisedAt,
                         hasActionableProposedPlan: row.hasActionableProposedPlan > 0,
                       } satisfies OrchestrationSessionShell)
                     : Result.failVoid,
@@ -1711,6 +1720,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     latestUserMessageAt: row.latestUserMessageAt,
                     hasPendingApprovals: row.pendingApprovalCount > 0,
                     hasPendingUserInput: row.pendingUserInputCount > 0,
+                    pendingRequestRaisedAt: row.pendingRequestRaisedAt,
                     hasActionableProposedPlan: row.hasActionableProposedPlan > 0,
                   }),
                 ),
@@ -1957,6 +1967,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         latestUserMessageAt: sessionRow.value.latestUserMessageAt,
         hasPendingApprovals: sessionRow.value.pendingApprovalCount > 0,
         hasPendingUserInput: sessionRow.value.pendingUserInputCount > 0,
+        pendingRequestRaisedAt: sessionRow.value.pendingRequestRaisedAt,
         hasActionableProposedPlan: sessionRow.value.hasActionableProposedPlan > 0,
       } satisfies OrchestrationSessionShell);
     });
@@ -2056,6 +2067,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         latestUserMessageAt: sessionRow.value.latestUserMessageAt,
         pendingApprovalCount: sessionRow.value.pendingApprovalCount,
         pendingUserInputCount: sessionRow.value.pendingUserInputCount,
+        pendingRequestRaisedAt: sessionRow.value.pendingRequestRaisedAt,
         deletedAt: null,
         messages: messageRows.map((row) => {
           const message = {

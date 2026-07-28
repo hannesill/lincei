@@ -98,6 +98,7 @@ describe("orchestration projector", () => {
         latestUserMessageAt: null,
         pendingApprovalCount: 0,
         pendingUserInputCount: 0,
+        pendingRequestRaisedAt: null,
         deletedAt: null,
         messages: [],
         proposedPlans: [],

@@ -18,6 +18,7 @@ export interface SessionLifecycleShell {
   readonly session: SessionLifecycleRuntime | null;
   readonly hasPendingApprovals: boolean;
   readonly hasPendingUserInput: boolean;
+  readonly pendingRequestRaisedAt?: string | null;
   readonly settledOverride: "settled" | "active" | null;
   readonly settledAt: string | null;
   readonly snoozedUntil: string | null;
@@ -108,6 +109,7 @@ export type SessionSnoozeShell = Pick<
   | "snoozedAt"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
+  | "pendingRequestRaisedAt"
   | "session"
   | "latestTurn"
 >;
@@ -171,7 +173,7 @@ export function sessionWokeAt(
   }
   if (sessionRaisedHandWhileSnoozed(shell)) {
     if (shell.hasPendingApprovals || shell.hasPendingUserInput) {
-      return shell.updatedAt;
+      return shell.pendingRequestRaisedAt ?? shell.snoozedAt;
     }
     if (
       shell.snoozedAt !== null &&

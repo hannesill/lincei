@@ -33,11 +33,14 @@ export function isStalePendingUserInputFailureDetail(detail: string | null): boo
 interface RequestLifecycleActivity {
   readonly kind: string;
   readonly payload: unknown;
+  readonly createdAt?: string;
+  readonly eventOccurredAt?: string | null;
 }
 
 export interface PendingRequestCounts {
   readonly pendingApprovalCount: number;
   readonly pendingUserInputCount: number;
+  readonly pendingRequestRaisedAt: string | null;
 }
 
 export function extractLifecycleRequestId(payload: unknown): string | null {
@@ -63,8 +66,8 @@ function extractFailureDetail(payload: unknown): string | null {
 export function derivePendingRequestCounts(
   activities: ReadonlyArray<RequestLifecycleActivity>,
 ): PendingRequestCounts {
-  const pendingApprovalIds = new Set<string>();
-  const pendingUserInputIds = new Set<string>();
+  const pendingApprovalIds = new Map<string, string | null>();
+  const pendingUserInputIds = new Map<string, string | null>();
 
   for (const activity of activities) {
     const requestId = extractLifecycleRequestId(activity.payload);
@@ -73,9 +76,10 @@ export function derivePendingRequestCounts(
     }
 
     const detail = extractFailureDetail(activity.payload);
+    const raisedAt = activity.eventOccurredAt ?? activity.createdAt ?? null;
     switch (activity.kind) {
       case "approval.requested":
-        pendingApprovalIds.add(requestId);
+        pendingApprovalIds.set(requestId, raisedAt);
         break;
       case "approval.resolved":
         pendingApprovalIds.delete(requestId);
@@ -86,7 +90,7 @@ export function derivePendingRequestCounts(
         }
         break;
       case "user-input.requested":
-        pendingUserInputIds.add(requestId);
+        pendingUserInputIds.set(requestId, raisedAt);
         break;
       case "user-input.resolved":
         pendingUserInputIds.delete(requestId);
@@ -99,9 +103,19 @@ export function derivePendingRequestCounts(
     }
   }
 
+  const pendingRequestRaisedAt = [
+    ...pendingApprovalIds.values(),
+    ...pendingUserInputIds.values(),
+  ].reduce<string | null>(
+    (latest, raisedAt) =>
+      raisedAt !== null && (latest === null || raisedAt > latest) ? raisedAt : latest,
+    null,
+  );
+
   return {
     pendingApprovalCount: pendingApprovalIds.size,
     pendingUserInputCount: pendingUserInputIds.size,
+    pendingRequestRaisedAt,
   };
 }
 
@@ -118,42 +132,82 @@ export function advancePendingRequestCounts(
     return counts;
   }
   const detail = extractFailureDetail(activity.payload);
+  const raisedAt = activity.eventOccurredAt ?? activity.createdAt ?? null;
+  const latestRaisedAt =
+    raisedAt !== null &&
+    (counts.pendingRequestRaisedAt === null || raisedAt > counts.pendingRequestRaisedAt)
+      ? raisedAt
+      : counts.pendingRequestRaisedAt;
+  const clearRaisedAtIfResolved = (pendingApprovalCount: number, pendingUserInputCount: number) =>
+    pendingApprovalCount === 0 && pendingUserInputCount === 0
+      ? null
+      : counts.pendingRequestRaisedAt;
 
   switch (activity.kind) {
     case "approval.requested":
       return {
         ...counts,
         pendingApprovalCount: counts.pendingApprovalCount + 1,
+        pendingRequestRaisedAt: latestRaisedAt,
       };
-    case "approval.resolved":
+    case "approval.resolved": {
+      const pendingApprovalCount = Math.max(0, counts.pendingApprovalCount - 1);
       return {
         ...counts,
-        pendingApprovalCount: Math.max(0, counts.pendingApprovalCount - 1),
+        pendingApprovalCount,
+        pendingRequestRaisedAt: clearRaisedAtIfResolved(
+          pendingApprovalCount,
+          counts.pendingUserInputCount,
+        ),
       };
+    }
     case "provider.approval.respond.failed":
-      return isStalePendingApprovalFailureDetail(detail)
-        ? {
-            ...counts,
-            pendingApprovalCount: Math.max(0, counts.pendingApprovalCount - 1),
-          }
-        : counts;
+      if (!isStalePendingApprovalFailureDetail(detail)) {
+        return counts;
+      }
+      {
+        const pendingApprovalCount = Math.max(0, counts.pendingApprovalCount - 1);
+        return {
+          ...counts,
+          pendingApprovalCount,
+          pendingRequestRaisedAt: clearRaisedAtIfResolved(
+            pendingApprovalCount,
+            counts.pendingUserInputCount,
+          ),
+        };
+      }
     case "user-input.requested":
       return {
         ...counts,
         pendingUserInputCount: counts.pendingUserInputCount + 1,
+        pendingRequestRaisedAt: latestRaisedAt,
       };
-    case "user-input.resolved":
+    case "user-input.resolved": {
+      const pendingUserInputCount = Math.max(0, counts.pendingUserInputCount - 1);
       return {
         ...counts,
-        pendingUserInputCount: Math.max(0, counts.pendingUserInputCount - 1),
+        pendingUserInputCount,
+        pendingRequestRaisedAt: clearRaisedAtIfResolved(
+          counts.pendingApprovalCount,
+          pendingUserInputCount,
+        ),
       };
+    }
     case "provider.user-input.respond.failed":
-      return isStalePendingUserInputFailureDetail(detail)
-        ? {
-            ...counts,
-            pendingUserInputCount: Math.max(0, counts.pendingUserInputCount - 1),
-          }
-        : counts;
+      if (!isStalePendingUserInputFailureDetail(detail)) {
+        return counts;
+      }
+      {
+        const pendingUserInputCount = Math.max(0, counts.pendingUserInputCount - 1);
+        return {
+          ...counts,
+          pendingUserInputCount,
+          pendingRequestRaisedAt: clearRaisedAtIfResolved(
+            counts.pendingApprovalCount,
+            pendingUserInputCount,
+          ),
+        };
+      }
     default:
       return counts;
   }

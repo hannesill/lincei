@@ -46,6 +46,7 @@ const makeProjectionSessionActivityRepository = Effect.gen(function* () {
               summary,
               payload_json,
               sequence,
+              event_occurred_at,
               created_at
             )
             VALUES (
@@ -57,6 +58,7 @@ const makeProjectionSessionActivityRepository = Effect.gen(function* () {
               ${row.summary},
               ${JSON.stringify(row.payload)},
               ${row.sequence ?? null},
+              ${row.eventOccurredAt},
               ${row.createdAt}
             )
             ON CONFLICT (activity_id)
@@ -68,6 +70,7 @@ const makeProjectionSessionActivityRepository = Effect.gen(function* () {
               summary = excluded.summary,
               payload_json = excluded.payload_json,
               sequence = excluded.sequence,
+              event_occurred_at = excluded.event_occurred_at,
               created_at = excluded.created_at
           `,
   });
@@ -86,6 +89,7 @@ const makeProjectionSessionActivityRepository = Effect.gen(function* () {
           summary,
           payload_json AS "payload",
           sequence,
+          event_occurred_at AS "eventOccurredAt",
           created_at AS "createdAt"
         FROM projection_session_activities
         WHERE session_id = ${sessionId}
@@ -134,6 +138,7 @@ const makeProjectionSessionActivityRepository = Effect.gen(function* () {
           summary: row.summary,
           payload: row.payload,
           ...(row.sequence !== null ? { sequence: row.sequence } : {}),
+          eventOccurredAt: row.eventOccurredAt,
           createdAt: row.createdAt,
         })),
       ),

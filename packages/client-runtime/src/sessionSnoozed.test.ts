@@ -19,6 +19,7 @@ function makeShell(input: {
   readonly snoozedAt?: string | null;
   readonly sessionStatus?: "starting" | "running" | "ready" | "error";
   readonly pending?: "approval" | "user-input";
+  readonly pendingRequestRaisedAt?: string | null;
   readonly turnCompletedAt?: string | null;
   readonly updatedAt?: string;
 }): SessionSnoozeShell {
@@ -30,6 +31,7 @@ function makeShell(input: {
       (input.snoozedUntil === undefined || input.snoozedUntil === null ? null : SNOOZED_AT),
     hasPendingApprovals: input.pending === "approval",
     hasPendingUserInput: input.pending === "user-input",
+    pendingRequestRaisedAt: input.pendingRequestRaisedAt ?? null,
     session:
       input.sessionStatus === undefined
         ? null
@@ -242,12 +244,33 @@ describe("sessionWokeAt", () => {
       snoozedUntil: FUTURE_WAKE,
       pending: "approval",
       sessionStatus: "ready",
-      updatedAt: "2026-04-10T10:15:00.000Z",
+      pendingRequestRaisedAt: "2026-04-10T10:15:00.000Z",
+      updatedAt: "2026-04-10T11:45:00.000Z",
     });
 
     expect(sessionWokeAt(pendingShell, { now: NOW })).toBe("2026-04-10T10:15:00.000Z");
     expect(sessionWokeAt(pendingShell, { now: "2026-04-10T13:00:00.000Z" })).toBe(
       "2026-04-10T10:15:00.000Z",
     );
+  });
+
+  it("uses the stable snooze timestamp for legacy shells without a request timestamp", () => {
+    const pendingShell = makeShell({
+      snoozedUntil: FUTURE_WAKE,
+      pending: "approval",
+      pendingRequestRaisedAt: null,
+      updatedAt: "2026-04-10T11:45:00.000Z",
+    });
+
+    expect(sessionWokeAt(pendingShell, { now: NOW })).toBe(SNOOZED_AT);
+    expect(
+      sessionWokeAt(
+        {
+          ...pendingShell,
+          updatedAt: "2026-04-10T13:45:00.000Z",
+        },
+        { now: "2026-04-10T14:00:00.000Z" },
+      ),
+    ).toBe(SNOOZED_AT);
   });
 });

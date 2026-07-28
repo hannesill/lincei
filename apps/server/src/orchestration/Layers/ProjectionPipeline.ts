@@ -75,6 +75,8 @@ export const ORCHESTRATION_PROJECTOR_NAMES = {
   pendingApprovals: "projection.pending-approvals",
 } as const;
 
+export const SESSION_LIFECYCLE_SUMMARY_MARKER = "projection.session-lifecycle-summary-v36" as const;
+
 type ProjectorName =
   (typeof ORCHESTRATION_PROJECTOR_NAMES)[keyof typeof ORCHESTRATION_PROJECTOR_NAMES];
 
@@ -503,7 +505,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         }
       }
 
-      const { pendingApprovalCount, pendingUserInputCount } =
+      const { pendingApprovalCount, pendingUserInputCount, pendingRequestRaisedAt } =
         derivePendingRequestCounts(activities);
       const hasActionableProposedPlan = deriveHasActionableProposedPlan({
         latestTurnId: existingRow.value.latestTurnId,
@@ -515,6 +517,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         latestUserMessageAt,
         pendingApprovalCount,
         pendingUserInputCount,
+        pendingRequestRaisedAt,
         hasActionableProposedPlan: hasActionableProposedPlan ? 1 : 0,
       });
     });
@@ -570,6 +573,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             latestUserMessageAt: null,
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
+            pendingRequestRaisedAt: null,
             hasActionableProposedPlan: 0,
             deletedAt: null,
           });
@@ -996,6 +1000,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             summary: event.payload.activity.summary,
             payload: event.payload.activity.payload,
             sequence: event.sequence,
+            eventOccurredAt: event.occurredAt,
             createdAt: event.payload.activity.createdAt,
           });
           return;
@@ -1543,10 +1548,27 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           ),
         );
 
+    const advanceSessionLifecycleSummaryMarker = Effect.fn("advanceSessionLifecycleSummaryMarker")(
+      function* (lastAppliedSequence: number, updatedAt: string) {
+        const marker = yield* projectionStateRepository.getByProjector({
+          projector: SESSION_LIFECYCLE_SUMMARY_MARKER,
+        });
+        if (Option.isNone(marker)) {
+          return;
+        }
+        yield* projectionStateRepository.upsert({
+          projector: SESSION_LIFECYCLE_SUMMARY_MARKER,
+          lastAppliedSequence,
+          updatedAt,
+        });
+      },
+    );
+
     const projectEvent: OrchestrationProjectionPipelineShape["projectEvent"] = (event) =>
       Effect.forEach(projectors, (projector) => runProjectorForEvent(projector, event), {
         concurrency: 1,
       }).pipe(
+        Effect.andThen(advanceSessionLifecycleSummaryMarker(event.sequence, event.occurredAt)),
         Effect.flatMap(() => {
           if (event.aggregateKind !== "session") {
             return Effect.succeed(null);
@@ -1562,6 +1584,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                     latestUserMessageAt: row.latestUserMessageAt,
                     pendingApprovalCount: row.pendingApprovalCount,
                     pendingUserInputCount: row.pendingUserInputCount,
+                    pendingRequestRaisedAt: row.pendingRequestRaisedAt,
                   }),
                 }),
               ),
@@ -1575,11 +1598,67 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         ),
       );
 
+    const rebuildSessionLifecycleSummaries = Effect.fn("rebuildSessionLifecycleSummaries")(
+      function* () {
+        const marker = yield* projectionStateRepository.getByProjector({
+          projector: SESSION_LIFECYCLE_SUMMARY_MARKER,
+        });
+        const activityState = yield* projectionStateRepository.getByProjector({
+          projector: ORCHESTRATION_PROJECTOR_NAMES.sessionActivities,
+        });
+        if (Option.isSome(marker)) {
+          if (
+            Option.isSome(activityState) &&
+            marker.value.lastAppliedSequence !== activityState.value.lastAppliedSequence
+          ) {
+            yield* projectionStateRepository.upsert({
+              projector: SESSION_LIFECYCLE_SUMMARY_MARKER,
+              lastAppliedSequence: activityState.value.lastAppliedSequence,
+              updatedAt: activityState.value.updatedAt,
+            });
+          }
+          return;
+        }
+
+        const sessionRows = yield* projectionSessionRepository.listAll();
+        yield* sql.withTransaction(
+          Effect.gen(function* () {
+            yield* Effect.forEach(
+              sessionRows,
+              (sessionRow) =>
+                projectionSessionActivityRepository
+                  .listBySessionId({ sessionId: sessionRow.sessionId })
+                  .pipe(
+                    Effect.flatMap((activities) =>
+                      projectionSessionRepository.upsert({
+                        ...sessionRow,
+                        ...derivePendingRequestCounts(activities),
+                      }),
+                    ),
+                  ),
+              { concurrency: 1 },
+            );
+
+            yield* projectionStateRepository.upsert({
+              projector: SESSION_LIFECYCLE_SUMMARY_MARKER,
+              lastAppliedSequence: Option.isSome(activityState)
+                ? activityState.value.lastAppliedSequence
+                : 0,
+              updatedAt: Option.isSome(activityState)
+                ? activityState.value.updatedAt
+                : "1970-01-01T00:00:00.000Z",
+            });
+          }),
+        );
+      },
+    );
+
     const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.forEach(
       projectors,
       bootstrapProjector,
       { concurrency: 1 },
     ).pipe(
+      Effect.andThen(rebuildSessionLifecycleSummaries()),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
       Effect.provideService(ServerConfig, serverConfig),
