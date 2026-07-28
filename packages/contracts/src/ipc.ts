@@ -374,14 +374,31 @@ const SupportedRemoteWebSocketBaseUrlSchema = Schema.String.check(
   }),
 );
 
-export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
+const PersistedSavedEnvironmentRecordMetadataFields = {
   environmentId: EnvironmentId,
   label: Schema.String,
-  wsBaseUrl: SupportedRemoteWebSocketBaseUrlSchema,
-  httpBaseUrl: SupportedRemoteHttpBaseUrlSchema,
   createdAt: Schema.String,
   lastConnectedAt: Schema.NullOr(Schema.String),
   desktopSsh: Schema.optionalKey(DesktopSshEnvironmentTargetSchema),
+};
+
+/**
+ * Read-only compatibility shape for records written before remote target
+ * validation was introduced. Callers must validate with
+ * PersistedSavedEnvironmentRecordSchema before storing or connecting.
+ */
+export const LegacyPersistedSavedEnvironmentRecordSchema = Schema.Struct({
+  ...PersistedSavedEnvironmentRecordMetadataFields,
+  wsBaseUrl: Schema.String,
+  httpBaseUrl: Schema.String,
+});
+export type LegacyPersistedSavedEnvironmentRecord =
+  typeof LegacyPersistedSavedEnvironmentRecordSchema.Type;
+
+export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
+  ...PersistedSavedEnvironmentRecordMetadataFields,
+  wsBaseUrl: SupportedRemoteWebSocketBaseUrlSchema,
+  httpBaseUrl: SupportedRemoteHttpBaseUrlSchema,
 }).check(
   Schema.makeFilter((record) => {
     try {
@@ -480,7 +497,7 @@ export interface DesktopBridge {
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
-  getSavedEnvironmentRegistry: () => Promise<readonly PersistedSavedEnvironmentRecord[]>;
+  getSavedEnvironmentRegistry: () => Promise<readonly LegacyPersistedSavedEnvironmentRecord[]>;
   setSavedEnvironmentRegistry: (
     records: readonly PersistedSavedEnvironmentRecord[],
   ) => Promise<void>;
@@ -565,7 +582,7 @@ export interface LocalApi {
   persistence: {
     getClientSettings: () => Promise<ClientSettings | null>;
     setClientSettings: (settings: ClientSettings) => Promise<void>;
-    getSavedEnvironmentRegistry: () => Promise<readonly PersistedSavedEnvironmentRecord[]>;
+    getSavedEnvironmentRegistry: () => Promise<readonly LegacyPersistedSavedEnvironmentRecord[]>;
     setSavedEnvironmentRegistry: (
       records: readonly PersistedSavedEnvironmentRecord[],
     ) => Promise<void>;

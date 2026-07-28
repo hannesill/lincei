@@ -1,4 +1,8 @@
-import { EnvironmentId, type PersistedSavedEnvironmentRecord } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  type LegacyPersistedSavedEnvironmentRecord,
+  type PersistedSavedEnvironmentRecord,
+} from "@t3tools/contracts";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -21,7 +25,7 @@ type PersistedSavedEnvironmentDesktopSsh = NonNullable<
 >;
 
 interface PersistedSavedEnvironmentStorageRecord extends Omit<
-  PersistedSavedEnvironmentRecord,
+  LegacyPersistedSavedEnvironmentRecord,
   "desktopSsh"
 > {
   readonly desktopSsh?: PersistedSavedEnvironmentDesktopSsh;
@@ -102,7 +106,7 @@ export type DesktopSavedEnvironmentsSetSecretError =
   | ElectronSafeStorage.ElectronSafeStorageEncryptError;
 
 export interface DesktopSavedEnvironmentsShape {
-  readonly getRegistry: Effect.Effect<readonly PersistedSavedEnvironmentRecord[]>;
+  readonly getRegistry: Effect.Effect<readonly LegacyPersistedSavedEnvironmentRecord[]>;
   readonly setRegistry: (
     records: readonly PersistedSavedEnvironmentRecord[],
   ) => Effect.Effect<void, DesktopSavedEnvironmentsWriteError>;
@@ -125,7 +129,7 @@ export class DesktopSavedEnvironments extends Context.Service<
 
 function toPersistedSavedEnvironmentRecord(
   record: PersistedSavedEnvironmentStorageRecord,
-): PersistedSavedEnvironmentRecord {
+): LegacyPersistedSavedEnvironmentRecord {
   const nextRecord = {
     environmentId: record.environmentId,
     label: record.label,

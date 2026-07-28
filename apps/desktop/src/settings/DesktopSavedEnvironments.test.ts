@@ -10,6 +10,10 @@ import * as Schema from "effect/Schema";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
+import {
+  getSavedEnvironmentRegistry,
+  setSavedEnvironmentRegistry,
+} from "../ipc/methods/savedEnvironments.ts";
 import * as DesktopSavedEnvironments from "./DesktopSavedEnvironments.ts";
 
 const textDecoder = new TextDecoder();
@@ -35,6 +39,9 @@ const SavedEnvironmentRegistryDocumentProbe = Schema.Struct({
   records: Schema.Array(Schema.Unknown),
 });
 const decodeSavedEnvironmentRegistryDocumentProbe = Schema.decodeEffect(
+  Schema.fromJsonString(SavedEnvironmentRegistryDocumentProbe),
+);
+const encodeSavedEnvironmentRegistryDocumentProbe = Schema.encodeEffect(
   Schema.fromJsonString(SavedEnvironmentRegistryDocumentProbe),
 );
 
@@ -190,6 +197,62 @@ describe("DesktopSavedEnvironments", () => {
         );
 
         assert.deepEqual(yield* savedEnvironments.getRegistry, [savedRegistryRecord]);
+      }),
+    ),
+  );
+
+  it.effect("migrates legacy targets across desktop IPC without dropping valid secrets", () =>
+    withSavedEnvironments(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const invalidEnvironmentId = EnvironmentId.make("environment-invalid");
+        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.writeFileString(
+          environment.savedEnvironmentRegistryPath,
+          yield* encodeSavedEnvironmentRegistryDocumentProbe({
+            version: 1,
+            records: [
+              {
+                ...savedRegistryRecord,
+                encryptedBearerToken: "encrypted-valid-token",
+              },
+              {
+                environmentId: invalidEnvironmentId,
+                label: "Unsupported legacy remote",
+                httpBaseUrl: "ftp://remote.example.com/",
+                wsBaseUrl: "file:///tmp/lincei.sock",
+                createdAt: "2026-04-09T00:00:00.000Z",
+                lastConnectedAt: null,
+                encryptedBearerToken: "encrypted-invalid-token",
+              },
+            ],
+          }),
+        );
+
+        const encodedRegistry = yield* getSavedEnvironmentRegistry.handler(undefined, {});
+        assert.deepEqual(encodedRegistry, [
+          savedRegistryRecord,
+          {
+            environmentId: invalidEnvironmentId,
+            label: "Unsupported legacy remote",
+            httpBaseUrl: "ftp://remote.example.com/",
+            wsBaseUrl: "file:///tmp/lincei.sock",
+            createdAt: "2026-04-09T00:00:00.000Z",
+            lastConnectedAt: null,
+          },
+        ]);
+
+        yield* setSavedEnvironmentRegistry.handler([savedRegistryRecord], {});
+        const persisted = yield* decodeSavedEnvironmentRegistryDocumentProbe(
+          yield* fileSystem.readFileString(environment.savedEnvironmentRegistryPath),
+        );
+        assert.deepEqual(persisted.records, [
+          {
+            ...savedRegistryRecord,
+            encryptedBearerToken: "encrypted-valid-token",
+          },
+        ]);
       }),
     ),
   );
