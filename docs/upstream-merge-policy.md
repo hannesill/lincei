@@ -13,8 +13,10 @@ At this commit, the repository had completed the initial refactor from the upstr
 `t3code` codebase into the Lincei codebase. After this point, new commits may include
 Lincei-specific product work.
 
-When merging upstream `t3code`, treat this baseline as the point where Lincei ownership
-begins. Do not assume upstream should overwrite local changes made after this commit.
+When reviewing upstream `t3code`, treat this baseline as the point where Lincei ownership
+begins. Current Lincei and upstream histories are not suitable for a direct Git merge, so
+the baseline is an ownership reference rather than a merge base. Do not assume upstream
+should overwrite local changes made after this commit.
 
 Use the baseline to distinguish three categories:
 
@@ -73,28 +75,46 @@ if one is apparent.
 
 Resolve only conflicts that are clearly mechanical or directly covered by this policy.
 
-## Merge Workflow
+## Selective Port Workflow
 
-Do upstream merges in a separate worktree and branch so the main checkout remains usable
-while conflicts are resolved.
+Do upstream reviews and ports in separate worktrees and branches so the main checkout
+remains usable while adaptations are implemented and verified.
 
-Recommended shape:
+Before changing the target:
 
 ```sh
-git fetch upstream
-git worktree add ../lincei-upstream-merge -b merge/upstream-t3code HEAD
-cd ../lincei-upstream-merge
-git merge upstream/main
+git ls-remote t3code refs/heads/main
+git show --no-patch <audited-upstream-sha>
 ```
 
-Resolve conflicts using this policy. Leave uncertain conflicts open and report them for
-owner review. Do not create the final merge commit and do not fast-forward or merge the
-finished branch back into the main checkout until the owner has inspected the result and
-explicitly approved landing it.
+If upstream advanced beyond the audited SHA, report the exact delta before changing the
+cutoff. Create the integration branch from Lincei, not from upstream, then behavior-port
+selected upstream commits through the pinned cutoff. Do not merge `t3code/main`, copy its
+tree wholesale, or introduce an upstream merge commit.
 
-If a different branch layout is more appropriate for the local checkout, keep the same
-principle: isolate the upstream merge in a purpose-named `merge/upstream-*` branch and
-avoid resolving large upstream conflicts directly in the primary working tree.
+Use separate cohort worktrees when ports can be partitioned without overlapping files.
+Serialize shared seam files, independently review each cohort, fix findings on the cohort
+branch, then rebase or cherry-pick only clean atomic commits onto the integration branch.
+Do not fast-forward or merge the integration branch into `main` until the owner has
+inspected it and explicitly approved landing it.
+
+## Upstream Ledger
+
+Every reviewed upstream SHA must appear in the integration ledger with exactly one status:
+
+- `ported`: Lincei contains the upstream behavior, normally with an adapted implementation
+  and focused regression coverage.
+- `equivalent`: existing Lincei behavior already provides the relevant guarantee; cite the
+  concrete implementation or test.
+- `deferred`: the change is potentially applicable but intentionally outside the pinned
+  port scope; state the remaining risk or dependency.
+- `not applicable`: the change targets an excluded platform, product, provider, or
+  architecture; state why it does not apply.
+
+Port commits must be atomic and use imperative subjects. Their bodies must cite the
+upstream SHA and PR when known, explain why the behavior matters, and record material
+Lincei or toolchain adaptations. Do not describe an existing Lincei capability as ported
+when the ledger evidence shows it was already equivalent.
 
 ## Compatibility Rules
 
@@ -107,10 +127,11 @@ Lincei naming, even if internal packages still use `@t3tools/*`.
 
 ## Agent Prompt
 
-Use this prompt when assigning an upstream merge task to an AI agent:
+Use this prompt when assigning a selective upstream port:
 
 ```md
-Merge the latest upstream `pingdotgg/t3code` changes into this Lincei fork.
+Review and selectively port upstream `pingdotgg/t3code` changes through the pinned cutoff
+into this Lincei fork.
 
 Important constraints:
 
@@ -126,22 +147,25 @@ Important constraints:
 6. Use `lincei-fork-baseline` or the baseline commit in this document to understand
    where Lincei ownership begins. Do not assume upstream should overwrite local changes
    made after that baseline.
-7. Do the merge in a separate worktree and purpose-named branch such as
-   `merge/upstream-t3code`. Do not resolve large upstream conflicts directly in the
-   primary working tree.
+7. Work in separate cohort worktrees and purpose-named branches. Do not edit the primary
+   checkout or merge the upstream branch.
 8. If a conflict is not clearly mechanical or directly covered by this policy, leave it
    open and report it back instead of guessing. Include the file path, the conflicting
    choices, likely impact, and any recommendation.
-9. Do not create the final merge commit, fast-forward, or merge the worktree branch back
-   into the main checkout. Stop after preparing the merge branch so the owner can inspect
-   and approve it.
-10. After resolving the conflicts you are confident about, run `bun fmt`, `bun lint`, and `bun typecheck`.
-    Do not run `bun test`; use `bun run test` only if tests are needed.
-11. Summarize:
+9. Record every reviewed SHA as `ported`, `equivalent`, `deferred`, or `not applicable`.
+   Cite the concrete Lincei implementation, test, remaining dependency, or exclusion.
+10. Keep port commits atomic. Use imperative subjects and include the upstream SHA/PR,
+    rationale, and material Lincei adaptations in the commit message.
+11. Obtain independent cohort review and fix findings before rebasing or cherry-picking
+    clean commits onto the integration branch. Do not merge the integration branch into
+    `main`; stop for owner inspection and approval.
+12. Run focused tests for the cohort plus `bun fmt`, `bun lint`, and `bun typecheck`.
+    Do not run `bun test`; use `bun run test`.
+13. Summarize:
 
-- upstream range merged
-- conflicts resolved and chosen resolution
-- conflicts left open for owner review
+- upstream cutoff and reviewed SHAs
+- ledger classifications and deliberate deviations
+- review findings and fixes
 - Lincei-specific changes preserved
 - verification commands and results
 ```
