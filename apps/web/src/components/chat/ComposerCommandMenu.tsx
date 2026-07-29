@@ -148,9 +148,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
     >
       <div
         ref={listRef}
-        className="relative overflow-hidden rounded-xl border border-border/80 bg-popover/96 shadow-lg/8 backdrop-blur-xs"
+        className="dropdown-glass relative flex min-h-0 max-h-[var(--composer-command-menu-available-height,18rem)] flex-1 flex-col overflow-hidden rounded-[20px]"
       >
-        <CommandList className="max-h-72">
+        <CommandList className="min-h-0 max-h-[min(18rem,var(--composer-command-menu-available-height,18rem))] flex-1">
           {groups.map((group, groupIndex) => (
             <div key={group.id}>
               {groupIndex > 0 ? <CommandSeparator className="my-0.5" /> : null}

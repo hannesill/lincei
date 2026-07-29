@@ -8,7 +8,7 @@ import {
   FolderIcon,
   MonitorIcon,
 } from "lucide-react";
-import { type ReactNode, memo, useMemo } from "react";
+import { memo, useMemo } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { useIsMobile } from "../hooks/useMediaQuery";
@@ -37,7 +37,6 @@ import {
   MenuTrigger,
 } from "./ui/menu";
 import { Separator } from "./ui/separator";
-import { APP_CONTENT_MAX_WIDTH_CLASS } from "./appShell";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -52,7 +51,6 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
-  centerContent?: ReactNode;
 }
 
 interface MobileRunContextSelectorProps {
@@ -204,7 +202,6 @@ export const BranchToolbar = memo(function BranchToolbar({
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
-  centerContent,
 }: BranchToolbarProps) {
   const sessionRef = useMemo(
     () => scopeSessionRef(environmentId, sessionId),
@@ -244,9 +241,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   if (!hasActiveSession || !activeProject) return null;
 
   return (
-    <div
-      className={`mx-auto grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-2.5 pb-3 pt-1 sm:px-3 ${APP_CONTENT_MAX_WIDTH_CLASS}`}
-    >
+    <div className="chat-composer-context-strip -mt-4 mx-auto grid w-[calc(100%-2.75rem)] grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 px-1 pb-1 pt-5">
       {isMobile ? (
         <MobileRunContextSelector
           envLocked={envLocked}
@@ -281,14 +276,8 @@ export const BranchToolbar = memo(function BranchToolbar({
         </div>
       )}
 
-      {centerContent ? (
-        <div className="col-span-3 row-start-2 justify-self-center md:col-span-1 md:col-start-2 md:row-start-1">
-          {centerContent}
-        </div>
-      ) : null}
-
       <BranchToolbarBranchSelector
-        className="col-start-3 row-start-1 min-w-0 justify-end justify-self-end"
+        className="col-start-2 row-start-1 min-w-0 justify-end justify-self-end"
         environmentId={environmentId}
         sessionId={sessionId}
         {...(draftId ? { draftId } : {})}
