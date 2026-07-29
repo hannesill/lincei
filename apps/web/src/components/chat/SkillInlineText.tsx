@@ -52,10 +52,11 @@ export function renderSkillInlineMarkdownChildren(
     if (typeof child === "string") {
       return <SkillInlineText text={child} skills={skills} />;
     }
-    if (!isValidElement<{ children?: ReactNode }>(child)) {
+    if (!isValidElement<{ children?: ReactNode; node?: { tagName?: string } }>(child)) {
       return child;
     }
-    if (child.type === "code" || child.type === "a") {
+    const markdownTagName = typeof child.type === "string" ? child.type : child.props.node?.tagName;
+    if (markdownTagName === "code" || markdownTagName === "a") {
       return child;
     }
     if (!("children" in child.props)) {

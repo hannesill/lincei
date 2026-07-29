@@ -30,8 +30,10 @@ import { LRUCache } from "../lib/lruCache";
 import { useTheme } from "../hooks/useTheme";
 import {
   normalizeMarkdownLinkDestination,
+  resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   rewriteMarkdownFileUriHref,
+  type MarkdownFileLinkMeta,
 } from "../markdown-links";
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
@@ -74,6 +76,35 @@ const highlightedCodeCache = new LRUCache<string>(
   MAX_HIGHLIGHT_CACHE_MEMORY_BYTES,
 );
 const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
+const CHAT_MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkTagInlineCode];
+
+export interface MarkdownAstNode {
+  type?: string;
+  children?: MarkdownAstNode[];
+  data?: {
+    hProperties?: Record<string, unknown>;
+  };
+}
+
+function tagInlineCodeNodes(node: MarkdownAstNode, insideLink: boolean): void {
+  if (node.type === "inlineCode" && !insideLink) {
+    node.data = {
+      ...node.data,
+      hProperties: {
+        ...node.data?.hProperties,
+        dataInlineCode: "",
+      },
+    };
+  }
+  const childInsideLink = insideLink || node.type === "link" || node.type === "linkReference";
+  node.children?.forEach((child) => tagInlineCodeNodes(child, childInsideLink));
+}
+
+export function remarkTagInlineCode() {
+  return (tree: MarkdownAstNode) => {
+    tagInlineCodeNodes(tree, false);
+  };
+}
 
 function extractFenceLanguage(className: string | undefined): string {
   const match = className?.match(CODE_FENCE_LANGUAGE_REGEX);
@@ -105,9 +136,13 @@ function extractCodeBlock(
 
   const onlyChild = childNodes[0];
   if (
-    !isValidElement<{ className?: string; children?: ReactNode }>(onlyChild) ||
-    onlyChild.type !== "code"
+    !isValidElement<{ className?: string; children?: ReactNode; node?: { tagName?: string } }>(
+      onlyChild,
+    )
   ) {
+    return null;
+  }
+  if (onlyChild.type !== "code" && onlyChild.props.node?.tagName !== "code") {
     return null;
   }
 
@@ -362,6 +397,21 @@ function extractMarkdownLinkHrefs(text: string): string[] {
   return hrefs;
 }
 
+const FENCED_CODE_SEGMENT_PATTERN = /(```[\s\S]*?(?:```|$))/;
+const INLINE_CODE_SPAN_PATTERN = /`([^`\n]+)`/g;
+
+function extractInlineCodeSpans(text: string): string[] {
+  const spans: string[] = [];
+  const segments = text.split(FENCED_CODE_SEGMENT_PATTERN);
+  for (let index = 0; index < segments.length; index += 2) {
+    for (const match of (segments[index] ?? "").matchAll(INLINE_CODE_SPAN_PATTERN)) {
+      const span = match[1]?.trim();
+      if (span) spans.push(span);
+    }
+  }
+  return spans;
+}
+
 function normalizeMarkdownLinkHrefKey(href: string): string {
   const normalizedHref = normalizeMarkdownLinkDestination(href);
   return rewriteMarkdownFileUriHref(normalizedHref) ?? normalizedHref;
@@ -535,15 +585,54 @@ function ChatMarkdown({
     }
     return metaByHref;
   }, [cwd, text]);
+  const inlineCodeFileLinkMetaByText = useMemo(() => {
+    const metaByText = new Map<string, MarkdownFileLinkMeta>();
+    for (const span of extractInlineCodeSpans(text)) {
+      if (metaByText.has(span)) continue;
+      const meta = resolveInlineCodeFileLinkMeta(span, cwd);
+      if (meta) {
+        metaByText.set(span, meta);
+      }
+    }
+    return metaByText;
+  }, [cwd, text]);
   const fileLinkParentSuffixByPath = useMemo(() => {
-    const filePaths = [...markdownFileLinkMetaByHref.values()].map((meta) => meta.filePath);
+    const filePaths = [
+      ...[...markdownFileLinkMetaByHref.values()].map((meta) => meta.filePath),
+      ...[...inlineCodeFileLinkMetaByText.values()].map((meta) => meta.filePath),
+    ];
     return buildFileLinkParentSuffixByPath(filePaths);
-  }, [markdownFileLinkMetaByHref]);
+  }, [inlineCodeFileLinkMetaByText, markdownFileLinkMetaByHref]);
   const markdownUrlTransform = useCallback((href: string) => {
     return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
   }, []);
-  const markdownComponents = useMemo<Components>(
-    () => ({
+  const markdownComponents = useMemo<Components>(() => {
+    const fileLinkChip = (fileLinkMeta: MarkdownFileLinkMeta, className?: string) => {
+      const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
+      const labelParts = [fileLinkMeta.basename];
+      if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
+        labelParts.push(parentSuffix);
+      }
+      if (fileLinkMeta.line) {
+        labelParts.push(
+          `L${fileLinkMeta.line}${fileLinkMeta.column ? `:C${fileLinkMeta.column}` : ""}`,
+        );
+      }
+
+      return (
+        <MarkdownFileLink
+          href={fileLinkMeta.targetPath}
+          targetPath={fileLinkMeta.targetPath}
+          displayPath={fileLinkMeta.displayPath}
+          filePath={fileLinkMeta.filePath}
+          label={labelParts.join(" · ")}
+          theme={resolvedTheme}
+          className={className}
+        />
+      );
+    };
+
+    return {
       p({ node: _node, children, ...props }) {
         return <p {...props}>{renderSkillInlineMarkdownChildren(children, skills)}</p>;
       },
@@ -557,27 +646,23 @@ function ChatMarkdown({
           return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />;
         }
 
-        const parentSuffix = fileLinkParentSuffixByPath.get(fileLinkMeta.filePath);
-        const labelParts = [fileLinkMeta.basename];
-        if (typeof parentSuffix === "string" && parentSuffix.length > 0) {
-          labelParts.push(parentSuffix);
-        }
-        if (fileLinkMeta.line) {
-          labelParts.push(
-            `L${fileLinkMeta.line}${fileLinkMeta.column ? `:C${fileLinkMeta.column}` : ""}`,
-          );
+        return fileLinkChip(fileLinkMeta, props.className);
+      },
+      code({ node, children, className, ...props }) {
+        if (node?.properties?.dataInlineCode != null) {
+          const codeText = nodeToPlainText(children);
+          const fileLinkMeta =
+            inlineCodeFileLinkMetaByText.get(codeText.trim()) ??
+            resolveInlineCodeFileLinkMeta(codeText, cwd);
+          if (fileLinkMeta) {
+            return fileLinkChip(fileLinkMeta);
+          }
         }
 
         return (
-          <MarkdownFileLink
-            href={fileLinkMeta.targetPath}
-            targetPath={fileLinkMeta.targetPath}
-            displayPath={fileLinkMeta.displayPath}
-            filePath={fileLinkMeta.filePath}
-            label={labelParts.join(" · ")}
-            theme={resolvedTheme}
-            className={props.className}
-          />
+          <code {...props} className={className}>
+            {children}
+          </code>
         );
       },
       pre({ node: _node, children, ...props }) {
@@ -601,21 +686,22 @@ function ChatMarkdown({
           </MarkdownCodeBlock>
         );
       },
-    }),
-    [
-      diffThemeName,
-      fileLinkParentSuffixByPath,
-      isStreaming,
-      markdownFileLinkMetaByHref,
-      resolvedTheme,
-      skills,
-    ],
-  );
+    };
+  }, [
+    cwd,
+    diffThemeName,
+    fileLinkParentSuffixByPath,
+    inlineCodeFileLinkMetaByText,
+    isStreaming,
+    markdownFileLinkMetaByHref,
+    resolvedTheme,
+    skills,
+  ]);
 
   return (
     <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={CHAT_MARKDOWN_REMARK_PLUGINS}
         components={markdownComponents}
         urlTransform={markdownUrlTransform}
       >

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
@@ -116,5 +117,96 @@ describe("resolveMarkdownFileLinkTarget", () => {
 
   it("does not treat app routes as file links", () => {
     expect(resolveMarkdownFileLinkTarget("/chat/settings")).toBeNull();
+  });
+});
+
+describe("resolveInlineCodeFileLinkMeta", () => {
+  const cwd = "/Users/hannesill/Developer/lincei";
+
+  it("links relative, absolute, and Windows file paths", () => {
+    expect(resolveInlineCodeFileLinkMeta("apps/web/src/main.ts:71", cwd)).toMatchObject({
+      targetPath: `${cwd}/apps/web/src/main.ts:71`,
+      basename: "main.ts",
+      line: 71,
+    });
+    expect(resolveInlineCodeFileLinkMeta("/usr/local/bin/tool")).toMatchObject({
+      targetPath: "/usr/local/bin/tool",
+    });
+    expect(
+      resolveInlineCodeFileLinkMeta("C:\\Users\\researcher\\lincei\\src\\main.ts"),
+    ).toMatchObject({
+      basename: "main.ts",
+    });
+  });
+
+  it("links explicit dot paths and conventional extensionless line references", () => {
+    expect(resolveInlineCodeFileLinkMeta("./scripts/deploy", cwd)).toMatchObject({
+      basename: "deploy",
+    });
+    expect(resolveInlineCodeFileLinkMeta("Makefile:12", cwd)).toMatchObject({
+      targetPath: `${cwd}/Makefile:12`,
+      line: 12,
+    });
+    expect(resolveInlineCodeFileLinkMeta("Makefile:12")).toBeNull();
+  });
+
+  it("rejects ambiguous name-position forms", () => {
+    for (const candidate of ["error:1", "TODO:12", "exit:0", "port:3000", "http:80"]) {
+      expect(resolveInlineCodeFileLinkMeta(candidate, cwd)).toBeNull();
+    }
+  });
+
+  it("rejects hosts, ports, and version-shaped segments", () => {
+    for (const candidate of [
+      "127.0.0.1:3000",
+      "localhost:3000",
+      "example.com/index.html",
+      "example.uk/index.html",
+      "v1.2.3/changelog.md",
+      "1.2.3/changelog.md",
+    ]) {
+      expect(resolveInlineCodeFileLinkMeta(candidate, cwd)).toBeNull();
+    }
+  });
+
+  it("keeps legitimate file suffixes that resemble host labels", () => {
+    expect(resolveInlineCodeFileLinkMeta("script.ts:10", cwd)).not.toBeNull();
+    expect(resolveInlineCodeFileLinkMeta("src/setup.sh:3", cwd)).not.toBeNull();
+    expect(resolveInlineCodeFileLinkMeta("Makefile.in:12", cwd)).not.toBeNull();
+    expect(resolveInlineCodeFileLinkMeta("conf.d/nginx.conf", cwd)).not.toBeNull();
+  });
+
+  it("rejects commands, globs, refs, directories, and external URLs", () => {
+    for (const candidate of [
+      "git worktree list --porcelain",
+      "node.meta",
+      "bun install",
+      "src/**/*.ts",
+      "origin/main",
+      "apps/web",
+      "https://example.com/docs.html",
+    ]) {
+      expect(resolveInlineCodeFileLinkMeta(candidate, cwd)).toBeNull();
+    }
+  });
+
+  it("requires cwd for relative paths", () => {
+    expect(resolveInlineCodeFileLinkMeta("apps/web/src/main.ts")).toBeNull();
+  });
+
+  it("keeps POSIX workspace containment case-sensitive", () => {
+    expect(
+      resolveMarkdownFileLinkMeta("/Users/Foo/project/src/main.ts", "/users/foo/project"),
+    ).toMatchObject({
+      workspaceRelativePath: null,
+    });
+    expect(
+      resolveMarkdownFileLinkMeta(
+        "C:/Users/Researcher/Lincei/src/main.ts",
+        "c:/users/researcher/lincei",
+      ),
+    ).toMatchObject({
+      workspaceRelativePath: "src/main.ts",
+    });
   });
 });
