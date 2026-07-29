@@ -4157,6 +4157,125 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
   );
 
+  it.effect("buffers shell events during snapshot loading and fences snapshot duplicates", () =>
+    Effect.gen(function* () {
+      const includedEvent = {
+        sequence: 2,
+        eventId: EventId.make("event-shell-included"),
+        aggregateKind: "session",
+        aggregateId: defaultSessionId,
+        occurredAt: "2026-01-01T00:00:01.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "session.unarchived",
+        payload: {
+          sessionId: defaultSessionId,
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        },
+      } satisfies Extract<OrchestrationEvent, { type: "session.unarchived" }>;
+      const laterSessionId = SessionId.make("session-shell-later");
+      const laterEvent = {
+        sequence: 3,
+        eventId: EventId.make("event-shell-later"),
+        aggregateKind: "session",
+        aggregateId: laterSessionId,
+        occurredAt: "2026-01-01T00:00:02.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "session.unarchived",
+        payload: {
+          sessionId: laterSessionId,
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+      } satisfies Extract<OrchestrationEvent, { type: "session.unarchived" }>;
+      const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+      const subscriptionRequested = yield* Deferred.make<void>();
+      const allowSubscription = yield* Deferred.make<void>();
+      const liveSubscribed = yield* Deferred.make<void>();
+      const snapshotStarted = yield* Deferred.make<void>();
+      const releaseSnapshot = yield* Deferred.make<void>();
+      const queriedSessionIds: Array<SessionId> = [];
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            subscribeDomainEvents: Effect.gen(function* () {
+              yield* Deferred.succeed(subscriptionRequested, undefined);
+              yield* Deferred.await(allowSubscription);
+              const subscription = yield* PubSub.subscribe(liveEvents);
+              yield* Deferred.succeed(liveSubscribed, undefined);
+              return subscription;
+            }),
+          },
+          projectionSnapshotQuery: {
+            getShellSnapshot: () =>
+              Effect.gen(function* () {
+                yield* Deferred.succeed(snapshotStarted, undefined);
+                yield* Deferred.await(releaseSnapshot);
+                return {
+                  snapshotSequence: includedEvent.sequence,
+                  projects: [],
+                  sessions: [makeDefaultOrchestrationSessionShell()],
+                  updatedAt: includedEvent.payload.updatedAt,
+                };
+              }),
+            getSessionShellById: (sessionId) =>
+              Effect.sync(() => {
+                queriedSessionIds.push(sessionId);
+                return Option.some(
+                  makeDefaultOrchestrationSessionShell({
+                    id: sessionId,
+                    updatedAt: laterEvent.payload.updatedAt,
+                  }),
+                );
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const itemsFiber = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeShell]({}).pipe(
+            Stream.take(2),
+            Stream.runCollect,
+          ),
+        ),
+      ).pipe(Effect.timeout("2 seconds"), Effect.forkScoped);
+
+      yield* Deferred.await(subscriptionRequested).pipe(Effect.timeout("1 second"));
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      assert.isTrue(Option.isNone(yield* Deferred.poll(snapshotStarted)));
+
+      yield* Deferred.succeed(allowSubscription, undefined);
+      yield* Deferred.await(liveSubscribed).pipe(Effect.timeout("1 second"));
+      yield* Deferred.await(snapshotStarted).pipe(Effect.timeout("1 second"));
+      yield* PubSub.publish(liveEvents, includedEvent);
+      yield* PubSub.publish(liveEvents, laterEvent);
+      yield* Deferred.succeed(releaseSnapshot, undefined);
+
+      const items = yield* Fiber.join(itemsFiber);
+
+      assert.equal(items[0]?.kind, "snapshot");
+      assert.equal(
+        items[0]?.kind === "snapshot" ? items[0].snapshot.snapshotSequence : null,
+        includedEvent.sequence,
+      );
+      assert.equal(items[1]?.kind, "session-upserted");
+      assert.equal(items[1]?.kind === "session-upserted" ? items[1].sequence : null, 3);
+      assert.equal(
+        items[1]?.kind === "session-upserted" ? items[1].session.id : null,
+        laterSessionId,
+      );
+      assert.deepEqual(queriedSessionIds, [laterSessionId]);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), TestClock.withLive),
+  );
+
   it.effect("routes websocket rpc orchestration shell snapshot errors", () =>
     Effect.gen(function* () {
       const projectionError = new PersistenceSqlError({

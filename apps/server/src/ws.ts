@@ -817,6 +817,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcStreamEffect(
             ORCHESTRATION_WS_METHODS.subscribeShell,
             Effect.gen(function* () {
+              // Acquire live delivery before reading snapshot state. The
+              // subscription buffers events until the snapshot is ready,
+              // closing the publish-before-subscribe gap left by a hot stream.
+              const liveSubscription = yield* orchestrationEngine.subscribeDomainEvents;
+              const liveStream = Stream.fromSubscription(liveSubscription);
+
               const snapshot = yield* projectionSnapshotQuery.getShellSnapshot().pipe(
                 Effect.tapError((cause) =>
                   Effect.logError("orchestration shell snapshot load failed", { cause }),
@@ -830,7 +836,8 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 ),
               );
 
-              const liveStream = orchestrationEngine.streamDomainEvents.pipe(
+              const bufferedLiveStream = liveStream.pipe(
+                Stream.filter((event) => event.sequence > snapshot.snapshotSequence),
                 Stream.mapEffect(toShellStreamEvent),
                 Stream.flatMap((event) =>
                   Option.isSome(event) ? Stream.succeed(event.value) : Stream.empty,
@@ -842,7 +849,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   kind: "snapshot" as const,
                   snapshot,
                 }),
-                liveStream,
+                bufferedLiveStream,
               );
             }),
             { "rpc.aggregate": "orchestration" },
