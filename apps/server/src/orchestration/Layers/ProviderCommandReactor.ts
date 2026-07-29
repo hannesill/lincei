@@ -2,6 +2,7 @@ import {
   type ChatAttachment,
   CommandId,
   EventId,
+  type MessageId,
   type ModelSelection,
   type OrchestrationEvent,
   ProviderDriverKind,
@@ -29,6 +30,8 @@ import { resolveSessionWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
 import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
+import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
+import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
@@ -179,6 +182,7 @@ const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+  const projectionTurnRepository = yield* ProjectionTurnRepository;
   const providerService = yield* ProviderService;
   const gitWorkflow = yield* GitWorkflowService;
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
@@ -296,6 +300,22 @@ const make = Effect.gen(function* () {
       },
       createdAt: input.createdAt,
     });
+  });
+
+  const setProviderRuntimeErrorForOwnedTurnStartFailure = Effect.fnUntraced(function* (input: {
+    readonly sessionId: SessionId;
+    readonly messageId: MessageId;
+    readonly detail: string;
+    readonly createdAt: string;
+  }) {
+    const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartBySessionId({
+      sessionId: input.sessionId,
+    });
+    if (Option.isNone(pendingTurnStart) || pendingTurnStart.value.messageId !== input.messageId) {
+      return;
+    }
+
+    yield* setProviderRuntimeErrorOnTurnStartFailure(input);
   });
 
   const resolveProject = Effect.fnUntraced(function* (projectId: ProjectId) {
@@ -794,12 +814,23 @@ const make = Effect.gen(function* () {
         return Effect.void;
       }
       const detail = formatFailureDetail(cause);
-      return setProviderRuntimeErrorOnTurnStartFailure({
+      return setProviderRuntimeErrorForOwnedTurnStartFailure({
         sessionId: event.payload.sessionId,
+        messageId: event.payload.messageId,
         detail,
         createdAt: event.payload.createdAt,
       }).pipe(
-        Effect.flatMap(() =>
+        Effect.catchCause((runtimeCause) =>
+          Effect.logWarning(
+            "provider command reactor failed to settle owned turn start failure runtime",
+            {
+              sessionId: event.payload.sessionId,
+              messageId: event.payload.messageId,
+              cause: Cause.pretty(runtimeCause),
+            },
+          ),
+        ),
+        Effect.andThen(
           appendProviderFailureActivity({
             sessionId: event.payload.sessionId,
             kind: "provider.turn.start.failed",
@@ -1077,4 +1108,6 @@ const make = Effect.gen(function* () {
   } satisfies ProviderCommandReactorShape;
 });
 
-export const ProviderCommandReactorLive = Layer.effect(ProviderCommandReactor, make);
+export const ProviderCommandReactorLive = Layer.effect(ProviderCommandReactor, make).pipe(
+  Layer.provide(ProjectionTurnRepositoryLive),
+);
