@@ -23,7 +23,7 @@ import {
 } from "@t3tools/contracts";
 import { scopedSessionKey, scopeSessionRef } from "@t3tools/client-runtime";
 import { WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
-import { mergeLinceiSkillCatalog } from "@t3tools/shared/linceiSkills";
+import { mergeLinceiSkillCatalog, workflowById } from "@t3tools/shared/linceiSkills";
 import { createModelCapabilities, createModelSelection } from "@t3tools/shared/model";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import * as Option from "effect/Option";
@@ -6458,11 +6458,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForComposerEditor();
       await page.getByTestId("composer-editor").fill("$");
 
-      const menuItem = await waitForComposerMenuItem("skill:codex:lincei-api");
-      expect(menuItem.textContent).toContain("$lincei-api");
+      const menuItem = await waitForComposerMenuItem("skill:codex:lincei:context");
+      expect(menuItem.textContent).toContain("$lincei:context");
       await menuItem.click();
 
-      await waitForComposerText("$lincei-api ");
+      await waitForComposerText("$lincei:context ");
     } finally {
       await mounted.cleanup();
     }
@@ -6539,11 +6539,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await waitForComposerEditor();
       await page.getByTestId("composer-editor").fill("/");
 
-      const menuItem = await waitForComposerMenuItem("skill:claudeAgent:lincei-api");
-      expect(menuItem.textContent).toContain("/lincei-api");
+      const menuItem = await waitForComposerMenuItem("skill:claudeAgent:lincei:context");
+      expect(menuItem.textContent).toContain("/lincei:context");
       await menuItem.click();
 
-      await waitForComposerText("/lincei-api ");
+      await waitForComposerText("/lincei:context ");
     } finally {
       await mounted.cleanup();
     }
@@ -6699,7 +6699,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
           expect(turnStartRequest).toMatchObject({
             workflowId: "structured-clinical-study",
-            workflowVersion: "2.0.0",
+            workflowVersion: workflowById("structured-clinical-study").version,
           });
         },
         { timeout: 8_000, interval: 16 },
