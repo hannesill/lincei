@@ -26,7 +26,7 @@ import {
   Trash2Icon,
   Undo2Icon,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { isElectron } from "../env";
@@ -798,8 +798,24 @@ function SidebarV2ProjectGroup({
       ),
     [activeVisible, settledVisible, snoozedVisible],
   );
+  const registeredVisibleSessionKeysRef = useRef<{
+    projectKey: string;
+    sessionKeys: readonly string[];
+  } | null>(null);
 
   useEffect(() => {
+    const registered = registeredVisibleSessionKeysRef.current;
+    if (
+      registered?.projectKey === project.projectKey &&
+      registered.sessionKeys.length === visibleSessionKeys.length &&
+      registered.sessionKeys.every((sessionKey, index) => sessionKey === visibleSessionKeys[index])
+    ) {
+      return;
+    }
+    registeredVisibleSessionKeysRef.current = {
+      projectKey: project.projectKey,
+      sessionKeys: visibleSessionKeys,
+    };
     registerVisibleSessionKeys(project.projectKey, visibleSessionKeys);
   }, [project.projectKey, registerVisibleSessionKeys, visibleSessionKeys]);
 
