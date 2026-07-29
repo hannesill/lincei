@@ -115,6 +115,40 @@ export function parkedSessionsVisibleWhenCollapsed(input: {
   );
 }
 
+export function pageSessionsWithRouteRetention(input: {
+  sessions: ReadonlyArray<SidebarSessionSummary>;
+  visibleCount: number;
+  routeSessionRef: ScopedSessionRef | null;
+}): SidebarSessionSummary[] {
+  const visible = input.sessions.slice(0, Math.max(0, input.visibleCount));
+  if (!input.routeSessionRef) return visible;
+  const routeSession = input.sessions.find(
+    (session) =>
+      session.environmentId === input.routeSessionRef?.environmentId &&
+      session.id === input.routeSessionRef.sessionId,
+  );
+  if (
+    !routeSession ||
+    visible.some(
+      (session) =>
+        session.environmentId === routeSession.environmentId && session.id === routeSession.id,
+    )
+  ) {
+    return visible;
+  }
+  return [...visible, routeSession];
+}
+
+export function sessionsRequiringChangeRequestObservation(
+  sessions: ReadonlyArray<SidebarSessionSummary>,
+): SidebarSessionSummary[] {
+  return sessions.filter((session) => session.archivedAt === null && session.branch !== null);
+}
+
+export function sidebarV2SessionRowKey(session: SidebarSessionSummary): string {
+  return scopedSessionKey(scopeSessionRef(session.environmentId, session.id));
+}
+
 export function resolveSidebarV2NewSessionOptions(defaultSessionEnvMode: SessionEnvMode): {
   envMode: SessionEnvMode;
 } {
