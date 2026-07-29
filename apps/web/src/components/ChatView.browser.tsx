@@ -35,6 +35,7 @@ import { render } from "vitest-browser-react";
 
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import { useComposerDraftStore, DraftId } from "../composerDraftStore";
+import { CLIENT_SETTINGS_STORAGE_KEY } from "../clientPersistenceStorage";
 import {
   __resetEnvironmentApiOverridesForTests,
   __setEnvironmentApiOverrideForTests,
@@ -121,6 +122,8 @@ let fixture: TestFixture;
 const rpcHarness = new BrowserWsRpcHarness();
 const wsRequests = rpcHarness.requests;
 let customWsRpcResolver: ((body: NormalizedWsRpcRequestBody) => unknown | undefined) | null = null;
+let clientSettingsValueBeforeTest: string | null = null;
+const pendingClientSettingsRestores = new Set<() => void>();
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
 const encodeServerConfig = Schema.encodeSync(ServerConfigSchema);
 
@@ -1672,23 +1675,39 @@ async function mountChatView(options: {
   configureFixture?: (fixture: TestFixture) => void;
   resolveRpc?: (body: NormalizedWsRpcRequestBody) => unknown | undefined;
   initialPath?: string;
+  sidebarV1RollbackEnabled?: boolean;
 }): Promise<MountedChatView> {
   fixture = buildFixture(options.snapshot);
   options.configureFixture?.(fixture);
   customWsRpcResolver = options.resolveRpc ?? null;
-  const persistedClientSettings = JSON.parse(
-    localStorage.getItem("lincei:client-settings:v1") ?? "{}",
-  ) as Record<string, unknown>;
+  const previousClientSettingsValue = localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY);
+  const persistedClientSettings = JSON.parse(previousClientSettingsValue ?? "{}") as Record<
+    string,
+    unknown
+  >;
   localStorage.setItem(
-    "lincei:client-settings:v1",
+    CLIENT_SETTINGS_STORAGE_KEY,
     JSON.stringify({
       ...persistedClientSettings,
       // This suite exercises ChatView plus the qualification Sidebar v1
-      // controls. Sidebar v2 has dedicated browser rollout coverage.
-      sidebarV1RollbackEnabled: true,
+      // controls by default. Rollout cases opt into Sidebar v2 explicitly.
+      sidebarV1RollbackEnabled: options.sidebarV1RollbackEnabled ?? true,
     }),
   );
   __resetClientSettingsPersistenceForTests();
+  let clientSettingsRestored = false;
+  const restoreClientSettings = () => {
+    if (clientSettingsRestored) return;
+    clientSettingsRestored = true;
+    pendingClientSettingsRestores.delete(restoreClientSettings);
+    if (previousClientSettingsValue === null) {
+      localStorage.removeItem(CLIENT_SETTINGS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(CLIENT_SETTINGS_STORAGE_KEY, previousClientSettingsValue);
+    }
+    __resetClientSettingsPersistenceForTests();
+  };
+  pendingClientSettingsRestores.add(restoreClientSettings);
   await setViewport(options.viewport);
   await waitForProductionStyles();
 
@@ -1723,9 +1742,13 @@ async function mountChatView(options: {
 
   const cleanup = async () => {
     customWsRpcResolver = null;
-    await screen.unmount();
-    host.remove();
-    await waitForLayout();
+    try {
+      await screen.unmount();
+    } finally {
+      host.remove();
+      restoreClientSettings();
+      await waitForLayout();
+    }
   };
 
   return {
@@ -1816,7 +1839,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
     await __resetLocalApiForTests();
     await setViewport(DEFAULT_VIEWPORT);
+    clientSettingsValueBeforeTest = localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY);
     localStorage.clear();
+    __resetClientSettingsPersistenceForTests();
     document.body.innerHTML = "";
     wsRequests.length = 0;
     customWsRpcResolver = null;
@@ -1855,6 +1880,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   afterEach(() => {
+    for (const restoreClientSettings of [...pendingClientSettingsRestores].toReversed()) {
+      restoreClientSettings();
+    }
+    if (clientSettingsValueBeforeTest === null) {
+      localStorage.removeItem(CLIENT_SETTINGS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(CLIENT_SETTINGS_STORAGE_KEY, clientSettingsValueBeforeTest);
+    }
+    __resetClientSettingsPersistenceForTests();
     customWsRpcResolver = null;
     document.body.innerHTML = "";
   });
@@ -1900,7 +1934,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
         };
       },
     });
-
     try {
       const banner = await waitForElement(
         () =>
@@ -1981,7 +2014,6 @@ describe("ChatView timeline estimator parity (full app)", () => {
         };
       },
     });
-
     try {
       await waitForServerConfigToApply();
       const openButton = await waitForElement(
@@ -3939,7 +3971,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("shows the confirm archive action after clicking the archive button", async () => {
     localStorage.setItem(
-      "lincei:client-settings:v1",
+      CLIENT_SETTINGS_STORAGE_KEY,
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
         confirmSessionArchive: true,
@@ -3968,8 +4000,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await expect.element(confirmButton).toBeInTheDocument();
       await expect.element(confirmButton).toBeVisible();
     } finally {
-      localStorage.removeItem("lincei:client-settings:v1");
       await mounted.cleanup();
+      localStorage.removeItem(CLIENT_SETTINGS_STORAGE_KEY);
+      __resetClientSettingsPersistenceForTests();
     }
   });
 
@@ -4076,9 +4109,10 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("creates a fresh worktree draft from an existing worktree session when the default mode is worktree", async () => {
+  it("mounts Sidebar v2 by default and creates a context-free worktree draft from its project action", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
+      sidebarV1RollbackEnabled: false,
       snapshot: {
         ...createSnapshotForTargetUser({
           targetMessageId: "msg-user-new-session-worktree-default-test" as MessageId,
@@ -4106,12 +4140,22 @@ describe("ChatView timeline estimator parity (full app)", () => {
         };
       },
     });
+    const setLogicalProjectDraftSessionId = vi.spyOn(
+      useComposerDraftStore.getState(),
+      "setLogicalProjectDraftSessionId",
+    );
 
     try {
-      const newSessionButton = page.getByTestId("new-session-button");
-      await expect.element(newSessionButton).toBeInTheDocument();
+      await waitForElement(
+        () => document.querySelector('[data-sidebar-implementation="v2"]'),
+        "Sidebar v2 should mount on a normal session route by default.",
+      );
+      const projectNewSessionButton = page.getByRole("button", {
+        name: "New session in Project",
+      });
+      await expect.element(projectNewSessionButton).toBeInTheDocument();
 
-      await newSessionButton.click();
+      await projectNewSessionButton.click();
 
       const newSessionPath = await waitForURL(
         mounted.router,
@@ -4120,10 +4164,152 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const newDraftId = draftIdFromPath(newSessionPath);
 
-      expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
-        envMode: "worktree",
-        worktreePath: null,
+      expect(setLogicalProjectDraftSessionId).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          environmentId: LOCAL_ENVIRONMENT_ID,
+          projectId: PROJECT_ID,
+        },
+        newDraftId,
+        expect.objectContaining({
+          envMode: "worktree",
+          branch: null,
+          worktreePath: null,
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
+          envMode: "worktree",
+          branch: "main",
+          worktreePath: null,
+        });
       });
+      expect(useComposerDraftStore.getState().getDraftSession(newDraftId)?.branch).not.toBe(
+        "feature/existing",
+      );
+    } finally {
+      setLogicalProjectDraftSessionId.mockRestore();
+      await mounted.cleanup();
+    }
+  });
+
+  it("mounts Sidebar v1 when the persisted rollback flag is enabled", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      sidebarV1RollbackEnabled: true,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-sidebar-v1-rollback-test" as MessageId,
+        targetText: "sidebar v1 rollback test",
+      }),
+    });
+
+    try {
+      await waitForElement(
+        () => document.querySelector('[data-sidebar-implementation="v1"]'),
+        "Sidebar v1 should mount when the persisted rollback flag is enabled.",
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("archives into a context-free draft using the persisted environment mode", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      sidebarV1RollbackEnabled: false,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-sidebar-v2-archive-test" as MessageId,
+        targetText: "sidebar v2 archive test",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          settings: {
+            ...nextFixture.serverConfig.settings,
+            defaultSessionEnvMode: "worktree",
+          },
+        };
+      },
+      resolveRpc: (body) =>
+        body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand
+          ? { sequence: fixture.snapshot.snapshotSequence + 1 }
+          : undefined,
+    });
+    const setLogicalProjectDraftSessionId = vi.spyOn(
+      useComposerDraftStore.getState(),
+      "setLogicalProjectDraftSessionId",
+    );
+
+    try {
+      await waitForElement(
+        () => document.querySelector('[data-sidebar-implementation="v2"]'),
+        "Sidebar v2 should mount before archive qualification.",
+      );
+      const sessionActions = page.getByTestId(`session-actions-${THREAD_KEY}`);
+      await expect.element(sessionActions).toBeInTheDocument();
+      await sessionActions.click();
+      await page.getByText("Archive", { exact: true }).click();
+
+      await vi.waitFor(() => {
+        expect(
+          wsRequests.some(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "session.archive",
+          ),
+        ).toBe(true);
+      });
+      await vi.waitFor(() => {
+        expect(setLogicalProjectDraftSessionId).toHaveBeenCalledWith(
+          expect.any(String),
+          {
+            environmentId: LOCAL_ENVIRONMENT_ID,
+            projectId: PROJECT_ID,
+          },
+          expect.any(String),
+          expect.objectContaining({
+            envMode: "worktree",
+            branch: null,
+            worktreePath: null,
+          }),
+        );
+      });
+      const draftPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Archiving the active session should navigate to a replacement draft.",
+      );
+      await vi.waitFor(() => {
+        expect(
+          useComposerDraftStore.getState().getDraftSession(draftIdFromPath(draftPath)),
+        ).toMatchObject({
+          envMode: "worktree",
+          branch: "main",
+          worktreePath: null,
+        });
+      });
+    } finally {
+      setLogicalProjectDraftSessionId.mockRestore();
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps settings routes on Sidebar v1 while Sidebar v2 is the alpha default", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      sidebarV1RollbackEnabled: false,
+      initialPath: "/settings",
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-sidebar-settings-v1-test" as MessageId,
+        targetText: "sidebar settings v1 test",
+      }),
+    });
+
+    try {
+      await waitForElement(
+        () => document.querySelector('[data-sidebar-implementation="v1"]'),
+        "Settings routes should retain Sidebar v1 during alpha qualification.",
+      );
     } finally {
       await mounted.cleanup();
     }
@@ -6050,7 +6236,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("keeps the Plan sidebar control reachable in a constrained footer layout", async () => {
     localStorage.setItem(
-      "lincei:client-settings:v1",
+      CLIENT_SETTINGS_STORAGE_KEY,
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
         autoOpenPlanSidebar: false,
