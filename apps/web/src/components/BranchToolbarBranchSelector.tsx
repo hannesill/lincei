@@ -30,6 +30,7 @@ import {
   resolveBranchToolbarValue,
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
+  resolveNewWorktreeBaseBranch,
   shouldIncludeBranchPickerItem,
 } from "./BranchToolbar.logic";
 import { Button } from "./ui/button";
@@ -215,6 +216,7 @@ export function BranchToolbarBranchSelector({
     data: branchesSearchData,
     fetchNextPage,
     hasNextPage,
+    isFetching: isBranchesSearchFetching,
     isFetchingNextPage,
     isPending: isBranchesSearchPending,
   } = useInfiniteQuery(
@@ -247,6 +249,17 @@ export function BranchToolbarBranchSelector({
     [refs],
   );
   const defaultBranchName = refs.find((refName) => refName.isDefault)?.name ?? null;
+  const newWorktreeBaseBranch = resolveNewWorktreeBaseBranch({
+    envMode: effectiveEnvMode,
+    activeWorktreePath,
+    activeSessionBranch,
+    refsQuerySettled:
+      deferredTrimmedBranchQuery.length === 0 &&
+      !isBranchesSearchPending &&
+      !isBranchesSearchFetching,
+    defaultBranchName,
+    currentGitBranch,
+  });
   const normalizedDeferredBranchQuery = deferredTrimmedBranchQuery.toLowerCase();
   const prReference = parsePullRequestReference(trimmedBranchQuery);
   const isSelectingWorktreeBase =
@@ -404,23 +417,9 @@ export function BranchToolbarBranchSelector({
   };
 
   useEffect(() => {
-    if (
-      effectiveEnvMode !== "worktree" ||
-      activeWorktreePath ||
-      activeSessionBranch ||
-      (!defaultBranchName && !currentGitBranch)
-    ) {
-      return;
-    }
-    setSessionBranch(defaultBranchName ?? currentGitBranch, null);
-  }, [
-    activeSessionBranch,
-    activeWorktreePath,
-    currentGitBranch,
-    defaultBranchName,
-    effectiveEnvMode,
-    setSessionBranch,
-  ]);
+    if (!newWorktreeBaseBranch) return;
+    setSessionBranch(newWorktreeBaseBranch, null);
+  }, [newWorktreeBaseBranch, setSessionBranch]);
 
   // ---------------------------------------------------------------------------
   // Combobox / list plumbing

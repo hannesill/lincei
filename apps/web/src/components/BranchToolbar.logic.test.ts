@@ -4,6 +4,7 @@ import {
   dedupeRemoteBranchesWithLocalMatches,
   deriveLocalBranchNameFromRemoteRef,
   resolveEnvironmentOptionLabel,
+  resolveNewWorktreeBaseBranch,
   resolveBranchSelectionTarget,
   resolveCurrentWorkspaceLabel,
   resolveDraftEnvModeAfterBranchChange,
@@ -78,6 +79,44 @@ describe("resolveBranchToolbarValue", () => {
         envMode: "local",
         activeWorktreePath: null,
         activeSessionBranch: "feature/base",
+        currentGitBranch: "main",
+      }),
+    ).toBe("main");
+  });
+});
+
+describe("resolveNewWorktreeBaseBranch", () => {
+  it("waits for delayed ref inventory before preferring its default over a warm viewed branch", () => {
+    expect(
+      resolveNewWorktreeBaseBranch({
+        envMode: "worktree",
+        activeWorktreePath: null,
+        activeSessionBranch: null,
+        refsQuerySettled: false,
+        defaultBranchName: null,
+        currentGitBranch: "feature/existing",
+      }),
+    ).toBeNull();
+    expect(
+      resolveNewWorktreeBaseBranch({
+        envMode: "worktree",
+        activeWorktreePath: null,
+        activeSessionBranch: null,
+        refsQuerySettled: true,
+        defaultBranchName: "main",
+        currentGitBranch: "feature/existing",
+      }),
+    ).toBe("main");
+  });
+
+  it("falls back to the checked-out ref only after settled inventory has no default", () => {
+    expect(
+      resolveNewWorktreeBaseBranch({
+        envMode: "worktree",
+        activeWorktreePath: null,
+        activeSessionBranch: null,
+        refsQuerySettled: true,
+        defaultBranchName: null,
         currentGitBranch: "main",
       }),
     ).toBe("main");
