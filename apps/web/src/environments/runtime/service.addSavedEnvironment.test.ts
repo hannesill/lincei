@@ -12,6 +12,7 @@ const mockResolveRemoteWebSocketConnectionUrl = vi.fn();
 const mockBootstrapSshBearerSession = vi.fn();
 const mockFetchSshSessionState = vi.fn();
 const mockPersistSavedEnvironmentRecord = vi.fn();
+const mockPersistSavedEnvironmentRecordWithBearerToken = vi.fn();
 const mockWriteSavedEnvironmentBearerToken = vi.fn();
 const mockSetSavedEnvironmentRegistry = vi.fn();
 const mockGetSavedEnvironmentRecord = vi.fn((environmentId: EnvironmentId) => {
@@ -27,6 +28,33 @@ const mockRegistrySetState = vi.fn((next: { byId: Record<string, Record<string, 
 const mockRemove = vi.fn((environmentId: EnvironmentId) => {
   mockSavedRecords = mockSavedRecords.filter((record) => record.environmentId !== environmentId);
 });
+const mockRemoveSavedEnvironmentRecord = vi.fn(async (environmentId: EnvironmentId) => {
+  const removedRecord =
+    mockSavedRecords.find((record) => record.environmentId === environmentId) ?? null;
+  await mockSetSavedEnvironmentRegistry(
+    mockSavedRecords.filter((record) => record.environmentId !== environmentId),
+  );
+  mockRemove(environmentId);
+  try {
+    await mockRemoveSavedEnvironmentBearerToken(environmentId);
+  } catch (error) {
+    if (removedRecord) {
+      await mockSetSavedEnvironmentRegistry([...mockSavedRecords, removedRecord]);
+      mockUpsert(removedRecord);
+      console.error("[SAVED_ENVIRONMENTS] secret removal failed; restored registry record", {
+        environmentId,
+        error,
+      });
+    }
+    throw error;
+  }
+  return removedRecord;
+});
+const mockReplaceSavedEnvironmentRegistryRecords = vi.fn(
+  async (records: Array<Record<string, unknown>>) => {
+    await mockSetSavedEnvironmentRegistry(records);
+  },
+);
 const mockMarkConnected = vi.fn((environmentId: EnvironmentId, connectedAt: string) => {
   mockSavedRecords = mockSavedRecords.map((record) =>
     record.environmentId === environmentId ? { ...record, lastConnectedAt: connectedAt } : record,
@@ -82,8 +110,11 @@ vi.mock("./catalog", () => ({
   hasSavedEnvironmentRegistryHydrated: vi.fn(),
   listSavedEnvironmentRecords: mockListSavedEnvironmentRecords,
   persistSavedEnvironmentRecord: mockPersistSavedEnvironmentRecord,
+  persistSavedEnvironmentRecordWithBearerToken: mockPersistSavedEnvironmentRecordWithBearerToken,
   readSavedEnvironmentBearerToken: mockReadSavedEnvironmentBearerToken,
+  removeSavedEnvironmentRecord: mockRemoveSavedEnvironmentRecord,
   removeSavedEnvironmentBearerToken: mockRemoveSavedEnvironmentBearerToken,
+  replaceSavedEnvironmentRegistryRecords: mockReplaceSavedEnvironmentRegistryRecords,
   toPersistedSavedEnvironmentRecord: mockToPersistedSavedEnvironmentRecord,
   useSavedEnvironmentRegistryStore: {
     getState: () => ({
@@ -184,6 +215,26 @@ describe("addSavedEnvironment", () => {
       role: "owner",
     });
     mockPersistSavedEnvironmentRecord.mockResolvedValue(undefined);
+    mockPersistSavedEnvironmentRecordWithBearerToken.mockImplementation(
+      async (record: Record<string, unknown>, bearerToken: string) => {
+        const previousRecords = [...mockSavedRecords];
+        const nextRecords = [
+          ...previousRecords.filter((entry) => entry.environmentId !== record.environmentId),
+          record,
+        ];
+        await mockSetSavedEnvironmentRegistry(nextRecords);
+        const didPersistBearerToken = await mockWriteSavedEnvironmentBearerToken(
+          record.environmentId,
+          bearerToken,
+        );
+        if (!didPersistBearerToken) {
+          await mockSetSavedEnvironmentRegistry(previousRecords);
+          return false;
+        }
+        mockUpsert(record);
+        return true;
+      },
+    );
     mockWriteSavedEnvironmentBearerToken.mockResolvedValue(false);
     mockSetSavedEnvironmentRegistry.mockResolvedValue(undefined);
     mockReadSavedEnvironmentBearerToken.mockResolvedValue(null);
@@ -234,7 +285,7 @@ describe("addSavedEnvironment", () => {
       }),
     ).rejects.toThrow("Unable to persist saved environment credentials.");
 
-    expect(mockPersistSavedEnvironmentRecord).toHaveBeenCalledTimes(1);
+    expect(mockPersistSavedEnvironmentRecordWithBearerToken).toHaveBeenCalledTimes(1);
     expect(mockWriteSavedEnvironmentBearerToken).toHaveBeenCalledWith(
       EnvironmentId.make("environment-1"),
       "bearer-token",
@@ -668,6 +719,63 @@ describe("addSavedEnvironment", () => {
     );
     expect(mockDisconnectSshEnvironment.mock.invocationCallOrder[0]).toBeLessThan(
       mockRemove.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+    expect(mockSetSavedEnvironmentRegistry.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRemoveSavedEnvironmentBearerToken.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("keeps credentials and restores the record when durable registry removal fails", async () => {
+    const persistenceError = new Error("registry write failed");
+    const record = {
+      environmentId: EnvironmentId.make("environment-1"),
+      label: "Remote environment",
+      httpBaseUrl: "https://remote.example.com/",
+      wsBaseUrl: "wss://remote.example.com/",
+      createdAt: "2026-04-14T00:00:00.000Z",
+      lastConnectedAt: null,
+    };
+    mockSavedRecords = [record];
+    mockSetSavedEnvironmentRegistry.mockRejectedValueOnce(persistenceError);
+
+    const { removeSavedEnvironment, resetEnvironmentServiceForTests } = await import("./service");
+
+    await expect(removeSavedEnvironment(record.environmentId)).rejects.toBe(persistenceError);
+
+    expect(mockRemoveSavedEnvironmentBearerToken).not.toHaveBeenCalled();
+    expect(mockSavedRecords).toEqual([record]);
+
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("restores the registry record when secret removal fails", async () => {
+    const secretError = new Error("secret removal failed");
+    const record = {
+      environmentId: EnvironmentId.make("environment-1"),
+      label: "Remote environment",
+      httpBaseUrl: "https://remote.example.com/",
+      wsBaseUrl: "wss://remote.example.com/",
+      createdAt: "2026-04-14T00:00:00.000Z",
+      lastConnectedAt: null,
+    };
+    mockSavedRecords = [record];
+    mockRemoveSavedEnvironmentBearerToken.mockRejectedValueOnce(secretError);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { removeSavedEnvironment, resetEnvironmentServiceForTests } = await import("./service");
+
+    await expect(removeSavedEnvironment(record.environmentId)).rejects.toBe(secretError);
+
+    expect(mockSetSavedEnvironmentRegistry).toHaveBeenLastCalledWith([record]);
+    expect(mockSavedRecords).toEqual([record]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[SAVED_ENVIRONMENTS] secret removal failed; restored registry record",
+      {
+        environmentId: record.environmentId,
+        error: secretError,
+      },
     );
 
     await resetEnvironmentServiceForTests();

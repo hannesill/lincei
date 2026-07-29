@@ -1859,7 +1859,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     customWsRpcResolver = null;
     gitStatusMockState.data = null;
     __resetEnvironmentApiOverridesForTests();
-    resetSavedEnvironmentRegistryStoreForTests();
+    await resetSavedEnvironmentRegistryStoreForTests();
     resetSavedEnvironmentRuntimeStoreForTests();
     Reflect.deleteProperty(window, "desktopBridge");
     useComposerDraftStore.setState({

@@ -1,8 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, type PersistedSavedEnvironmentRecord } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -45,12 +47,15 @@ const encodeSavedEnvironmentRegistryDocumentProbe = Schema.encodeEffect(
   Schema.fromJsonString(SavedEnvironmentRegistryDocumentProbe),
 );
 
-function makeSafeStorageLayer(input: {
+interface SavedEnvironmentTestOptions {
   readonly available: boolean;
   readonly availabilityError?: unknown;
   readonly encryptError?: unknown;
   readonly decryptError?: unknown;
-}) {
+  readonly encryptString?: ElectronSafeStorage.ElectronSafeStorageShape["encryptString"];
+}
+
+function makeSafeStorageLayer(input: SavedEnvironmentTestOptions) {
   return Layer.succeed(ElectronSafeStorage.ElectronSafeStorage, {
     isEncryptionAvailable:
       input.availabilityError === undefined
@@ -61,13 +66,15 @@ function makeSafeStorageLayer(input: {
             }),
           ),
     encryptString: (value) =>
-      input.encryptError === undefined
-        ? Effect.succeed(textEncoder.encode(`enc:${value}`))
-        : Effect.fail(
-            new ElectronSafeStorage.ElectronSafeStorageEncryptError({
-              cause: input.encryptError,
-            }),
-          ),
+      input.encryptString
+        ? input.encryptString(value)
+        : input.encryptError === undefined
+          ? Effect.succeed(textEncoder.encode(`enc:${value}`))
+          : Effect.fail(
+              new ElectronSafeStorage.ElectronSafeStorageEncryptError({
+                cause: input.encryptError,
+              }),
+            ),
     decryptString: (value) => {
       if (input.decryptError !== undefined) {
         return Effect.fail(
@@ -97,6 +104,7 @@ function makeLayer(
     readonly availabilityError?: unknown;
     readonly encryptError?: unknown;
     readonly decryptError?: unknown;
+    readonly encryptString?: ElectronSafeStorage.ElectronSafeStorageShape["encryptString"];
   },
 ) {
   const environmentLayer = DesktopEnvironment.layer({
@@ -123,6 +131,7 @@ function makeLayer(
         availabilityError: options?.availabilityError,
         encryptError: options?.encryptError,
         decryptError: options?.decryptError,
+        ...(options?.encryptString ? { encryptString: options.encryptString } : {}),
       }),
     ),
     Layer.provideMerge(NodeServices.layer),
@@ -136,6 +145,7 @@ const withSavedEnvironments = <A, E, R>(
     readonly availabilityError?: unknown;
     readonly encryptError?: unknown;
     readonly decryptError?: unknown;
+    readonly encryptString?: ElectronSafeStorage.ElectronSafeStorageShape["encryptString"];
   },
 ) =>
   Effect.gen(function* () {
@@ -403,5 +413,92 @@ describe("DesktopSavedEnvironments", () => {
         );
       }),
     ),
+  );
+
+  it.effect("serializes complete saved-environment read-transform-write transactions", () =>
+    Effect.gen(function* () {
+      const encryptionStarted = yield* Deferred.make<void>();
+      const releaseEncryption = yield* Deferred.make<void>();
+      let activeEncryptions = 0;
+      let maximumActiveEncryptions = 0;
+      const encryptString: ElectronSafeStorage.ElectronSafeStorageShape["encryptString"] = (
+        value,
+      ) =>
+        Effect.gen(function* () {
+          activeEncryptions += 1;
+          maximumActiveEncryptions = Math.max(maximumActiveEncryptions, activeEncryptions);
+          yield* Deferred.succeed(encryptionStarted, undefined);
+          yield* Deferred.await(releaseEncryption);
+          return textEncoder.encode(`enc:${value}`);
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              activeEncryptions -= 1;
+            }),
+          ),
+        );
+
+      yield* withSavedEnvironments(
+        Effect.gen(function* () {
+          const savedEnvironments = yield* DesktopSavedEnvironments.DesktopSavedEnvironments;
+          yield* savedEnvironments.setRegistry([savedRegistryRecord]);
+
+          const firstSecretWrite = yield* Effect.forkChild(
+            savedEnvironments.setSecret({
+              environmentId: savedRegistryRecord.environmentId,
+              secret: "first-token",
+            }),
+          );
+          yield* Deferred.await(encryptionStarted);
+
+          const secondSecretWrite = yield* Effect.forkChild(
+            savedEnvironments.setSecret({
+              environmentId: savedRegistryRecord.environmentId,
+              secret: "second-token",
+            }),
+          );
+          const registryWriteCompleted = yield* Deferred.make<void>();
+          const registryWrite = yield* Effect.forkChild(
+            savedEnvironments
+              .setRegistry([{ ...savedRegistryRecord, label: "Renamed environment" }])
+              .pipe(
+                Effect.tap(() =>
+                  Deferred.succeed(registryWriteCompleted, undefined).pipe(Effect.orDie),
+                ),
+              ),
+          );
+          const secretRemovalCompleted = yield* Deferred.make<void>();
+          const secretRemoval = yield* Effect.forkChild(
+            savedEnvironments
+              .removeSecret(savedRegistryRecord.environmentId)
+              .pipe(
+                Effect.tap(() =>
+                  Deferred.succeed(secretRemovalCompleted, undefined).pipe(Effect.orDie),
+                ),
+              ),
+          );
+          yield* Effect.yieldNow;
+
+          assert.equal(maximumActiveEncryptions, 1);
+          assert.isFalse(yield* Deferred.isDone(registryWriteCompleted));
+          assert.isFalse(yield* Deferred.isDone(secretRemovalCompleted));
+
+          yield* Deferred.succeed(releaseEncryption, undefined);
+          yield* Fiber.join(firstSecretWrite);
+          yield* Fiber.join(secondSecretWrite);
+          yield* Fiber.join(registryWrite);
+          yield* Fiber.join(secretRemoval);
+
+          assert.equal(maximumActiveEncryptions, 1);
+          assert.deepEqual(yield* savedEnvironments.getRegistry, [
+            { ...savedRegistryRecord, label: "Renamed environment" },
+          ]);
+          assert.isTrue(
+            Option.isNone(yield* savedEnvironments.getSecret(savedRegistryRecord.environmentId)),
+          );
+        }),
+        { encryptString },
+      );
+    }),
   );
 });
