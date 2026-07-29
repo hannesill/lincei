@@ -56,6 +56,23 @@ describe("ClientSettings.sidebarV1RollbackEnabled", () => {
   });
 });
 
+describe("ClientSettings.glassOpacity", () => {
+  it("defaults legacy settings to a readable translucent surface", () => {
+    expect(DEFAULT_CLIENT_SETTINGS.glassOpacity).toBe(80);
+    expect(decodeClientSettings({}).glassOpacity).toBe(80);
+  });
+
+  it.each([39, 101, 72.5])("rejects an invalid glass opacity: %s", (value) => {
+    expect(() => decodeClientSettings({ glassOpacity: value })).toThrow();
+    expect(() => decodeClientSettingsPatch({ glassOpacity: value })).toThrow();
+  });
+
+  it.each([40, 75, 100])("accepts a bounded whole-number opacity: %s", (value) => {
+    expect(decodeClientSettings({ glassOpacity: value }).glassOpacity).toBe(value);
+    expect(decodeClientSettingsPatch({ glassOpacity: value }).glassOpacity).toBe(value);
+  });
+});
+
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
     expect(DEFAULT_SERVER_SETTINGS.providerInstances).toEqual({});

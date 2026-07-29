@@ -1,6 +1,7 @@
 import { ArchiveIcon, ArchiveX, LoaderIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   defaultInstanceIdForDriver,
@@ -12,7 +13,11 @@ import {
   type ScopedSessionRef,
 } from "@t3tools/contracts";
 import { scopeSessionRef } from "@t3tools/client-runtime";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_UNIFIED_SETTINGS,
+  MAX_GLASS_OPACITY,
+  MIN_GLASS_OPACITY,
+} from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
@@ -393,6 +398,7 @@ export function useSettingsRestore(onRestored?: () => void) {
   const changedSettingLabels = useMemo(
     () => [
       ...(theme !== "system" ? ["Theme"] : []),
+      ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? ["Time format"]
         : []),
@@ -402,6 +408,9 @@ export function useSettingsRestore(onRestored?: () => void) {
         : []),
       ...(settings.diffWordWrap !== DEFAULT_UNIFIED_SETTINGS.diffWordWrap
         ? ["Diff line wrapping"]
+        : []),
+      ...(settings.sidebarV1RollbackEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarV1RollbackEnabled
+        ? ["Sidebar version"]
         : []),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
         ? ["Diff whitespace changes"]
@@ -448,6 +457,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.defaultSessionEnvMode,
       settings.diffIgnoreWhitespace,
       settings.diffWordWrap,
+      settings.glassOpacity,
+      settings.sidebarV1RollbackEnabled,
       settings.automaticGitFetchInterval,
       settings.enableAssistantStreaming,
       settings.sidebarSessionPreviewCount,
@@ -471,6 +482,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
+      glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
+      sidebarV1RollbackEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarV1RollbackEnabled,
       sidebarSessionPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarSessionPreviewCount,
       autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
       enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
@@ -492,8 +505,157 @@ export function useSettingsRestore(onRestored?: () => void) {
   };
 }
 
-export function GeneralSettingsPanel() {
+export function AppearanceSettingsPanel() {
   const { theme, setTheme } = useTheme();
+  const settings = useSettings();
+  const { updateSettings } = useUpdateSettings();
+  const glassOpacityRatio =
+    (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
+  const glassOpacitySliderStyle = {
+    "--glass-slider-progress": `${glassOpacityRatio * 100}%`,
+    "--glass-slider-fill-offset": `${0.5 - glassOpacityRatio}rem`,
+  } as CSSProperties;
+
+  return (
+    <SettingsPageContainer>
+      <SettingsSection title="Appearance">
+        <SettingsRow
+          title="Theme"
+          description="Choose how Lincei looks across the app."
+          resetAction={
+            theme !== "system" ? (
+              <SettingResetButton label="theme" onClick={() => setTheme("system")} />
+            ) : null
+          }
+          control={
+            <Select
+              value={theme}
+              onValueChange={(value) => {
+                if (value === "system" || value === "light" || value === "dark") {
+                  setTheme(value);
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-40" aria-label="Theme preference">
+                <SelectValue>
+                  {THEME_OPTIONS.find((option) => option.value === theme)?.label ?? "System"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {THEME_OPTIONS.map((option) => (
+                  <SelectItem hideIndicator key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          title="Glass opacity"
+          description="Control how transparent glass surfaces are. Higher values make menus, dialogs, and the composer more solid."
+          resetAction={
+            settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
+              <SettingResetButton
+                label="glass opacity"
+                onClick={() =>
+                  updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="glass-opacity"
+              >
+                {settings.glassOpacity}%
+              </output>
+              <input
+                aria-label="Glass opacity"
+                className="glass-opacity-slider min-w-0 flex-1"
+                id="glass-opacity"
+                max={MAX_GLASS_OPACITY}
+                min={MIN_GLASS_OPACITY}
+                onChange={(event) => {
+                  const glassOpacity = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(glassOpacity) &&
+                    glassOpacity >= MIN_GLASS_OPACITY &&
+                    glassOpacity <= MAX_GLASS_OPACITY
+                  ) {
+                    updateSettings({ glassOpacity });
+                  }
+                }}
+                step={5}
+                style={glassOpacitySliderStyle}
+                type="range"
+                value={settings.glassOpacity}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          title="Diff line wrapping"
+          description="Set the default wrap state when the diff panel opens."
+          resetAction={
+            settings.diffWordWrap !== DEFAULT_UNIFIED_SETTINGS.diffWordWrap ? (
+              <SettingResetButton
+                label="diff line wrapping"
+                onClick={() =>
+                  updateSettings({
+                    diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.diffWordWrap}
+              onCheckedChange={(checked) => updateSettings({ diffWordWrap: Boolean(checked) })}
+              aria-label="Wrap diff lines by default"
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Qualification">
+        <SettingsRow
+          title="Use Sidebar v1"
+          description="Temporarily use the retained Sidebar v1 while Sidebar v2 is qualified. Sidebar v2 remains the alpha default."
+          resetAction={
+            settings.sidebarV1RollbackEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarV1RollbackEnabled ? (
+              <SettingResetButton
+                label="sidebar version"
+                onClick={() =>
+                  updateSettings({
+                    sidebarV1RollbackEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarV1RollbackEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarV1RollbackEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarV1RollbackEnabled: Boolean(checked) })
+              }
+              aria-label="Use Sidebar v1"
+            />
+          }
+        />
+      </SettingsSection>
+    </SettingsPageContainer>
+  );
+}
+
+export function GeneralSettingsPanel() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const observability = useServerObservability();
@@ -553,39 +715,6 @@ export function GeneralSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection title="General">
         <SettingsRow
-          title="Theme"
-          description="Choose how Lincei looks across the app."
-          resetAction={
-            theme !== "system" ? (
-              <SettingResetButton label="theme" onClick={() => setTheme("system")} />
-            ) : null
-          }
-          control={
-            <Select
-              value={theme}
-              onValueChange={(value) => {
-                if (value === "system" || value === "light" || value === "dark") {
-                  setTheme(value);
-                }
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-40" aria-label="Theme preference">
-                <SelectValue>
-                  {THEME_OPTIONS.find((option) => option.value === theme)?.label ?? "System"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                {THEME_OPTIONS.map((option) => (
-                  <SelectItem hideIndicator key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
-          }
-        />
-
-        <SettingsRow
           title="Time format"
           description="System default follows your browser or OS clock preference."
           resetAction={
@@ -624,30 +753,6 @@ export function GeneralSettingsPanel() {
                 </SelectItem>
               </SelectPopup>
             </Select>
-          }
-        />
-
-        <SettingsRow
-          title="Diff line wrapping"
-          description="Set the default wrap state when the diff panel opens."
-          resetAction={
-            settings.diffWordWrap !== DEFAULT_UNIFIED_SETTINGS.diffWordWrap ? (
-              <SettingResetButton
-                label="diff line wrapping"
-                onClick={() =>
-                  updateSettings({
-                    diffWordWrap: DEFAULT_UNIFIED_SETTINGS.diffWordWrap,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Switch
-              checked={settings.diffWordWrap}
-              onCheckedChange={(checked) => updateSettings({ diffWordWrap: Boolean(checked) })}
-              aria-label="Wrap diff lines by default"
-            />
           }
         />
 
