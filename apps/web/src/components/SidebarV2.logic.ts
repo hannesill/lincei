@@ -3,6 +3,7 @@ import {
   canSnoozeSession,
   effectiveSessionSettled,
   effectiveSessionSnoozed,
+  sessionWokeAt,
   type ChangeRequestStateLike,
   type SessionLifecycleShell,
 } from "@t3tools/client-runtime";
@@ -34,6 +35,32 @@ export function toSessionLifecycleShell(session: SidebarSessionSummary): Session
     ...session,
     updatedAt: session.updatedAt ?? session.createdAt,
   };
+}
+
+export function resolveRoutedSessionWakeAcknowledgementAt(input: {
+  routeSessionKey: string | null;
+  session: SidebarSessionSummary | null | undefined;
+  lastVisitedAt: string | null | undefined;
+  now: string;
+}): string | null {
+  if (
+    input.routeSessionKey === null ||
+    !input.session ||
+    sidebarV2SessionRowKey(input.session) !== input.routeSessionKey
+  ) {
+    return null;
+  }
+  const wokeAt = sessionWokeAt(toSessionLifecycleShell(input.session), { now: input.now });
+  if (wokeAt === null) return null;
+
+  const wokeAtMs = Date.parse(wokeAt);
+  if (!Number.isFinite(wokeAtMs)) return null;
+  const lastVisitedAtMs =
+    input.lastVisitedAt === null || input.lastVisitedAt === undefined
+      ? Number.NaN
+      : Date.parse(input.lastVisitedAt);
+  if (Number.isFinite(lastVisitedAtMs) && lastVisitedAtMs >= wokeAtMs) return null;
+  return wokeAt;
 }
 
 export function partitionSidebarV2Sessions(input: {
