@@ -139,10 +139,17 @@ export function pageSessionsWithRouteRetention(input: {
   return [...visible, routeSession];
 }
 
-export function sessionsRequiringChangeRequestObservation(
-  sessions: ReadonlyArray<SidebarSessionSummary>,
-): SidebarSessionSummary[] {
-  return sessions.filter((session) => session.archivedAt === null && session.branch !== null);
+export function sessionsRequiringChangeRequestObservation(input: {
+  active: ReadonlyArray<SidebarSessionSummary>;
+  visibleSnoozed: ReadonlyArray<SidebarSessionSummary>;
+  visibleSettled: ReadonlyArray<SidebarSessionSummary>;
+}): SidebarSessionSummary[] {
+  const result = new Map<string, SidebarSessionSummary>();
+  for (const session of [...input.active, ...input.visibleSnoozed, ...input.visibleSettled]) {
+    if (session.archivedAt !== null || session.branch === null) continue;
+    result.set(sidebarV2SessionRowKey(session), session);
+  }
+  return [...result.values()];
 }
 
 export function sidebarV2SessionRowKey(session: SidebarSessionSummary): string {
