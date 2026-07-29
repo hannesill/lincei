@@ -1831,7 +1831,12 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
                 name: refName.name,
                 current: false,
                 isRemote: true,
-                isDefault: false,
+                // origin/HEAD's target is the repository default even when no
+                // local copy of the default branch exists.
+                isDefault:
+                  defaultBranch !== null &&
+                  parsedRemoteRef?.remoteName === "origin" &&
+                  parsedRemoteRef.branchName === defaultBranch,
                 worktreePath: null,
               };
               if (parsedRemoteRef) {
@@ -1846,11 +1851,16 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
             })
           : [];
 
+      const allBranches = dedupeRemoteBranchesWithLocalMatches([
+        ...localBranches,
+        ...remoteBranches,
+      ]).toSorted((a, b) => {
+        const aPriority = a.current ? 0 : a.isDefault ? 1 : 2;
+        const bPriority = b.current ? 0 : b.isDefault ? 1 : 2;
+        return aPriority - bPriority;
+      });
       const refs = paginateBranches({
-        refs: filterBranchesForListQuery(
-          dedupeRemoteBranchesWithLocalMatches([...localBranches, ...remoteBranches]),
-          input.query,
-        ),
+        refs: filterBranchesForListQuery(allBranches, input.query),
         cursor: input.cursor,
         limit: input.limit,
       });
