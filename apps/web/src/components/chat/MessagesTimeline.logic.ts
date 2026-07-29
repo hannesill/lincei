@@ -18,6 +18,22 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string;
       groupedEntries: WorkLogEntry[];
+      showHeader?: boolean;
+    }
+  | {
+      kind: "work-toggle";
+      id: string;
+      createdAt: string;
+      groupId: string;
+      hiddenCount: number;
+      expanded: boolean;
+      onlyToolEntries: boolean;
+    }
+  | {
+      kind: "work-header";
+      id: string;
+      createdAt: string;
+      entryCount: number;
     }
   | {
       kind: "message";
@@ -117,6 +133,7 @@ export function deriveMessagesTimelineRows(input: {
   isWorking: boolean;
   activeTurnInProgress?: boolean;
   activeTurnId?: TurnId | null;
+  expandedWorkGroupIds?: ReadonlySet<string>;
   activeTurnStartedAt: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
@@ -142,12 +159,50 @@ export function deriveMessagesTimelineRows(input: {
         groupedEntries.push(nextEntry.entry);
         cursor += 1;
       }
-      nextRows.push({
-        kind: "work",
-        id: timelineEntry.id,
-        createdAt: timelineEntry.createdAt,
-        groupedEntries,
-      });
+      if (groupedEntries.length <= MAX_VISIBLE_WORK_LOG_ENTRIES) {
+        nextRows.push({
+          kind: "work",
+          id: timelineEntry.id,
+          createdAt: timelineEntry.createdAt,
+          groupedEntries,
+        });
+      } else {
+        const groupId = `work-group:${timelineEntry.id}`;
+        const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
+        const hiddenEntries = groupedEntries.slice(0, -MAX_VISIBLE_WORK_LOG_ENTRIES);
+        const visibleEntries = groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES);
+        const renderedEntries = expanded ? groupedEntries : visibleEntries;
+        const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
+
+        if (!onlyToolEntries) {
+          nextRows.push({
+            kind: "work-header",
+            id: `work-header:${timelineEntry.id}`,
+            createdAt: timelineEntry.createdAt,
+            entryCount: groupedEntries.length,
+          });
+        }
+
+        for (const workEntry of renderedEntries) {
+          nextRows.push({
+            kind: "work",
+            id: workEntry.id,
+            createdAt: workEntry.createdAt,
+            groupedEntries: [workEntry],
+            showHeader: false,
+          });
+        }
+
+        nextRows.push({
+          kind: "work-toggle",
+          id: `work-toggle:${timelineEntry.id}`,
+          createdAt: timelineEntry.createdAt,
+          groupId,
+          hiddenCount: hiddenEntries.length,
+          expanded,
+          onlyToolEntries,
+        });
+      }
       index = cursor - 1;
       continue;
     }
@@ -239,7 +294,26 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       return a.proposedPlan === (b as typeof a).proposedPlan;
 
     case "work":
-      return Equal.equals(a.groupedEntries, (b as typeof a).groupedEntries);
+      return (
+        a.showHeader === (b as typeof a).showHeader &&
+        Equal.equals(a.groupedEntries, (b as typeof a).groupedEntries)
+      );
+
+    case "work-toggle": {
+      const bw = b as typeof a;
+      return (
+        a.createdAt === bw.createdAt &&
+        a.groupId === bw.groupId &&
+        a.hiddenCount === bw.hiddenCount &&
+        a.expanded === bw.expanded &&
+        a.onlyToolEntries === bw.onlyToolEntries
+      );
+    }
+
+    case "work-header": {
+      const bh = b as typeof a;
+      return a.createdAt === bh.createdAt && a.entryCount === bh.entryCount;
+    }
 
     case "message": {
       const bm = b as typeof a;

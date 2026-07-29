@@ -36,7 +36,7 @@ import {
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { truncate } from "@t3tools/shared/String";
 import { Debouncer } from "@tanstack/react-pacer";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { useGitStatus } from "~/lib/gitStatusState";
@@ -171,6 +171,7 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestSessionDialog } from "./PullRequestSessionDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
+import { createChatTimelineAnchorController } from "./chat/chatTimelineAnchor";
 import { ChatHeader } from "./chat/ChatHeader";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { AiReviewNotice, useSessionPlanCatalog } from "./chat/sessionPlanCatalog";
@@ -695,11 +696,31 @@ export default function ChatView(props: ChatViewProps) {
     LastInvokedScriptByProjectSchema,
   );
   const legendListRef = useRef<LegendListRef | null>(null);
+  const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
+  const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
   const isAtEndRef = useRef(true);
   const attachmentPreviewHandoffByMessageIdRef = useRef<Record<string, string[]>>({});
   const attachmentPreviewPromotionInFlightByMessageIdRef = useRef<Record<string, true>>({});
   const sendInFlightRef = useRef(false);
   const terminalOpenBySessionRef = useRef<Record<string, boolean>>({});
+
+  useLayoutEffect(() => {
+    if (!composerOverlayElement) return;
+
+    const updateHeight = () => {
+      const nextHeight = Math.ceil(composerOverlayElement.getBoundingClientRect().height);
+      setComposerOverlayHeight((currentHeight) =>
+        currentHeight === nextHeight ? currentHeight : nextHeight,
+      );
+    };
+
+    updateHeight();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(composerOverlayElement);
+    return () => observer.disconnect();
+  }, [composerOverlayElement]);
 
   const terminalState = useTerminalStateStore((state) =>
     selectSessionTerminalState(state.terminalStateBySessionKey, routeSessionRef),
@@ -799,6 +820,12 @@ export default function ChatView(props: ChatViewProps) {
     [activeSession],
   );
   const activeSessionKey = activeSessionRef ? scopedSessionKey(activeSessionRef) : null;
+  const [timelineAnchor, setTimelineAnchor] = useState<{
+    readonly sessionKey: string | null;
+    readonly messageId: MessageId | null;
+  }>({ sessionKey: activeSessionKey, messageId: null });
+  const timelineAnchorMessageId =
+    timelineAnchor.sessionKey === activeSessionKey ? timelineAnchor.messageId : null;
   const existingOpenTerminalSessionKeys = useMemo(() => {
     const existingSessionKeys = new Set<string>([...serverSessionKeys, ...draftSessionKeys]);
     return openTerminalSessionKeys.filter((nextSessionKey) =>
@@ -2624,13 +2651,43 @@ export default function ChatView(props: ChatViewProps) {
     new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
   );
 
-  // Scroll helpers — LegendList handles auto-scroll via maintainScrollAtEnd.
+  // Scrolling is explicit so streamed timeline updates never take control away
+  // from the user after the newly sent row has been positioned once.
   const scrollToEnd = useCallback((animated = false) => {
     isAtEndRef.current = true;
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
-    legendListRef.current?.scrollToEnd?.({ animated });
+    void legendListRef.current?.scrollToEnd?.({ animated });
   }, []);
+  const timelineAnchorControllerRef = useRef<
+    ReturnType<typeof createChatTimelineAnchorController<MessageId>> | undefined
+  >(undefined);
+  const timelineAnchorController =
+    timelineAnchorControllerRef.current ??
+    (timelineAnchorControllerRef.current = createChatTimelineAnchorController<MessageId>({
+      getList: () => legendListRef.current,
+    }));
+  const onTimelineAnchorReady = useCallback(
+    (messageId: MessageId, anchorIndex: number) => {
+      timelineAnchorController.position(messageId, anchorIndex);
+    },
+    [timelineAnchorController],
+  );
+  const onTimelineAnchorSizeChanged = useCallback(
+    (messageId: MessageId) => {
+      timelineAnchorController.sizeChanged(messageId);
+    },
+    [timelineAnchorController],
+  );
+  useLayoutEffect(() => {
+    timelineAnchorController.reset();
+    setTimelineAnchor((current) =>
+      current.sessionKey === activeSessionKey && current.messageId === null
+        ? current
+        : { sessionKey: activeSessionKey, messageId: null },
+    );
+    return () => timelineAnchorController.reset();
+  }, [activeSessionKey, timelineAnchorController]);
 
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
     isAtEndRef.current = isAtEnd;
@@ -3172,14 +3229,16 @@ export default function ChatView(props: ChatViewProps) {
       sizeBytes: image.sizeBytes,
       previewUrl: image.previewUrl,
     }));
-    // Scroll to the current end *before* adding the optimistic message.
-    // This sets LegendList's internal isAtEnd=true so maintainScrollAtEnd
-    // automatically pins to the new item when the data changes.
+    // Sending always returns to the live edge. The new row becomes the
+    // anchored end-space target so it lands near the top while the response
+    // streams into the reserved space below it.
     isAtEndRef.current = true;
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
-    await legendListRef.current?.scrollToEnd?.({ animated: false });
-
+    setTimelineAnchor({
+      sessionKey: scopedSessionKey(scopeSessionRef(activeSession.environmentId, sessionIdForSend)),
+      messageId: messageIdForSend,
+    });
     setOptimisticUserMessages((existing) => [
       ...existing,
       {
@@ -3575,11 +3634,16 @@ export default function ChatView(props: ChatViewProps) {
       beginLocalDispatch({ preparingWorktree: false });
       setSessionError(sessionIdForSend, null);
 
-      // Scroll to the current end *before* adding the optimistic message.
+      // Position this sent row once LegendList has measured the anchored tail.
       isAtEndRef.current = true;
       showScrollDebouncer.current.cancel();
       setShowScrollToBottom(false);
-      await legendListRef.current?.scrollToEnd?.({ animated: false });
+      setTimelineAnchor({
+        sessionKey: scopedSessionKey(
+          scopeSessionRef(activeSession.environmentId, sessionIdForSend),
+        ),
+        messageId: messageIdForSend,
+      });
 
       setOptimisticUserMessages((existing) => [
         ...existing,
@@ -4019,7 +4083,7 @@ export default function ChatView(props: ChatViewProps) {
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">
         {/* Chat column */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background/98">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background/98">
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Messages — LegendList handles virtualization and scrolling internally */}
@@ -4046,12 +4110,19 @@ export default function ChatView(props: ChatViewProps) {
               timestampFormat={timestampFormat}
               workspaceRoot={activeWorkspaceRoot}
               skills={activeProviderStatus?.skills ?? EMPTY_PROVIDER_SKILLS}
+              anchorMessageId={timelineAnchorMessageId}
+              onAnchorReady={onTimelineAnchorReady}
+              onAnchorSizeChanged={onTimelineAnchorSizeChanged}
+              contentInsetEndAdjustment={composerOverlayHeight}
               onIsAtEndChange={onIsAtEndChange}
             />
 
             {/* scroll to bottom control shown when user has scrolled away from the bottom */}
             {showScrollToBottom && (
-              <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
+              <div
+                className="pointer-events-none absolute left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5"
+                style={{ bottom: composerOverlayHeight + 4 }}
+              >
                 <button
                   type="button"
                   onClick={() => scrollToEnd(true)}
@@ -4067,122 +4138,150 @@ export default function ChatView(props: ChatViewProps) {
 
           {/* Input bar */}
           <div
-            className={cn(
-              "pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-2 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-2.5",
-              isGitRepo
-                ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
-                : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
-            )}
+            ref={setComposerOverlayElement}
+            data-chat-composer-overlay="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-2 sm:pt-2.5"
           >
-            <div className="relative isolate">
-              <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
-              <div className="relative z-10">
-                <ChatComposer
-                  composerRef={composerRef}
-                  composerDraftTarget={composerDraftTarget}
-                  environmentId={environmentId}
-                  routeKind={routeKind}
-                  routeSessionRef={routeSessionRef}
-                  draftId={draftId}
-                  activeSessionId={activeSessionId}
-                  activeSessionEnvironmentId={activeSession?.environmentId}
-                  activeSession={activeSession}
-                  isServerSession={isServerSession}
-                  isLocalDraftSession={isLocalDraftSession}
-                  phase={phase}
-                  isConnecting={isConnecting}
-                  isSendBusy={isSendBusy}
-                  isPreparingWorktree={isPreparingWorktree}
-                  environmentUnavailable={activeEnvironmentUnavailableState}
-                  activePendingApproval={activePendingApproval}
-                  pendingApprovals={pendingApprovals}
-                  pendingUserInputs={pendingUserInputs}
-                  activePendingProgress={activePendingProgress}
-                  activePendingResolvedAnswers={activePendingResolvedAnswers}
-                  activePendingIsResponding={activePendingIsResponding}
-                  activePendingDraftAnswers={activePendingDraftAnswers}
-                  activePendingQuestionIndex={activePendingQuestionIndex}
-                  respondingRequestIds={respondingRequestIds}
-                  showPlanFollowUpPrompt={showPlanFollowUpPrompt}
-                  activeProposedPlan={activeProposedPlan}
-                  activePlan={activePlan as { turnId?: TurnId } | null}
-                  sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
-                  planSidebarLabel={planSidebarLabel}
-                  planSidebarOpen={planSidebarOpen}
-                  runtimeMode={runtimeMode}
-                  interactionMode={interactionMode}
-                  lockedProvider={lockedProvider}
-                  providerStatuses={providerStatuses as ServerProvider[]}
-                  activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
-                  activeSessionModelSelection={activeSession?.modelSelection}
-                  activeSessionActivities={activeSession?.activities}
-                  resolvedTheme={resolvedTheme}
-                  settings={settings}
-                  shortcuts={shortcuts}
-                  terminalOpen={Boolean(terminalState.terminalOpen)}
-                  gitCwd={gitCwd}
-                  promptRef={promptRef}
-                  composerImagesRef={composerImagesRef}
-                  composerTerminalContextsRef={composerTerminalContextsRef}
-                  shouldAutoScrollRef={isAtEndRef}
-                  scheduleStickToBottom={scrollToEnd}
-                  onSend={onSend}
-                  onInterrupt={onInterrupt}
-                  onImplementPlanInNewSession={onImplementPlanInNewSession}
-                  onRespondToApproval={onRespondToApproval}
-                  onSelectActivePendingUserInputOption={onSelectActivePendingUserInputOption}
-                  onAdvanceActivePendingUserInput={onAdvanceActivePendingUserInput}
-                  onPreviousActivePendingUserInputQuestion={
-                    onPreviousActivePendingUserInputQuestion
-                  }
-                  onChangeActivePendingUserInputCustomAnswer={
-                    onChangeActivePendingUserInputCustomAnswer
-                  }
-                  onProviderModelSelect={onProviderModelSelect}
-                  toggleInteractionMode={toggleInteractionMode}
-                  handleRuntimeModeChange={handleRuntimeModeChange}
-                  handleInteractionModeChange={handleInteractionModeChange}
-                  togglePlanSidebar={togglePlanSidebar}
-                  focusComposer={focusComposer}
-                  scheduleComposerFocus={scheduleComposerFocus}
-                  setSessionError={setSessionError}
-                  onExpandImage={onExpandTimelineImage}
-                />
-              </div>
-            </div>
-            {isGitRepo && (
-              <BranchToolbar
-                environmentId={activeSession.environmentId}
-                sessionId={activeSession.id}
-                {...(routeKind === "draft" && draftId ? { draftId } : {})}
-                onEnvModeChange={onEnvModeChange}
-                {...(canOverrideServerSessionEnvMode ? { effectiveEnvModeOverride: envMode } : {})}
-                {...(canOverrideServerSessionEnvMode
-                  ? {
-                      activeSessionBranchOverride: activeSessionBranch,
-                      onActiveSessionBranchOverrideChange: setPendingServerSessionBranch,
-                    }
-                  : {})}
-                envLocked={envLocked}
-                onComposerFocusRequest={scheduleComposerFocus}
-                centerContent={<AiReviewNotice />}
-                {...(canCheckoutPullRequestIntoSession
-                  ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                  : {})}
-                {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
-                availableEnvironments={logicalProjectEnvironments}
-              />
-            )}
-            {!isGitRepo && (
+            <div
+              aria-hidden="true"
+              className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-2 bottom-0 z-0 sm:top-2.5"
+            >
               <div
                 className={cn(
-                  "mx-auto flex w-full justify-center px-2.5 pb-1 pt-1.5 sm:px-3",
+                  "relative mx-auto h-full w-full overflow-clip rounded-t-[20px]",
                   APP_CONTENT_MAX_WIDTH_CLASS,
                 )}
               >
-                <AiReviewNotice />
+                <div className="chat-composer-shared-blur absolute -inset-8" />
               </div>
-            )}
+            </div>
+            <div className="chat-composer-horizontal-inset">
+              <div
+                className={cn(
+                  "pointer-events-auto relative z-10 isolate mx-auto w-full",
+                  APP_CONTENT_MAX_WIDTH_CLASS,
+                )}
+              >
+                <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
+                <div className="relative z-10">
+                  <ChatComposer
+                    composerRef={composerRef}
+                    composerDraftTarget={composerDraftTarget}
+                    environmentId={environmentId}
+                    routeKind={routeKind}
+                    routeSessionRef={routeSessionRef}
+                    draftId={draftId}
+                    activeSessionId={activeSessionId}
+                    activeSessionEnvironmentId={activeSession?.environmentId}
+                    activeSession={activeSession}
+                    isServerSession={isServerSession}
+                    isLocalDraftSession={isLocalDraftSession}
+                    phase={phase}
+                    isConnecting={isConnecting}
+                    isSendBusy={isSendBusy}
+                    isPreparingWorktree={isPreparingWorktree}
+                    environmentUnavailable={activeEnvironmentUnavailableState}
+                    activePendingApproval={activePendingApproval}
+                    pendingApprovals={pendingApprovals}
+                    pendingUserInputs={pendingUserInputs}
+                    activePendingProgress={activePendingProgress}
+                    activePendingResolvedAnswers={activePendingResolvedAnswers}
+                    activePendingIsResponding={activePendingIsResponding}
+                    activePendingDraftAnswers={activePendingDraftAnswers}
+                    activePendingQuestionIndex={activePendingQuestionIndex}
+                    respondingRequestIds={respondingRequestIds}
+                    showPlanFollowUpPrompt={showPlanFollowUpPrompt}
+                    activeProposedPlan={activeProposedPlan}
+                    activePlan={activePlan as { turnId?: TurnId } | null}
+                    sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
+                    planSidebarLabel={planSidebarLabel}
+                    planSidebarOpen={planSidebarOpen}
+                    runtimeMode={runtimeMode}
+                    interactionMode={interactionMode}
+                    lockedProvider={lockedProvider}
+                    providerStatuses={providerStatuses as ServerProvider[]}
+                    activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
+                    activeSessionModelSelection={activeSession?.modelSelection}
+                    activeSessionActivities={activeSession?.activities}
+                    resolvedTheme={resolvedTheme}
+                    settings={settings}
+                    shortcuts={shortcuts}
+                    terminalOpen={Boolean(terminalState.terminalOpen)}
+                    gitCwd={gitCwd}
+                    promptRef={promptRef}
+                    composerImagesRef={composerImagesRef}
+                    composerTerminalContextsRef={composerTerminalContextsRef}
+                    onSend={onSend}
+                    onInterrupt={onInterrupt}
+                    onImplementPlanInNewSession={onImplementPlanInNewSession}
+                    onRespondToApproval={onRespondToApproval}
+                    onSelectActivePendingUserInputOption={onSelectActivePendingUserInputOption}
+                    onAdvanceActivePendingUserInput={onAdvanceActivePendingUserInput}
+                    onPreviousActivePendingUserInputQuestion={
+                      onPreviousActivePendingUserInputQuestion
+                    }
+                    onChangeActivePendingUserInputCustomAnswer={
+                      onChangeActivePendingUserInputCustomAnswer
+                    }
+                    onProviderModelSelect={onProviderModelSelect}
+                    toggleInteractionMode={toggleInteractionMode}
+                    handleRuntimeModeChange={handleRuntimeModeChange}
+                    handleInteractionModeChange={handleInteractionModeChange}
+                    togglePlanSidebar={togglePlanSidebar}
+                    focusComposer={focusComposer}
+                    scheduleComposerFocus={scheduleComposerFocus}
+                    setSessionError={setSessionError}
+                    onExpandImage={onExpandTimelineImage}
+                  />
+                </div>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "chat-composer-horizontal-inset chat-composer-lower-chrome relative z-10",
+                isGitRepo
+                  ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
+                  : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
+              )}
+            >
+              {isGitRepo && (
+                <div className="pointer-events-auto">
+                  <BranchToolbar
+                    environmentId={activeSession.environmentId}
+                    sessionId={activeSession.id}
+                    {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                    onEnvModeChange={onEnvModeChange}
+                    {...(canOverrideServerSessionEnvMode
+                      ? { effectiveEnvModeOverride: envMode }
+                      : {})}
+                    {...(canOverrideServerSessionEnvMode
+                      ? {
+                          activeSessionBranchOverride: activeSessionBranch,
+                          onActiveSessionBranchOverrideChange: setPendingServerSessionBranch,
+                        }
+                      : {})}
+                    envLocked={envLocked}
+                    onComposerFocusRequest={scheduleComposerFocus}
+                    centerContent={<AiReviewNotice />}
+                    {...(canCheckoutPullRequestIntoSession
+                      ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                      : {})}
+                    {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
+                    availableEnvironments={logicalProjectEnvironments}
+                  />
+                </div>
+              )}
+              {!isGitRepo && (
+                <div
+                  className={cn(
+                    "pointer-events-auto mx-auto flex w-full justify-center px-2.5 pb-1 pt-1.5 sm:px-3",
+                    APP_CONTENT_MAX_WIDTH_CLASS,
+                  )}
+                >
+                  <AiReviewNotice />
+                </div>
+              )}
+            </div>
           </div>
 
           {pullRequestDialogState ? (

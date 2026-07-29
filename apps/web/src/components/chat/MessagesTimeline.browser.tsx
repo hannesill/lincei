@@ -69,6 +69,10 @@ function buildProps() {
     resolvedTheme: "dark" as const,
     timestampFormat: "24-hour" as const,
     workspaceRoot: undefined,
+    anchorMessageId: null,
+    onAnchorReady: vi.fn(),
+    onAnchorSizeChanged: vi.fn(),
+    contentInsetEndAdjustment: 0,
     onIsAtEndChange: vi.fn(),
   };
 }
@@ -133,15 +137,7 @@ describe("MessagesTimeline", () => {
     }
   });
 
-  it("snaps to the bottom when timeline rows appear after an initially empty render", async () => {
-    const requestAnimationFrameSpy = vi
-      .spyOn(window, "requestAnimationFrame")
-      .mockImplementation((callback: FrameRequestCallback) => {
-        callback(0);
-        return 1;
-      });
-    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-
+  it("does not override explicit anchoring when timeline rows appear after an empty render", async () => {
     const props = buildProps();
     const screen = await render(<MessagesTimeline {...props} timelineEntries={[]} />);
 
@@ -171,9 +167,8 @@ describe("MessagesTimeline", () => {
       );
 
       await expect.element(page.getByText("Thinking - Inspecting repository state")).toBeVisible();
-      expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
-      expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
-      expect(requestAnimationFrameSpy).toHaveBeenCalled();
+      expect(props.onIsAtEndChange).not.toHaveBeenCalled();
+      expect(scrollToEndSpy).not.toHaveBeenCalled();
     } finally {
       await screen.unmount();
     }

@@ -468,7 +468,7 @@ export function BranchToolbarBranchSelector({
     }
 
     if (shouldVirtualizeBranchList) {
-      branchListRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+      void branchListRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     } else {
       branchListScrollElementRef.current?.scrollTo({ top: 0 });
     }
@@ -586,7 +586,7 @@ export function BranchToolbarBranchSelector({
         if (!isBranchMenuOpen || eventDetails.index < 0 || eventDetails.reason !== "keyboard") {
           return;
         }
-        branchListRef.current?.scrollIndexIntoView?.({
+        void branchListRef.current?.scrollIndexIntoView?.({
           index: eventDetails.index,
           animated: false,
         });
@@ -623,6 +623,13 @@ export function BranchToolbarBranchSelector({
               ref={branchListRef}
               data={filteredBranchPickerItems}
               keyExtractor={(item) => item}
+              getItemType={(item) =>
+                item === checkoutPullRequestItemValue
+                  ? "checkout-pull-request"
+                  : item === createBranchItemValue
+                    ? "create-branch"
+                    : "branch"
+              }
               renderItem={({ item, index }) => renderPickerItem(item, index)}
               estimatedItemSize={28}
               drawDistance={336}
