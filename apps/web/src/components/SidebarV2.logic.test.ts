@@ -11,6 +11,7 @@ import {
   resolveSidebarV2NewSessionOptions,
   sessionsRequiringChangeRequestObservation,
   sidebarV2SessionRowKey,
+  shouldNavigateAfterSidebarV2ProjectDelete,
 } from "./SidebarV2.logic";
 import type { SidebarSessionSummary } from "../types";
 
@@ -139,6 +140,45 @@ describe("Sidebar v2 lifecycle partition", () => {
     expect(sidebarV2SessionRowKey(session)).toBe(
       scopedSessionKey(scopeSessionRef(environmentId, session.id)),
     );
+  });
+
+  it("navigates away only when project deletion still targets the captured route", () => {
+    const deletedProjectRef = {
+      environmentId,
+      projectId: ProjectId.make("project"),
+    };
+    const routeBeforeDelete = {
+      routeKey: "server:environment:session",
+      projectRef: deletedProjectRef,
+    };
+
+    expect(
+      shouldNavigateAfterSidebarV2ProjectDelete({
+        deletedProjectRef,
+        routeBeforeDelete,
+        routeKeyAfterDelete: routeBeforeDelete.routeKey,
+      }),
+    ).toBe(true);
+    expect(
+      shouldNavigateAfterSidebarV2ProjectDelete({
+        deletedProjectRef,
+        routeBeforeDelete,
+        routeKeyAfterDelete: "draft:new-route",
+      }),
+    ).toBe(false);
+    expect(
+      shouldNavigateAfterSidebarV2ProjectDelete({
+        deletedProjectRef,
+        routeBeforeDelete: {
+          ...routeBeforeDelete,
+          projectRef: {
+            environmentId,
+            projectId: ProjectId.make("another-project"),
+          },
+        },
+        routeKeyAfterDelete: routeBeforeDelete.routeKey,
+      }),
+    ).toBe(false);
   });
 
   it("gates lifecycle dispatch at the action boundary", () => {

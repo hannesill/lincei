@@ -7,7 +7,7 @@ import {
   type SessionLifecycleShell,
 } from "@t3tools/client-runtime";
 import { scopeSessionRef, scopedSessionKey } from "@t3tools/client-runtime";
-import type { ScopedSessionRef, SessionEnvMode } from "@t3tools/contracts";
+import type { ScopedProjectRef, ScopedSessionRef, SessionEnvMode } from "@t3tools/contracts";
 
 import { sortSessionsForSidebarV2, sortSettledSessionsForSidebarV2 } from "./Sidebar.logic";
 import type { SidebarSessionSummary } from "../types";
@@ -147,6 +147,26 @@ export function sessionsRequiringChangeRequestObservation(
 
 export function sidebarV2SessionRowKey(session: SidebarSessionSummary): string {
   return scopedSessionKey(scopeSessionRef(session.environmentId, session.id));
+}
+
+export interface SidebarV2ProjectDeleteRouteSnapshot {
+  routeKey: string | null;
+  projectRef: ScopedProjectRef | null;
+}
+
+export function shouldNavigateAfterSidebarV2ProjectDelete(input: {
+  deletedProjectRef: ScopedProjectRef;
+  routeBeforeDelete: SidebarV2ProjectDeleteRouteSnapshot;
+  routeKeyAfterDelete: string | null;
+}): boolean {
+  const routeProject = input.routeBeforeDelete.projectRef;
+  return (
+    input.routeBeforeDelete.routeKey !== null &&
+    input.routeBeforeDelete.routeKey === input.routeKeyAfterDelete &&
+    routeProject !== null &&
+    routeProject.environmentId === input.deletedProjectRef.environmentId &&
+    routeProject.projectId === input.deletedProjectRef.projectId
+  );
 }
 
 export function resolveSidebarV2NewSessionOptions(defaultSessionEnvMode: SessionEnvMode): {
