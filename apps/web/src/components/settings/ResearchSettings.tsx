@@ -325,7 +325,7 @@ export function ResearchSettingsPanel() {
           </>
         ) : null}
 
-        <div className="border-t border-border/60 px-4 py-3.5 sm:px-5">
+        <div className="rounded-xl px-3 py-3 sm:px-4">
           <div className="flex items-start gap-2.5 rounded-lg border border-warning/25 bg-warning/5 p-3 text-xs">
             <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
             <div className="space-y-1">

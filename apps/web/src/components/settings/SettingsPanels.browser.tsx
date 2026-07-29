@@ -1471,6 +1471,77 @@ describe("Settings panels", () => {
     await expect.element(page.getByPlaceholder("Optional")).toBeInTheDocument();
   });
 
+  it("exposes provider-instance wizard progress as navigable steps", async () => {
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <ProviderSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Add provider instance" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add provider instance" });
+    const driverStep = dialog.getByRole("button", { name: "Driver, step 1" });
+    const identityStep = dialog.getByRole("button", { name: "Identity, step 2" });
+
+    await expect.element(dialog.getByRole("list")).toBeInTheDocument();
+    await expect.element(driverStep).toHaveAttribute("aria-current", "step");
+
+    await identityStep.click();
+
+    await expect.element(identityStep).toHaveAttribute("aria-current", "step");
+    await expect.element(driverStep).not.toHaveAttribute("aria-current");
+  });
+
+  it("blocks a direct Config step skip and focuses the invalid instance ID", async () => {
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <ProviderSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Add provider instance" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add provider instance" });
+    const configStep = dialog.getByRole("button", { name: "Config, step 3" });
+    const identityStep = dialog.getByRole("button", { name: "Identity, step 2" });
+    const instanceIdInput = dialog.getByLabelText("Instance ID");
+
+    await configStep.click();
+
+    await expect.element(identityStep).toHaveAttribute("aria-current", "step");
+    await expect.element(dialog.getByText("Instance ID is required.")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(instanceIdInput.element());
+    });
+  });
+
+  it("blocks Next from Identity and focuses the invalid instance ID", async () => {
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <ProviderSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Add provider instance" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add provider instance" });
+    const identityStep = dialog.getByRole("button", { name: "Identity, step 2" });
+    const instanceIdInput = dialog.getByLabelText("Instance ID");
+
+    await identityStep.click();
+    await dialog.getByRole("button", { name: "Next" }).click();
+
+    await expect.element(identityStep).toHaveAttribute("aria-current", "step");
+    await expect.element(dialog.getByText("Instance ID is required.")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(instanceIdInput.element());
+    });
+  });
+
   it("runs one-click provider updates from the provider card", async () => {
     const updateProvider = vi.fn<LocalApi["server"]["updateProvider"]>().mockResolvedValue({
       providers: [createOutdatedProvider("codex")],

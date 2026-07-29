@@ -92,6 +92,60 @@
   animation-duration: 0s !important;
 }
 
+/* Fade scrolling settings content into the shared, borderless app top bar. */
+.settings-page-scroll-fade {
+  --settings-top-fade-height: 2.5rem;
+
+  scroll-padding-top: var(--settings-top-fade-height);
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgb(0 0 0 / 10%) 10%,
+      rgb(0 0 0 / 30%) 24%,
+      rgb(0 0 0 / 58%) 42%,
+      rgb(0 0 0 / 82%) 62%,
+      rgb(0 0 0 / 96%) 82%,
+      black 100%
+    ),
+    linear-gradient(black, black);
+  -webkit-mask-position: top, bottom;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size:
+    100% var(--settings-top-fade-height),
+    100% calc(100% - var(--settings-top-fade-height));
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgb(0 0 0 / 10%) 10%,
+      rgb(0 0 0 / 30%) 24%,
+      rgb(0 0 0 / 58%) 42%,
+      rgb(0 0 0 / 82%) 62%,
+      rgb(0 0 0 / 96%) 82%,
+      black 100%
+    ),
+    linear-gradient(black, black);
+  mask-position: top, bottom;
+  mask-repeat: no-repeat;
+  mask-size:
+    100% var(--settings-top-fade-height),
+    100% calc(100% - var(--settings-top-fade-height));
+}
+
+@media (min-width: 40rem) {
+  .settings-page-scroll-fade {
+    --settings-top-fade-height: 3rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .settings-page-scroll-fade {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
 :root {
   color-scheme: light;
   --app-scrollbar-width: 6px;
