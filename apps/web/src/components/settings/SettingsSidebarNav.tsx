@@ -9,6 +9,7 @@ import {
   Layers3Icon,
   Link2Icon,
   MicroscopeIcon,
+  PaletteIcon,
   Settings2Icon,
 } from "lucide-react";
 import { useCanGoBack, useNavigate } from "@tanstack/react-router";
@@ -26,6 +27,7 @@ import {
 
 export type SettingsSectionPath =
   | "/settings/general"
+  | "/settings/appearance"
   | "/settings/research"
   | "/settings/datasets"
   | "/settings/skills"
@@ -43,6 +45,7 @@ type SettingsNavItem = {
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<SettingsNavItem> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
+  { label: "Appearance", to: "/settings/appearance", icon: PaletteIcon },
   { label: "Research", to: "/settings/research", icon: MicroscopeIcon },
   { label: "Datasets", to: "/settings/datasets", icon: DatabaseIcon },
   { label: "Skills", to: "/settings/skills", icon: Layers3Icon },

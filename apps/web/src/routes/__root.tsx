@@ -132,6 +132,7 @@ function RootRouteView() {
   return (
     <ToastProvider>
       <AnchoredToastProvider>
+        <GlassAppearanceSync />
         {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
         {primaryEnvironmentAuthenticated ? <ServerStateBootstrap /> : null}
         <EnvironmentConnectionManagerBootstrap />
@@ -149,6 +150,16 @@ function RootRouteView() {
       </AnchoredToastProvider>
     </ToastProvider>
   );
+}
+
+function GlassAppearanceSync() {
+  const glassOpacity = useSettings((settings) => settings.glassOpacity);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--glass-opacity", `${glassOpacity}%`);
+  }, [glassOpacity]);
+
+  return null;
 }
 
 function HostedStaticEnvironmentBootstrap() {

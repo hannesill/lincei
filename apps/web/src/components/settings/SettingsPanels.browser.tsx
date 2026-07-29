@@ -4,6 +4,7 @@ import {
   type AuthAccessStreamEvent,
   type AuthAccessSnapshot,
   AuthSessionId,
+  DEFAULT_CLIENT_SETTINGS,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   type DesktopBridge,
@@ -42,7 +43,12 @@ import { useUiStateStore } from "../../uiStateStore";
 import { ConnectionsSettings } from "./ConnectionsSettings";
 import { DiagnosticsSettingsPanel } from "./DiagnosticsSettings";
 import { SkillsSettingsPanel } from "./SkillsSettings";
-import { GeneralSettingsPanel, ProviderSettingsPanel, useSettingsRestore } from "./SettingsPanels";
+import {
+  AppearanceSettingsPanel,
+  GeneralSettingsPanel,
+  ProviderSettingsPanel,
+  useSettingsRestore,
+} from "./SettingsPanels";
 import { SourceControlSettingsPanel } from "./SourceControlSettings";
 
 function renderWithTestRouter(children: ReactNode) {
@@ -485,7 +491,7 @@ const createDesktopBridgeStub = (overrides?: {
   };
 };
 
-describe("GeneralSettingsPanel observability", () => {
+describe("Settings panels", () => {
   let mounted:
     | (Awaited<ReturnType<typeof render>> & {
         cleanup?: () => Promise<void>;
@@ -515,6 +521,61 @@ describe("GeneralSettingsPanel observability", () => {
     resetServerStateForTests();
     await __resetLocalApiForTests();
     authAccessHarness.reset();
+  });
+
+  it("hydrates and persists the Appearance qualification controls", async () => {
+    const setClientSettings = vi.fn().mockResolvedValue(undefined);
+    window.nativeApi = {
+      persistence: {
+        getClientSettings: vi.fn().mockResolvedValue({
+          ...DEFAULT_CLIENT_SETTINGS,
+          diffWordWrap: true,
+          glassOpacity: 65,
+          sidebarV1RollbackEnabled: true,
+        }),
+        setClientSettings,
+      },
+    } as unknown as LocalApi;
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <AppearanceSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    const opacitySlider = page.getByLabelText("Glass opacity", { exact: true });
+    await expect.element(opacitySlider).toHaveValue("65");
+    await expect
+      .element(page.getByRole("switch", { name: "Wrap diff lines by default" }))
+      .toBeChecked();
+    await expect.element(page.getByRole("switch", { name: "Use Sidebar v1" })).toBeChecked();
+
+    const opacityInput = opacitySlider.element() as HTMLInputElement;
+    const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setInputValue?.call(opacityInput, "70");
+    opacityInput.dispatchEvent(new Event("input", { bubbles: true }));
+    opacityInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          glassOpacity: 70,
+          sidebarV1RollbackEnabled: true,
+        }),
+      );
+    });
+
+    await page.getByRole("switch", { name: "Use Sidebar v1" }).click();
+
+    await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          glassOpacity: 70,
+          sidebarV1RollbackEnabled: false,
+        }),
+      );
+    });
   });
 
   it("includes the Vitrine executable in the global settings restore", async () => {
