@@ -126,7 +126,7 @@ function StatBlock({
 
 function StatsGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="relative grid grid-cols-2 sm:grid-cols-4">
+    <div className="relative grid grid-cols-2 overflow-hidden rounded-xl border border-border/60 bg-card sm:grid-cols-4">
       <span
         className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-border/60"
         aria-hidden
@@ -149,7 +149,11 @@ function StatsGrid({ children }: { children: ReactNode }) {
 }
 
 function EmptyRows({ label }: { label: string }) {
-  return <div className="px-4 py-4 text-xs text-muted-foreground sm:px-5">{label}</div>;
+  return (
+    <div className="rounded-xl border border-border/60 bg-card px-4 py-4 text-muted-foreground text-xs sm:px-5">
+      {label}
+    </div>
+  );
 }
 
 function ExpandableText({
@@ -205,7 +209,7 @@ function DiagnosticsTable({
       chainVerticalScroll
       scrollFade
       hideScrollbars
-      className="w-full max-w-full rounded-none"
+      className="w-full max-w-full rounded-xl border border-border/60 bg-card"
     >
       <table
         className={cn("w-full text-left text-xs", minTableWidth, columnWidths && "table-fixed")}
@@ -439,7 +443,7 @@ function ProcessDiagnosticsTable({
       chainVerticalScroll
       scrollFade
       hideScrollbars
-      className="max-h-[min(64vh,44rem)] w-full max-w-full rounded-none border-t border-border/60"
+      className="max-h-[min(64vh,44rem)] w-full max-w-full rounded-xl border border-border/60 bg-card"
     >
       <table className="w-full min-w-[1040px] table-fixed text-left text-xs">
         <colgroup>
@@ -587,7 +591,7 @@ function ProcessResourceHistoryChart({
   const maxCpuPercent = Math.max(1, ...buckets.map((bucket) => bucket.maxCpuPercent));
 
   return (
-    <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+    <div className="rounded-xl border border-border/60 bg-card px-4 py-3 sm:px-5">
       <div className="flex h-28 items-end gap-1 overflow-hidden rounded-sm bg-muted/10 p-2">
         {buckets.map((bucket) => {
           const peakHeight = Math.max(2, (bucket.maxCpuPercent / maxCpuPercent) * 100);
@@ -667,7 +671,7 @@ function ProcessResourceHistoryTable({
       chainVerticalScroll
       scrollFade
       hideScrollbars
-      className="max-h-[min(64vh,44rem)] w-full max-w-full border-t border-border/60"
+      className="max-h-[min(64vh,44rem)] w-full max-w-full rounded-xl border border-border/60 bg-card"
     >
       <table className="w-full min-w-[980px] table-fixed text-left text-xs">
         <colgroup>
@@ -947,7 +951,7 @@ export function DiagnosticsSettingsPanel() {
           />
         </StatsGrid>
         {processDiagnosticsError || processError ? (
-          <div className="space-y-2 border-t border-border/60 px-4 py-3 text-xs text-muted-foreground sm:px-5">
+          <div className="space-y-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-muted-foreground text-xs sm:px-5">
             {processDiagnosticsError ? (
               <div className="flex items-start gap-2 text-destructive">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
@@ -1012,7 +1016,7 @@ export function DiagnosticsSettingsPanel() {
           />
         </StatsGrid>
         {processResourceError || resourceError ? (
-          <div className="space-y-2 border-t border-border/60 px-4 py-3 text-xs text-muted-foreground sm:px-5">
+          <div className="space-y-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-muted-foreground text-xs sm:px-5">
             {processResourceError ? (
               <div className="flex items-start gap-2 text-destructive">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
@@ -1092,7 +1096,7 @@ export function DiagnosticsSettingsPanel() {
           />
         </StatsGrid>
         {openLogsDirectoryError || traceDiagnosticsError || error ? (
-          <div className="space-y-2 border-t border-border/60 px-4 py-3 text-xs text-muted-foreground sm:px-5">
+          <div className="space-y-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-muted-foreground text-xs sm:px-5">
             {openLogsDirectoryError ? (
               <div className="flex items-start gap-2 text-destructive">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
@@ -1216,7 +1220,7 @@ export function DiagnosticsSettingsPanel() {
             chainVerticalScroll
             scrollFade
             hideScrollbars
-            className="w-full max-w-full rounded-none"
+            className="w-full max-w-full rounded-xl border border-border/60 bg-card"
           >
             <table className="w-full min-w-[920px] table-fixed text-left text-xs">
               <colgroup>

@@ -1224,7 +1224,7 @@ export function ShortcutsSettingsPanel() {
         }
       >
         {!isElectron ? (
-          <div className="flex items-start gap-2 border-b border-warning/20 bg-warning/5 px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground sm:px-4">
+          <div className="flex items-start gap-2 rounded-xl border border-warning/20 bg-warning/5 px-3 py-2.5 text-[12px] text-muted-foreground leading-relaxed sm:px-4">
             <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <p>
               Some shortcuts may be claimed by the browser before Lincei sees them. Use the desktop
@@ -1237,7 +1237,7 @@ export function ShortcutsSettingsPanel() {
           chainVerticalScroll
           scrollFade
           hideScrollbars
-          className="w-full max-w-full rounded-none"
+          className="w-full max-w-full rounded-xl border border-border/60 bg-card"
         >
           <div className="grid min-w-[680px] grid-cols-[minmax(190px,1.1fr)_minmax(220px,0.85fr)_minmax(210px,1fr)_60px] border-b border-border/70 bg-muted/25 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
             <div>Command</div>

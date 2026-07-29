@@ -177,17 +177,19 @@ function DatasetRow({ datasetId, backendId, snapshot, busy, onInitialize }: Data
   const derivedTablesLabel = formatDerivedTables(snapshot);
 
   return (
-    <div className="border-t border-border/60 px-4 py-3 first:border-t-0 sm:px-5">
+    <div className="rounded-xl px-3 py-3 transition-colors hover:bg-muted/20 sm:px-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[13px] font-semibold text-foreground">
+            <h3 className="font-medium text-foreground text-sm tracking-[-0.005em]">
               {DATASET_LABELS[datasetId]}
             </h3>
             <Badge variant={readinessVariant(readiness)}>{READINESS_LABELS[readiness]}</Badge>
             {bundled ? <Badge variant="outline">Bundled</Badge> : null}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground/80">{DATASET_DESCRIPTIONS[datasetId]}</p>
+          <p className="mt-1 text-[13px] text-muted-foreground/80 leading-[1.45]">
+            {DATASET_DESCRIPTIONS[datasetId]}
+          </p>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>Location: {DATA_LOCATION_LABELS[backendId]}</span>
             {snapshot?.path ? <span className="truncate">Path: {snapshot.path}</span> : null}
@@ -379,13 +381,8 @@ export function DatasetSettingsPanel() {
             control={<Badge variant="error">Unavailable</Badge>}
           />
         ) : null}
-        <details
-          className={
-            status?.runtime.available === false ? "group border-t border-border/60" : "group"
-          }
-          open={status?.runtime.available === false}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[13px] font-semibold text-foreground sm:px-5 [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-xl" open={status?.runtime.available === false}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-3 font-medium text-foreground text-sm hover:bg-muted/20 sm:px-4 [&::-webkit-details-marker]:hidden">
             Runtime and data location details
             <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
@@ -586,12 +583,12 @@ export function DatasetSettingsPanel() {
             }
           />
           <details
-            className="group border-t border-border/60"
+            className="group/m4 mx-3 mb-3 rounded-xl sm:mx-4"
             open={status?.runtime.available === false}
           >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[13px] font-semibold text-foreground sm:px-5 [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-3 font-medium text-foreground text-sm hover:bg-muted/20 sm:px-4 [&::-webkit-details-marker]:hidden">
               M4 command troubleshooting
-              <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+              <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open/m4:rotate-180" />
             </summary>
             <SettingsRow
               title="M4 command"

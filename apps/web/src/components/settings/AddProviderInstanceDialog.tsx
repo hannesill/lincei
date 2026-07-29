@@ -2,7 +2,7 @@
 
 import { CheckIcon } from "lucide-react";
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ProviderInstanceId,
   ProviderDriverKind,
@@ -29,6 +29,12 @@ import { toastManager } from "../ui/toast";
 import { DRIVER_OPTION_BY_VALUE, DRIVER_OPTIONS } from "./providerDriverMeta";
 import { ProviderSettingsForm, deriveProviderSettingsFields } from "./ProviderSettingsForm";
 import { AnimatedHeight } from "../AnimatedHeight";
+import {
+  ADD_PROVIDER_WIZARD_STEPS,
+  resolveWizardNavigation,
+  type WizardNavigation,
+} from "./AddProviderInstanceDialog.logic";
+import { AddProviderInstanceWizardSteps } from "./AddProviderInstanceWizardSteps";
 
 /**
  * Normalize a user-provided label into a slug suffix for the instance id.
@@ -117,9 +123,11 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   // Driver-specific config drafts keyed by driver so toggling between drivers
   // during the same dialog session does not lose in-progress input.
   const [configByDriver, setConfigByDriver] = useState<Record<string, Record<string, unknown>>>({});
-  // Errors are suppressed until the user has tried to submit once. After that
-  // they update live so fixing the problem clears the message in place.
+  // Errors are suppressed until a forward navigation or submit needs validation.
+  // After that they update live so fixing the problem clears the message in place.
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [identityFocusRequest, setIdentityFocusRequest] = useState(0);
+  const instanceIdInputRef = useRef<HTMLInputElement>(null);
 
   const existingIds = useMemo(
     () => new Set(Object.keys(settings.providerInstances ?? {})),
@@ -138,6 +146,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     setInstanceIdDirty(false);
     setConfigByDriver({});
     setHasAttemptedSubmit(false);
+    setIdentityFocusRequest(0);
   }, [open]);
 
   // Auto-derive the instance id from driver + label until the user types
@@ -155,8 +164,12 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   const instanceIdError = validateInstanceId(instanceId, existingIds);
   const showInstanceIdError = hasAttemptedSubmit && instanceIdError !== null;
   const previewLabel = label.trim() || `${driverOption.label} Workspace`;
-  const wizardSteps = ["Driver", "Identity", "Config"] as const;
   const wizardStepSummaries = [driverOption.label, previewLabel, null] as const;
+
+  useEffect(() => {
+    if (identityFocusRequest === 0 || wizardStep !== 1) return;
+    instanceIdInputRef.current?.focus();
+  }, [identityFocusRequest, wizardStep]);
 
   const configDraft = configByDriver[driver] ?? EMPTY_CONFIG_DRAFT;
   const setConfigDraft = useCallback(
@@ -174,9 +187,35 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     [driver],
   );
 
+  const applyWizardNavigation = useCallback((navigation: WizardNavigation) => {
+    if (navigation.kind === "blocked") {
+      setHasAttemptedSubmit(true);
+      setIdentityFocusRequest((request) => request + 1);
+    }
+    setWizardStep(navigation.step);
+  }, []);
+
+  const navigateToStep = useCallback(
+    (requestedStep: number) => {
+      applyWizardNavigation(
+        resolveWizardNavigation(wizardStep, requestedStep, ADD_PROVIDER_WIZARD_STEPS.length, {
+          instanceIdError,
+        }),
+      );
+    },
+    [applyWizardNavigation, instanceIdError, wizardStep],
+  );
+
   const handleSave = useCallback(() => {
+    if (instanceIdError !== null) {
+      applyWizardNavigation({
+        kind: "blocked",
+        step: 1,
+        error: instanceIdError,
+      });
+      return;
+    }
     setHasAttemptedSubmit(true);
-    if (instanceIdError !== null) return;
 
     const config = configByDriver[driver] ?? {};
     const hasConfig = Object.keys(config).length > 0;
@@ -216,6 +255,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   }, [
     driver,
     driverOption,
+    applyWizardNavigation,
     configByDriver,
     instanceId,
     instanceIdError,
@@ -236,85 +276,47 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
               Configure an additional provider instance — for example, a second Codex install
               pointed at a different workspace.
             </DialogDescription>
-            <div className="grid grid-cols-3 gap-2">
-              {wizardSteps.map((step, index) => (
-                <button
-                  key={step}
-                  type="button"
-                  className={cn(
-                    "grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-lg border px-3 py-2 text-left",
-                    index === wizardStep
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/25"
-                      : index < wizardStep
-                        ? "border-border bg-background"
-                        : "border-border bg-muted/40",
-                  )}
-                  onClick={() => setWizardStep(index)}
-                >
-                  <span
-                    className={cn(
-                      "row-span-2 mt-0.5 grid size-4 place-items-center rounded-full border",
-                      index < wizardStep
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : index === wizardStep
-                          ? "border-primary bg-background"
-                          : "border-muted-foreground/35 bg-background",
-                    )}
-                    aria-hidden
-                  >
-                    {index < wizardStep ? <CheckIcon className="size-3" /> : null}
-                  </span>
-                  <span className="text-[10px] font-medium uppercase text-muted-foreground">
-                    Step {index + 1}
-                  </span>
-                  <span className="truncate text-xs font-semibold text-foreground">
-                    {step}
-                    {index < wizardStep && wizardStepSummaries[index]
-                      ? `: ${wizardStepSummaries[index]}`
-                      : ""}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <AddProviderInstanceWizardSteps
+              currentStep={wizardStep}
+              summaries={wizardStepSummaries}
+              instanceIdError={instanceIdError}
+              onNavigation={applyWizardNavigation}
+            />
           </DialogHeader>
 
           <div
             data-slot="dialog-panel"
-            className="space-y-4 bg-foreground/[0.025] px-6 py-5 ring-1 ring-foreground/5"
+            className="space-y-4 bg-secondary px-6 py-5 ring-1 ring-border/70 dark:bg-white/2 dark:ring-white/5"
           >
             <AnimatedHeight>
               <div className={cn("grid gap-2", wizardStep !== 0 && "hidden")}>
-                <span
-                  id="add-instance-driver-label"
-                  className="text-xs font-medium text-foreground"
-                >
+                <div id="add-instance-driver-label" className="font-medium text-foreground text-sm">
                   Driver
-                </span>
+                </div>
                 <RadioGroup
                   value={driver}
                   onValueChange={(value) => setDriver(ProviderDriverKind.make(value))}
                   aria-labelledby="add-instance-driver-label"
-                  className="grid grid-cols-2 gap-2.5"
+                  className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                 >
                   {DRIVER_OPTIONS.map((option) => {
                     const IconComponent = option.icon;
-                    const isSelected = option.value === driver;
                     return (
                       <RadioPrimitive.Root
                         key={option.value}
                         value={option.value}
-                        className={cn(
-                          "relative flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-[background-color,border-color,box-shadow]",
-                          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                          isSelected
-                            ? "border-primary bg-background shadow-sm ring-2 ring-primary/35"
-                            : "border-border bg-background hover:border-foreground/20 hover:bg-muted/50",
-                        )}
+                        className="relative flex cursor-pointer items-center gap-3 rounded-lg bg-card px-3 py-3 text-left text-muted-foreground outline-none ring-1 ring-border/70 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary/8 data-checked:text-foreground data-checked:ring-2 data-checked:ring-primary data-checked:hover:bg-primary/8 dark:bg-white/3 dark:ring-white/5 dark:hover:bg-white/5 dark:data-checked:bg-primary/15 dark:data-checked:ring-primary dark:data-checked:hover:bg-primary/15"
                       >
-                        <IconComponent className="size-5 shrink-0" aria-hidden />
+                        <IconComponent className="size-4 shrink-0" aria-hidden />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                           {option.label}
                         </span>
+                        <RadioPrimitive.Indicator
+                          className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"
+                          aria-hidden
+                        >
+                          <CheckIcon className="size-3.5 shrink-0" />
+                        </RadioPrimitive.Indicator>
                         {option.badgeLabel ? (
                           <Badge variant="warning" size="sm">
                             {option.badgeLabel}
@@ -331,11 +333,11 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
                         value={option.value}
                         disabled
                         className={cn(
-                          "relative flex cursor-not-allowed items-center gap-3 rounded-lg border border-border bg-background px-3 py-3 text-left opacity-55 outline-none",
+                          "relative flex cursor-not-allowed items-center gap-3 rounded-lg bg-card/60 px-3 py-3 text-left opacity-55 outline-none ring-1 ring-border/70 dark:bg-white/2 dark:ring-white/5",
                         )}
                       >
                         <IconComponent
-                          className="size-5 shrink-0 text-muted-foreground"
+                          className="size-4 shrink-0 text-muted-foreground"
                           aria-hidden
                         />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -366,6 +368,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
               <label className={cn("grid gap-2", wizardStep !== 1 && "hidden")}>
                 <span className="text-xs font-medium text-foreground">Instance ID</span>
                 <Input
+                  ref={instanceIdInputRef}
                   className="bg-background"
                   placeholder={`${driver}_work`}
                   value={instanceId}
@@ -374,12 +377,20 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
                     setInstanceId(event.target.value);
                   }}
                   aria-invalid={showInstanceIdError}
+                  aria-describedby={
+                    showInstanceIdError ? "add-provider-instance-id-error" : undefined
+                  }
                 />
                 {showInstanceIdError ? (
-                  <span className="text-[11px] text-destructive">{instanceIdError}</span>
+                  <span
+                    id="add-provider-instance-id-error"
+                    className="text-[11px] text-destructive"
+                  >
+                    {instanceIdError}
+                  </span>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">
-                    Routing key used by sessions and sessions. Letters, digits, '-', or '_'.
+                    Routing key used for provider-backed sessions. Letters, digits, '-', or '_'.
                   </span>
                 )}
               </label>
@@ -465,8 +476,8 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
             >
               {wizardStep === 0 ? "Cancel" : "Back"}
             </Button>
-            {wizardStep < wizardSteps.length - 1 ? (
-              <Button size="sm" onClick={() => setWizardStep((step) => Math.min(2, step + 1))}>
+            {wizardStep < ADD_PROVIDER_WIZARD_STEPS.length - 1 ? (
+              <Button size="sm" onClick={() => navigateToStep(wizardStep + 1)}>
                 Next
               </Button>
             ) : (

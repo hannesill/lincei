@@ -316,9 +316,9 @@ function formatDesktopSshConnectionError(error: unknown): string {
   return withoutTaggedErrorPrefix.trim() || fallback;
 }
 
-/** Direct row in the card – same pattern as the Provider / ACP-agent list rows. */
-const ITEM_ROW_CLASSNAME = "border-t border-border/60 px-4 py-4 first:border-t-0 sm:px-5";
-const ENDPOINT_ROW_CLASSNAME = "border-t border-border/60 px-4 py-2.5 first:border-t-0 sm:px-5";
+/** Direct row in a settings section. Whitespace, rather than rules, separates peers. */
+const ITEM_ROW_CLASSNAME = "rounded-xl px-3 py-3 sm:px-4";
+const ENDPOINT_ROW_CLASSNAME = "rounded-xl px-3 py-2.5 sm:px-4";
 
 const ITEM_ROW_INNER_CLASSNAME =
   "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between";
@@ -331,10 +331,7 @@ function accessRowClassName(_presentation: AccessSectionPresentation) {
 
 function endpointRowClassName(presentation: AccessSectionPresentation, isAvailable: boolean) {
   if (presentation === "endpoint-rail") {
-    return cn(
-      "relative border-t border-border/60 px-4 py-3 first:border-t-0 sm:px-5",
-      !isAvailable && "bg-muted/20",
-    );
+    return cn("relative rounded-xl px-3 py-3 sm:px-4", !isAvailable && "bg-muted/15");
   }
 
   return cn(ENDPOINT_ROW_CLASSNAME, !isAvailable && "bg-muted/24");
@@ -1375,7 +1372,7 @@ const DesktopSshHostRow = memo(function DesktopSshHostRow({
   const buttonLabel = connectingHostAlias === target.alias ? "Adding…" : "Add environment";
 
   return (
-    <div className="border-t border-border/60 px-4 py-3 first:border-t-0 sm:px-5">
+    <div className="rounded-xl px-3 py-3 sm:px-4">
       <div className={ITEM_ROW_INNER_CLASSNAME}>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-medium text-foreground">{target.alias}</h3>
