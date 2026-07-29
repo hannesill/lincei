@@ -7,6 +7,7 @@ import {
   parkedSessionsVisibleWhenCollapsed,
   partitionSidebarV2Sessions,
   resolveParkedSessionComposerState,
+  resolveSidebarV2NewSessionOptions,
 } from "./SidebarV2.logic";
 import type { SidebarSessionSummary } from "../types";
 
@@ -162,5 +163,11 @@ describe("Sidebar v2 lifecycle partition", () => {
         snoozeSupported: true,
       }),
     ).toBeNull();
+  });
+
+  it("uses the persisted default environment mode for project actions", () => {
+    expect(resolveSidebarV2NewSessionOptions("worktree")).toEqual({
+      envMode: "worktree",
+    });
   });
 });

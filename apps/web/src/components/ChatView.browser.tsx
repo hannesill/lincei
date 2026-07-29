@@ -52,6 +52,7 @@ import {
 } from "../lib/terminalContext";
 import { isMacPlatform } from "../lib/utils";
 import { __resetLocalApiForTests } from "../localApi";
+import { __resetClientSettingsPersistenceForTests } from "../hooks/useSettings";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { applySettingsUpdated, getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
@@ -1675,6 +1676,19 @@ async function mountChatView(options: {
   fixture = buildFixture(options.snapshot);
   options.configureFixture?.(fixture);
   customWsRpcResolver = options.resolveRpc ?? null;
+  const persistedClientSettings = JSON.parse(
+    localStorage.getItem("lincei:client-settings:v1") ?? "{}",
+  ) as Record<string, unknown>;
+  localStorage.setItem(
+    "lincei:client-settings:v1",
+    JSON.stringify({
+      ...persistedClientSettings,
+      // This suite exercises ChatView plus the qualification Sidebar v1
+      // controls. Sidebar v2 has dedicated browser rollout coverage.
+      sidebarV1RollbackEnabled: true,
+    }),
+  );
+  __resetClientSettingsPersistenceForTests();
   await setViewport(options.viewport);
   await waitForProductionStyles();
 
