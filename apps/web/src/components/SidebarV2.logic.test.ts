@@ -1,15 +1,21 @@
 import { scopeSessionRef, scopedSessionKey } from "@t3tools/client-runtime";
-import { EnvironmentId, ProjectId, SessionId } from "@t3tools/contracts";
+import { CommandId, EnvironmentId, ProjectId, SessionId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSidebarV2ProjectDeleteCommand,
   canDispatchSessionLifecycleAction,
+  completeSidebarV2ProjectDelete,
+  latestSidebarV2RouteParams,
   pageSessionsWithRouteRetention,
   parkedSessionsVisibleWhenCollapsed,
   partitionSidebarV2Sessions,
   resolveParkedSessionComposerState,
   resolveSidebarV2NewSessionOptions,
+  resolveSidebarV2ServerRouteProjectRef,
   sessionsRequiringChangeRequestObservation,
+  sidebarV2DraftSessionKeysForProject,
+  sidebarV2ProjectDeleteConfirmation,
   sidebarV2SessionRowKey,
   shouldNavigateAfterSidebarV2ProjectDelete,
 } from "./SidebarV2.logic";
@@ -178,19 +184,25 @@ describe("Sidebar v2 lifecycle partition", () => {
       routeKey: "server:environment:session",
       projectRef: deletedProjectRef,
     };
+    const routeAfterDelete = {
+      ...routeBeforeDelete,
+    };
 
     expect(
       shouldNavigateAfterSidebarV2ProjectDelete({
         deletedProjectRef,
         routeBeforeDelete,
-        routeKeyAfterDelete: routeBeforeDelete.routeKey,
+        routeAfterDelete,
       }),
     ).toBe(true);
     expect(
       shouldNavigateAfterSidebarV2ProjectDelete({
         deletedProjectRef,
         routeBeforeDelete,
-        routeKeyAfterDelete: "draft:new-route",
+        routeAfterDelete: {
+          ...routeAfterDelete,
+          routeKey: "draft:new-route",
+        },
       }),
     ).toBe(false);
     expect(
@@ -203,9 +215,177 @@ describe("Sidebar v2 lifecycle partition", () => {
             projectId: ProjectId.make("another-project"),
           },
         },
-        routeKeyAfterDelete: routeBeforeDelete.routeKey,
+        routeAfterDelete,
       }),
     ).toBe(false);
+    expect(
+      shouldNavigateAfterSidebarV2ProjectDelete({
+        deletedProjectRef,
+        routeBeforeDelete: {
+          routeKey: "draft:retargeted",
+          projectRef: deletedProjectRef,
+        },
+        routeAfterDelete: {
+          routeKey: "draft:retargeted",
+          projectRef: {
+            environmentId,
+            projectId: ProjectId.make("retargeted-project"),
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("uses an in-flight route instead of the last committed route", () => {
+    expect(
+      latestSidebarV2RouteParams({
+        matches: [{ params: { draftId: "committed-draft" } }],
+        pendingMatches: [
+          {
+            params: {
+              environmentId: "pending-environment",
+              sessionId: "pending-session",
+            },
+          },
+        ],
+      }),
+    ).toEqual({
+      environmentId: "pending-environment",
+      sessionId: "pending-session",
+    });
+    expect(
+      latestSidebarV2RouteParams({
+        matches: [{ params: { draftId: "committed-draft" } }],
+        pendingMatches: [],
+      }),
+    ).toEqual({ draftId: "committed-draft" });
+  });
+
+  it("uses detail session ownership for archived and pre-shell routes", () => {
+    const archivedDetail = makeSession("archived-detail", {
+      archivedAt: "2026-07-29T09:00:00.000Z",
+    });
+
+    expect(
+      resolveSidebarV2ServerRouteProjectRef({
+        detailSession: archivedDetail,
+        sidebarSession: null,
+      }),
+    ).toEqual({
+      environmentId,
+      projectId: archivedDetail.projectId,
+    });
+    expect(
+      resolveSidebarV2ServerRouteProjectRef({
+        detailSession: archivedDetail,
+        sidebarSession: makeSession("stale-shell", {
+          projectId: ProjectId.make("stale-project"),
+        }),
+      }),
+    ).toEqual({
+      environmentId,
+      projectId: archivedDetail.projectId,
+    });
+  });
+
+  it("warns that project removal permanently deletes archived sessions", () => {
+    expect(
+      sidebarV2ProjectDeleteConfirmation({
+        name: "Research",
+        cwd: "/repo/research",
+      }),
+    ).toBe(
+      [
+        'Remove project "Research"?',
+        "Path: /repo/research",
+        "This permanently deletes all sessions for this project, including archived sessions.",
+        "This action cannot be undone.",
+      ].join("\n"),
+    );
+  });
+
+  it("forces project deletion regardless of visible session inventory", () => {
+    expect(
+      buildSidebarV2ProjectDeleteCommand({
+        commandId: CommandId.make("delete-project"),
+        projectId: ProjectId.make("project"),
+      }),
+    ).toEqual({
+      type: "project.delete",
+      commandId: "delete-project",
+      projectId: "project",
+      force: true,
+    });
+  });
+
+  it("does not clean a draft that was retargeted while deletion was pending", () => {
+    const deletedProjectRef = {
+      environmentId,
+      projectId: ProjectId.make("deleted-project"),
+    };
+    const drafts = {
+      deleted: {
+        environmentId,
+        projectId: deletedProjectRef.projectId,
+      },
+      retargeted: {
+        environmentId,
+        projectId: ProjectId.make("replacement-project"),
+      },
+    };
+
+    expect(sidebarV2DraftSessionKeysForProject(drafts, deletedProjectRef)).toEqual(["deleted"]);
+    expect(
+      sidebarV2DraftSessionKeysForProject(
+        {
+          retargeted: drafts.retargeted,
+        },
+        deletedProjectRef,
+      ),
+    ).toEqual([]);
+  });
+
+  it("preserves project drafts when deletion dispatch fails", async () => {
+    let cleaned = false;
+
+    await expect(
+      completeSidebarV2ProjectDelete({
+        dispatchDelete: async () => {
+          throw new Error("delete failed");
+        },
+        readRouteAfterDelete: () => "unreachable",
+        cleanupDrafts: () => {
+          cleaned = true;
+        },
+      }),
+    ).rejects.toThrow("delete failed");
+    expect(cleaned).toBe(false);
+  });
+
+  it("captures current ownership before cleaning drafts after successful deletion", async () => {
+    const order: string[] = [];
+
+    const routeAfterDelete = await completeSidebarV2ProjectDelete({
+      dispatchDelete: async () => {
+        order.push("dispatch");
+      },
+      readRouteAfterDelete: () => {
+        order.push("route");
+        return {
+          routeKey: "draft:active",
+          projectRef: {
+            environmentId,
+            projectId: ProjectId.make("project"),
+          },
+        };
+      },
+      cleanupDrafts: () => {
+        order.push("cleanup");
+      },
+    });
+
+    expect(order).toEqual(["dispatch", "route", "cleanup"]);
+    expect(routeAfterDelete.routeKey).toBe("draft:active");
   });
 
   it("gates lifecycle dispatch at the action boundary", () => {

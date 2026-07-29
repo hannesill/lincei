@@ -69,12 +69,13 @@ import {
 } from "../sidebarProjectGrouping";
 import {
   selectProjectsAcrossEnvironments,
+  selectSessionByRef,
   selectSidebarSessionSummaryByRef,
   selectSidebarSessionsAcrossEnvironments,
   useStore,
 } from "../store";
 import { useCommandPaletteStore } from "../commandPaletteStore";
-import { useComposerDraftStore } from "../composerDraftStore";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useModelPickerOpen } from "../modelPickerOpenState";
 import { useServerShortcuts } from "../rpc/serverState";
 import { useShortcutModifierState } from "../shortcutModifierState";
@@ -89,12 +90,18 @@ import {
   useSessionJumpHintVisibility,
 } from "./Sidebar.logic";
 import {
+  buildSidebarV2ProjectDeleteCommand,
+  completeSidebarV2ProjectDelete,
+  latestSidebarV2RouteParams,
   parkedSessionsVisibleWhenCollapsed,
   pageSessionsWithRouteRetention,
   partitionSidebarV2Sessions,
+  resolveSidebarV2ServerRouteProjectRef,
   resolveSidebarV2NewSessionOptions,
   sessionsRequiringChangeRequestObservation,
+  sidebarV2DraftSessionKeysForProject,
   sidebarV2SessionRowKey,
+  sidebarV2ProjectDeleteConfirmation,
   shouldNavigateAfterSidebarV2ProjectDelete,
   toSessionLifecycleShell,
   type SidebarV2ProjectDeleteRouteSnapshot,
@@ -151,7 +158,10 @@ function projectCwdForSession(
 }
 
 function currentSidebarV2RouteTarget(router: ReturnType<typeof useRouter>) {
-  const params = router.state.matches[router.state.matches.length - 1]?.params ?? {};
+  const params = latestSidebarV2RouteParams({
+    matches: router.state.matches,
+    pendingMatches: router.state.pendingMatches,
+  });
   return resolveSessionRouteTarget(params);
 }
 
@@ -168,10 +178,13 @@ function readSidebarV2ProjectDeleteRouteSnapshot(
   const target = currentSidebarV2RouteTarget(router);
   if (!target) return { routeKey: null, projectRef: null };
   if (target.kind === "server") {
-    const session = selectSidebarSessionSummaryByRef(useStore.getState(), target.sessionRef);
+    const state = useStore.getState();
     return {
       routeKey: sidebarV2RouteKey(target),
-      projectRef: session ? scopeProjectRef(session.environmentId, session.projectId) : null,
+      projectRef: resolveSidebarV2ServerRouteProjectRef({
+        detailSession: selectSessionByRef(state, target.sessionRef),
+        sidebarSession: selectSidebarSessionSummaryByRef(state, target.sessionRef),
+      }),
     };
   }
   const draft = useComposerDraftStore.getState().getDraftSession(target.draftId);
@@ -202,11 +215,9 @@ function observedChangeRequestsEqual(
 
 function ProjectActionsMenu({
   project,
-  sessions,
   onNewSession,
 }: {
   project: SidebarProjectSnapshot;
-  sessions: readonly SidebarSessionSummary[];
   onNewSession: (projectRef: ScopedProjectRef) => void;
 }) {
   const { copyToClipboard } = useCopyToClipboard();
@@ -229,51 +240,47 @@ function ProjectActionsMenu({
     async (member: SidebarProjectGroupMember) => {
       const memberRef = scopeProjectRef(member.environmentId, member.id);
       const routeBeforeDelete = readSidebarV2ProjectDeleteRouteSnapshot(router);
-      const memberSessions = sessions.filter(
-        (session) =>
-          session.environmentId === member.environmentId && session.projectId === member.id,
-      );
       const localApi = readLocalApi();
       if (!localApi) return;
       const confirmed = await localApi.dialogs.confirm(
-        [
-          `Remove project "${member.name}"?`,
-          `Path: ${member.cwd}`,
-          ...(memberSessions.length > 0
-            ? [
-                `This also permanently deletes ${memberSessions.length} session${
-                  memberSessions.length === 1 ? "" : "s"
-                }.`,
-                "This action cannot be undone.",
-              ]
-            : ["This removes only this project entry."]),
-        ].join("\n"),
+        sidebarV2ProjectDeleteConfirmation({
+          name: member.name,
+          cwd: member.cwd,
+        }),
       );
       if (!confirmed) return;
       const api = readEnvironmentApi(member.environmentId);
       if (!api) return;
-      const draftStore = useComposerDraftStore.getState();
-      const projectDraft = draftStore.getDraftSessionByProjectRef(memberRef);
-      if (projectDraft) draftStore.clearDraftSession(projectDraft.draftId);
-      draftStore.clearProjectDraftSessionId(memberRef);
-      await api.orchestration.dispatchCommand({
-        type: "project.delete",
-        commandId: newCommandId(),
-        projectId: member.id,
-        ...(memberSessions.length > 0 ? { force: true } : {}),
+      const routeAfterDelete = await completeSidebarV2ProjectDelete({
+        dispatchDelete: () =>
+          api.orchestration.dispatchCommand(
+            buildSidebarV2ProjectDeleteCommand({
+              commandId: newCommandId(),
+              projectId: member.id,
+            }),
+          ),
+        readRouteAfterDelete: () => readSidebarV2ProjectDeleteRouteSnapshot(router),
+        cleanupDrafts: () => {
+          const draftStore = useComposerDraftStore.getState();
+          for (const draftSessionKey of sidebarV2DraftSessionKeysForProject(
+            draftStore.draftSessionsBySessionKey,
+            memberRef,
+          )) {
+            draftStore.clearDraftSession(DraftId.make(draftSessionKey));
+          }
+        },
       });
-      const routeKeyAfterDelete = sidebarV2RouteKey(currentSidebarV2RouteTarget(router));
       if (
         shouldNavigateAfterSidebarV2ProjectDelete({
           deletedProjectRef: memberRef,
           routeBeforeDelete,
-          routeKeyAfterDelete,
+          routeAfterDelete,
         })
       ) {
-        await router.navigate({ to: "/" });
+        await router.navigate({ to: "/", replace: true });
       }
     },
-    [router, sessions],
+    [router],
   );
 
   const reportActionError = useCallback((title: string, error: unknown) => {
@@ -865,7 +872,7 @@ function SidebarV2ProjectGroup({
           </TooltipTrigger>
           <TooltipPopup side="top">New session</TooltipPopup>
         </Tooltip>
-        <ProjectActionsMenu project={project} sessions={sessions} onNewSession={onNewSession} />
+        <ProjectActionsMenu project={project} onNewSession={onNewSession} />
       </div>
       {observedSessions.map((session) => {
         const sessionKey = scopedSessionKey(scopeSessionRef(session.environmentId, session.id));

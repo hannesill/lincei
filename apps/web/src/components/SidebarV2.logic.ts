@@ -6,8 +6,15 @@ import {
   type ChangeRequestStateLike,
   type SessionLifecycleShell,
 } from "@t3tools/client-runtime";
-import { scopeSessionRef, scopedSessionKey } from "@t3tools/client-runtime";
-import type { ScopedProjectRef, ScopedSessionRef, SessionEnvMode } from "@t3tools/contracts";
+import { scopeProjectRef, scopeSessionRef, scopedSessionKey } from "@t3tools/client-runtime";
+import type {
+  CommandId,
+  DispatchableClientOrchestrationCommand,
+  ProjectId,
+  ScopedProjectRef,
+  ScopedSessionRef,
+  SessionEnvMode,
+} from "@t3tools/contracts";
 
 import { sortSessionsForSidebarV2, sortSettledSessionsForSidebarV2 } from "./Sidebar.logic";
 import type { SidebarSessionSummary } from "../types";
@@ -161,19 +168,102 @@ export interface SidebarV2ProjectDeleteRouteSnapshot {
   projectRef: ScopedProjectRef | null;
 }
 
+type SidebarV2RouteParams = Partial<
+  Record<"environmentId" | "sessionId" | "draftId", string | undefined>
+>;
+
+interface SidebarV2RouteMatchLike {
+  params: SidebarV2RouteParams;
+}
+
+export function latestSidebarV2RouteParams(input: {
+  matches: readonly SidebarV2RouteMatchLike[];
+  pendingMatches?: readonly SidebarV2RouteMatchLike[] | null | undefined;
+}): SidebarV2RouteParams {
+  const latestMatches =
+    input.pendingMatches && input.pendingMatches.length > 0 ? input.pendingMatches : input.matches;
+  return latestMatches[latestMatches.length - 1]?.params ?? {};
+}
+
+type SidebarV2ProjectIdentity = Pick<SidebarSessionSummary, "environmentId" | "projectId">;
+
+export function sidebarV2DraftSessionKeysForProject(
+  draftsBySessionKey: Readonly<Record<string, SidebarV2ProjectIdentity>>,
+  projectRef: ScopedProjectRef,
+): string[] {
+  return Object.entries(draftsBySessionKey)
+    .filter(
+      ([, draft]) =>
+        draft.environmentId === projectRef.environmentId &&
+        draft.projectId === projectRef.projectId,
+    )
+    .map(([sessionKey]) => sessionKey);
+}
+
+export function resolveSidebarV2ServerRouteProjectRef(input: {
+  detailSession?: SidebarV2ProjectIdentity | null | undefined;
+  sidebarSession?: SidebarV2ProjectIdentity | null | undefined;
+}): ScopedProjectRef | null {
+  const session = input.detailSession ?? input.sidebarSession;
+  return session ? scopeProjectRef(session.environmentId, session.projectId) : null;
+}
+
 export function shouldNavigateAfterSidebarV2ProjectDelete(input: {
   deletedProjectRef: ScopedProjectRef;
   routeBeforeDelete: SidebarV2ProjectDeleteRouteSnapshot;
-  routeKeyAfterDelete: string | null;
+  routeAfterDelete: SidebarV2ProjectDeleteRouteSnapshot;
 }): boolean {
-  const routeProject = input.routeBeforeDelete.projectRef;
+  const routeProjectBefore = input.routeBeforeDelete.projectRef;
+  const routeProjectAfter = input.routeAfterDelete.projectRef;
   return (
     input.routeBeforeDelete.routeKey !== null &&
-    input.routeBeforeDelete.routeKey === input.routeKeyAfterDelete &&
-    routeProject !== null &&
-    routeProject.environmentId === input.deletedProjectRef.environmentId &&
-    routeProject.projectId === input.deletedProjectRef.projectId
+    input.routeBeforeDelete.routeKey === input.routeAfterDelete.routeKey &&
+    routeProjectBefore !== null &&
+    routeProjectBefore.environmentId === input.deletedProjectRef.environmentId &&
+    routeProjectBefore.projectId === input.deletedProjectRef.projectId &&
+    routeProjectAfter !== null &&
+    routeProjectAfter.environmentId === input.deletedProjectRef.environmentId &&
+    routeProjectAfter.projectId === input.deletedProjectRef.projectId
   );
+}
+
+export function sidebarV2ProjectDeleteConfirmation(input: { name: string; cwd: string }): string {
+  return [
+    `Remove project "${input.name}"?`,
+    `Path: ${input.cwd}`,
+    "This permanently deletes all sessions for this project, including archived sessions.",
+    "This action cannot be undone.",
+  ].join("\n");
+}
+
+type SidebarV2ProjectDeleteCommand = Extract<
+  DispatchableClientOrchestrationCommand,
+  { type: "project.delete" }
+>;
+
+export function buildSidebarV2ProjectDeleteCommand(input: {
+  commandId: CommandId;
+  projectId: ProjectId;
+}): SidebarV2ProjectDeleteCommand {
+  return {
+    type: "project.delete",
+    commandId: input.commandId,
+    projectId: input.projectId,
+    force: true,
+  };
+}
+
+export async function completeSidebarV2ProjectDelete<T>(input: {
+  dispatchDelete: () => Promise<unknown>;
+  readRouteAfterDelete: () => T;
+  cleanupDrafts: () => void;
+}): Promise<T> {
+  await input.dispatchDelete();
+  try {
+    return input.readRouteAfterDelete();
+  } finally {
+    input.cleanupDrafts();
+  }
 }
 
 export function resolveSidebarV2NewSessionOptions(defaultSessionEnvMode: SessionEnvMode): {
