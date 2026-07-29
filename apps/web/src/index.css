@@ -108,12 +108,13 @@
       rgb(0 0 0 / 96%) 82%,
       black 100%
     ),
-    linear-gradient(black, black);
-  -webkit-mask-position: top, bottom;
+    linear-gradient(black, black), linear-gradient(black, black);
+  -webkit-mask-position: top, bottom, right;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size:
     100% var(--settings-top-fade-height),
-    100% calc(100% - var(--settings-top-fade-height));
+    100% calc(100% - var(--settings-top-fade-height)),
+    var(--app-scrollbar-width) 100%;
   mask-image:
     linear-gradient(
       to bottom,
@@ -125,12 +126,13 @@
       rgb(0 0 0 / 96%) 82%,
       black 100%
     ),
-    linear-gradient(black, black);
-  mask-position: top, bottom;
+    linear-gradient(black, black), linear-gradient(black, black);
+  mask-position: top, bottom, right;
   mask-repeat: no-repeat;
   mask-size:
     100% var(--settings-top-fade-height),
-    100% calc(100% - var(--settings-top-fade-height));
+    100% calc(100% - var(--settings-top-fade-height)),
+    var(--app-scrollbar-width) 100%;
 }
 
 @media (min-width: 40rem) {
@@ -149,6 +151,8 @@
 :root {
   color-scheme: light;
   --app-scrollbar-width: 6px;
+  --app-scrollbar-thumb: oklch(0.78 0.012 70);
+  --app-scrollbar-thumb-hover: oklch(0.68 0.016 70);
   --glass-blur: 12px;
   --glass-opacity: 80%;
   --glass-saturation: 1.14;
@@ -191,6 +195,8 @@
   --sidebar-border: color-mix(in srgb, oklch(0.56 0.055 70) 25%, transparent);
   @variant dark {
     color-scheme: dark;
+    --app-scrollbar-thumb: oklch(0.9 0.02 75 / 16%);
+    --app-scrollbar-thumb-hover: oklch(0.9 0.02 75 / 26%);
     --glass-blur: 16px;
     --glass-saturation: 1.08;
     --background: oklch(0.21 0 0);
@@ -225,6 +231,53 @@
     --sidebar-accent-foreground: oklch(0.88 0.075 78);
     --sidebar-border: color-mix(in srgb, oklch(0.82 0.045 70) 15%, transparent);
   }
+}
+
+/*
+ * Keep Sidebar v1 rollback and v2 qualification on one Lincei palette.
+ * Generic surface tokens are scoped because both implementations contain
+ * controls built from shared background/card/muted primitives.
+ */
+[data-sidebar-implementation] {
+  --background: oklch(0.97 0.012 72);
+  --foreground: oklch(0.25 0.025 52);
+  --card: oklch(0.955 0.018 72);
+  --card-foreground: var(--foreground);
+  --secondary: oklch(0.925 0.025 72);
+  --secondary-foreground: var(--foreground);
+  --accent: oklch(0.895 0.035 72);
+  --accent-foreground: oklch(0.27 0.045 58);
+  --muted: oklch(0.925 0.025 72);
+  --muted-foreground: oklch(0.455 0.035 62);
+  --border: oklch(0.62 0.045 68 / 28%);
+  --input: oklch(0.56 0.045 68 / 32%);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(0.89 0.045 72);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+
+  background-color: var(--sidebar);
+}
+
+.dark [data-sidebar-implementation] {
+  --background: oklch(0.17 0.012 52);
+  --foreground: oklch(0.94 0.014 78);
+  --card: oklch(0.145 0.014 52);
+  --card-foreground: var(--foreground);
+  --secondary: oklch(0.2 0.018 55);
+  --secondary-foreground: var(--foreground);
+  --accent: oklch(0.245 0.03 62);
+  --accent-foreground: oklch(0.94 0.025 78);
+  --muted: oklch(0.2 0.018 55);
+  --muted-foreground: oklch(0.7 0.028 75);
+  --border: oklch(0.82 0.035 75 / 12%);
+  --input: oklch(0.82 0.035 75 / 18%);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(0.245 0.03 62);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
 }
 
 .dialog-glass {
@@ -696,20 +749,12 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--app-scrollbar-thumb);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--app-scrollbar-thumb-hover);
 }
 
 .turn-chip-strip {
@@ -1085,18 +1130,10 @@ label:has(> select#reasoning-effort) select {
 }
 
 .model-picker-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--app-scrollbar-thumb);
   border-radius: 2px;
 }
 
 .model-picker-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.dark .model-picker-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.dark .model-picker-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--app-scrollbar-thumb-hover);
 }

@@ -47,7 +47,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
       contentClassName="flex w-full items-start gap-2"
       className={cn(
         "w-full cursor-pointer rounded px-3 py-2 transition-colors group",
-        "data-highlighted:bg-muted data-selected:bg-accent data-selected:text-foreground",
+        "[&&:hover]:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))] [&&[data-highlighted]]:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))] data-selected:bg-foreground/[0.08] data-selected:text-foreground [&&[data-highlighted][data-selected]]:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))]",
       )}
     >
       <Tooltip>
