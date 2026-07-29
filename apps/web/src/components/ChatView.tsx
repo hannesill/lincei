@@ -311,6 +311,8 @@ function useLocalDispatchState(input: {
   sessionError: string | null | undefined;
 }) {
   const [localDispatch, setLocalDispatch] = useState<LocalDispatchSnapshot | null>(null);
+  const latestUserMessageId =
+    input.activeSession?.messages.findLast((message) => message.role === "user")?.id ?? null;
 
   const beginLocalDispatch = useCallback(
     (options?: { preparingWorktree?: boolean }) => {
@@ -337,6 +339,7 @@ function useLocalDispatchState(input: {
         localDispatch,
         phase: input.phase,
         latestTurn: input.activeLatestTurn,
+        latestUserMessageId,
         session: input.activeSession?.session ?? null,
         hasPendingApproval: input.activePendingApproval !== null,
         hasPendingUserInput: input.activePendingUserInput !== null,
@@ -349,6 +352,7 @@ function useLocalDispatchState(input: {
       input.activeSession?.session,
       input.phase,
       input.sessionError,
+      latestUserMessageId,
       localDispatch,
     ],
   );
