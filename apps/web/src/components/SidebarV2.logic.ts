@@ -178,8 +178,14 @@ export function shouldNavigateAfterSidebarV2ProjectDelete(input: {
 
 export function resolveSidebarV2NewSessionOptions(defaultSessionEnvMode: SessionEnvMode): {
   envMode: SessionEnvMode;
+  branch: null;
+  worktreePath: null;
 } {
-  return { envMode: defaultSessionEnvMode };
+  return {
+    envMode: defaultSessionEnvMode,
+    branch: null,
+    worktreePath: null,
+  };
 }
 
 export type SessionLifecycleAction = "settle" | "unsettle" | "snooze" | "unsnooze";
