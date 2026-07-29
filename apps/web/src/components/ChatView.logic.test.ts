@@ -1,6 +1,7 @@
 import { scopeSessionRef } from "@t3tools/client-runtime";
 import {
   EnvironmentId,
+  MessageId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -722,6 +723,50 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
           activeTurnId: TurnId.make("turn-2"),
           updatedAt: "2026-03-29T00:01:01.000Z",
         },
+        hasPendingApproval: false,
+        hasPendingUserInput: false,
+        sessionError: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("acknowledges a steering message projected onto the current running turn", () => {
+    const runningTurn = {
+      ...previousLatestTurn,
+      state: "running" as const,
+      completedAt: null,
+    };
+    const runningSession = {
+      ...previousSession,
+      status: "running" as const,
+      orchestrationStatus: "running" as const,
+      activeTurnId: runningTurn.turnId,
+    };
+    const initialMessageId = MessageId.make("message-before-steer");
+    const activeSession = {
+      ...makeSession({ latestTurn: runningTurn }),
+      session: runningSession,
+      messages: [
+        {
+          id: initialMessageId,
+          role: "user" as const,
+          text: "Initial prompt",
+          turnId: runningTurn.turnId,
+          createdAt: runningTurn.requestedAt,
+          updatedAt: runningTurn.requestedAt,
+          streaming: false,
+        },
+      ],
+    };
+    const localDispatch = createLocalDispatchSnapshot(activeSession);
+
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        localDispatch,
+        phase: "running",
+        latestTurn: runningTurn,
+        latestUserMessageId: MessageId.make("message-steer"),
+        session: runningSession,
         hasPendingApproval: false,
         hasPendingUserInput: false,
         sessionError: null,
