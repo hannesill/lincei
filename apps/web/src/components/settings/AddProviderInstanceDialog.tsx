@@ -229,8 +229,8 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-xl overflow-hidden">
-        <div className="flex min-h-0 flex-col overflow-hidden border-foreground/10 bg-background shadow-2xl">
-          <DialogHeader className="border-b border-border/70 bg-background">
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <DialogHeader>
             <DialogTitle>Add provider instance</DialogTitle>
             <DialogDescription>
               Configure an additional provider instance — for example, a second Codex install
@@ -280,7 +280,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
 
           <div
             data-slot="dialog-panel"
-            className="space-y-4 border-b border-border/70 bg-muted/20 px-6 py-5"
+            className="space-y-4 bg-foreground/[0.025] px-6 py-5 ring-1 ring-foreground/5"
           >
             <AnimatedHeight>
               <div className={cn("grid gap-2", wizardStep !== 0 && "hidden")}>
@@ -451,7 +451,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
             </AnimatedHeight>
           </div>
 
-          <DialogFooter className="border-t bg-background">
+          <DialogFooter variant="bare">
             <Button
               variant="outline"
               size="sm"
