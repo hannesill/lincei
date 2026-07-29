@@ -11,6 +11,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 
@@ -91,26 +92,32 @@ export const layer = Layer.effect(
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
+    const writeSemaphore = yield* Semaphore.make(1);
 
     return DesktopClientSettings.of({
       get: readClientSettings(fileSystem, environment.clientSettingsPath).pipe(
         Effect.withSpan("desktop.clientSettings.get"),
       ),
       set: (settings) =>
-        crypto.randomUUIDv4.pipe(
-          Effect.map((uuid) => uuid.replace(/-/g, "")),
-          Effect.flatMap((suffix) =>
-            writeClientSettings({
-              fileSystem,
-              path,
-              settingsPath: environment.clientSettingsPath,
-              settings,
-              suffix,
-            }),
+        writeSemaphore
+          .withPermit(
+            crypto.randomUUIDv4.pipe(
+              Effect.map((uuid) => uuid.replace(/-/g, "")),
+              Effect.flatMap((suffix) =>
+                writeClientSettings({
+                  fileSystem,
+                  path,
+                  settingsPath: environment.clientSettingsPath,
+                  settings,
+                  suffix,
+                }),
+              ),
+            ),
+          )
+          .pipe(
+            Effect.mapError((cause) => new DesktopClientSettingsWriteError({ cause })),
+            Effect.withSpan("desktop.clientSettings.set"),
           ),
-          Effect.mapError((cause) => new DesktopClientSettingsWriteError({ cause })),
-          Effect.withSpan("desktop.clientSettings.set"),
-        ),
     });
   }),
 );

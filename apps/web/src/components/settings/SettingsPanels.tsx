@@ -36,7 +36,7 @@ import { TraitsPicker } from "../chat/TraitsPicker";
 import { isElectron } from "../../env";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import { useTheme } from "../../hooks/useTheme";
-import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { useClientSettingsHydrated, useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useSessionActions } from "../../hooks/useSessionActions";
 import {
   setDesktopUpdateStateQueryData,
@@ -508,6 +508,7 @@ export function useSettingsRestore(onRestored?: () => void) {
 export function AppearanceSettingsPanel() {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
+  const clientSettingsHydrated = useClientSettingsHydrated();
   const { updateSettings } = useUpdateSettings();
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
@@ -556,6 +557,7 @@ export function AppearanceSettingsPanel() {
           title="Glass opacity"
           description="Control how transparent glass surfaces are. Higher values make menus, dialogs, and the composer more solid."
           resetAction={
+            clientSettingsHydrated &&
             settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
               <SettingResetButton
                 label="glass opacity"
@@ -579,7 +581,11 @@ export function AppearanceSettingsPanel() {
                 id="glass-opacity"
                 max={MAX_GLASS_OPACITY}
                 min={MIN_GLASS_OPACITY}
+                disabled={!clientSettingsHydrated}
                 onChange={(event) => {
+                  if (!clientSettingsHydrated) {
+                    return;
+                  }
                   const glassOpacity = Number(event.currentTarget.value);
                   if (
                     Number.isInteger(glassOpacity) &&
@@ -602,6 +608,7 @@ export function AppearanceSettingsPanel() {
           title="Diff line wrapping"
           description="Set the default wrap state when the diff panel opens."
           resetAction={
+            clientSettingsHydrated &&
             settings.diffWordWrap !== DEFAULT_UNIFIED_SETTINGS.diffWordWrap ? (
               <SettingResetButton
                 label="diff line wrapping"
@@ -616,7 +623,12 @@ export function AppearanceSettingsPanel() {
           control={
             <Switch
               checked={settings.diffWordWrap}
-              onCheckedChange={(checked) => updateSettings({ diffWordWrap: Boolean(checked) })}
+              disabled={!clientSettingsHydrated}
+              onCheckedChange={(checked) => {
+                if (clientSettingsHydrated) {
+                  updateSettings({ diffWordWrap: Boolean(checked) });
+                }
+              }}
               aria-label="Wrap diff lines by default"
             />
           }
@@ -628,8 +640,9 @@ export function AppearanceSettingsPanel() {
           title="Use Sidebar v1"
           description="Temporarily use the retained Sidebar v1 while Sidebar v2 is qualified. Sidebar v2 remains the alpha default."
           resetAction={
+            clientSettingsHydrated &&
             settings.sidebarV1RollbackEnabled !==
-            DEFAULT_UNIFIED_SETTINGS.sidebarV1RollbackEnabled ? (
+              DEFAULT_UNIFIED_SETTINGS.sidebarV1RollbackEnabled ? (
               <SettingResetButton
                 label="sidebar version"
                 onClick={() =>
@@ -643,9 +656,12 @@ export function AppearanceSettingsPanel() {
           control={
             <Switch
               checked={settings.sidebarV1RollbackEnabled}
-              onCheckedChange={(checked) =>
-                updateSettings({ sidebarV1RollbackEnabled: Boolean(checked) })
-              }
+              disabled={!clientSettingsHydrated}
+              onCheckedChange={(checked) => {
+                if (clientSettingsHydrated) {
+                  updateSettings({ sidebarV1RollbackEnabled: Boolean(checked) });
+                }
+              }}
               aria-label="Use Sidebar v1"
             />
           }

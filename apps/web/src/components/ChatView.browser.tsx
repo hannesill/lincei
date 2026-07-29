@@ -135,7 +135,7 @@ let customWsRpcResolver:
   | ((body: NormalizedWsRpcRequestBody) => unknown | Promise<unknown> | undefined)
   | null = null;
 let clientSettingsValueBeforeTest: string | null = null;
-const pendingClientSettingsRestores = new Set<() => void>();
+const pendingClientSettingsRestores = new Set<() => Promise<void>>();
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
 const encodeServerConfig = Schema.encodeSync(ServerConfigSchema);
 
@@ -1692,6 +1692,7 @@ async function mountChatView(options: {
   fixture = buildFixture(options.snapshot);
   options.configureFixture?.(fixture);
   customWsRpcResolver = options.resolveRpc ?? null;
+  await __resetClientSettingsPersistenceForTests();
   const previousClientSettingsValue = localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY);
   const persistedClientSettings = JSON.parse(previousClientSettingsValue ?? "{}") as Record<
     string,
@@ -1706,18 +1707,17 @@ async function mountChatView(options: {
       sidebarV1RollbackEnabled: options.sidebarV1RollbackEnabled ?? true,
     }),
   );
-  __resetClientSettingsPersistenceForTests();
   let clientSettingsRestored = false;
-  const restoreClientSettings = () => {
+  const restoreClientSettings = async () => {
     if (clientSettingsRestored) return;
     clientSettingsRestored = true;
     pendingClientSettingsRestores.delete(restoreClientSettings);
+    await __resetClientSettingsPersistenceForTests();
     if (previousClientSettingsValue === null) {
       localStorage.removeItem(CLIENT_SETTINGS_STORAGE_KEY);
     } else {
       localStorage.setItem(CLIENT_SETTINGS_STORAGE_KEY, previousClientSettingsValue);
     }
-    __resetClientSettingsPersistenceForTests();
   };
   pendingClientSettingsRestores.add(restoreClientSettings);
   await setViewport(options.viewport);
@@ -1758,7 +1758,7 @@ async function mountChatView(options: {
       await screen.unmount();
     } finally {
       host.remove();
-      restoreClientSettings();
+      await restoreClientSettings();
       await waitForLayout();
     }
   };
@@ -1853,7 +1853,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     await setViewport(DEFAULT_VIEWPORT);
     clientSettingsValueBeforeTest = localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY);
     localStorage.clear();
-    __resetClientSettingsPersistenceForTests();
+    await __resetClientSettingsPersistenceForTests();
     document.body.innerHTML = "";
     wsRequests.length = 0;
     customWsRpcResolver = null;
@@ -1892,16 +1892,16 @@ describe("ChatView timeline estimator parity (full app)", () => {
     usePreviewStateStore.setState({ bySessionKey: {} });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const restoreClientSettings of [...pendingClientSettingsRestores].toReversed()) {
-      restoreClientSettings();
+      await restoreClientSettings();
     }
     if (clientSettingsValueBeforeTest === null) {
       localStorage.removeItem(CLIENT_SETTINGS_STORAGE_KEY);
     } else {
       localStorage.setItem(CLIENT_SETTINGS_STORAGE_KEY, clientSettingsValueBeforeTest);
     }
-    __resetClientSettingsPersistenceForTests();
+    await __resetClientSettingsPersistenceForTests();
     customWsRpcResolver = null;
     document.body.innerHTML = "";
   });
@@ -4015,7 +4015,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     } finally {
       await mounted.cleanup();
       localStorage.removeItem(CLIENT_SETTINGS_STORAGE_KEY);
-      __resetClientSettingsPersistenceForTests();
+      await __resetClientSettingsPersistenceForTests();
     }
   });
 
