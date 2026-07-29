@@ -51,6 +51,72 @@ interface SavedEnvironmentRegistryStore extends SavedEnvironmentRegistryState {
 
 let savedEnvironmentRegistryHydrated = false;
 let savedEnvironmentRegistryHydrationPromise: Promise<void> | null = null;
+let savedEnvironmentRegistryHydrationGeneration = 0;
+let savedEnvironmentPersistenceTail: Promise<void> = Promise.resolve();
+
+type SavedEnvironmentRegistryById = Record<EnvironmentId, SavedEnvironmentRecord>;
+let savedEnvironmentRegistryCommittedById: SavedEnvironmentRegistryById | null = null;
+
+type SavedEnvironmentRegistryMutationScope =
+  | { readonly _tag: "all" }
+  | {
+      readonly _tag: "environmentIds";
+      readonly environmentIds: ReadonlyArray<EnvironmentId>;
+    };
+
+interface SavedEnvironmentRegistryMutationIntent {
+  readonly byId: SavedEnvironmentRegistryById;
+  readonly scope: SavedEnvironmentRegistryMutationScope;
+}
+
+type SavedEnvironmentRegistryOperationResult<T> =
+  | {
+      readonly _tag: "success";
+      readonly value: T;
+      readonly committedById: SavedEnvironmentRegistryById;
+    }
+  | {
+      readonly _tag: "failure";
+      readonly error: unknown;
+      readonly committedById: SavedEnvironmentRegistryById;
+    };
+
+const ALL_SAVED_ENVIRONMENT_REGISTRY_RECORDS: SavedEnvironmentRegistryMutationScope = {
+  _tag: "all",
+};
+
+function savedEnvironmentRegistryMutationScope(
+  environmentIds: ReadonlyArray<EnvironmentId>,
+): SavedEnvironmentRegistryMutationScope {
+  return {
+    _tag: "environmentIds",
+    environmentIds,
+  };
+}
+
+function savedEnvironmentRegistryMutationIntent(
+  byId: SavedEnvironmentRegistryById,
+  scope: SavedEnvironmentRegistryMutationScope,
+): SavedEnvironmentRegistryMutationIntent {
+  if (scope._tag === "all") {
+    return {
+      byId: { ...byId },
+      scope,
+    };
+  }
+
+  const scopedById: SavedEnvironmentRegistryById = {};
+  for (const environmentId of scope.environmentIds) {
+    const record = byId[environmentId];
+    if (record) {
+      scopedById[environmentId] = record;
+    }
+  }
+  return {
+    byId: scopedById,
+    scope,
+  };
+}
 
 export function toPersistedSavedEnvironmentRecord(
   record: SavedEnvironmentRecord,
@@ -68,39 +134,196 @@ export function toPersistedSavedEnvironmentRecord(
 }
 
 function valuesOfSavedEnvironmentRegistry(
-  byId: Record<EnvironmentId, SavedEnvironmentRecord>,
+  byId: SavedEnvironmentRegistryById,
 ): ReadonlyArray<SavedEnvironmentRecord> {
   return Object.values(byId) as ReadonlyArray<SavedEnvironmentRecord>;
 }
 
-function persistSavedEnvironmentRegistryState(
-  byId: Record<EnvironmentId, SavedEnvironmentRecord>,
-): void {
-  try {
-    void ensureLocalApi()
-      .persistence.setSavedEnvironmentRegistry(
-        valuesOfSavedEnvironmentRegistry(byId).map((record) =>
-          toPersistedSavedEnvironmentRecord(record),
-        ),
-      )
-      .catch((error) => {
-        console.error("[SAVED_ENVIRONMENTS] persist failed", error);
-      });
-  } catch (error) {
-    console.error("[SAVED_ENVIRONMENTS] persist failed", error);
+function applySavedEnvironmentRegistryMutationIntent(
+  committedById: SavedEnvironmentRegistryById,
+  intent: SavedEnvironmentRegistryMutationIntent,
+): SavedEnvironmentRegistryById {
+  if (intent.scope._tag === "all") {
+    return { ...intent.byId };
+  }
+
+  const nextById = { ...committedById };
+  for (const environmentId of intent.scope.environmentIds) {
+    const record = intent.byId[environmentId];
+    if (record) {
+      nextById[environmentId] = record;
+    } else {
+      delete nextById[environmentId];
+    }
+  }
+  return nextById;
+}
+
+function areSavedEnvironmentRegistriesIdentical(
+  left: SavedEnvironmentRegistryById,
+  right: SavedEnvironmentRegistryById,
+): boolean {
+  const leftEnvironmentIds = Object.keys(left) as EnvironmentId[];
+  const rightEnvironmentIds = Object.keys(right) as EnvironmentId[];
+  return (
+    leftEnvironmentIds.length === rightEnvironmentIds.length &&
+    leftEnvironmentIds.every((environmentId) => left[environmentId] === right[environmentId])
+  );
+}
+
+async function writeSavedEnvironmentRegistrySnapshot(
+  byId: SavedEnvironmentRegistryById,
+): Promise<void> {
+  await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
+    valuesOfSavedEnvironmentRegistry(byId).map(toPersistedSavedEnvironmentRecord),
+  );
+}
+
+function publishSavedEnvironmentRegistryState(byId: SavedEnvironmentRegistryById): void {
+  useSavedEnvironmentRegistryStore.setState({ byId: { ...byId } });
+}
+
+function commitSavedEnvironmentRegistryState(
+  byId: SavedEnvironmentRegistryById,
+): SavedEnvironmentRegistryById {
+  savedEnvironmentRegistryCommittedById = { ...byId };
+  publishSavedEnvironmentRegistryState(savedEnvironmentRegistryCommittedById);
+  return savedEnvironmentRegistryCommittedById;
+}
+
+async function initializeSavedEnvironmentRegistryLane(options: {
+  readonly reconcileStore: boolean;
+}): Promise<SavedEnvironmentRegistryById> {
+  if (savedEnvironmentRegistryCommittedById) {
+    return savedEnvironmentRegistryCommittedById;
+  }
+
+  const persistedRecords: ReadonlyArray<SavedEnvironmentRecord> =
+    await ensureLocalApi().persistence.getSavedEnvironmentRegistry();
+  const supportedRecords = persistedRecords.filter(isSupportedSavedEnvironmentRecord);
+  const persistedById = Object.fromEntries(
+    supportedRecords.map((record) => [record.environmentId, record]),
+  );
+  const rejectedEnvironmentIds = persistedRecords
+    .filter((record) => !isSupportedSavedEnvironmentRecord(record))
+    .map((record) => record.environmentId);
+
+  if (rejectedEnvironmentIds.length > 0) {
+    console.warn("[SAVED_ENVIRONMENTS] removed unsupported persisted targets", {
+      environmentIds: rejectedEnvironmentIds,
+    });
+  }
+
+  const currentById = useSavedEnvironmentRegistryStore.getState().byId;
+  const reconciledById = options.reconcileStore
+    ? {
+        ...persistedById,
+        ...currentById,
+      }
+    : persistedById;
+  const shouldPersistReconciliation =
+    rejectedEnvironmentIds.length > 0 ||
+    (options.reconcileStore && Object.keys(currentById).length > 0);
+
+  let initializedById = persistedById;
+  if (shouldPersistReconciliation) {
+    try {
+      await writeSavedEnvironmentRegistrySnapshot(reconciledById);
+      initializedById = reconciledById;
+    } catch {
+      if (rejectedEnvironmentIds.length > 0) {
+        console.error("[SAVED_ENVIRONMENTS] failed to persist filtered registry", {
+          environmentIds: rejectedEnvironmentIds,
+        });
+      } else {
+        console.error("[SAVED_ENVIRONMENTS] failed to persist hydrated registry reconciliation");
+      }
+    }
+  }
+
+  savedEnvironmentRegistryCommittedById = { ...initializedById };
+  if (options.reconcileStore) {
+    publishSavedEnvironmentRegistryState(savedEnvironmentRegistryCommittedById);
+  }
+  return savedEnvironmentRegistryCommittedById;
+}
+
+function enqueueSavedEnvironmentPersistenceOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const queuedOperation = savedEnvironmentPersistenceTail.then(operation);
+  savedEnvironmentPersistenceTail = queuedOperation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queuedOperation;
+}
+
+function enqueueSavedEnvironmentRegistryOperation<T>(input: {
+  readonly intent: SavedEnvironmentRegistryMutationIntent;
+  readonly execute: (
+    nextById: SavedEnvironmentRegistryById,
+    committedByIdBeforeOperation: SavedEnvironmentRegistryById,
+  ) => Promise<SavedEnvironmentRegistryOperationResult<T>>;
+}): Promise<T> {
+  return enqueueSavedEnvironmentPersistenceOperation(async () => {
+    const committedByIdBeforeOperation = await initializeSavedEnvironmentRegistryLane({
+      reconcileStore: false,
+    });
+    const nextById = applySavedEnvironmentRegistryMutationIntent(
+      committedByIdBeforeOperation,
+      input.intent,
+    );
+
+    let result: SavedEnvironmentRegistryOperationResult<T>;
+    try {
+      result = await input.execute(nextById, committedByIdBeforeOperation);
+    } catch (error) {
+      publishSavedEnvironmentRegistryState(committedByIdBeforeOperation);
+      throw error;
+    }
+
+    commitSavedEnvironmentRegistryState(result.committedById);
+    if (result._tag === "failure") {
+      throw result.error;
+    }
+    return result.value;
+  });
+}
+
+function enqueueSavedEnvironmentRegistryWrite(
+  byId: SavedEnvironmentRegistryById,
+  scope: SavedEnvironmentRegistryMutationScope,
+): Promise<void> {
+  return enqueueSavedEnvironmentRegistryOperation({
+    intent: savedEnvironmentRegistryMutationIntent(byId, scope),
+    execute: async (nextById, committedByIdBeforeOperation) => {
+      if (!areSavedEnvironmentRegistriesIdentical(nextById, committedByIdBeforeOperation)) {
+        await writeSavedEnvironmentRegistrySnapshot(nextById);
+      }
+      return {
+        _tag: "success",
+        value: undefined,
+        committedById: nextById,
+      };
+    },
+  });
+}
+
+async function drainSavedEnvironmentRegistryWrites(): Promise<void> {
+  while (true) {
+    const observedTail = savedEnvironmentPersistenceTail;
+    await observedTail;
+    if (observedTail === savedEnvironmentPersistenceTail) {
+      return;
+    }
   }
 }
 
-function replaceSavedEnvironmentRegistryState(
-  records: ReadonlyArray<SavedEnvironmentRecord>,
+function scheduleSavedEnvironmentRegistryWrite(
+  byId: SavedEnvironmentRegistryById,
+  scope: SavedEnvironmentRegistryMutationScope,
 ): void {
-  const currentById = useSavedEnvironmentRegistryStore.getState().byId;
-  const hydratedById = Object.fromEntries(records.map((record) => [record.environmentId, record]));
-  useSavedEnvironmentRegistryStore.setState({
-    byId: {
-      ...hydratedById,
-      ...currentById,
-    },
+  void enqueueSavedEnvironmentRegistryWrite(byId, scope).catch((error) => {
+    console.error("[SAVED_ENVIRONMENTS] persist failed", error);
   });
 }
 
@@ -112,37 +335,21 @@ async function hydrateSavedEnvironmentRegistry(): Promise<void> {
     return savedEnvironmentRegistryHydrationPromise;
   }
 
-  const nextHydration = (async () => {
-    try {
-      const persistedRecords: ReadonlyArray<SavedEnvironmentRecord> =
-        await ensureLocalApi().persistence.getSavedEnvironmentRegistry();
-      const supportedRecords = persistedRecords.filter(isSupportedSavedEnvironmentRecord);
-      replaceSavedEnvironmentRegistryState(supportedRecords);
-      if (supportedRecords.length !== persistedRecords.length) {
-        const rejectedEnvironmentIds = persistedRecords
-          .filter((record) => !isSupportedSavedEnvironmentRecord(record))
-          .map((record) => record.environmentId);
-        console.warn("[SAVED_ENVIRONMENTS] removed unsupported persisted targets", {
-          environmentIds: rejectedEnvironmentIds,
-        });
-        try {
-          await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
-            valuesOfSavedEnvironmentRegistry(useSavedEnvironmentRegistryStore.getState().byId).map(
-              toPersistedSavedEnvironmentRecord,
-            ),
-          );
-        } catch {
-          console.error("[SAVED_ENVIRONMENTS] failed to persist filtered registry", {
-            environmentIds: rejectedEnvironmentIds,
-          });
-        }
-      }
-    } catch (error) {
+  const hydrationGeneration = savedEnvironmentRegistryHydrationGeneration;
+  const nextHydration = enqueueSavedEnvironmentPersistenceOperation(async () => {
+    const committedById = await initializeSavedEnvironmentRegistryLane({
+      reconcileStore: true,
+    });
+    publishSavedEnvironmentRegistryState(committedById);
+  })
+    .catch((error) => {
       console.error("[SAVED_ENVIRONMENTS] hydrate failed", error);
-    } finally {
-      savedEnvironmentRegistryHydrated = true;
-    }
-  })();
+    })
+    .finally(() => {
+      if (hydrationGeneration === savedEnvironmentRegistryHydrationGeneration) {
+        savedEnvironmentRegistryHydrated = true;
+      }
+    });
 
   const hydrationPromise = nextHydration.finally(() => {
     if (savedEnvironmentRegistryHydrationPromise === hydrationPromise) {
@@ -159,18 +366,30 @@ export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryS
   upsert: (record) => {
     assertSupportedSavedEnvironmentRecord(record);
     set((state) => {
+      if (state.byId[record.environmentId] === record) {
+        return state;
+      }
       const byId = {
         ...state.byId,
         [record.environmentId]: record,
       };
-      persistSavedEnvironmentRegistryState(byId);
+      scheduleSavedEnvironmentRegistryWrite(
+        byId,
+        savedEnvironmentRegistryMutationScope([record.environmentId]),
+      );
       return { byId };
     });
   },
   remove: (environmentId) =>
     set((state) => {
+      if (!state.byId[environmentId]) {
+        return state;
+      }
       const { [environmentId]: _removed, ...remaining } = state.byId;
-      persistSavedEnvironmentRegistryState(remaining);
+      scheduleSavedEnvironmentRegistryWrite(
+        remaining,
+        savedEnvironmentRegistryMutationScope([environmentId]),
+      );
       return {
         byId: remaining,
       };
@@ -188,7 +407,10 @@ export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryS
           lastConnectedAt: connectedAt,
         },
       };
-      persistSavedEnvironmentRegistryState(byId);
+      scheduleSavedEnvironmentRegistryWrite(
+        byId,
+        savedEnvironmentRegistryMutationScope([environmentId]),
+      );
       return { byId };
     }),
   rename: (environmentId, label) =>
@@ -205,11 +427,14 @@ export const useSavedEnvironmentRegistryStore = create<SavedEnvironmentRegistryS
           label: nextLabel,
         },
       };
-      persistSavedEnvironmentRegistryState(byId);
+      scheduleSavedEnvironmentRegistryWrite(
+        byId,
+        savedEnvironmentRegistryMutationScope([environmentId]),
+      );
       return { byId };
     }),
   reset: () => {
-    persistSavedEnvironmentRegistryState({});
+    scheduleSavedEnvironmentRegistryWrite({}, ALL_SAVED_ENVIRONMENT_REGISTRY_RECORDS);
     set({
       byId: {},
     });
@@ -267,9 +492,12 @@ export function resolveEnvironmentHttpUrl(input: {
   return url.toString();
 }
 
-export function resetSavedEnvironmentRegistryStoreForTests() {
+export async function resetSavedEnvironmentRegistryStoreForTests(): Promise<void> {
+  savedEnvironmentRegistryHydrationGeneration += 1;
+  await drainSavedEnvironmentRegistryWrites();
   savedEnvironmentRegistryHydrated = false;
   savedEnvironmentRegistryHydrationPromise = null;
+  savedEnvironmentRegistryCommittedById = null;
   useSavedEnvironmentRegistryStore.setState({ byId: {} });
 }
 
@@ -279,10 +507,177 @@ export async function persistSavedEnvironmentRecord(record: SavedEnvironmentReco
     ...useSavedEnvironmentRegistryStore.getState().byId,
     [record.environmentId]: record,
   };
-
-  await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
-    valuesOfSavedEnvironmentRegistry(byId).map((entry) => toPersistedSavedEnvironmentRecord(entry)),
+  await enqueueSavedEnvironmentRegistryWrite(
+    byId,
+    savedEnvironmentRegistryMutationScope([record.environmentId]),
   );
+}
+
+function removeSavedEnvironmentRecordFromStoreIfCurrent(
+  environmentId: EnvironmentId,
+  record: SavedEnvironmentRecord,
+): void {
+  const currentById = useSavedEnvironmentRegistryStore.getState().byId;
+  if (currentById[environmentId] !== record) {
+    return;
+  }
+  const { [environmentId]: _removedRecord, ...remaining } = currentById;
+  useSavedEnvironmentRegistryStore.setState({ byId: remaining });
+}
+
+async function rollbackSavedEnvironmentRegistrySnapshot(input: {
+  readonly rollbackById: SavedEnvironmentRegistryById;
+  readonly environmentId: EnvironmentId;
+  readonly error: unknown;
+  readonly message: string;
+}): Promise<void> {
+  try {
+    await writeSavedEnvironmentRegistrySnapshot(input.rollbackById);
+  } catch (restoreError) {
+    console.error(input.message, {
+      environmentId: input.environmentId,
+      error: input.error,
+      restoreError,
+    });
+    throw restoreError;
+  }
+}
+
+export async function persistSavedEnvironmentRecordWithBearerToken(
+  record: SavedEnvironmentRecord,
+  bearerToken: string,
+): Promise<boolean> {
+  assertSupportedSavedEnvironmentRecord(record);
+
+  return await enqueueSavedEnvironmentRegistryOperation({
+    intent: savedEnvironmentRegistryMutationIntent(
+      { [record.environmentId]: record },
+      savedEnvironmentRegistryMutationScope([record.environmentId]),
+    ),
+    execute: async (nextById, committedByIdBeforeOperation) => {
+      await writeSavedEnvironmentRegistrySnapshot(nextById);
+
+      let didPersistBearerToken: boolean;
+      try {
+        didPersistBearerToken = await ensureLocalApi().persistence.setSavedEnvironmentSecret(
+          record.environmentId,
+          bearerToken,
+        );
+      } catch (error) {
+        await rollbackSavedEnvironmentRegistrySnapshot({
+          rollbackById: committedByIdBeforeOperation,
+          environmentId: record.environmentId,
+          error,
+          message:
+            "[SAVED_ENVIRONMENTS] credential persistence failed and registry rollback failed",
+        });
+        return {
+          _tag: "failure",
+          error,
+          committedById: committedByIdBeforeOperation,
+        };
+      }
+
+      if (!didPersistBearerToken) {
+        await rollbackSavedEnvironmentRegistrySnapshot({
+          rollbackById: committedByIdBeforeOperation,
+          environmentId: record.environmentId,
+          error: new Error("Saved environment credential persistence returned false."),
+          message:
+            "[SAVED_ENVIRONMENTS] credential persistence failed and registry rollback failed",
+        });
+        return {
+          _tag: "success",
+          value: false,
+          committedById: committedByIdBeforeOperation,
+        };
+      }
+
+      return {
+        _tag: "success",
+        value: true,
+        committedById: nextById,
+      };
+    },
+  });
+}
+
+export async function replaceSavedEnvironmentRegistryRecords(
+  records: ReadonlyArray<SavedEnvironmentRecord>,
+  touchedEnvironmentIds: ReadonlyArray<EnvironmentId>,
+): Promise<void> {
+  for (const record of records) {
+    assertSupportedSavedEnvironmentRecord(record);
+  }
+  await enqueueSavedEnvironmentRegistryWrite(
+    Object.fromEntries(records.map((record) => [record.environmentId, record])),
+    savedEnvironmentRegistryMutationScope(touchedEnvironmentIds),
+  );
+}
+
+export async function removeSavedEnvironmentRecord(
+  environmentId: EnvironmentId,
+): Promise<SavedEnvironmentRecord | null> {
+  const capturedById = useSavedEnvironmentRegistryStore.getState().byId;
+  const initiallyRemovedRecord = capturedById[environmentId] ?? null;
+  const { [environmentId]: _removedRecord, ...remaining } = capturedById;
+  if (initiallyRemovedRecord) {
+    useSavedEnvironmentRegistryStore.setState({ byId: remaining });
+  }
+
+  return await enqueueSavedEnvironmentRegistryOperation({
+    intent: savedEnvironmentRegistryMutationIntent(
+      {},
+      savedEnvironmentRegistryMutationScope([environmentId]),
+    ),
+    execute: async (nextById, committedByIdBeforeOperation) => {
+      const removedRecord = committedByIdBeforeOperation[environmentId] ?? null;
+      if (removedRecord) {
+        removeSavedEnvironmentRecordFromStoreIfCurrent(environmentId, removedRecord);
+      }
+      try {
+        if (!areSavedEnvironmentRegistriesIdentical(nextById, committedByIdBeforeOperation)) {
+          await writeSavedEnvironmentRegistrySnapshot(nextById);
+        }
+      } catch (error) {
+        console.error("[SAVED_ENVIRONMENTS] registry removal failed; restored record", {
+          environmentId,
+          error,
+        });
+        return {
+          _tag: "failure",
+          error,
+          committedById: committedByIdBeforeOperation,
+        };
+      }
+
+      try {
+        await ensureLocalApi().persistence.removeSavedEnvironmentSecret(environmentId);
+      } catch (error) {
+        await rollbackSavedEnvironmentRegistrySnapshot({
+          rollbackById: committedByIdBeforeOperation,
+          environmentId,
+          error,
+          message: "[SAVED_ENVIRONMENTS] secret removal failed and registry restoration failed",
+        });
+        console.error("[SAVED_ENVIRONMENTS] secret removal failed; restored registry record", {
+          environmentId,
+          error,
+        });
+        return {
+          _tag: "failure",
+          error,
+          committedById: committedByIdBeforeOperation,
+        };
+      }
+
+      return {
+        _tag: "success",
+        value: removedRecord,
+        committedById: nextById,
+      };
+    },
+  });
 }
 
 export async function readSavedEnvironmentBearerToken(
@@ -295,13 +690,17 @@ export async function writeSavedEnvironmentBearerToken(
   environmentId: EnvironmentId,
   bearerToken: string,
 ): Promise<boolean> {
-  return ensureLocalApi().persistence.setSavedEnvironmentSecret(environmentId, bearerToken);
+  return enqueueSavedEnvironmentPersistenceOperation(async () =>
+    ensureLocalApi().persistence.setSavedEnvironmentSecret(environmentId, bearerToken),
+  );
 }
 
 export async function removeSavedEnvironmentBearerToken(
   environmentId: EnvironmentId,
 ): Promise<void> {
-  await ensureLocalApi().persistence.removeSavedEnvironmentSecret(environmentId);
+  await enqueueSavedEnvironmentPersistenceOperation(async () => {
+    await ensureLocalApi().persistence.removeSavedEnvironmentSecret(environmentId);
+  });
 }
 
 export type SavedEnvironmentConnectionState = "connecting" | "connected" | "disconnected" | "error";

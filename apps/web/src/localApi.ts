@@ -218,12 +218,12 @@ export function ensureLocalApi(): LocalApi {
 export async function __resetLocalApiForTests() {
   const { __resetClientSettingsPersistenceForTests } = await import("./hooks/useSettings");
   await __resetClientSettingsPersistenceForTests();
-  cachedApi = undefined;
   await resetEnvironmentServiceForTests();
+  await resetSavedEnvironmentRegistryStoreForTests();
+  cachedApi = undefined;
   resetGitStatusStateForTests();
   resetSourceControlDiscoveryStateForTests();
   resetRequestLatencyStateForTests();
-  resetSavedEnvironmentRegistryStoreForTests();
   resetSavedEnvironmentRuntimeStoreForTests();
   resetServerStateForTests();
   resetWsConnectionStateForTests();

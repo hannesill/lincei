@@ -25,7 +25,6 @@ import {
   markPromotedDraftSessionsByRef,
   useComposerDraftStore,
 } from "~/composerDraftStore";
-import { ensureLocalApi } from "~/localApi";
 import { collectActiveTerminalSessionIds } from "~/lib/terminalStateCleanup";
 import { deriveOrchestrationBatchEffects } from "~/orchestrationEventEffects";
 import { projectQueryKeys } from "~/lib/projectReactQuery";
@@ -45,10 +44,12 @@ import {
   hasSavedEnvironmentRegistryHydrated,
   listSavedEnvironmentRecords,
   persistSavedEnvironmentRecord,
+  persistSavedEnvironmentRecordWithBearerToken,
   readSavedEnvironmentBearerToken,
+  removeSavedEnvironmentRecord,
   removeSavedEnvironmentBearerToken,
+  replaceSavedEnvironmentRegistryRecords,
   type SavedEnvironmentRecord,
-  toPersistedSavedEnvironmentRecord,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
   waitForSavedEnvironmentRegistryHydration,
@@ -693,9 +694,7 @@ async function persistSavedEnvironmentRegistryRollback(
     delete byId[environmentId];
   }
   const records = Object.values(byId);
-  await ensureLocalApi().persistence.setSavedEnvironmentRegistry(
-    records.map((entry) => toPersistedSavedEnvironmentRecord(entry)),
-  );
+  await replaceSavedEnvironmentRegistryRecords(records, [...snapshot.keys()]);
   useSavedEnvironmentRegistryStore.setState({
     byId,
   });
@@ -1583,7 +1582,10 @@ export function getPrimaryEnvironmentConnection(): EnvironmentConnection {
   return createPrimaryEnvironmentConnection();
 }
 
-export async function disconnectSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
+async function disconnectSavedEnvironmentRuntime(
+  environmentId: EnvironmentId,
+  options: { readonly removeCredential: boolean },
+): Promise<void> {
   const record = getSavedEnvironmentRecord(environmentId);
   const pendingConnection = pendingSavedEnvironmentConnections.get(environmentId);
   if (pendingConnection) {
@@ -1599,8 +1601,14 @@ export async function disconnectSavedEnvironment(environmentId: EnvironmentId): 
 
   if (record?.desktopSsh && typeof window !== "undefined") {
     await window.desktopBridge?.disconnectSshEnvironment(record.desktopSsh);
-    await removeSavedEnvironmentBearerToken(environmentId);
+    if (options.removeCredential) {
+      await removeSavedEnvironmentBearerToken(environmentId);
+    }
   }
+}
+
+export async function disconnectSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
+  await disconnectSavedEnvironmentRuntime(environmentId, { removeCredential: true });
 }
 
 export async function reconnectSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
@@ -1658,12 +1666,11 @@ export async function reconnectSavedEnvironment(environmentId: EnvironmentId): P
 }
 
 export async function removeSavedEnvironment(environmentId: EnvironmentId): Promise<void> {
-  await disconnectSavedEnvironment(environmentId);
+  await disconnectSavedEnvironmentRuntime(environmentId, { removeCredential: false });
   disposeSessionDetailSubscriptionsForEnvironment(environmentId);
-  useSavedEnvironmentRegistryStore.getState().remove(environmentId);
+  await removeSavedEnvironmentRecord(environmentId);
   useSavedEnvironmentRuntimeStore.getState().clear(environmentId);
   useStore.getState().removeEnvironmentState(environmentId);
-  await removeSavedEnvironmentBearerToken(environmentId);
 }
 
 export async function addSavedEnvironment(input: {
@@ -1684,7 +1691,6 @@ export async function addSavedEnvironment(input: {
         httpBaseUrl: resolvedTarget.httpBaseUrl,
       });
   const environmentId = descriptor.environmentId;
-  const registrySnapshot = snapshotSavedEnvironmentRegistry([environmentId]);
   const existingRecord =
     getSavedEnvironmentRecord(environmentId) ??
     findSavedEnvironmentRecordByDesktopSshTarget(input.desktopSsh);
@@ -1711,16 +1717,13 @@ export async function addSavedEnvironment(input: {
   };
   assertSupportedSavedEnvironmentRecord(record);
 
-  await persistSavedEnvironmentRecord(record);
-  const didPersistBearerToken = await writeSavedEnvironmentBearerToken(
-    environmentId,
+  const didPersistBearerToken = await persistSavedEnvironmentRecordWithBearerToken(
+    record,
     bearerSession.sessionToken,
   );
   if (!didPersistBearerToken) {
-    await persistSavedEnvironmentRegistryRollback(registrySnapshot);
     throw new Error("Unable to persist saved environment credentials.");
   }
-  useSavedEnvironmentRegistryStore.getState().upsert(record);
   if (staleDesktopSshRecord) {
     await removeSavedEnvironment(staleDesktopSshRecord.environmentId);
   }
