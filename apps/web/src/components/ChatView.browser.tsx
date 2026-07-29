@@ -15,6 +15,7 @@ import {
   type ServerLifecycleWelcomePayload,
   SessionId,
   type TurnId,
+  type VcsStatusResult,
   WS_METHODS,
   OrchestrationProviderRuntimeStatus,
   DEFAULT_SERVER_SETTINGS,
@@ -68,8 +69,17 @@ import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test
 
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 
+const gitStatusMockState = vi.hoisted((): { data: VcsStatusResult | null } => ({
+  data: null,
+}));
+
 vi.mock("../lib/gitStatusState", () => ({
-  useGitStatus: () => ({ data: null, error: null, cause: null, isPending: false }),
+  useGitStatus: () => ({
+    data: gitStatusMockState.data,
+    error: null,
+    cause: null,
+    isPending: false,
+  }),
   useGitStatuses: () => new Map(),
   refreshGitStatus: () => Promise.resolve(null),
   resetGitStatusStateForTests: () => undefined,
@@ -121,7 +131,9 @@ interface TestFixture {
 let fixture: TestFixture;
 const rpcHarness = new BrowserWsRpcHarness();
 const wsRequests = rpcHarness.requests;
-let customWsRpcResolver: ((body: NormalizedWsRpcRequestBody) => unknown | undefined) | null = null;
+let customWsRpcResolver:
+  | ((body: NormalizedWsRpcRequestBody) => unknown | Promise<unknown> | undefined)
+  | null = null;
 let clientSettingsValueBeforeTest: string | null = null;
 const pendingClientSettingsRestores = new Set<() => void>();
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
@@ -999,7 +1011,7 @@ function createSnapshotWithPlanFollowUpPrompt(options?: {
   };
 }
 
-function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
+function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown | Promise<unknown> {
   const customResult = customWsRpcResolver?.(body);
   if (customResult !== undefined) {
     return customResult;
@@ -1673,7 +1685,7 @@ async function mountChatView(options: {
   viewport: ViewportSpec;
   snapshot: OrchestrationReadModel;
   configureFixture?: (fixture: TestFixture) => void;
-  resolveRpc?: (body: NormalizedWsRpcRequestBody) => unknown | undefined;
+  resolveRpc?: (body: NormalizedWsRpcRequestBody) => unknown | Promise<unknown> | undefined;
   initialPath?: string;
   sidebarV1RollbackEnabled?: boolean;
 }): Promise<MountedChatView> {
@@ -1845,6 +1857,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     document.body.innerHTML = "";
     wsRequests.length = 0;
     customWsRpcResolver = null;
+    gitStatusMockState.data = null;
     __resetEnvironmentApiOverridesForTests();
     resetSavedEnvironmentRegistryStoreForTests();
     resetSavedEnvironmentRuntimeStoreForTests();
@@ -4110,6 +4123,34 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("mounts Sidebar v2 by default and creates a context-free worktree draft from its project action", async () => {
+    const delayedRefsResult = {
+      isRepo: true,
+      hasPrimaryRemote: true,
+      nextCursor: null,
+      totalCount: 1,
+      refs: [
+        {
+          name: "main",
+          current: false,
+          isRemote: false,
+          isDefault: true,
+          worktreePath: null,
+        },
+      ],
+    };
+    const refsDeferred = createDeferredPromise<typeof delayedRefsResult>();
+    gitStatusMockState.data = {
+      isRepo: true,
+      hasPrimaryRemote: true,
+      isDefaultRef: false,
+      refName: "feature/existing",
+      hasWorkingTreeChanges: false,
+      workingTree: { files: [], insertions: 0, deletions: 0 },
+      hasUpstream: true,
+      aheadCount: 0,
+      behindCount: 0,
+      pr: null,
+    };
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       sidebarV1RollbackEnabled: false,
@@ -4139,6 +4180,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           },
         };
       },
+      resolveRpc: (body) =>
+        body._tag === WS_METHODS.vcsListRefs ? refsDeferred.promise : undefined,
     });
     const setLogicalProjectDraftSessionId = vi.spyOn(
       useComposerDraftStore.getState(),
@@ -4177,6 +4220,13 @@ describe("ChatView timeline estimator parity (full app)", () => {
           worktreePath: null,
         }),
       );
+      await waitForLayout();
+      expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
+        envMode: "worktree",
+        branch: null,
+        worktreePath: null,
+      });
+      refsDeferred.resolve(delayedRefsResult);
       await vi.waitFor(() => {
         expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
           envMode: "worktree",
@@ -4188,6 +4238,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         "feature/existing",
       );
     } finally {
+      refsDeferred.resolve(delayedRefsResult);
       setLogicalProjectDraftSessionId.mockRestore();
       await mounted.cleanup();
     }

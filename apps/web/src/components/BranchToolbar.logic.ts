@@ -97,6 +97,25 @@ export function resolveBranchToolbarValue(input: {
   return currentGitBranch ?? activeSessionBranch;
 }
 
+export function resolveNewWorktreeBaseBranch(input: {
+  envMode: EnvMode;
+  activeWorktreePath: string | null;
+  activeSessionBranch: string | null;
+  refsQuerySettled: boolean;
+  defaultBranchName: string | null;
+  currentGitBranch: string | null;
+}): string | null {
+  if (
+    input.envMode !== "worktree" ||
+    input.activeWorktreePath !== null ||
+    input.activeSessionBranch !== null ||
+    !input.refsQuerySettled
+  ) {
+    return null;
+  }
+  return input.defaultBranchName ?? input.currentGitBranch;
+}
+
 export function resolveBranchSelectionTarget(input: {
   activeProjectCwd: string;
   activeWorktreePath: string | null;
