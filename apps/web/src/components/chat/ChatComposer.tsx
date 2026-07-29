@@ -481,10 +481,6 @@ export interface ChatComposerProps {
   composerTerminalContextsRef: React.RefObject<TerminalContextDraft[]>;
   composerRef: React.RefObject<ChatComposerHandle | null>;
 
-  // Scroll
-  shouldAutoScrollRef: React.RefObject<boolean>;
-  scheduleStickToBottom: () => void;
-
   // Callbacks
   onSend: (e?: { preventDefault: () => void }) => void;
   onInterrupt: () => void;
@@ -568,8 +564,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     composerRef,
     composerImagesRef,
     composerTerminalContextsRef,
-    shouldAutoScrollRef,
-    scheduleStickToBottom,
     onSend,
     onInterrupt,
     onImplementPlanInNewSession,
@@ -850,7 +844,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerFormRef = useRef<HTMLFormElement>(null);
   const composerFooterLeftControlsRef = useRef<HTMLDivElement>(null);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
-  const composerFormHeightRef = useRef(0);
   const composerSelectLockRef = useRef(false);
   const composerMenuOpenRef = useRef(false);
   const composerMenuItemsRef = useRef<ComposerCommandItem[]>([]);
@@ -1316,13 +1309,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       };
     };
 
-    composerFormHeightRef.current = composerForm.getBoundingClientRect().height;
     const initialCompactness = measureFooterCompactness();
     setIsComposerPrimaryActionsCompact(initialCompactness.primaryActionsCompact);
     setIsComposerFooterCompact(initialCompactness.footerCompact);
     if (typeof ResizeObserver === "undefined") return;
 
-    let pendingHeight = composerFormHeightRef.current;
     let footerLayoutFrameId: number | null = null;
 
     const flushFooterLayoutMeasurement = () => {
@@ -1336,18 +1327,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setIsComposerFooterCompact((previous) =>
         previous === nextCompactness.footerCompact ? previous : nextCompactness.footerCompact,
       );
-      const nextHeight = pendingHeight;
-      const previousHeight = composerFormHeightRef.current;
-      composerFormHeightRef.current = nextHeight;
-      if (previousHeight > 0 && Math.abs(nextHeight - previousHeight) < 0.5) return;
-      if (!shouldAutoScrollRef.current) return;
-      scheduleStickToBottom();
     };
 
-    const observer = new ResizeObserver((entries) => {
-      const [entry] = entries;
-      if (!entry) return;
-      pendingHeight = entry.contentRect.height;
+    const observer = new ResizeObserver(() => {
       if (footerLayoutFrameId !== null) return;
       footerLayoutFrameId = window.requestAnimationFrame(flushFooterLayoutMeasurement);
     });
@@ -1359,13 +1341,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         window.cancelAnimationFrame(footerLayoutFrameId);
       }
     };
-  }, [
-    activeSessionId,
-    composerFooterActionLayoutKey,
-    composerFooterHasWideActions,
-    scheduleStickToBottom,
-    shouldAutoScrollRef,
-  ]);
+  }, [activeSessionId, composerFooterActionLayoutKey, composerFooterHasWideActions]);
 
   // ------------------------------------------------------------------
   // Image persist effect

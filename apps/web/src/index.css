@@ -94,6 +94,7 @@
 
 :root {
   color-scheme: light;
+  --app-scrollbar-width: 6px;
   --font-lincei-sans:
     "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-lincei-serif:
@@ -167,6 +168,29 @@
   }
 }
 
+.chat-composer-horizontal-inset {
+  padding-inline-start: calc(env(safe-area-inset-left) + 0.75rem);
+  padding-inline-end: calc(env(safe-area-inset-right) + 0.75rem);
+}
+
+.chat-composer-shared-blur,
+.chat-composer-lower-chrome {
+  background: var(--background);
+}
+
+.chat-composer-lower-chrome {
+  margin-top: -1px;
+  margin-inline-end: var(--app-scrollbar-width);
+  padding-top: 1px;
+}
+
+@media (min-width: 40rem) {
+  .chat-composer-horizontal-inset {
+    padding-inline-start: calc(env(safe-area-inset-left) + 1.25rem);
+    padding-inline-end: calc(env(safe-area-inset-right) + 1.25rem);
+  }
+}
+
 body {
   font-family: var(--font-lincei-sans);
   margin: 0;
@@ -220,7 +244,7 @@ code {
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: var(--app-scrollbar-width);
 }
 
 ::-webkit-scrollbar-track {

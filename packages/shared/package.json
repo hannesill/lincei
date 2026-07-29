@@ -102,6 +102,10 @@
     "./vitrine": {
       "types": "./src/vitrine.ts",
       "import": "./src/vitrine.ts"
+    },
+    "./chatList": {
+      "types": "./src/chatList.ts",
+      "import": "./src/chatList.ts"
     }
   },
   "scripts": {

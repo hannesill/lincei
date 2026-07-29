@@ -381,6 +381,101 @@ describe("deriveMessagesTimelineRows", () => {
     expect(userRow?.revertTurnCount).toBe(1);
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
+
+  it("models work log overflow expansion as inserted list rows", () => {
+    const timelineEntries = Array.from({ length: 8 }, (_, index) => ({
+      id: `work-entry-${index + 1}`,
+      kind: "work" as const,
+      createdAt: `2026-01-01T00:00:0${index}Z`,
+      entry: {
+        id: `work-${index + 1}`,
+        createdAt: `2026-01-01T00:00:0${index}Z`,
+        label: "read",
+        detail: `Reading file ${index + 1}`,
+        tone: "tool" as const,
+      },
+    }));
+    const baseInput = {
+      timelineEntries,
+      completionDividerBeforeEntryId: null,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    };
+
+    const collapsedRows = deriveMessagesTimelineRows(baseInput);
+    const expandedRows = deriveMessagesTimelineRows({
+      ...baseInput,
+      expandedWorkGroupIds: new Set(["work-group:work-entry-1"]),
+    });
+
+    expect(collapsedRows.map((row) => row.id)).toEqual([
+      "work-3",
+      "work-4",
+      "work-5",
+      "work-6",
+      "work-7",
+      "work-8",
+      "work-toggle:work-entry-1",
+    ]);
+    expect(collapsedRows.at(-1)).toMatchObject({
+      kind: "work-toggle",
+      hiddenCount: 2,
+      expanded: false,
+      onlyToolEntries: true,
+    });
+    expect(expandedRows.map((row) => row.id)).toEqual([
+      "work-1",
+      "work-2",
+      "work-3",
+      "work-4",
+      "work-5",
+      "work-6",
+      "work-7",
+      "work-8",
+      "work-toggle:work-entry-1",
+    ]);
+    expect(expandedRows.at(-1)).toMatchObject({
+      kind: "work-toggle",
+      expanded: true,
+    });
+  });
+
+  it("renders one stable header for mixed-tone overflow groups", () => {
+    const timelineEntries = Array.from({ length: 7 }, (_, index) => ({
+      id: `mixed-entry-${index + 1}`,
+      kind: "work" as const,
+      createdAt: `2026-01-01T00:00:0${index}Z`,
+      entry: {
+        id: `mixed-work-${index + 1}`,
+        createdAt: `2026-01-01T00:00:0${index}Z`,
+        label: index === 0 ? "thinking" : "read",
+        detail: `Entry ${index + 1}`,
+        tone: index === 0 ? ("thinking" as const) : ("tool" as const),
+      },
+    }));
+
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries,
+      completionDividerBeforeEntryId: null,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.filter((row) => row.kind === "work-header")).toEqual([
+      expect.objectContaining({ entryCount: 7 }),
+    ]);
+    expect(
+      rows
+        .filter(
+          (row): row is Extract<(typeof rows)[number], { kind: "work" }> => row.kind === "work",
+        )
+        .every((row) => row.showHeader === false),
+    ).toBe(true);
+  });
 });
 
 describe("computeStableMessagesTimelineRows", () => {

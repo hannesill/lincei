@@ -4,6 +4,7 @@ import {
   type ServerProviderSkill,
   type TurnId,
 } from "@t3tools/contracts";
+import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import {
   createContext,
   memo,
@@ -15,6 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { flushSync } from "react-dom";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
@@ -23,6 +25,7 @@ import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
   CheckIcon,
+  ChevronDownIcon,
   CircleAlertIcon,
   EyeIcon,
   GlobeIcon,
@@ -42,7 +45,6 @@ import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { MessageCopyButton } from "./MessageCopyButton";
 import {
   computeStableMessagesTimelineRows,
-  MAX_VISIBLE_WORK_LOG_ENTRIES,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
@@ -87,6 +89,7 @@ interface TimelineRowSharedState {
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  onToggleWorkGroup: (groupId: string, anchorElement?: HTMLElement) => void;
 }
 
 interface TimelineRowActivityState {
@@ -99,6 +102,7 @@ const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 const TIMELINE_LIST_HEADER = <div className="h-2 sm:h-3" />;
 const TIMELINE_LIST_FOOTER = <div className="h-0" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
+const EMPTY_EXPANDED_WORK_GROUP_IDS: ReadonlySet<string> = new Set();
 const MESSAGE_META_CLASS = "font-sans text-[10px] leading-4 text-muted-foreground/35 tabular-nums";
 
 // ---------------------------------------------------------------------------
@@ -127,6 +131,10 @@ interface MessagesTimelineProps {
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
   skills?: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
+  anchorMessageId: MessageId | null;
+  onAnchorReady: (messageId: MessageId, anchorIndex: number) => void;
+  onAnchorSizeChanged: (messageId: MessageId, size: number) => void;
+  contentInsetEndAdjustment: number;
   onIsAtEndChange: (isAtEnd: boolean) => void;
 }
 
@@ -156,8 +164,60 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   timestampFormat,
   workspaceRoot,
   skills = EMPTY_TIMELINE_SKILLS,
+  anchorMessageId,
+  onAnchorReady,
+  onAnchorSizeChanged,
+  contentInsetEndAdjustment,
   onIsAtEndChange,
 }: MessagesTimelineProps) {
+  const [expandedWorkGroups, setExpandedWorkGroups] = useState<{
+    readonly routeSessionKey: string;
+    readonly ids: ReadonlySet<string>;
+  }>({
+    routeSessionKey,
+    ids: EMPTY_EXPANDED_WORK_GROUP_IDS,
+  });
+  const expandedWorkGroupIds =
+    expandedWorkGroups.routeSessionKey === routeSessionKey
+      ? expandedWorkGroups.ids
+      : EMPTY_EXPANDED_WORK_GROUP_IDS;
+  const onToggleWorkGroup = useCallback(
+    (groupId: string, anchorElement?: HTMLElement) => {
+      const anchorBottomBeforeToggle = anchorElement?.getBoundingClientRect().bottom ?? null;
+
+      flushSync(() => {
+        setExpandedWorkGroups((existing) => {
+          const next = new Set(
+            existing.routeSessionKey === routeSessionKey
+              ? existing.ids
+              : EMPTY_EXPANDED_WORK_GROUP_IDS,
+          );
+          if (next.has(groupId)) {
+            next.delete(groupId);
+          } else {
+            next.add(groupId);
+          }
+          return { routeSessionKey, ids: next };
+        });
+      });
+
+      if (anchorBottomBeforeToggle === null || !anchorElement) {
+        return;
+      }
+
+      const delta = anchorElement.getBoundingClientRect().bottom - anchorBottomBeforeToggle;
+      if (Math.abs(delta) < 0.5) {
+        return;
+      }
+
+      const list = listRef.current;
+      const currentScroll = list?.getState?.().scroll;
+      if (list && typeof currentScroll === "number") {
+        void list.scrollToOffset({ offset: currentScroll + delta, animated: false });
+      }
+    },
+    [listRef, routeSessionKey],
+  );
   const rawRows = useMemo(
     () =>
       deriveMessagesTimelineRows({
@@ -167,6 +227,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         isWorking,
         activeTurnInProgress,
         activeTurnId: activeTurnId ?? null,
+        expandedWorkGroupIds,
         activeTurnStartedAt,
         turnDiffSummaryByAssistantMessageId,
         revertTurnCountByUserMessageId,
@@ -178,12 +239,37 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       isWorking,
       activeTurnInProgress,
       activeTurnId,
+      expandedWorkGroupIds,
       activeTurnStartedAt,
       turnDiffSummaryByAssistantMessageId,
       revertTurnCountByUserMessageId,
     ],
   );
   const rows = useStableRows(rawRows);
+  const handleAnchorReady = useCallback(
+    (info: { anchorIndex: number | undefined }) => {
+      if (anchorMessageId !== null && info.anchorIndex !== undefined) {
+        onAnchorReady(anchorMessageId, info.anchorIndex);
+      }
+    },
+    [anchorMessageId, onAnchorReady],
+  );
+  const handleAnchorSizeChanged = useCallback(
+    (size: number) => {
+      if (anchorMessageId !== null) {
+        onAnchorSizeChanged(anchorMessageId, size);
+      }
+    },
+    [anchorMessageId, onAnchorSizeChanged],
+  );
+  const anchoredEndSpace = useMemo(() => {
+    const config = resolveChatListAnchoredEndSpace(rows, anchorMessageId, (row) =>
+      row.kind === "message" ? row.message.id : null,
+    );
+    return config
+      ? { ...config, onReady: handleAnchorReady, onSizeChanged: handleAnchorSizeChanged }
+      : undefined;
+  }, [anchorMessageId, handleAnchorReady, handleAnchorSizeChanged, rows]);
 
   const handleScroll = useCallback(() => {
     const state = listRef.current?.getState?.();
@@ -191,24 +277,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onIsAtEndChange(state.isAtEnd);
     }
   }, [listRef, onIsAtEndChange]);
-
-  const previousRowCountRef = useRef(rows.length);
-  useEffect(() => {
-    const previousRowCount = previousRowCountRef.current;
-    previousRowCountRef.current = rows.length;
-
-    if (previousRowCount > 0 || rows.length === 0) {
-      return;
-    }
-
-    onIsAtEndChange(true);
-    const frameId = window.requestAnimationFrame(() => {
-      void listRef.current?.scrollToEnd?.({ animated: false });
-    });
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [listRef, onIsAtEndChange, rows.length]);
 
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
@@ -222,6 +290,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
+      onToggleWorkGroup,
     }),
     [
       timestampFormat,
@@ -234,6 +303,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
+      onToggleWorkGroup,
     ],
   );
   const activityState = useMemo<TimelineRowActivityState>(
@@ -278,14 +348,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           ref={listRef}
           data={rows}
           keyExtractor={keyExtractor}
+          getItemType={getItemType}
           renderItem={renderItem}
           estimatedItemSize={90}
           initialScrollAtEnd
-          maintainScrollAtEnd
-          maintainScrollAtEndThreshold={0.1}
-          maintainVisibleContentPosition
+          {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
+          contentInsetEndAdjustment={contentInsetEndAdjustment}
+          maintainVisibleContentPosition={{
+            data: true,
+            size: false,
+          }}
           onScroll={handleScroll}
-          className="h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
+          className="scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain px-3 [overflow-anchor:none] sm:px-5"
           ListHeaderComponent={TIMELINE_LIST_HEADER}
           ListFooterComponent={TIMELINE_LIST_FOOTER}
         />
@@ -296,6 +370,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
 function keyExtractor(item: MessagesTimelineRow) {
   return item.id;
+}
+
+function getItemType(item: MessagesTimelineRow) {
+  return item.kind === "message" ? `message:${item.message.role}` : item.kind;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +397,14 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
-      {row.kind === "work" ? <WorkGroupSection groupedEntries={row.groupedEntries} /> : null}
+      {row.kind === "work" ? (
+        <WorkGroupSection
+          groupedEntries={row.groupedEntries}
+          showHeader={row.showHeader !== false}
+        />
+      ) : null}
+      {row.kind === "work-header" ? <WorkGroupHeader entryCount={row.entryCount} /> : null}
+      {row.kind === "work-toggle" ? <WorkGroupToggleTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -605,45 +690,30 @@ function LiveMessageMeta({
 // re-render only the affected row, not the entire list.
 // ---------------------------------------------------------------------------
 
-/** Owns its own expand/collapse state so toggling re-renders only this row.
- *  State resets on unmount which is fine — work groups start collapsed. */
+/** Renders one or more already-derived work-log rows. Overflow expansion is list data. */
 const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries,
+  showHeader,
 }: {
   groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
+  showHeader: boolean;
 }) {
   const { workspaceRoot } = use(TimelineRowCtx);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
-    hasOverflow && !isExpanded
-      ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-      : groupedEntries;
-  const hiddenCount = groupedEntries.length - visibleEntries.length;
   const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-  const showHeader = hasOverflow || !onlyToolEntries;
+  const shouldShowHeader = showHeader && !onlyToolEntries;
   const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
 
   return (
     <div className="rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-      {showHeader && (
+      {shouldShowHeader && (
         <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
           <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
             {groupLabel} ({groupedEntries.length})
           </p>
-          {hasOverflow && (
-            <button
-              type="button"
-              className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
-              onClick={() => setIsExpanded((v) => !v)}
-            >
-              {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-            </button>
-          )}
         </div>
       )}
       <div className="space-y-0.5">
-        {visibleEntries.map((workEntry) => (
+        {groupedEntries.map((workEntry) => (
           <SimpleWorkEntryRow
             key={`work-row:${workEntry.id}`}
             workEntry={workEntry}
@@ -654,6 +724,53 @@ const WorkGroupSection = memo(function WorkGroupSection({
     </div>
   );
 });
+
+function WorkGroupHeader({ entryCount }: { entryCount: number }) {
+  return (
+    <div className="rounded-t-xl border border-b-0 border-border/45 bg-card/25 px-2.5 pt-1.5 pb-1">
+      <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
+        Work log ({entryCount})
+      </p>
+    </div>
+  );
+}
+
+function WorkGroupToggleTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "work-toggle" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const labelNoun = row.onlyToolEntries ? "tool call" : "log entry";
+
+  return (
+    <button
+      type="button"
+      className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] leading-5 text-muted-foreground/70 transition-colors duration-150 hover:bg-accent/20 hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      aria-expanded={row.expanded}
+      onClick={(event) => {
+        const anchorElement =
+          event.currentTarget.closest<HTMLElement>("[data-timeline-row-id]") ?? event.currentTarget;
+        ctx.onToggleWorkGroup(row.groupId, anchorElement);
+      }}
+    >
+      <ChevronDownIcon
+        className={cn(
+          "size-3.5 shrink-0 opacity-70 transition-transform duration-200",
+          row.expanded && "rotate-180",
+        )}
+      />
+      {row.expanded ? (
+        <span>Show fewer {row.onlyToolEntries ? "tool calls" : "log entries"}</span>
+      ) : (
+        <span>
+          +{row.hiddenCount} previous {labelNoun}
+          {row.hiddenCount === 1 ? "" : "s"}
+        </span>
+      )}
+    </button>
+  );
+}
 
 /** Subscribes directly to the UI state store for expand/collapse state,
  *  so toggling re-renders only this component — not the entire list. */
