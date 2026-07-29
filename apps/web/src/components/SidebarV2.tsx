@@ -7,7 +7,7 @@ import {
   scopeSessionRef,
 } from "@t3tools/client-runtime";
 import type { ChangeRequestState, ScopedProjectRef, ScopedSessionRef } from "@t3tools/contracts";
-import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import {
   AlarmClockIcon,
   ArchiveIcon,
@@ -77,6 +77,7 @@ import {
 } from "../sidebarProjectGrouping";
 import {
   selectProjectsAcrossEnvironments,
+  selectSidebarSessionSummaryByRef,
   selectSidebarSessionsAcrossEnvironments,
   useStore,
 } from "../store";
@@ -102,7 +103,9 @@ import {
   resolveSidebarV2NewSessionOptions,
   sessionsRequiringChangeRequestObservation,
   sidebarV2SessionRowKey,
+  shouldNavigateAfterSidebarV2ProjectDelete,
   toSessionLifecycleShell,
+  type SidebarV2ProjectDeleteRouteSnapshot,
   type SidebarV2Section,
 } from "./SidebarV2.logic";
 import { attachSidebarV2ListAnimation } from "./SidebarV2.animation";
@@ -155,6 +158,37 @@ function projectCwdForSession(
   );
 }
 
+function currentSidebarV2RouteTarget(router: ReturnType<typeof useRouter>) {
+  const params = router.state.matches[router.state.matches.length - 1]?.params ?? {};
+  return resolveSessionRouteTarget(params);
+}
+
+function sidebarV2RouteKey(target: ReturnType<typeof resolveSessionRouteTarget>): string | null {
+  if (!target) return null;
+  return target.kind === "server"
+    ? `server:${scopedSessionKey(target.sessionRef)}`
+    : `draft:${target.draftId}`;
+}
+
+function readSidebarV2ProjectDeleteRouteSnapshot(
+  router: ReturnType<typeof useRouter>,
+): SidebarV2ProjectDeleteRouteSnapshot {
+  const target = currentSidebarV2RouteTarget(router);
+  if (!target) return { routeKey: null, projectRef: null };
+  if (target.kind === "server") {
+    const session = selectSidebarSessionSummaryByRef(useStore.getState(), target.sessionRef);
+    return {
+      routeKey: sidebarV2RouteKey(target),
+      projectRef: session ? scopeProjectRef(session.environmentId, session.projectId) : null,
+    };
+  }
+  const draft = useComposerDraftStore.getState().getDraftSession(target.draftId);
+  return {
+    routeKey: sidebarV2RouteKey(target),
+    projectRef: draft ? scopeProjectRef(draft.environmentId, draft.projectId) : null,
+  };
+}
+
 function observedChangeRequestsEqual(
   left: ObservedChangeRequest | null | undefined,
   right: ObservedChangeRequest | null,
@@ -184,6 +218,7 @@ function ProjectActionsMenu({
   onNewSession: (projectRef: ScopedProjectRef) => void;
 }) {
   const { copyToClipboard } = useCopyToClipboard();
+  const router = useRouter();
 
   const renameProject = useCallback(async (member: SidebarProjectGroupMember) => {
     const title = window.prompt("Rename project", member.name)?.trim();
@@ -200,6 +235,8 @@ function ProjectActionsMenu({
 
   const removeProject = useCallback(
     async (member: SidebarProjectGroupMember) => {
+      const memberRef = scopeProjectRef(member.environmentId, member.id);
+      const routeBeforeDelete = readSidebarV2ProjectDeleteRouteSnapshot(router);
       const memberSessions = sessions.filter(
         (session) =>
           session.environmentId === member.environmentId && session.projectId === member.id,
@@ -223,7 +260,6 @@ function ProjectActionsMenu({
       if (!confirmed) return;
       const api = readEnvironmentApi(member.environmentId);
       if (!api) return;
-      const memberRef = scopeProjectRef(member.environmentId, member.id);
       const draftStore = useComposerDraftStore.getState();
       const projectDraft = draftStore.getDraftSessionByProjectRef(memberRef);
       if (projectDraft) draftStore.clearDraftSession(projectDraft.draftId);
@@ -234,8 +270,18 @@ function ProjectActionsMenu({
         projectId: member.id,
         ...(memberSessions.length > 0 ? { force: true } : {}),
       });
+      const routeKeyAfterDelete = sidebarV2RouteKey(currentSidebarV2RouteTarget(router));
+      if (
+        shouldNavigateAfterSidebarV2ProjectDelete({
+          deletedProjectRef: memberRef,
+          routeBeforeDelete,
+          routeKeyAfterDelete,
+        })
+      ) {
+        await router.navigate({ to: "/" });
+      }
     },
-    [sessions],
+    [router, sessions],
   );
 
   const reportActionError = useCallback((title: string, error: unknown) => {
