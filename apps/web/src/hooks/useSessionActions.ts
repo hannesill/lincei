@@ -1,5 +1,10 @@
 import { parseScopedSessionKey, scopeProjectRef, scopeSessionRef } from "@t3tools/client-runtime";
-import { type EnvironmentApi, type ScopedSessionRef, SessionId } from "@t3tools/contracts";
+import {
+  type EnvironmentApi,
+  type ScopedSessionRef,
+  type SessionEnvMode,
+  SessionId,
+} from "@t3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
@@ -71,6 +76,18 @@ const defaultSessionLifecycleDispatchDependencies: SessionLifecycleDispatchDepen
   now: () => new Date().toISOString(),
 };
 
+export function resolvePostArchiveNewSessionOptions(defaultSessionEnvMode: SessionEnvMode): {
+  branch: null;
+  worktreePath: null;
+  envMode: SessionEnvMode;
+} {
+  return {
+    branch: null,
+    worktreePath: null,
+    envMode: defaultSessionEnvMode,
+  };
+}
+
 export async function dispatchSessionLifecycleAction(
   request: SessionLifecycleDispatchRequest,
   dependencies: SessionLifecycleDispatchDependencies = defaultSessionLifecycleDispatchDependencies,
@@ -139,6 +156,7 @@ export async function dispatchSessionLifecycleAction(
 export function useSessionActions() {
   const sidebarSessionSortOrder = useSettings((settings) => settings.sidebarSessionSortOrder);
   const confirmSessionDelete = useSettings((settings) => settings.confirmSessionDelete);
+  const defaultSessionEnvMode = useSettings((settings) => settings.defaultSessionEnvMode);
   const clearComposerDraftForSession = useComposerDraftStore((store) => store.clearDraftSession);
   const clearProjectDraftSessionById = useComposerDraftStore(
     (store) => store.clearProjectDraftSessionById,
@@ -194,13 +212,14 @@ export function useSessionActions() {
       if (shouldNavigateToDraft) {
         await handleNewSessionRef.current(
           scopeProjectRef(session.environmentId, session.projectId),
+          resolvePostArchiveNewSessionOptions(defaultSessionEnvMode),
         );
       }
 
       await archiveCommand;
       refreshArchivedSessionsForEnvironment(sessionRef.environmentId);
     },
-    [getCurrentRouteSessionRef, resolveSessionTarget],
+    [defaultSessionEnvMode, getCurrentRouteSessionRef, resolveSessionTarget],
   );
 
   const unarchiveSession = useCallback(async (target: ScopedSessionRef) => {

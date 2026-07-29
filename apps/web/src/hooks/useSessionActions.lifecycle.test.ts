@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   dispatchSessionLifecycleAction,
+  resolvePostArchiveNewSessionOptions,
   type SessionLifecycleDispatchDependencies,
 } from "./useSessionActions";
 import type { SidebarSessionSummary } from "../types";
@@ -68,6 +69,14 @@ function makeDependencies(input: {
 }
 
 describe("session lifecycle action dispatch", () => {
+  it("resets archived session workspace context while retaining the sidebar default mode", () => {
+    expect(resolvePostArchiveNewSessionOptions("worktree")).toEqual({
+      branch: null,
+      worktreePath: null,
+      envMode: "worktree",
+    });
+  });
+
   it("dispatches only the lifecycle commands with explicit user wake reasons", async () => {
     const { dependencies, dispatchCommand } = makeDependencies({});
     const snoozedUntil = "2026-07-30T10:00:00.000Z";

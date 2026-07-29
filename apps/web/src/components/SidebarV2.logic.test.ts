@@ -271,6 +271,8 @@ describe("Sidebar v2 lifecycle partition", () => {
   it("uses the persisted default environment mode for project actions", () => {
     expect(resolveSidebarV2NewSessionOptions("worktree")).toEqual({
       envMode: "worktree",
+      branch: null,
+      worktreePath: null,
     });
   });
 });

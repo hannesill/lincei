@@ -246,6 +246,7 @@ export function BranchToolbarBranchSelector({
     () => new Map(refs.map((refName) => [refName.name, refName] as const)),
     [refs],
   );
+  const defaultBranchName = refs.find((refName) => refName.isDefault)?.name ?? null;
   const normalizedDeferredBranchQuery = deferredTrimmedBranchQuery.toLowerCase();
   const prReference = parsePullRequestReference(trimmedBranchQuery);
   const isSelectingWorktreeBase =
@@ -407,15 +408,16 @@ export function BranchToolbarBranchSelector({
       effectiveEnvMode !== "worktree" ||
       activeWorktreePath ||
       activeSessionBranch ||
-      !currentGitBranch
+      (!defaultBranchName && !currentGitBranch)
     ) {
       return;
     }
-    setSessionBranch(currentGitBranch, null);
+    setSessionBranch(defaultBranchName ?? currentGitBranch, null);
   }, [
     activeSessionBranch,
     activeWorktreePath,
     currentGitBranch,
+    defaultBranchName,
     effectiveEnvMode,
     setSessionBranch,
   ]);
