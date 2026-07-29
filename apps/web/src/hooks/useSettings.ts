@@ -22,6 +22,7 @@ import { ensureLocalApi } from "~/localApi";
 import * as Struct from "effect/Struct";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
+import { createLatestWriteQueue } from "~/latestWriteQueue";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 
@@ -48,6 +49,14 @@ function withDemoClientSettingsOverrides(settings: ClientSettings): ClientSettin
 let clientSettingsSnapshot = withDemoClientSettingsOverrides(DEFAULT_CLIENT_SETTINGS);
 let clientSettingsHydrated = false;
 let clientSettingsHydrationPromise: Promise<void> | null = null;
+let clientSettingsHydrationGeneration = 0;
+
+const clientSettingsWriteQueue = createLatestWriteQueue<ClientSettings>({
+  write: (settings) => ensureLocalApi().persistence.setClientSettings(settings),
+  onError: (error) => {
+    console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} persist failed`, error);
+  },
+});
 
 function emitClientSettingsChange() {
   for (const listener of clientSettingsListeners) {
@@ -106,9 +115,13 @@ async function hydrateClientSettings(): Promise<void> {
     return clientSettingsHydrationPromise;
   }
 
+  const hydrationGeneration = clientSettingsHydrationGeneration;
   const nextHydration = (async () => {
     try {
       const persistedSettings = await ensureLocalApi().persistence.getClientSettings();
+      if (hydrationGeneration !== clientSettingsHydrationGeneration) {
+        return;
+      }
       if (persistedSettings) {
         replaceClientSettingsSnapshot(
           withDemoClientSettingsOverrides({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings }),
@@ -119,7 +132,9 @@ async function hydrateClientSettings(): Promise<void> {
     } catch (error) {
       console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} hydrate failed`, error);
     } finally {
-      setClientSettingsHydrated(true);
+      if (hydrationGeneration === clientSettingsHydrationGeneration) {
+        setClientSettingsHydrated(true);
+      }
     }
   })();
 
@@ -134,12 +149,9 @@ async function hydrateClientSettings(): Promise<void> {
 }
 
 function persistClientSettings(settings: ClientSettings): void {
-  replaceClientSettingsSnapshot(withDemoClientSettingsOverrides(settings));
-  void ensureLocalApi()
-    .persistence.setClientSettings(withDemoClientSettingsOverrides(settings))
-    .catch((error) => {
-      console.error(`${CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE} persist failed`, error);
-    });
+  const nextSettings = withDemoClientSettingsOverrides(settings);
+  replaceClientSettingsSnapshot(nextSettings);
+  clientSettingsWriteQueue.enqueue(nextSettings);
 }
 
 // ── Key sets for routing patches ─────────────────────────────────────
@@ -245,7 +257,9 @@ export function useUpdateSettings() {
   };
 }
 
-export function __resetClientSettingsPersistenceForTests(): void {
+export async function __resetClientSettingsPersistenceForTests(): Promise<void> {
+  clientSettingsHydrationGeneration += 1;
+  await clientSettingsWriteQueue.reset();
   clientSettingsSnapshot = DEFAULT_CLIENT_SETTINGS;
   clientSettingsHydrated = false;
   clientSettingsHydrationPromise = null;

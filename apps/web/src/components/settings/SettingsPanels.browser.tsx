@@ -3,6 +3,7 @@ import "../../index.css";
 import {
   type AuthAccessStreamEvent,
   type AuthAccessSnapshot,
+  type ClientSettings,
   AuthSessionId,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_SERVER_SETTINGS,
@@ -77,6 +78,16 @@ function SettingsRestoreHarness() {
       </button>
     </>
   );
+}
+
+function createDeferredPromise<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 const authAccessHarness = vi.hoisted(() => {
@@ -523,8 +534,56 @@ describe("Settings panels", () => {
     authAccessHarness.reset();
   });
 
-  it("hydrates and persists the Appearance qualification controls", async () => {
-    const setClientSettings = vi.fn().mockResolvedValue(undefined);
+  it("guards persisted Appearance controls until client settings hydrate", async () => {
+    const hydration = createDeferredPromise<ClientSettings | null>();
+    window.nativeApi = {
+      persistence: {
+        getClientSettings: vi.fn(() => hydration.promise),
+        setClientSettings: vi.fn().mockResolvedValue(undefined),
+      },
+    } as unknown as LocalApi;
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <AppearanceSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect.element(page.getByLabelText("Theme preference")).not.toBeDisabled();
+    await expect.element(page.getByLabelText("Glass opacity", { exact: true })).toBeDisabled();
+    await expect
+      .element(page.getByRole("switch", { name: "Wrap diff lines by default" }))
+      .toBeDisabled();
+    await expect.element(page.getByRole("switch", { name: "Use Sidebar v1" })).toBeDisabled();
+
+    hydration.resolve({
+      ...DEFAULT_CLIENT_SETTINGS,
+      diffWordWrap: true,
+      glassOpacity: 65,
+      sidebarV1RollbackEnabled: true,
+    });
+
+    await expect.element(page.getByLabelText("Glass opacity", { exact: true })).not.toBeDisabled();
+    await expect.element(page.getByLabelText("Glass opacity", { exact: true })).toHaveValue("65");
+    await expect
+      .element(page.getByRole("switch", { name: "Wrap diff lines by default" }))
+      .not.toBeDisabled();
+    await expect
+      .element(page.getByRole("switch", { name: "Wrap diff lines by default" }))
+      .toBeChecked();
+    await expect.element(page.getByRole("switch", { name: "Use Sidebar v1" })).not.toBeDisabled();
+    await expect.element(page.getByRole("switch", { name: "Use Sidebar v1" })).toBeChecked();
+  });
+
+  it("drains the latest optimistic Appearance snapshot after persistence rejects", async () => {
+    const firstWrite = createDeferredPromise<void>();
+    const firstWriteError = new Error("desktop settings write failed");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const setClientSettings = vi
+      .fn()
+      .mockImplementationOnce(() => firstWrite.promise)
+      .mockResolvedValue(undefined);
     window.nativeApi = {
       persistence: {
         getClientSettings: vi.fn().mockResolvedValue({
@@ -566,16 +625,29 @@ describe("Settings panels", () => {
       );
     });
 
+    const diffWrapSwitch = page.getByRole("switch", {
+      name: "Wrap diff lines by default",
+    });
+    await diffWrapSwitch.click();
     await page.getByRole("switch", { name: "Use Sidebar v1" }).click();
 
+    await expect.element(diffWrapSwitch).not.toBeChecked();
+    await expect.element(page.getByRole("switch", { name: "Use Sidebar v1" })).not.toBeChecked();
+    expect(setClientSettings).toHaveBeenCalledTimes(1);
+
+    firstWrite.reject(firstWriteError);
     await vi.waitFor(() => {
+      expect(setClientSettings).toHaveBeenCalledTimes(2);
       expect(setClientSettings).toHaveBeenCalledWith(
         expect.objectContaining({
+          diffWordWrap: false,
           glassOpacity: 70,
           sidebarV1RollbackEnabled: false,
         }),
       );
     });
+    expect(consoleError).toHaveBeenCalledWith("[CLIENT_SETTINGS] persist failed", firstWriteError);
+    consoleError.mockRestore();
   });
 
   it("includes the Vitrine executable in the global settings restore", async () => {
