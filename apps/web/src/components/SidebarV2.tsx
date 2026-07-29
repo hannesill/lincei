@@ -26,14 +26,7 @@ import {
   Trash2Icon,
   Undo2Icon,
 } from "lucide-react";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { isElectron } from "../env";
@@ -477,7 +470,6 @@ const SidebarV2SessionRow = memo(function SidebarV2SessionRow({
   } = useSessionActions();
 
   const handleClick = useCallback(() => onNavigate(sessionRef), [onNavigate, sessionRef]);
-  const stopRowClick = useCallback((event: ReactMouseEvent) => event.stopPropagation(), []);
   const snoozePresets = useMemo(() => resolveSnoozePresets(now), [now]);
 
   return (
@@ -490,7 +482,7 @@ const SidebarV2SessionRow = memo(function SidebarV2SessionRow({
       <button
         type="button"
         className={cn(
-          "flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-hidden transition-[background-color,color,opacity] duration-150",
+          "flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-left text-xs outline-hidden transition-[background-color,color,opacity] duration-150",
           "hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring",
           isActive
             ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -549,65 +541,60 @@ const SidebarV2SessionRow = memo(function SidebarV2SessionRow({
         <WorkingDuration session={session} />
         <SessionRowTrailingStatus session={session} />
         {jumpLabel ? <Kbd className="ml-0.5 h-4 min-w-4 px-1 text-[8px]">{jumpLabel}</Kbd> : null}
-        <Menu>
-          <MenuTrigger
-            onClick={stopRowClick}
-            render={
-              <span className="inline-flex size-5 shrink-0 items-center justify-center rounded opacity-0 hover:bg-background/70 group-hover/session:opacity-100 focus-visible:opacity-100" />
-            }
-          >
-            <MoreHorizontalIcon className="size-3.5" />
-            <span className="sr-only">Session actions</span>
-          </MenuTrigger>
-          <MenuPopup align="end" side="right" className="w-48">
-            {section === "settled" && settlementSupported ? (
-              <MenuItem onClick={() => void unsettleSession(sessionRef)}>
-                <Undo2Icon />
-                Reactivate
-              </MenuItem>
-            ) : null}
-            {section !== "settled" && settlementSupported ? (
-              <MenuItem disabled={running} onClick={() => void settleSession(sessionRef)}>
-                <CheckCircle2Icon />
-                Settle
-              </MenuItem>
-            ) : null}
-            {section === "snoozed" && snoozeSupported ? (
-              <MenuItem onClick={() => void unsnoozeSession(sessionRef)}>
-                <AlarmClockIcon />
-                Wake now
-              </MenuItem>
-            ) : null}
-            {section !== "snoozed" && snoozeSupported
-              ? snoozePresets.map((preset) => (
-                  <MenuItem
-                    key={preset.id}
-                    disabled={session.hasPendingApprovals || session.hasPendingUserInput}
-                    onClick={() => void snoozeSession(sessionRef, preset.snoozedUntil)}
-                  >
-                    <AlarmClockIcon />
-                    <span className="flex min-w-0 flex-1 justify-between gap-3">
-                      <span>{preset.label}</span>
-                      <span className="text-muted-foreground">{preset.whenLabel}</span>
-                    </span>
-                  </MenuItem>
-                ))
-              : null}
-            <MenuSeparator />
-            <MenuItem disabled={running} onClick={() => void archiveSession(sessionRef)}>
-              <ArchiveIcon />
-              Archive
-            </MenuItem>
-            <MenuItem
-              variant="destructive"
-              onClick={() => void confirmAndDeleteSession(sessionRef)}
-            >
-              <Trash2Icon />
-              Delete
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
       </button>
+      <Menu>
+        <MenuTrigger
+          data-testid={`session-actions-${sessionKey}`}
+          className="absolute top-1/2 right-1 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded opacity-0 outline-hidden hover:bg-background/70 group-hover/session:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <MoreHorizontalIcon className="size-3.5" />
+          <span className="sr-only">Session actions</span>
+        </MenuTrigger>
+        <MenuPopup align="end" side="right" className="w-48">
+          {section === "settled" && settlementSupported ? (
+            <MenuItem onClick={() => void unsettleSession(sessionRef)}>
+              <Undo2Icon />
+              Reactivate
+            </MenuItem>
+          ) : null}
+          {section !== "settled" && settlementSupported ? (
+            <MenuItem disabled={running} onClick={() => void settleSession(sessionRef)}>
+              <CheckCircle2Icon />
+              Settle
+            </MenuItem>
+          ) : null}
+          {section === "snoozed" && snoozeSupported ? (
+            <MenuItem onClick={() => void unsnoozeSession(sessionRef)}>
+              <AlarmClockIcon />
+              Wake now
+            </MenuItem>
+          ) : null}
+          {section !== "snoozed" && snoozeSupported
+            ? snoozePresets.map((preset) => (
+                <MenuItem
+                  key={preset.id}
+                  disabled={session.hasPendingApprovals || session.hasPendingUserInput}
+                  onClick={() => void snoozeSession(sessionRef, preset.snoozedUntil)}
+                >
+                  <AlarmClockIcon />
+                  <span className="flex min-w-0 flex-1 justify-between gap-3">
+                    <span>{preset.label}</span>
+                    <span className="text-muted-foreground">{preset.whenLabel}</span>
+                  </span>
+                </MenuItem>
+              ))
+            : null}
+          <MenuSeparator />
+          <MenuItem disabled={running} onClick={() => void archiveSession(sessionRef)}>
+            <ArchiveIcon />
+            Archive
+          </MenuItem>
+          <MenuItem variant="destructive" onClick={() => void confirmAndDeleteSession(sessionRef)}>
+            <Trash2Icon />
+            Delete
+          </MenuItem>
+        </MenuPopup>
+      </Menu>
     </li>
   );
 });
