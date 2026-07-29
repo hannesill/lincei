@@ -31,7 +31,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -108,7 +107,7 @@ import {
   type SidebarV2ProjectDeleteRouteSnapshot,
   type SidebarV2Section,
 } from "./SidebarV2.logic";
-import { attachSidebarV2ListAnimation } from "./SidebarV2.animation";
+import { createSidebarV2ListAnimationRef } from "./SidebarV2.animation";
 import { resolveSnoozePresets, snoozeWakeDescription, snoozeWakeLabel } from "./Sidebar.snooze";
 import { ProjectFavicon } from "./ProjectFavicon";
 import {
@@ -423,15 +422,9 @@ const SidebarV2ChangeRequestObserver = memo(function SidebarV2ChangeRequestObser
   );
 
   useEffect(() => {
+    if (gitStatus.data === null || gitStatus.isPending) return;
     onChange(sessionKey, { state, presentation });
-  }, [onChange, presentation, sessionKey, state]);
-
-  useEffect(
-    () => () => {
-      onChange(sessionKey, null);
-    },
-    [onChange, sessionKey],
-  );
+  }, [gitStatus.data, gitStatus.isPending, onChange, presentation, sessionKey, state]);
 
   return null;
 });
@@ -734,10 +727,9 @@ function SidebarV2ProjectGroup({
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
   const [settledExpanded, setSettledExpanded] = useState(true);
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_INITIAL_COUNT);
-  const animatedListsRef = useRef(new WeakSet<HTMLElement>());
-  const attachAnimatedListRef = useCallback((node: HTMLUListElement | null) => {
-    attachSidebarV2ListAnimation(node, animatedListsRef.current);
-  }, []);
+  const attachActiveListAnimationRef = useMemo(() => createSidebarV2ListAnimationRef(), []);
+  const attachSnoozedListAnimationRef = useMemo(() => createSidebarV2ListAnimationRef(), []);
+  const attachSettledListAnimationRef = useMemo(() => createSidebarV2ListAnimationRef(), []);
   const partition = useMemo(
     () =>
       partitionSidebarV2Sessions({
@@ -750,10 +742,6 @@ function SidebarV2ProjectGroup({
         snoozeSupported: (session) => environmentSupportsSessionSnooze(session.environmentId),
       }),
     [autoSettleAfterDays, changeRequestStateBySessionKey, nowIso, sessions],
-  );
-  const observedSessions = useMemo(
-    () => sessionsRequiringChangeRequestObservation(sessions),
-    [sessions],
   );
   const draftActive = activeDraftProjectKey === project.projectKey;
   const routeInProject =
@@ -798,6 +786,15 @@ function SidebarV2ProjectGroup({
         routeSessionRef,
       }),
     [routeSessionRef, settledCollapsedSafe, settledVisibleCount],
+  );
+  const observedSessions = useMemo(
+    () =>
+      sessionsRequiringChangeRequestObservation({
+        active: partition.active,
+        visibleSnoozed: snoozedVisible,
+        visibleSettled: settledVisible,
+      }),
+    [partition.active, settledVisible, snoozedVisible],
   );
   const visibleSessionKeys = useMemo(
     () =>
@@ -897,7 +894,7 @@ function SidebarV2ProjectGroup({
       <div>
         {projectExpanded && partition.active.length > 0 ? (
           <ul
-            ref={attachAnimatedListRef}
+            ref={attachActiveListAnimationRef}
             className="space-y-0.5"
             data-sidebar-v2-animated-list="active"
           >
@@ -914,7 +911,7 @@ function SidebarV2ProjectGroup({
             setSnoozedExpanded(expanded);
           }}
           routeSessionRef={routeSessionRef}
-          attachAnimatedListRef={attachAnimatedListRef}
+          attachAnimatedListRef={attachSnoozedListAnimationRef}
         >
           {(rows) => renderRows("snoozed", rows)}
         </ParkedShelf>
@@ -930,7 +927,7 @@ function SidebarV2ProjectGroup({
           routeSessionRef={routeSessionRef}
           visibleCount={settledVisibleCount}
           onShowMore={() => setSettledVisibleCount((current) => current + SETTLED_PAGE_SIZE)}
-          attachAnimatedListRef={attachAnimatedListRef}
+          attachAnimatedListRef={attachSettledListAnimationRef}
         >
           {(rows) => renderRows("settled", rows)}
         </ParkedShelf>
@@ -1038,6 +1035,19 @@ export default function SidebarV2() {
     }
     return next;
   }, [physicalKeyByProjectRef, physicalToLogicalKey, sessions]);
+  useEffect(() => {
+    const retainedSessionKeys = new Set(
+      sessions
+        .filter((session) => session.archivedAt === null && session.branch !== null)
+        .map(sidebarV2SessionRowKey),
+    );
+    setObservedChangeRequestBySessionKey((current) => {
+      if ([...current.keys()].every((sessionKey) => retainedSessionKeys.has(sessionKey))) {
+        return current;
+      }
+      return new Map([...current].filter(([sessionKey]) => retainedSessionKeys.has(sessionKey)));
+    });
+  }, [sessions]);
   const changeRequestStateBySessionKey = useMemo(
     () =>
       new Map(

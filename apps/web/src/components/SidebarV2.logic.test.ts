@@ -121,18 +121,45 @@ describe("Sidebar v2 lifecycle partition", () => {
     ).toEqual([...sessions.slice(0, 10), sessions[11]].map((session) => session!.id));
   });
 
-  it("observes unarchived branch sessions independently of project expansion", () => {
+  it("keeps active change-request settlement live while a project is collapsed", () => {
     const branch = makeSession("branch", { branch: "feature" });
+    const observed = sessionsRequiringChangeRequestObservation({
+      active: [branch],
+      visibleSnoozed: [],
+      visibleSettled: [],
+    });
+    const partition = partitionSidebarV2Sessions({
+      sessions: [branch],
+      now: "2026-07-29T10:00:00.000Z",
+      autoSettleAfterDays: null,
+      changeRequestStateBySessionKey: new Map([[sidebarV2SessionRowKey(branch), "merged"]]),
+      settlementSupported: () => true,
+      snoozeSupported: () => true,
+    });
+
+    expect(observed).toEqual([branch]);
+    expect(partition.settled).toEqual([branch]);
+  });
+
+  it("bounds historical parked observers and restores them when rows become visible", () => {
+    const active = makeSession("active", { branch: "active" });
+    const visibleSettled = makeSession("visible-settled", { branch: "visible" });
+    const hiddenSettled = makeSession("hidden-settled", { branch: "hidden" });
+
     expect(
-      sessionsRequiringChangeRequestObservation([
-        branch,
-        makeSession("without-branch"),
-        makeSession("archived-branch", {
-          archivedAt: "2026-07-29T09:00:00.000Z",
-          branch: "done",
-        }),
-      ]),
-    ).toEqual([branch]);
+      sessionsRequiringChangeRequestObservation({
+        active: [active],
+        visibleSnoozed: [],
+        visibleSettled: [visibleSettled],
+      }),
+    ).toEqual([active, visibleSettled]);
+    expect(
+      sessionsRequiringChangeRequestObservation({
+        active: [active],
+        visibleSnoozed: [],
+        visibleSettled: [visibleSettled, hiddenSettled],
+      }),
+    ).toEqual([active, visibleSettled, hiddenSettled]);
   });
 
   it("keeps row identity scoped to the session across section transitions", () => {

@@ -2,17 +2,33 @@ import { autoAnimate } from "@formkit/auto-animate";
 
 import { SIDEBAR_LIST_ANIMATION_OPTIONS } from "./sidebar/sidebarPresentation";
 
+interface SidebarV2ListAnimationController {
+  destroy?: () => void;
+}
+
 type SidebarV2ListAnimator = (
   node: HTMLElement,
   options: typeof SIDEBAR_LIST_ANIMATION_OPTIONS,
-) => unknown;
+) => SidebarV2ListAnimationController;
 
-export function attachSidebarV2ListAnimation(
-  node: HTMLElement | null,
-  animatedLists: WeakSet<HTMLElement>,
+export function createSidebarV2ListAnimationRef(
   animate: SidebarV2ListAnimator = autoAnimate,
-): void {
-  if (!node || animatedLists.has(node)) return;
-  animate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-  animatedLists.add(node);
+): (node: HTMLElement | null) => void {
+  let attached:
+    | {
+        node: HTMLElement;
+        controller: SidebarV2ListAnimationController;
+      }
+    | undefined;
+
+  return (node) => {
+    if (attached?.node === node) return;
+    attached?.controller.destroy?.();
+    attached = undefined;
+    if (!node) return;
+    attached = {
+      node,
+      controller: animate(node, SIDEBAR_LIST_ANIMATION_OPTIONS),
+    };
+  };
 }
