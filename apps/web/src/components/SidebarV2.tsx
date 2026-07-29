@@ -8,7 +8,6 @@ import {
 } from "@t3tools/client-runtime";
 import type { ChangeRequestState, ScopedProjectRef, ScopedSessionRef } from "@t3tools/contracts";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import { autoAnimate } from "@formkit/auto-animate";
 import {
   AlarmClockIcon,
   ArchiveIcon,
@@ -77,7 +76,6 @@ import {
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
 import {
-  selectProjectByRef,
   selectProjectsAcrossEnvironments,
   selectSidebarSessionsAcrossEnvironments,
   useStore,
@@ -99,11 +97,15 @@ import {
 } from "./Sidebar.logic";
 import {
   parkedSessionsVisibleWhenCollapsed,
+  pageSessionsWithRouteRetention,
   partitionSidebarV2Sessions,
   resolveSidebarV2NewSessionOptions,
+  sessionsRequiringChangeRequestObservation,
+  sidebarV2SessionRowKey,
   toSessionLifecycleShell,
   type SidebarV2Section,
 } from "./SidebarV2.logic";
+import { attachSidebarV2ListAnimation } from "./SidebarV2.animation";
 import { resolveSnoozePresets, snoozeWakeDescription, snoozeWakeLabel } from "./Sidebar.snooze";
 import { ProjectFavicon } from "./ProjectFavicon";
 import {
@@ -111,6 +113,7 @@ import {
   prStatusIndicator,
   resolveSessionPr,
   SessionRowTrailingStatus,
+  type PrStatusIndicator,
 } from "./SessionStatusIndicators";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./Sidebar";
 import { Button } from "./ui/button";
@@ -119,16 +122,17 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "./ui/menu
 import { SidebarContent, SidebarGroup, SidebarSeparator, useSidebar } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { stackedSessionToast, toastManager } from "./ui/toast";
-import {
-  EMPTY_THREAD_JUMP_LABELS,
-  SIDEBAR_LIST_ANIMATION_OPTIONS,
-  buildSessionJumpLabelMap,
-} from "./sidebar/sidebarPresentation";
+import { EMPTY_THREAD_JUMP_LABELS, buildSessionJumpLabelMap } from "./sidebar/sidebarPresentation";
 
 const SETTLED_INITIAL_COUNT = 10;
 const SETTLED_PAGE_SIZE = 25;
 
 type ChangeRequestStateLike = Extract<ChangeRequestState, "open" | "closed" | "merged">;
+
+interface ObservedChangeRequest {
+  state: ChangeRequestStateLike | null;
+  presentation: PrStatusIndicator | null;
+}
 
 function projectMemberLabel(
   member: SidebarProjectGroupMember,
@@ -138,6 +142,36 @@ function projectMemberLabel(
   return member.environmentLabel
     ? `${member.name} · ${member.environmentLabel}`
     : `${member.name} · ${member.cwd}`;
+}
+
+function projectCwdForSession(
+  session: SidebarSessionSummary,
+  project: SidebarProjectSnapshot,
+): string {
+  return (
+    project.memberProjects.find(
+      (member) => member.environmentId === session.environmentId && member.id === session.projectId,
+    )?.cwd ?? project.cwd
+  );
+}
+
+function observedChangeRequestsEqual(
+  left: ObservedChangeRequest | null | undefined,
+  right: ObservedChangeRequest | null,
+): boolean {
+  if (left === right) return true;
+  if (!left && !right) return true;
+  if (!left || !right || left.state !== right.state) return false;
+  const leftPresentation = left.presentation;
+  const rightPresentation = right.presentation;
+  if (leftPresentation === rightPresentation) return true;
+  if (!leftPresentation || !rightPresentation) return false;
+  return (
+    leftPresentation.label === rightPresentation.label &&
+    leftPresentation.colorClass === rightPresentation.colorClass &&
+    leftPresentation.tooltip === rightPresentation.tooltip &&
+    leftPresentation.url === rightPresentation.url
+  );
 }
 
 function ProjectActionsMenu({
@@ -314,6 +348,48 @@ function statusDotClass(session: SidebarSessionSummary): string {
   }
 }
 
+interface ChangeRequestObserverProps {
+  session: SidebarSessionSummary;
+  project: SidebarProjectSnapshot;
+  onChange: (sessionKey: string, observation: ObservedChangeRequest | null) => void;
+}
+
+const SidebarV2ChangeRequestObserver = memo(function SidebarV2ChangeRequestObserver({
+  session,
+  project,
+  onChange,
+}: ChangeRequestObserverProps) {
+  const sessionKey = scopedSessionKey(scopeSessionRef(session.environmentId, session.id));
+  const gitStatus = useGitStatus({
+    environmentId: session.environmentId,
+    cwd:
+      session.branch === null
+        ? null
+        : (session.worktreePath ?? projectCwdForSession(session, project)),
+  });
+  const pr = resolveSessionPr(session.branch, gitStatus.data);
+  const state =
+    pr?.state === "open" || pr?.state === "closed" || pr?.state === "merged" ? pr.state : null;
+  const sourceControlProvider = gitStatus.data?.sourceControlProvider;
+  const presentation = useMemo(
+    () => prStatusIndicator(pr, sourceControlProvider),
+    [pr, sourceControlProvider],
+  );
+
+  useEffect(() => {
+    onChange(sessionKey, { state, presentation });
+  }, [onChange, presentation, sessionKey, state]);
+
+  useEffect(
+    () => () => {
+      onChange(sessionKey, null);
+    },
+    [onChange, sessionKey],
+  );
+
+  return null;
+});
+
 interface SessionRowProps {
   session: SidebarSessionSummary;
   project: SidebarProjectSnapshot;
@@ -321,8 +397,8 @@ interface SessionRowProps {
   isActive: boolean;
   jumpLabel: string | null;
   nowIso: string;
+  changeRequest: ObservedChangeRequest | null;
   onNavigate: (sessionRef: ScopedSessionRef) => void;
-  onChangeRequestState: (sessionKey: string, state: ChangeRequestStateLike | null) => void;
 }
 
 const SidebarV2SessionRow = memo(function SidebarV2SessionRow({
@@ -332,29 +408,15 @@ const SidebarV2SessionRow = memo(function SidebarV2SessionRow({
   isActive,
   jumpLabel,
   nowIso,
+  changeRequest,
   onNavigate,
-  onChangeRequestState,
 }: SessionRowProps) {
   const sessionRef = scopeSessionRef(session.environmentId, session.id);
   const sessionKey = scopedSessionKey(sessionRef);
   const now = useMemo(() => new Date(nowIso), [nowIso]);
   const lastVisitedAt = useUiStateStore((state) => state.sessionLastVisitedAtById[sessionKey]);
-  const projectCwd = useStore(
-    useMemo(
-      () => (state: import("../store").AppState) =>
-        selectProjectByRef(state, scopeProjectRef(session.environmentId, session.projectId))?.cwd ??
-        project.cwd,
-      [project.cwd, session.environmentId, session.projectId],
-    ),
-  );
-  const gitStatus = useGitStatus({
-    environmentId: session.environmentId,
-    cwd: session.branch === null ? null : (session.worktreePath ?? projectCwd),
-  });
-  const pr = resolveSessionPr(session.branch, gitStatus.data);
-  const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
-  const changeRequestState =
-    pr?.state === "open" || pr?.state === "closed" || pr?.state === "merged" ? pr.state : null;
+  const projectCwd = projectCwdForSession(session, project);
+  const prStatus = changeRequest?.presentation ?? null;
   const shell = toSessionLifecycleShell(session);
   const raisedHand = sessionRaisedHandWhileSnoozed(shell);
   const wokeAt = sessionWokeAt(shell, { now: nowIso });
@@ -374,10 +436,6 @@ const SidebarV2SessionRow = memo(function SidebarV2SessionRow({
     unsettleSession,
     unsnoozeSession,
   } = useSessionActions();
-
-  useEffect(() => {
-    onChangeRequestState(sessionKey, changeRequestState);
-  }, [changeRequestState, onChangeRequestState, sessionKey]);
 
   const handleClick = useCallback(() => onNavigate(sessionRef), [onNavigate, sessionRef]);
   const stopRowClick = useCallback((event: ReactMouseEvent) => event.stopPropagation(), []);
@@ -525,6 +583,7 @@ interface ShelfProps {
   routeSessionRef: ScopedSessionRef | null;
   visibleCount?: number;
   onShowMore?: () => void;
+  attachAnimatedListRef: (node: HTMLUListElement | null) => void;
 }
 
 function ParkedShelf({
@@ -537,6 +596,7 @@ function ParkedShelf({
   routeSessionRef,
   visibleCount,
   onShowMore,
+  attachAnimatedListRef,
 }: ShelfProps) {
   if (sessions.length === 0) return null;
   const collapsedSafe = parkedSessionsVisibleWhenCollapsed({
@@ -544,7 +604,14 @@ function ParkedShelf({
     expanded,
     routeSessionRef,
   });
-  const visible = visibleCount === undefined ? collapsedSafe : collapsedSafe.slice(0, visibleCount);
+  const visible =
+    visibleCount === undefined
+      ? collapsedSafe
+      : pageSessionsWithRouteRetention({
+          sessions: collapsedSafe,
+          visibleCount,
+          routeSessionRef,
+        });
   const hiddenCount = Math.max(0, sessions.length - visible.length);
 
   return (
@@ -564,7 +631,12 @@ function ParkedShelf({
         <span className="ml-auto tabular-nums">{sessions.length}</span>
       </button>
       {visible.length > 0 ? (
-        <ul className="space-y-0.5" data-sidebar-v2-shelf-list={section}>
+        <ul
+          ref={attachAnimatedListRef}
+          className="space-y-0.5"
+          data-sidebar-v2-animated-list={section}
+          data-sidebar-v2-shelf-list={section}
+        >
           {children(visible)}
         </ul>
       ) : null}
@@ -589,9 +661,10 @@ interface ProjectGroupProps {
   nowIso: string;
   autoSettleAfterDays: number | null;
   changeRequestStateBySessionKey: ReadonlyMap<string, ChangeRequestStateLike | null>;
+  observedChangeRequestBySessionKey: ReadonlyMap<string, ObservedChangeRequest>;
   jumpLabelByKey: ReadonlyMap<string, string>;
   onNavigate: (sessionRef: ScopedSessionRef) => void;
-  onChangeRequestState: (sessionKey: string, state: ChangeRequestStateLike | null) => void;
+  onObservedChangeRequest: (sessionKey: string, observation: ObservedChangeRequest | null) => void;
   onNewSession: (projectRef: ScopedProjectRef) => void;
   registerVisibleSessionKeys: (projectKey: string, sessionKeys: readonly string[]) => void;
 }
@@ -604,9 +677,10 @@ function SidebarV2ProjectGroup({
   nowIso,
   autoSettleAfterDays,
   changeRequestStateBySessionKey,
+  observedChangeRequestBySessionKey,
   jumpLabelByKey,
   onNavigate,
-  onChangeRequestState,
+  onObservedChangeRequest,
   onNewSession,
   registerVisibleSessionKeys,
 }: ProjectGroupProps) {
@@ -614,7 +688,10 @@ function SidebarV2ProjectGroup({
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
   const [settledExpanded, setSettledExpanded] = useState(true);
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_INITIAL_COUNT);
-  const listRef = useRef<HTMLDivElement | null>(null);
+  const animatedListsRef = useRef(new WeakSet<HTMLElement>());
+  const attachAnimatedListRef = useCallback((node: HTMLUListElement | null) => {
+    attachSidebarV2ListAnimation(node, animatedListsRef.current);
+  }, []);
   const partition = useMemo(
     () =>
       partitionSidebarV2Sessions({
@@ -627,6 +704,10 @@ function SidebarV2ProjectGroup({
         snoozeSupported: (session) => environmentSupportsSessionSnooze(session.environmentId),
       }),
     [autoSettleAfterDays, changeRequestStateBySessionKey, nowIso, sessions],
+  );
+  const observedSessions = useMemo(
+    () => sessionsRequiringChangeRequestObservation(sessions),
+    [sessions],
   );
   const draftActive = activeDraftProjectKey === project.projectKey;
   const routeInProject =
@@ -664,8 +745,13 @@ function SidebarV2ProjectGroup({
     [partition.settled, projectExpanded, routeSessionRef, settledExpanded],
   );
   const settledVisible = useMemo(
-    () => settledCollapsedSafe.slice(0, settledVisibleCount),
-    [settledCollapsedSafe, settledVisibleCount],
+    () =>
+      pageSessionsWithRouteRetention({
+        sessions: settledCollapsedSafe,
+        visibleCount: settledVisibleCount,
+        routeSessionRef,
+      }),
+    [routeSessionRef, settledCollapsedSafe, settledVisibleCount],
   );
   const visibleSessionKeys = useMemo(
     () =>
@@ -679,18 +765,12 @@ function SidebarV2ProjectGroup({
     registerVisibleSessionKeys(project.projectKey, visibleSessionKeys);
   }, [project.projectKey, registerVisibleSessionKeys, visibleSessionKeys]);
 
-  useEffect(() => {
-    const node = listRef.current;
-    if (!node) return;
-    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-  }, []);
-
   const renderRows = (section: SidebarV2Section, rows: readonly SidebarSessionSummary[]) =>
     rows.map((session) => {
       const sessionKey = scopedSessionKey(scopeSessionRef(session.environmentId, session.id));
       return (
         <SidebarV2SessionRow
-          key={`${sessionKey}:${section}`}
+          key={sidebarV2SessionRowKey(session)}
           session={session}
           project={project}
           section={section}
@@ -700,8 +780,8 @@ function SidebarV2ProjectGroup({
           }
           jumpLabel={jumpLabelByKey.get(sessionKey) ?? null}
           nowIso={nowIso}
+          changeRequest={observedChangeRequestBySessionKey.get(sessionKey) ?? null}
           onNavigate={onNavigate}
-          onChangeRequestState={onChangeRequestState}
         />
       );
     });
@@ -757,9 +837,26 @@ function SidebarV2ProjectGroup({
         </Tooltip>
         <ProjectActionsMenu project={project} sessions={sessions} onNewSession={onNewSession} />
       </div>
-      <div ref={listRef}>
+      {observedSessions.map((session) => {
+        const sessionKey = scopedSessionKey(scopeSessionRef(session.environmentId, session.id));
+        return (
+          <SidebarV2ChangeRequestObserver
+            key={sessionKey}
+            session={session}
+            project={project}
+            onChange={onObservedChangeRequest}
+          />
+        );
+      })}
+      <div>
         {projectExpanded && partition.active.length > 0 ? (
-          <ul className="space-y-0.5">{renderRows("active", partition.active)}</ul>
+          <ul
+            ref={attachAnimatedListRef}
+            className="space-y-0.5"
+            data-sidebar-v2-animated-list="active"
+          >
+            {renderRows("active", partition.active)}
+          </ul>
         ) : null}
         <ParkedShelf
           label="Snoozed"
@@ -771,6 +868,7 @@ function SidebarV2ProjectGroup({
             setSnoozedExpanded(expanded);
           }}
           routeSessionRef={routeSessionRef}
+          attachAnimatedListRef={attachAnimatedListRef}
         >
           {(rows) => renderRows("snoozed", rows)}
         </ParkedShelf>
@@ -786,6 +884,7 @@ function SidebarV2ProjectGroup({
           routeSessionRef={routeSessionRef}
           visibleCount={settledVisibleCount}
           onShowMore={() => setSettledVisibleCount((current) => current + SETTLED_PAGE_SIZE)}
+          attachAnimatedListRef={attachAnimatedListRef}
         >
           {(rows) => renderRows("settled", rows)}
         </ParkedShelf>
@@ -826,8 +925,8 @@ export default function SidebarV2() {
   const { showSessionJumpHints, updateSessionJumpHintsVisibility } = useSessionJumpHintVisibility();
   const nowMinute = useNowMinute();
   const nowIso = `${nowMinute}:00.000Z`;
-  const [changeRequestStateBySessionKey, setChangeRequestStateBySessionKey] = useState<
-    ReadonlyMap<string, ChangeRequestStateLike | null>
+  const [observedChangeRequestBySessionKey, setObservedChangeRequestBySessionKey] = useState<
+    ReadonlyMap<string, ObservedChangeRequest>
   >(() => new Map());
   const [visibleKeysByProject, setVisibleKeysByProject] = useState<
     ReadonlyMap<string, readonly string[]>
@@ -893,6 +992,16 @@ export default function SidebarV2() {
     }
     return next;
   }, [physicalKeyByProjectRef, physicalToLogicalKey, sessions]);
+  const changeRequestStateBySessionKey = useMemo(
+    () =>
+      new Map(
+        [...observedChangeRequestBySessionKey].map(([sessionKey, observation]) => [
+          sessionKey,
+          observation.state,
+        ]),
+      ),
+    [observedChangeRequestBySessionKey],
+  );
   const sessionByKey = useMemo(
     () =>
       new Map(
@@ -959,12 +1068,14 @@ export default function SidebarV2() {
       return next;
     });
   }, []);
-  const handleChangeRequestState = useCallback(
-    (sessionKey: string, state: ChangeRequestStateLike | null) => {
-      setChangeRequestStateBySessionKey((current) => {
-        if ((current.get(sessionKey) ?? null) === state) return current;
+  const handleObservedChangeRequest = useCallback(
+    (sessionKey: string, observation: ObservedChangeRequest | null) => {
+      setObservedChangeRequestBySessionKey((current) => {
+        const existing = current.get(sessionKey);
+        if (observedChangeRequestsEqual(existing, observation)) return current;
         const next = new Map(current);
-        next.set(sessionKey, state);
+        if (observation) next.set(sessionKey, observation);
+        else next.delete(sessionKey);
         return next;
       });
     },
@@ -1093,9 +1204,10 @@ export default function SidebarV2() {
                 nowIso={nowIso}
                 autoSettleAfterDays={settings.sidebarAutoSettleAfterDays}
                 changeRequestStateBySessionKey={changeRequestStateBySessionKey}
+                observedChangeRequestBySessionKey={observedChangeRequestBySessionKey}
                 jumpLabelByKey={visibleJumpLabels}
                 onNavigate={navigateToSession}
-                onChangeRequestState={handleChangeRequestState}
+                onObservedChangeRequest={handleObservedChangeRequest}
                 onNewSession={handleNewSession}
                 registerVisibleSessionKeys={registerVisibleSessionKeys}
               />

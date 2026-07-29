@@ -4,10 +4,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   canDispatchSessionLifecycleAction,
+  pageSessionsWithRouteRetention,
   parkedSessionsVisibleWhenCollapsed,
   partitionSidebarV2Sessions,
   resolveParkedSessionComposerState,
   resolveSidebarV2NewSessionOptions,
+  sessionsRequiringChangeRequestObservation,
+  sidebarV2SessionRowKey,
 } from "./SidebarV2.logic";
 import type { SidebarSessionSummary } from "../types";
 
@@ -103,6 +106,39 @@ describe("Sidebar v2 lifecycle partition", () => {
         },
       }),
     ).toEqual([parked]);
+  });
+
+  it("retains a deep-linked settled session beyond the visible page", () => {
+    const sessions = Array.from({ length: 12 }, (_, index) => makeSession(`settled-${index}`));
+
+    expect(
+      pageSessionsWithRouteRetention({
+        sessions,
+        visibleCount: 10,
+        routeSessionRef: scopeSessionRef(environmentId, sessions[11]!.id),
+      }).map((session) => session.id),
+    ).toEqual([...sessions.slice(0, 10), sessions[11]].map((session) => session!.id));
+  });
+
+  it("observes unarchived branch sessions independently of project expansion", () => {
+    const branch = makeSession("branch", { branch: "feature" });
+    expect(
+      sessionsRequiringChangeRequestObservation([
+        branch,
+        makeSession("without-branch"),
+        makeSession("archived-branch", {
+          archivedAt: "2026-07-29T09:00:00.000Z",
+          branch: "done",
+        }),
+      ]),
+    ).toEqual([branch]);
+  });
+
+  it("keeps row identity scoped to the session across section transitions", () => {
+    const session = makeSession("moving");
+    expect(sidebarV2SessionRowKey(session)).toBe(
+      scopedSessionKey(scopeSessionRef(environmentId, session.id)),
+    );
   });
 
   it("gates lifecycle dispatch at the action boundary", () => {
