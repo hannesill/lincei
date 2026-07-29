@@ -95,7 +95,9 @@
 :root {
   color-scheme: light;
   --app-scrollbar-width: 6px;
+  --glass-blur: 12px;
   --glass-opacity: 80%;
+  --glass-saturation: 1.14;
   --font-lincei-sans:
     "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-lincei-serif:
@@ -135,6 +137,8 @@
   --sidebar-border: color-mix(in srgb, oklch(0.56 0.055 70) 25%, transparent);
   @variant dark {
     color-scheme: dark;
+    --glass-blur: 16px;
+    --glass-saturation: 1.08;
     --background: oklch(0.21 0 0);
     --app-chrome-background: var(--background);
     --foreground: oklch(0.93 0 0);
@@ -166,6 +170,59 @@
     --sidebar-accent: color-mix(in srgb, oklch(0.72 0.1 70) 14%, transparent);
     --sidebar-accent-foreground: oklch(0.88 0.075 78);
     --sidebar-border: color-mix(in srgb, oklch(0.82 0.045 70) 15%, transparent);
+  }
+}
+
+.dialog-glass {
+  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 65%);
+}
+
+.dialog-backdrop {
+  background: color-mix(in srgb, var(--background) 60%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.dropdown-glass {
+  /*
+   * Elevated glass needs a denser tint than broad ambient surfaces. Nesting
+   * the user-controlled mix inside an 18% popover tint preserves the full
+   * opacity range while keeping high-contrast page content legible.
+   */
+  background: color-mix(
+    in srgb,
+    var(--popover) 18%,
+    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+  );
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
+}
+
+.dark .dropdown-glass {
+  box-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
+}
+
+.dark .dialog-glass {
+  border-color: color-mix(in srgb, var(--color-white) 8%, transparent);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 4%),
+    0 24px 72px -20px rgb(0 0 0 / 90%);
+}
+
+.dark .dialog-backdrop {
+  background: color-mix(in srgb, var(--background) 64%, transparent);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .dialog-glass,
+  .dropdown-glass {
+    background: var(--popover) !important;
   }
 }
 
