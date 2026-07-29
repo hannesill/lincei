@@ -221,7 +221,7 @@ describe("ProviderCommandReactor", () => {
         ),
       );
     });
-    const sendTurn = vi.fn((_: unknown) =>
+    const sendTurn = vi.fn<ProviderServiceShape["sendTurn"]>((_) =>
       Effect.succeed({
         sessionId: SessionId.make("session-1"),
         turnId: asTurnId("turn-1"),
@@ -368,6 +368,7 @@ describe("ProviderCommandReactor", () => {
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
+      Layer.provide(SqlitePersistenceMemory),
     );
     runtime = ManagedRuntime.make(layer);
 
@@ -579,6 +580,227 @@ describe("ProviderCommandReactor", () => {
     session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
     expect(session?.session?.status).toBe("starting");
     expect(session?.session?.lastError).toBeNull();
+  });
+
+  it("preserves a newer pending turn when an older provider send fails late", async () => {
+    const releaseOlderSend = await Effect.runPromise(Deferred.make<void>());
+    const harness = await createHarness();
+    let sendAttempt = 0;
+    harness.sendTurn.mockImplementation((input) => {
+      sendAttempt += 1;
+      if (sendAttempt === 1) {
+        return Deferred.await(releaseOlderSend).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new ProviderAdapterRequestError({
+                provider: "codex",
+                method: "session.turn.start",
+                detail: "older provider send failed late",
+              }),
+            ),
+          ),
+        );
+      }
+      return Effect.succeed({
+        sessionId: input.sessionId,
+        turnId: asTurnId("provider-turn-newer"),
+      });
+    });
+
+    const olderCreatedAt = "2026-01-01T00:00:00.000Z";
+    const newerCreatedAt = "2026-01-01T00:00:01.000Z";
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-overlap-older"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-overlap-older"),
+          role: "user",
+          text: "older turn",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: olderCreatedAt,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-overlap-newer"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-overlap-newer"),
+          role: "user",
+          text: "newer turn",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: newerCreatedAt,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+
+    await Effect.runPromise(Deferred.succeed(releaseOlderSend, undefined));
+    await waitFor(async () => {
+      const readModel = await harness.readModel();
+      const session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+      return (
+        session?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
+        false
+      );
+    });
+
+    let readModel = await harness.readModel();
+    let session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+    expect(session?.session).toMatchObject({
+      status: "starting",
+      activeTurnId: null,
+      lastError: null,
+    });
+    expect(
+      session?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
+    ).toMatchObject({
+      payload: {
+        detail: "older provider send failed late",
+      },
+    });
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.session.set",
+        commandId: CommandId.make("cmd-session-set-overlap-newer-running"),
+        sessionId: SessionId.make("session-1"),
+        session: {
+          sessionId: SessionId.make("session-1"),
+          status: "running",
+          providerName: "codex",
+          providerInstanceId: ProviderInstanceId.make("codex"),
+          runtimeMode: "approval-required",
+          activeTurnId: asTurnId("turn-overlap-newer"),
+          lastError: null,
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      }),
+    );
+
+    readModel = await harness.readModel();
+    session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+    expect(session?.latestTurn).toMatchObject({
+      turnId: asTurnId("turn-overlap-newer"),
+      requestedAt: newerCreatedAt,
+    });
+  });
+
+  it("preserves a newer active runtime when an older provider send fails late", async () => {
+    const releaseOlderSend = await Effect.runPromise(Deferred.make<void>());
+    const harness = await createHarness();
+    let sendAttempt = 0;
+    harness.sendTurn.mockImplementation((input) => {
+      sendAttempt += 1;
+      if (sendAttempt === 1) {
+        return Deferred.await(releaseOlderSend).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new ProviderAdapterRequestError({
+                provider: "codex",
+                method: "session.turn.start",
+                detail: "older active-runtime send failed late",
+              }),
+            ),
+          ),
+        );
+      }
+      return Effect.succeed({
+        sessionId: input.sessionId,
+        turnId: asTurnId("provider-turn-active-newer"),
+      });
+    });
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-active-overlap-older"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-active-overlap-older"),
+          role: "user",
+          text: "older active overlap",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.turn.start",
+        commandId: CommandId.make("cmd-turn-start-active-overlap-newer"),
+        sessionId: SessionId.make("session-1"),
+        message: {
+          messageId: asMessageId("user-message-active-overlap-newer"),
+          role: "user",
+          text: "newer active overlap",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "session.session.set",
+        commandId: CommandId.make("cmd-session-set-active-overlap-newer-running"),
+        sessionId: SessionId.make("session-1"),
+        session: {
+          sessionId: SessionId.make("session-1"),
+          status: "running",
+          providerName: "codex",
+          providerInstanceId: ProviderInstanceId.make("codex"),
+          runtimeMode: "approval-required",
+          activeTurnId: asTurnId("turn-active-overlap-newer"),
+          lastError: null,
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      }),
+    );
+
+    await Effect.runPromise(Deferred.succeed(releaseOlderSend, undefined));
+    await waitFor(async () => {
+      const readModel = await harness.readModel();
+      const session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+      return (
+        session?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
+        false
+      );
+    });
+
+    const readModel = await harness.readModel();
+    const session = readModel.sessions.find((entry) => entry.id === SessionId.make("session-1"));
+    expect(session?.session).toMatchObject({
+      status: "running",
+      activeTurnId: asTurnId("turn-active-overlap-newer"),
+      lastError: null,
+    });
+    expect(
+      session?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
+    ).toMatchObject({
+      payload: {
+        detail: "older active-runtime send failed late",
+      },
+    });
   });
 
   it("forwards the selected workflow on existing-session turns", async () => {
