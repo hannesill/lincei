@@ -227,6 +227,55 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   });
 
   describe("refName operations", () => {
+    it.effect("prioritizes the origin default ref when no local copy exists", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-vcs-driver-remote-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+        yield* git(cwd, ["remote", "set-head", "origin", initialBranch]);
+        yield* git(cwd, ["checkout", "-b", "feature/only-local"]);
+        yield* git(cwd, ["branch", "-D", initialBranch]);
+        yield* git(cwd, ["branch", "feature/another-local"]);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        const refs = yield* driver.listRefs({ cwd, limit: 2 });
+
+        assert.equal(refs.refs[0]?.name, "feature/only-local");
+        assert.equal(refs.refs[1]?.name, `origin/${initialBranch}`);
+        assert.equal(refs.refs[1]?.isRemote, true);
+        assert.equal(refs.refs[1]?.isDefault, true);
+      }),
+    );
+
+    it.effect("deduplicates the origin default ref when its local copy exists", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-vcs-driver-remote-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+        yield* git(cwd, ["remote", "set-head", "origin", initialBranch]);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        const refs = yield* driver.listRefs({ cwd });
+        const defaultMatches = refs.refs.filter(
+          (ref) => ref.name === initialBranch || ref.name === `origin/${initialBranch}`,
+        );
+
+        assert.equal(defaultMatches.length, 1);
+        assert.deepInclude(defaultMatches[0], {
+          name: initialBranch,
+          current: true,
+          isRemote: false,
+          isDefault: true,
+        });
+      }),
+    );
+
     it.effect("creates, checks out, renames, and lists refs", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
