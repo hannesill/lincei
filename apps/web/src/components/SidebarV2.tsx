@@ -96,6 +96,7 @@ import {
   parkedSessionsVisibleWhenCollapsed,
   pageSessionsWithRouteRetention,
   partitionSidebarV2Sessions,
+  resolveRoutedSessionWakeAcknowledgementAt,
   resolveSidebarV2ServerRouteProjectRef,
   resolveSidebarV2NewSessionOptions,
   sessionsRequiringChangeRequestObservation,
@@ -944,6 +945,7 @@ export default function SidebarV2() {
     select: (params) => resolveSessionRouteTarget(params),
   });
   const routeSessionRef = routeTarget?.kind === "server" ? routeTarget.sessionRef : null;
+  const routeSessionKey = routeSessionRef ? scopedSessionKey(routeSessionRef) : null;
   const activeDraft = useComposerDraftStore((state) =>
     routeTarget?.kind === "draft"
       ? (state.draftSessionsBySessionKey[routeTarget.draftId] ?? null)
@@ -1062,6 +1064,21 @@ export default function SidebarV2() {
       ),
     [sessions],
   );
+  const routeSession = routeSessionKey ? (sessionByKey.get(routeSessionKey) ?? null) : null;
+  const routeSessionLastVisitedAt = useUiStateStore((state) =>
+    routeSessionKey ? state.sessionLastVisitedAtById[routeSessionKey] : undefined,
+  );
+  const markSessionVisited = useUiStateStore((state) => state.markSessionVisited);
+  useEffect(() => {
+    const wokeAt = resolveRoutedSessionWakeAcknowledgementAt({
+      routeSessionKey,
+      session: routeSession,
+      lastVisitedAt: routeSessionLastVisitedAt,
+      now: nowIso,
+    });
+    if (wokeAt === null || routeSessionKey === null) return;
+    markSessionVisited(routeSessionKey, wokeAt);
+  }, [markSessionVisited, nowIso, routeSession, routeSessionKey, routeSessionLastVisitedAt]);
   const visibleSessionKeys = useMemo(
     () => sidebarProjects.flatMap((project) => visibleKeysByProject.get(project.projectKey) ?? []),
     [sidebarProjects, visibleKeysByProject],

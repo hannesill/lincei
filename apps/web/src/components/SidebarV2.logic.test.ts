@@ -11,6 +11,7 @@ import {
   parkedSessionsVisibleWhenCollapsed,
   partitionSidebarV2Sessions,
   resolveParkedSessionComposerState,
+  resolveRoutedSessionWakeAcknowledgementAt,
   resolveSidebarV2NewSessionOptions,
   resolveSidebarV2ServerRouteProjectRef,
   sessionsRequiringChangeRequestObservation,
@@ -54,6 +55,92 @@ function makeSession(
     ...overrides,
   };
 }
+
+describe("Sidebar v2 routed wake acknowledgement", () => {
+  const routedSessionKey = scopedSessionKey(
+    scopeSessionRef(environmentId, SessionId.make("routed")),
+  );
+
+  it("acknowledges a quiet timed wake at its authoritative timestamp", () => {
+    const session = makeSession("routed", {
+      snoozedAt: "2026-07-29T09:00:00.000Z",
+      snoozedUntil: "2026-07-29T10:00:00.000Z",
+      latestTurn: {
+        turnId: "turn-before-snooze" as never,
+        state: "completed",
+        assistantMessageId: null,
+        requestedAt: "2026-07-29T08:00:00.000Z",
+        startedAt: "2026-07-29T08:00:00.000Z",
+        completedAt: "2026-07-29T08:30:00.000Z",
+      },
+    });
+
+    expect(
+      resolveRoutedSessionWakeAcknowledgementAt({
+        routeSessionKey: routedSessionKey,
+        session,
+        lastVisitedAt: "2026-07-29T09:45:00.000Z",
+        now: "2026-07-29T10:01:00.000Z",
+      }),
+    ).toBe("2026-07-29T10:00:00.000Z");
+  });
+
+  it("does not acknowledge sessions outside the active route", () => {
+    const session = makeSession("routed", {
+      snoozedAt: "2026-07-29T09:00:00.000Z",
+      snoozedUntil: "2026-07-29T10:00:00.000Z",
+    });
+
+    expect(
+      resolveRoutedSessionWakeAcknowledgementAt({
+        routeSessionKey: null,
+        session,
+        lastVisitedAt: null,
+        now: "2026-07-29T10:01:00.000Z",
+      }),
+    ).toBeNull();
+    expect(
+      resolveRoutedSessionWakeAcknowledgementAt({
+        routeSessionKey: scopedSessionKey(
+          scopeSessionRef(environmentId, SessionId.make("another-session")),
+        ),
+        session,
+        lastVisitedAt: null,
+        now: "2026-07-29T10:01:00.000Z",
+      }),
+    ).toBeNull();
+  });
+
+  it("does not move an already newer visit backward", () => {
+    expect(
+      resolveRoutedSessionWakeAcknowledgementAt({
+        routeSessionKey: routedSessionKey,
+        session: makeSession("routed", {
+          snoozedAt: "2026-07-29T09:00:00.000Z",
+          snoozedUntil: "2026-07-29T10:00:00.000Z",
+        }),
+        lastVisitedAt: "2026-07-29T10:30:00.000Z",
+        now: "2026-07-29T10:31:00.000Z",
+      }),
+    ).toBeNull();
+  });
+
+  it("acknowledges an early wake at the server request timestamp", () => {
+    expect(
+      resolveRoutedSessionWakeAcknowledgementAt({
+        routeSessionKey: routedSessionKey,
+        session: makeSession("routed", {
+          snoozedAt: "2026-07-29T09:00:00.000Z",
+          snoozedUntil: "2026-07-29T12:00:00.000Z",
+          hasPendingUserInput: true,
+          pendingRequestRaisedAt: "2026-07-29T10:15:00.000Z",
+        }),
+        lastVisitedAt: "2026-07-29T10:00:00.000Z",
+        now: "2026-07-29T10:30:00.000Z",
+      }),
+    ).toBe("2026-07-29T10:15:00.000Z");
+  });
+});
 
 describe("Sidebar v2 lifecycle partition", () => {
   it("keeps archived, snoozed, settled, and active semantics distinct", () => {
