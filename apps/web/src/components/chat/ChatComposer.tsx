@@ -70,6 +70,7 @@ import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../Compos
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { APP_CONTENT_MAX_WIDTH_CLASS } from "../appShell";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
+import { ComposerCommandMenuLayer } from "./ComposerCommandMenuLayer";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -826,6 +827,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [composerMenuAnchor, setComposerMenuAnchor] = useState<HTMLDivElement | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(
     () => activeSession?.workflowId ?? "ad-hoc",
   );
@@ -2028,7 +2030,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     >
       <div
         className={cn(
-          "group rounded-lg p-px shadow-sm/5 transition-colors duration-200",
+          "group rounded-[22px] p-px transition-colors duration-200",
           composerProviderState.composerFrameClassName,
         )}
         onDragEnter={onComposerDragEnter}
@@ -2040,8 +2042,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           ref={composerSurfaceRef}
           data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
           className={cn(
-            "rounded-md border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
-            isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border",
+            "rounded-[20px] transition-[background-color] duration-200",
+            isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
             environmentUnavailable ? "opacity-75" : null,
             composerProviderState.composerSurfaceClassName,
           )}
@@ -2212,6 +2214,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           ) : null}
 
           <div
+            ref={setComposerMenuAnchor}
             className={cn(
               "relative px-3 pb-1.5 sm:px-3.5",
               hasComposerHeader ? "pt-2 sm:pt-2.5" : "pt-2.5 sm:pt-3",
@@ -2219,7 +2222,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             )}
           >
             {composerMenuOpen && !isComposerApprovalState && (
-              <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
+              <ComposerCommandMenuLayer anchor={composerMenuAnchor}>
                 <ComposerCommandMenu
                   items={composerMenuItems}
                   resolvedTheme={resolvedTheme}
@@ -2234,7 +2237,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   onHighlightedItemChange={onComposerMenuItemHighlighted}
                   onSelect={onSelectComposerItem}
                 />
-              </div>
+              </ComposerCommandMenuLayer>
             )}
 
             {!isComposerCollapsedMobile &&

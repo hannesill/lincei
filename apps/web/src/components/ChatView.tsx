@@ -1797,6 +1797,7 @@ export default function ChatView(props: ChatViewProps) {
       : (storeServerTerminalLaunchContext ?? null);
   // Default true while loading to avoid toolbar flicker.
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
+  const showComposerContextStrip = isGitRepo && activeProject !== null;
   const terminalShortcutLabelOptions = useMemo(
     () => ({
       context: {
@@ -4146,145 +4147,138 @@ export default function ChatView(props: ChatViewProps) {
             data-chat-composer-overlay="true"
             className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-2 sm:pt-2.5"
           >
-            <div
-              aria-hidden="true"
-              className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-2 bottom-0 z-0 sm:top-2.5"
-            >
-              <div
-                className={cn(
-                  "relative mx-auto h-full w-full overflow-clip rounded-t-[20px]",
-                  APP_CONTENT_MAX_WIDTH_CLASS,
-                )}
-              >
-                <div className="chat-composer-shared-blur absolute -inset-8" />
-              </div>
-            </div>
             <div className="chat-composer-horizontal-inset">
               <div
                 className={cn(
-                  "pointer-events-auto relative z-10 isolate mx-auto w-full",
+                  "pointer-events-auto relative z-10 mx-auto w-full",
                   APP_CONTENT_MAX_WIDTH_CLASS,
                 )}
               >
                 <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
                 <div className="relative z-10">
-                  <ChatComposer
-                    composerRef={composerRef}
-                    composerDraftTarget={composerDraftTarget}
-                    environmentId={environmentId}
-                    routeKind={routeKind}
-                    routeSessionRef={routeSessionRef}
-                    draftId={draftId}
-                    activeSessionId={activeSessionId}
-                    activeSessionEnvironmentId={activeSession?.environmentId}
-                    activeSession={activeSession}
-                    isServerSession={isServerSession}
-                    isLocalDraftSession={isLocalDraftSession}
-                    phase={phase}
-                    isConnecting={isConnecting}
-                    isSendBusy={isSendBusy}
-                    isPreparingWorktree={isPreparingWorktree}
-                    environmentUnavailable={activeEnvironmentUnavailableState}
-                    activePendingApproval={activePendingApproval}
-                    pendingApprovals={pendingApprovals}
-                    pendingUserInputs={pendingUserInputs}
-                    activePendingProgress={activePendingProgress}
-                    activePendingResolvedAnswers={activePendingResolvedAnswers}
-                    activePendingIsResponding={activePendingIsResponding}
-                    activePendingDraftAnswers={activePendingDraftAnswers}
-                    activePendingQuestionIndex={activePendingQuestionIndex}
-                    respondingRequestIds={respondingRequestIds}
-                    showPlanFollowUpPrompt={showPlanFollowUpPrompt}
-                    activeProposedPlan={activeProposedPlan}
-                    activePlan={activePlan as { turnId?: TurnId } | null}
-                    sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
-                    planSidebarLabel={planSidebarLabel}
-                    planSidebarOpen={planSidebarOpen}
-                    runtimeMode={runtimeMode}
-                    interactionMode={interactionMode}
-                    lockedProvider={lockedProvider}
-                    providerStatuses={providerStatuses as ServerProvider[]}
-                    activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
-                    activeSessionModelSelection={activeSession?.modelSelection}
-                    activeSessionActivities={activeSession?.activities}
-                    resolvedTheme={resolvedTheme}
-                    settings={settings}
-                    shortcuts={shortcuts}
-                    terminalOpen={Boolean(terminalState.terminalOpen)}
-                    gitCwd={gitCwd}
-                    promptRef={promptRef}
-                    composerImagesRef={composerImagesRef}
-                    composerTerminalContextsRef={composerTerminalContextsRef}
-                    onSend={onSend}
-                    onInterrupt={onInterrupt}
-                    onImplementPlanInNewSession={onImplementPlanInNewSession}
-                    onRespondToApproval={onRespondToApproval}
-                    onSelectActivePendingUserInputOption={onSelectActivePendingUserInputOption}
-                    onAdvanceActivePendingUserInput={onAdvanceActivePendingUserInput}
-                    onPreviousActivePendingUserInputQuestion={
-                      onPreviousActivePendingUserInputQuestion
-                    }
-                    onChangeActivePendingUserInputCustomAnswer={
-                      onChangeActivePendingUserInputCustomAnswer
-                    }
-                    onProviderModelSelect={onProviderModelSelect}
-                    toggleInteractionMode={toggleInteractionMode}
-                    handleRuntimeModeChange={handleRuntimeModeChange}
-                    handleInteractionModeChange={handleInteractionModeChange}
-                    togglePlanSidebar={togglePlanSidebar}
-                    focusComposer={focusComposer}
-                    scheduleComposerFocus={scheduleComposerFocus}
-                    setSessionError={setSessionError}
-                    onExpandImage={onExpandTimelineImage}
-                  />
+                  <div
+                    className={cn(
+                      "chat-composer-glass-shell relative mx-auto w-full",
+                      showComposerContextStrip && "chat-composer-glass-shell-with-context",
+                    )}
+                  >
+                    <div className="chat-composer-glass-host relative z-10 w-full rounded-[22px]">
+                      <div className="relative z-10">
+                        <ChatComposer
+                          composerRef={composerRef}
+                          composerDraftTarget={composerDraftTarget}
+                          environmentId={environmentId}
+                          routeKind={routeKind}
+                          routeSessionRef={routeSessionRef}
+                          draftId={draftId}
+                          activeSessionId={activeSessionId}
+                          activeSessionEnvironmentId={activeSession?.environmentId}
+                          activeSession={activeSession}
+                          isServerSession={isServerSession}
+                          isLocalDraftSession={isLocalDraftSession}
+                          phase={phase}
+                          isConnecting={isConnecting}
+                          isSendBusy={isSendBusy}
+                          isPreparingWorktree={isPreparingWorktree}
+                          environmentUnavailable={activeEnvironmentUnavailableState}
+                          activePendingApproval={activePendingApproval}
+                          pendingApprovals={pendingApprovals}
+                          pendingUserInputs={pendingUserInputs}
+                          activePendingProgress={activePendingProgress}
+                          activePendingResolvedAnswers={activePendingResolvedAnswers}
+                          activePendingIsResponding={activePendingIsResponding}
+                          activePendingDraftAnswers={activePendingDraftAnswers}
+                          activePendingQuestionIndex={activePendingQuestionIndex}
+                          respondingRequestIds={respondingRequestIds}
+                          showPlanFollowUpPrompt={showPlanFollowUpPrompt}
+                          activeProposedPlan={activeProposedPlan}
+                          activePlan={activePlan as { turnId?: TurnId } | null}
+                          sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
+                          planSidebarLabel={planSidebarLabel}
+                          planSidebarOpen={planSidebarOpen}
+                          runtimeMode={runtimeMode}
+                          interactionMode={interactionMode}
+                          lockedProvider={lockedProvider}
+                          providerStatuses={providerStatuses as ServerProvider[]}
+                          activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
+                          activeSessionModelSelection={activeSession?.modelSelection}
+                          activeSessionActivities={activeSession?.activities}
+                          resolvedTheme={resolvedTheme}
+                          settings={settings}
+                          shortcuts={shortcuts}
+                          terminalOpen={Boolean(terminalState.terminalOpen)}
+                          gitCwd={gitCwd}
+                          promptRef={promptRef}
+                          composerImagesRef={composerImagesRef}
+                          composerTerminalContextsRef={composerTerminalContextsRef}
+                          onSend={onSend}
+                          onInterrupt={onInterrupt}
+                          onImplementPlanInNewSession={onImplementPlanInNewSession}
+                          onRespondToApproval={onRespondToApproval}
+                          onSelectActivePendingUserInputOption={
+                            onSelectActivePendingUserInputOption
+                          }
+                          onAdvanceActivePendingUserInput={onAdvanceActivePendingUserInput}
+                          onPreviousActivePendingUserInputQuestion={
+                            onPreviousActivePendingUserInputQuestion
+                          }
+                          onChangeActivePendingUserInputCustomAnswer={
+                            onChangeActivePendingUserInputCustomAnswer
+                          }
+                          onProviderModelSelect={onProviderModelSelect}
+                          toggleInteractionMode={toggleInteractionMode}
+                          handleRuntimeModeChange={handleRuntimeModeChange}
+                          handleInteractionModeChange={handleInteractionModeChange}
+                          togglePlanSidebar={togglePlanSidebar}
+                          focusComposer={focusComposer}
+                          scheduleComposerFocus={scheduleComposerFocus}
+                          setSessionError={setSessionError}
+                          onExpandImage={onExpandTimelineImage}
+                        />
+                      </div>
+                    </div>
+                    {showComposerContextStrip ? (
+                      <div className="min-h-0">
+                        <div className="pointer-events-auto relative z-0">
+                          <BranchToolbar
+                            environmentId={activeSession.environmentId}
+                            sessionId={activeSession.id}
+                            {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                            onEnvModeChange={onEnvModeChange}
+                            {...(canOverrideServerSessionEnvMode
+                              ? { effectiveEnvModeOverride: envMode }
+                              : {})}
+                            {...(canOverrideServerSessionEnvMode
+                              ? {
+                                  activeSessionBranchOverride: activeSessionBranch,
+                                  onActiveSessionBranchOverrideChange:
+                                    setPendingServerSessionBranch,
+                                }
+                              : {})}
+                            envLocked={envLocked}
+                            onComposerFocusRequest={scheduleComposerFocus}
+                            {...(canCheckoutPullRequestIntoSession
+                              ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                              : {})}
+                            {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
+                            availableEnvironments={logicalProjectEnvironments}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div
-              className={cn(
-                "chat-composer-horizontal-inset chat-composer-lower-chrome relative z-10",
-                isGitRepo
-                  ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
-                  : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
-              )}
-            >
-              {isGitRepo && (
-                <div className="pointer-events-auto">
-                  <BranchToolbar
-                    environmentId={activeSession.environmentId}
-                    sessionId={activeSession.id}
-                    {...(routeKind === "draft" && draftId ? { draftId } : {})}
-                    onEnvModeChange={onEnvModeChange}
-                    {...(canOverrideServerSessionEnvMode
-                      ? { effectiveEnvModeOverride: envMode }
-                      : {})}
-                    {...(canOverrideServerSessionEnvMode
-                      ? {
-                          activeSessionBranchOverride: activeSessionBranch,
-                          onActiveSessionBranchOverrideChange: setPendingServerSessionBranch,
-                        }
-                      : {})}
-                    envLocked={envLocked}
-                    onComposerFocusRequest={scheduleComposerFocus}
-                    centerContent={<AiReviewNotice />}
-                    {...(canCheckoutPullRequestIntoSession
-                      ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                      : {})}
-                    {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
-                    availableEnvironments={logicalProjectEnvironments}
-                  />
-                </div>
-              )}
-              {!isGitRepo && (
                 <div
-                  className={cn(
-                    "pointer-events-auto mx-auto flex w-full justify-center px-2.5 pb-1 pt-1.5 sm:px-3",
-                    APP_CONTENT_MAX_WIDTH_CLASS,
-                  )}
+                  data-lincei-ai-review-notice="true"
+                  className="pointer-events-auto mx-auto flex w-full justify-center pt-1"
                 >
                   <AiReviewNotice />
                 </div>
-              )}
+                <div
+                  aria-hidden="true"
+                  className="h-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:h-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+                />
+              </div>
             </div>
           </div>
 
