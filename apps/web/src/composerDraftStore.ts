@@ -366,9 +366,6 @@ interface ComposerDraftStoreState {
   setModelSelection: (
     sessionRef: ComposerSessionTarget,
     modelSelection: ModelSelection | null | undefined,
-    options?: {
-      replaceOptions?: boolean;
-    },
   ) => void;
   /** Replace the model options for one or more providers in the draft. */
   setModelOptions: (
@@ -2401,7 +2398,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             return { draftsBySessionKey: nextDraftsBySessionKey };
           });
         },
-        setModelSelection: (sessionRef, modelSelection, options) => {
+        setModelSelection: (sessionRef, modelSelection) => {
           const sessionKey = resolveComposerDraftKey(get(), sessionRef) ?? "";
           if (sessionKey.length === 0) {
             return;
@@ -2416,7 +2413,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const nextMap = { ...base.modelSelectionByProvider };
             if (normalized) {
               const current = nextMap[normalized.instanceId];
-              if (normalized.options !== undefined || options?.replaceOptions) {
+              if (normalized.options !== undefined) {
                 // Explicit options provided → use them
                 nextMap[normalized.instanceId] = normalized as ModelSelection;
               } else {

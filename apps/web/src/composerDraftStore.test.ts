@@ -975,25 +975,6 @@ describe("composerDraftStore modelSelection", () => {
     ).toEqual(modelSelection(CODEX_DRIVER, "gpt-5.4"));
   });
 
-  it("replaces stale model options when carrying a complete selection", () => {
-    const store = useComposerDraftStore.getState();
-    store.setModelSelection(
-      sessionRef,
-      modelSelection(CODEX_DRIVER, "gpt-5.3-codex", {
-        reasoningEffort: "xhigh",
-        fastMode: true,
-      }),
-    );
-
-    store.setModelSelection(sessionRef, modelSelection(CODEX_DRIVER, "gpt-5.4"), {
-      replaceOptions: true,
-    });
-
-    expect(
-      draftFor(sessionId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CODEX_INSTANCE],
-    ).toEqual(modelSelection(CODEX_DRIVER, "gpt-5.4"));
-  });
-
   it("replaces only the targeted provider options on the current model selection", () => {
     const store = useComposerDraftStore.getState();
 

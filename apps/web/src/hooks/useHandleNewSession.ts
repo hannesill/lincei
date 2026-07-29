@@ -44,7 +44,6 @@ function useNewSessionState() {
         getDraftSession,
         getComposerDraft,
         applyStickyState,
-        setModelSelection,
         setDraftSessionContext,
         setLogicalProjectDraftSessionId,
       } = useComposerDraftStore.getState();
@@ -65,13 +64,6 @@ function useNewSessionState() {
               : currentRouteTarget.draftId,
           )
         : null;
-      const activeComposerProvider = currentComposerDraft?.activeProvider ?? null;
-      const carriedModelSelection =
-        (activeComposerProvider
-          ? currentComposerDraft?.modelSelectionByProvider[activeComposerProvider]
-          : null) ??
-        currentServerSession?.modelSelection ??
-        null;
       const carriedRuntimeMode =
         currentComposerDraft?.runtimeMode ??
         currentServerSession?.runtimeMode ??
@@ -130,11 +122,6 @@ function useNewSessionState() {
               workflowVersion: carriedWorkflowVersion,
             },
           );
-          if (carriedModelSelection) {
-            setModelSelection(storedDraftSession.draftId, carriedModelSelection, {
-              replaceOptions: true,
-            });
-          }
           if (
             currentRouteTarget?.kind === "draft" &&
             currentRouteTarget.draftId === storedDraftSession.draftId
@@ -178,11 +165,6 @@ function useNewSessionState() {
           workflowId: carriedWorkflowId,
           workflowVersion: carriedWorkflowVersion,
         });
-        if (carriedModelSelection) {
-          setModelSelection(currentRouteTarget.draftId, carriedModelSelection, {
-            replaceOptions: true,
-          });
-        }
         return Promise.resolve();
       }
 
@@ -202,9 +184,6 @@ function useNewSessionState() {
           workflowVersion: carriedWorkflowVersion,
         });
         applyStickyState(draftId);
-        if (carriedModelSelection) {
-          setModelSelection(draftId, carriedModelSelection, { replaceOptions: true });
-        }
 
         await router.navigate({
           to: "/draft/$draftId",

@@ -100,6 +100,7 @@ import {
 import {
   parkedSessionsVisibleWhenCollapsed,
   partitionSidebarV2Sessions,
+  resolveSidebarV2NewSessionOptions,
   toSessionLifecycleShell,
   type SidebarV2Section,
 } from "./SidebarV2.logic";
@@ -971,9 +972,12 @@ export default function SidebarV2() {
   );
   const handleNewSession = useCallback(
     (projectRef: ScopedProjectRef) => {
-      void createNewSession(projectRef);
+      void createNewSession(
+        projectRef,
+        resolveSidebarV2NewSessionOptions(settings.defaultSessionEnvMode),
+      );
     },
-    [createNewSession],
+    [createNewSession, settings.defaultSessionEnvMode],
   );
 
   const shouldShowJumpHints = shouldShowSessionJumpHintsForModifiers(shortcutModifiers, shortcuts, {
@@ -1038,6 +1042,7 @@ export default function SidebarV2() {
         <SidebarGroup className="gap-2 px-1 py-2">
           <div className="flex items-center gap-1 px-1">
             <Button
+              data-testid="new-session-button"
               variant="ghost"
               size="sm"
               className="min-w-0 flex-1 justify-start gap-2 px-2 text-xs"
