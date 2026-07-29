@@ -99,6 +99,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         side="left"
         collapsible="offcanvas"
         className="border-r border-border bg-card text-foreground"
+        data-sidebar-implementation={sidebarImplementation}
       >
         {sidebarImplementation === "v1" ? <SessionSidebar /> : <SidebarV2 />}
         <SidebarRail />
