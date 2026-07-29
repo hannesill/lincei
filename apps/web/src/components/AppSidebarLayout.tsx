@@ -12,7 +12,7 @@ import {
   clearShortcutModifierState,
   syncShortcutModifierStateFromKeyboardEvent,
 } from "../shortcutModifierState";
-import { useSettings } from "../hooks/useSettings";
+import { useClientSettingsHydrated, useSettings } from "../hooks/useSettings";
 
 function SidebarGlobalShortcuts() {
   const { toggleSidebar } = useSidebar();
@@ -47,10 +47,12 @@ function SidebarGlobalShortcuts() {
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const clientSettingsHydrated = useClientSettingsHydrated();
   const sidebarV1RollbackEnabled = useSettings((settings) => settings.sidebarV1RollbackEnabled);
   const sidebarImplementation = resolveSidebarImplementation({
     pathname,
     sidebarV1RollbackEnabled,
+    clientSettingsHydrated,
   });
 
   useEffect(() => {

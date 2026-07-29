@@ -8,6 +8,7 @@ describe("Sidebar implementation rollout", () => {
       resolveSidebarImplementation({
         pathname: "/environment/session",
         sidebarV1RollbackEnabled: false,
+        clientSettingsHydrated: true,
       }),
     ).toBe("v2");
   });
@@ -17,6 +18,7 @@ describe("Sidebar implementation rollout", () => {
       resolveSidebarImplementation({
         pathname: "/environment/session",
         sidebarV1RollbackEnabled: true,
+        clientSettingsHydrated: true,
       }),
     ).toBe("v1");
   });
@@ -26,7 +28,23 @@ describe("Sidebar implementation rollout", () => {
       resolveSidebarImplementation({
         pathname: "/settings/appearance",
         sidebarV1RollbackEnabled: false,
+        clientSettingsHydrated: true,
       }),
     ).toBe("v1");
+  });
+
+  it("never mounts Sidebar v2 before a persisted rollback flag hydrates", () => {
+    expect([
+      resolveSidebarImplementation({
+        pathname: "/environment/session",
+        sidebarV1RollbackEnabled: false,
+        clientSettingsHydrated: false,
+      }),
+      resolveSidebarImplementation({
+        pathname: "/environment/session",
+        sidebarV1RollbackEnabled: true,
+        clientSettingsHydrated: true,
+      }),
+    ]).toEqual(["v1", "v1"]);
   });
 });

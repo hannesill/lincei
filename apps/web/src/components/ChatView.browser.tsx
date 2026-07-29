@@ -4245,22 +4245,55 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("mounts Sidebar v1 when the persisted rollback flag is enabled", async () => {
-    const mounted = await mountChatView({
-      viewport: DEFAULT_VIEWPORT,
-      sidebarV1RollbackEnabled: true,
-      snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-sidebar-v1-rollback-test" as MessageId,
-        targetText: "sidebar v1 rollback test",
-      }),
+    const observedImplementations: string[] = [];
+    const recordSidebarImplementation = (element: Element) => {
+      const implementation = element.getAttribute("data-sidebar-implementation");
+      if (implementation) observedImplementations.push(implementation);
+      for (const sidebar of element.querySelectorAll("[data-sidebar-implementation]")) {
+        const nestedImplementation = sidebar.getAttribute("data-sidebar-implementation");
+        if (nestedImplementation) observedImplementations.push(nestedImplementation);
+      }
+    };
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes") {
+          if (record.oldValue) observedImplementations.push(record.oldValue);
+          recordSidebarImplementation(record.target as Element);
+          continue;
+        }
+        for (const node of record.addedNodes) {
+          if (node instanceof Element) recordSidebarImplementation(node);
+        }
+      }
     });
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-sidebar-implementation"],
+      attributeOldValue: true,
+      childList: true,
+      subtree: true,
+    });
+    let mounted: MountedChatView | null = null;
 
     try {
+      mounted = await mountChatView({
+        viewport: DEFAULT_VIEWPORT,
+        sidebarV1RollbackEnabled: true,
+        snapshot: createSnapshotForTargetUser({
+          targetMessageId: "msg-user-sidebar-v1-rollback-test" as MessageId,
+          targetText: "sidebar v1 rollback test",
+        }),
+      });
       await waitForElement(
         () => document.querySelector('[data-sidebar-implementation="v1"]'),
         "Sidebar v1 should mount when the persisted rollback flag is enabled.",
       );
+      await waitForLayout();
+      expect(observedImplementations).toContain("v1");
+      expect(observedImplementations).not.toContain("v2");
     } finally {
-      await mounted.cleanup();
+      observer.disconnect();
+      await mounted?.cleanup();
     }
   });
 
