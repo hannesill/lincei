@@ -96,7 +96,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   render={
                     <button
                       className={cn(
-                        "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
+                        "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))] focus-visible:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))] focus-visible:outline-none",
                         props.selectedInstanceId === "favorites" && SELECTED_BUTTON_CLASS,
                       )}
                       onClick={() => handleSelect("favorites")}
@@ -138,7 +138,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             <button
               data-model-picker-provider={entry.instanceId}
               className={cn(
-                "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-muted",
+                "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded transition-colors hover:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))] focus-visible:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))] focus-visible:outline-none",
                 isSelected && SELECTED_BUTTON_CLASS,
                 isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
               )}

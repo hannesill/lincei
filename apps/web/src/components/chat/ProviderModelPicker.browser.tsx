@@ -1,3 +1,5 @@
+import "../../index.css";
+
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -370,6 +372,96 @@ describe("ProviderModelPicker", () => {
     }
   });
 
+  it("applies opacity-controlled glass once and keeps hover layers opaque", async () => {
+    const previousGlassOpacity = document.documentElement.style.getPropertyValue("--glass-opacity");
+    document.documentElement.style.setProperty("--glass-opacity", "40%");
+    const mounted = await mountPicker({
+      activeInstanceId: CLAUDE_INSTANCE_ID,
+      model: "claude-opus-4-6",
+      lockedProvider: null,
+    });
+
+    try {
+      await page.getByRole("button").click();
+
+      const content = await vi.waitFor(() => {
+        const element = document.querySelector<HTMLElement>('[data-model-picker-content="true"]');
+        expect(element).not.toBeNull();
+        return element!;
+      });
+      const popup = content.closest<HTMLElement>('[data-slot="popover-popup"]');
+      const modelRows = Array.from(
+        content.querySelectorAll<HTMLElement>('[data-slot="combobox-item"]'),
+      );
+      const firstModel = modelRows[0];
+      const unselectedModel = modelRows.find((element) =>
+        element.textContent?.includes("Claude Sonnet 4.6"),
+      );
+      const favoritesButton = content.querySelector<HTMLElement>(
+        '[data-model-picker-provider="favorites"]',
+      );
+      const backgroundProbe = document.createElement("div");
+      backgroundProbe.style.backgroundColor =
+        "color-mix(in srgb, var(--popover) 90%, var(--foreground))";
+      content.append(backgroundProbe);
+      const opaqueRowBackground = getComputedStyle(backgroundProbe).backgroundColor;
+      backgroundProbe.remove();
+
+      expect(content.classList).toContain("dropdown-glass");
+      expect(content.classList).toContain("model-picker-surface");
+      expect(content.className).toContain("[clip-path:inset(0_round_var(--radius-lg))]");
+      expect(popup).not.toBeNull();
+      expect(firstModel).toBeDefined();
+      expect(unselectedModel).toBeDefined();
+      expect(unselectedModel).not.toHaveAttribute("data-selected");
+      expect(favoritesButton).not.toBeNull();
+      expect(getComputedStyle(popup!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(popup!).backdropFilter).toBe("none");
+      expect(getComputedStyle(popup!).borderTopWidth).toBe("0px");
+      expect(firstModel!.className).toContain(
+        "[&&:hover]:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))]",
+      );
+      expect(favoritesButton!.className).toContain(
+        "focus-visible:bg-[color-mix(in_srgb,var(--popover)_90%,var(--foreground))]",
+      );
+
+      await page.getByText("Claude Sonnet 4.6").first().hover();
+      await vi.waitFor(() => {
+        expect(getComputedStyle(unselectedModel!).backgroundColor).toBe(opaqueRowBackground);
+      });
+
+      const searchInput = page.getByPlaceholder("Search models...");
+      await searchInput.hover();
+      await userEvent.click(searchInput);
+      await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+      const highlightedModel = await vi.waitFor(() => {
+        const element = content.querySelector<HTMLElement>(
+          '[data-slot="combobox-item"][data-highlighted]',
+        );
+        expect(element?.textContent).toContain("Claude Sonnet 4.6");
+        return element!;
+      });
+      await vi.waitFor(() => {
+        expect(getComputedStyle(highlightedModel).backgroundColor).toBe(opaqueRowBackground);
+      });
+
+      const lowOpacityBackground = getComputedStyle(content).backgroundColor;
+      expect(lowOpacityBackground).not.toBe("rgba(0, 0, 0, 0)");
+      document.documentElement.style.setProperty("--glass-opacity", "100%");
+
+      await vi.waitFor(() => {
+        expect(getComputedStyle(content).backgroundColor).not.toBe(lowOpacityBackground);
+      });
+    } finally {
+      if (previousGlassOpacity) {
+        document.documentElement.style.setProperty("--glass-opacity", previousGlassOpacity);
+      } else {
+        document.documentElement.style.removeProperty("--glass-opacity");
+      }
+      await mounted.cleanup();
+    }
+  });
+
   it("does not show model settings when traits are omitted", async () => {
     const mounted = await mountPicker({
       activeInstanceId: CODEX_INSTANCE_ID,
@@ -416,6 +508,11 @@ describe("ProviderModelPicker", () => {
       await vi.waitFor(() => {
         const text = document.body.textContent ?? "";
         expect(document.querySelector('input[placeholder="Search models..."]')).toBeNull();
+        expect(
+          document
+            .querySelector<HTMLElement>('[data-model-picker-content="traits"]')
+            ?.classList.contains("dropdown-glass"),
+        ).toBe(true);
         expect(text).not.toContain("Model settings");
         expect(text).toContain("Reasoning");
         expect(text).toContain("Fast Mode");

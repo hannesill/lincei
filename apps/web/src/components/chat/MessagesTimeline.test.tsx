@@ -245,6 +245,18 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-user-message-collapsible="false"');
   });
 
+  it("keeps user messages on the high-contrast Lincei primary surface", async () => {
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={[buildUserTimelineEntry("Contrast-preserving prompt.")]}
+      />,
+    );
+
+    expect(markup).toContain("bg-primary/90");
+    expect(markup).toContain("text-primary-foreground");
+  });
+
   it("renders inline terminal labels with the composer chip UI", async () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline
