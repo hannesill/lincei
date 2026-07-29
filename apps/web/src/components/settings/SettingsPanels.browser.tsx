@@ -19,6 +19,7 @@ import {
   type ServerProvider,
   type SourceControlDiscoveryResult,
 } from "@t3tools/contracts";
+import { bundledLinceiSkills } from "@t3tools/shared/linceiSkills";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import { page } from "vitest/browser";
@@ -975,6 +976,11 @@ describe("Settings panels", () => {
   });
 
   it("separates Lincei-owned skills from read-only external provider skills", async () => {
+    const linceiContextSkill = bundledLinceiSkills()[0];
+    if (!linceiContextSkill) {
+      throw new Error("Expected the bundled Lincei Context skill.");
+    }
+
     window.nativeApi = {
       persistence: {
         getClientSettings: vi.fn().mockResolvedValue(null),
@@ -987,6 +993,93 @@ describe("Settings panels", () => {
 
     setServerConfigSnapshot({
       ...createBaseServerConfig(),
+      skillCatalog: {
+        schemaVersion: 1,
+        refreshedAt: "2026-07-28T10:00:00.000Z",
+        skills: [
+          {
+            id: linceiContextSkill.id,
+            publisher: "lincei",
+            name: "context",
+            title: linceiContextSkill.title,
+            description: linceiContextSkill.description,
+            kind: "integration",
+            category: "lincei",
+            tier: linceiContextSkill.tier,
+            bundleVersion: linceiContextSkill.version,
+            contentDigest: linceiContextSkill.contentHash,
+            treeDigest: linceiContextSkill.contentHash,
+            relativeRoot: "context",
+            files: [],
+            source: "bundled",
+            enabled: linceiContextSkill.enabled,
+            activationPolicy: "workflow-required",
+            deliveryState: "managed-cache",
+            stale: false,
+            body: linceiContextSkill.body,
+          },
+          {
+            id: "m4:baseline-creatinine",
+            publisher: "m4",
+            name: "baseline-creatinine",
+            title: "Baseline Creatinine",
+            description:
+              "Estimate baseline serum creatinine for AKI assessment. Use for KDIGO staging, AKI research, or renal function baseline establishment.",
+            kind: "domain",
+            category: "clinical",
+            tier: "validated",
+            bundleVersion: "0.5.4",
+            contentDigest:
+              "sha256:c05d0d5b23fb79f4f01bf6f063e52814af8ab84ce3694ba2f32cb39f683ee41f",
+            treeDigest: "sha256:bdefabccaa3d0a8c6d665acc3cf3a61a43086a84c0e7bf47d2b4e7e98fade184",
+            relativeRoot: "clinical/baseline-creatinine",
+            files: [],
+            source: "managed-cache",
+            enabled: true,
+            activationPolicy: "eligible",
+            deliveryState: "managed-cache",
+            stale: false,
+            body: "Estimate baseline serum creatinine for AKI assessment.",
+          },
+          {
+            id: "m4:clinical-research-analysis-framework",
+            publisher: "m4",
+            name: "clinical-research-analysis-framework",
+            title: "Clinical Research Analysis Framework",
+            description:
+              "Guided workflow for statistical and ML analysis of clinical data. Use when planning or executing research analyses on MIMIC, eICU, or similar EHR data. Ensures methodological rigor through structured consultation, assumption checking, and stepwise execution with audit trails.",
+            kind: "methodology",
+            category: "clinical",
+            tier: "expert",
+            bundleVersion: "0.5.4",
+            contentDigest:
+              "sha256:864e10f568dc5d991781bb3189b80afae1f0cf8d3408e2ce5f7880e01dd50a38",
+            treeDigest: "sha256:ff2d9eff5270a343c38501e542da9aeae8dd67aa0b56e9834c61d3919fa9c7ae",
+            relativeRoot: "clinical/clinical-research-analysis-framework",
+            files: [],
+            source: "managed-cache",
+            enabled: true,
+            activationPolicy: "eligible",
+            deliveryState: "managed-cache",
+            stale: false,
+            body: "Use a structured framework to plan and review clinical analyses.",
+          },
+        ],
+        sources: [
+          {
+            publisher: "lincei",
+            state: "ready",
+            bundleVersion: linceiContextSkill.version,
+            bundleDigest: linceiContextSkill.contentHash,
+          },
+          {
+            publisher: "m4",
+            state: "ready",
+            bundleVersion: "0.5.4",
+            bundleDigest: "sha256:105804dc1f5039a4bea5280341e160647614af6461d02a3b1ed42545aa7e1c11",
+          },
+        ],
+      },
       providers: [
         {
           ...createOutdatedProvider("codex"),
@@ -1020,25 +1113,37 @@ describe("Settings panels", () => {
     );
 
     await expect
-      .element(page.getByRole("heading", { name: "Lincei Skills", exact: true }))
+      .element(page.getByRole("heading", { name: "Lincei", exact: true }))
       .toBeInTheDocument();
     await expect
-      .element(page.getByRole("switch", { name: "Lincei API enabled" }))
+      .element(page.getByRole("heading", { name: "M4 Clinical", exact: true }))
       .toBeInTheDocument();
     await expect
-      .element(page.getByRole("button", { name: "Review Lincei API prompt" }))
+      .element(page.getByRole("heading", { name: "M4 Methods and Integrations", exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("switch", { name: "Lincei Context enabled" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("switch", { name: "Baseline Creatinine enabled" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("switch", { name: "Clinical Research Analysis Framework enabled" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Review Lincei Context prompt" }))
       .toHaveAttribute("aria-expanded", "false");
-    await page.getByRole("button", { name: "Review Lincei API prompt" }).click();
+    await page.getByRole("button", { name: "Review Lincei Context prompt" }).click();
     await expect
-      .element(page.getByRole("button", { name: "Hide Lincei API prompt" }))
+      .element(page.getByRole("button", { name: "Hide Lincei Context prompt" }))
       .toHaveAttribute("aria-expanded", "true");
-    await expect.element(page.getByText("bundled", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByText("bundled", { exact: true })).toBeInTheDocument();
     await expect.element(page.getByText("Enabled", { exact: true })).not.toBeInTheDocument();
     await expect.element(page.getByText("Prompt injection")).not.toBeInTheDocument();
     await expect.element(page.getByText("Native deployment")).not.toBeInTheDocument();
 
     await expect
-      .element(page.getByRole("heading", { name: "External Provider Skills", exact: true }))
+      .element(page.getByRole("heading", { name: "Project and Provider Overrides", exact: true }))
       .toBeInTheDocument();
     expect(
       page
@@ -1047,13 +1152,15 @@ describe("Settings panels", () => {
         .getBoundingClientRect().top,
     ).toBeLessThan(
       page
-        .getByRole("heading", { name: "External Provider Skills", exact: true })
+        .getByRole("heading", { name: "Project and Provider Overrides", exact: true })
         .element()
         .getBoundingClientRect().top,
     );
     await expect.element(page.getByText("Agent Browser")).toBeInTheDocument();
     await expect.element(page.getByText("Daily Loop")).toBeInTheDocument();
-    await expect.element(page.getByText("Codex", { exact: true })).toBeInTheDocument();
+    await expect
+      .element(page.getByText("provider-native", { exact: true }).first())
+      .toBeInTheDocument();
     await expect.element(page.getByText("Personal", { exact: true })).toBeInTheDocument();
     await expect.element(page.getByText("Universal", { exact: true })).toBeInTheDocument();
     await expect.element(page.getByText("Codex Work")).not.toBeInTheDocument();
@@ -1087,7 +1194,7 @@ describe("Settings panels", () => {
     await expect
       .element(page.getByText(/Establish the Vitrine study context/))
       .not.toBeInTheDocument();
-    await expect.element(page.getByText("Baseline only.")).toBeInTheDocument();
+    await expect.element(page.getByText("Workflow disabled.")).toBeInTheDocument();
   });
 
   it("creates and shows a pairing link when network access is enabled", async () => {
