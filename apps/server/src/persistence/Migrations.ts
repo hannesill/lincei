@@ -11,6 +11,8 @@
 import * as Migrator from "effect/unstable/sql/Migrator";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 // Import all migrations statically
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
@@ -114,6 +116,71 @@ export const makeMigrationLoader = (throughId?: number) =>
  */
 const run = Migrator.make({});
 
+export class MigrationHistoryError extends Data.TaggedError("MigrationHistoryError")<{
+  readonly message: string;
+}> {}
+
+const incompatibleHistory = (reason: string) =>
+  new MigrationHistoryError({
+    message:
+      `Migration history is incompatible with this Lincei build: ${reason}. ` +
+      "Keep this profile unchanged and use a matching build or restore a verified backup. " +
+      "Do not edit migration records to bypass this check.",
+  });
+
+const assertCompatibleMigrationHistory = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const trackingObjects = yield* sql<{ readonly type: string }>`
+    SELECT type FROM sqlite_schema WHERE name = 'effect_sql_migrations'
+  `;
+  if (trackingObjects.some((row) => row.type !== "table")) {
+    return yield* incompatibleHistory("effect_sql_migrations is not a table");
+  }
+
+  // One extra row is enough to expose a duplicate or unknown ID without reading
+  // an unbounded malformed history. Use the full manifest, even for partial upgrades.
+  const history =
+    trackingObjects.length === 0
+      ? []
+      : yield* sql<{ readonly migration_id: number; readonly name: string }>`
+          SELECT migration_id, name FROM effect_sql_migrations
+          LIMIT ${migrationEntries.length + 1}
+        `;
+  if (history.length === 0) {
+    const existingTables = yield* sql<{ readonly name: string }>`
+      SELECT name FROM sqlite_schema
+      WHERE type = 'table' AND name NOT GLOB 'sqlite_*' AND name <> 'effect_sql_migrations'
+      LIMIT 1
+    `;
+    if (existingTables.length > 0) {
+      return yield* incompatibleHistory("no recorded migration history despite existing tables");
+    }
+    return;
+  }
+
+  const expectedNames = new Map<number, string>(migrationEntries.map(([id, name]) => [id, name]));
+  const seen = new Set<number>();
+  const conflicts: string[] = [];
+  let recordedHead = 0;
+  for (const row of history) {
+    if (seen.has(row.migration_id)) conflicts.push(`duplicate migration ID ${row.migration_id}`);
+    seen.add(row.migration_id);
+    recordedHead = Math.max(recordedHead, row.migration_id);
+    const expectedName = expectedNames.get(row.migration_id);
+    if (expectedName === undefined) {
+      conflicts.push(`unknown migration ID ${row.migration_id}`);
+    } else if (row.name !== expectedName) {
+      conflicts.push(`migration ${row.migration_id} is "${row.name}", expected "${expectedName}"`);
+    }
+  }
+  const missing = migrationEntries
+    .filter(([id]) => id <= recordedHead && !seen.has(id))
+    .map(([id, name]) => `${id}_${name}`);
+  if (missing.length > 0)
+    conflicts.push(`missing migrations below recorded head: ${missing.join(", ")}`);
+  if (conflicts.length > 0) return yield* incompatibleHistory(conflicts.join("; "));
+});
+
 export interface RunMigrationsOptions {
   readonly toMigrationInclusive?: number | undefined;
 }
@@ -123,6 +190,8 @@ export interface RunMigrationsOptions {
  *
  * Creates the migrations tracking table (effect_sql_migrations) if it doesn't exist,
  * then runs any migrations with ID greater than the latest recorded migration.
+ * History validation and the upgrade share a transaction so invalid profiles are
+ * rejected before schema or history changes are committed.
  *
  * Returns array of [id, name] tuples for migrations that were run.
  *
@@ -131,12 +200,18 @@ export interface RunMigrationsOptions {
 export const runMigrations = Effect.fn("runMigrations")(function* ({
   toMigrationInclusive,
 }: RunMigrationsOptions = {}) {
-  yield* Effect.log(
-    toMigrationInclusive === undefined
-      ? "Running all migrations..."
-      : `Running migrations 1 through ${toMigrationInclusive}...`,
+  const sql = yield* SqlClient.SqlClient;
+  const executedMigrations = yield* sql.withTransaction(
+    Effect.gen(function* () {
+      yield* assertCompatibleMigrationHistory;
+      yield* Effect.log(
+        toMigrationInclusive === undefined
+          ? "Running all migrations..."
+          : `Running migrations 1 through ${toMigrationInclusive}...`,
+      );
+      return yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
+    }),
   );
-  const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
   yield* Effect.log("Migrations ran successfully").pipe(
     Effect.annotateLogs({ migrations: executedMigrations.map(([id, name]) => `${id}_${name}`) }),
   );
