@@ -149,6 +149,36 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
     exact: [['path.join(NodeOS.homedir(), ".t3")', 'path.join(NodeOS.homedir(), ".lincei")']],
   },
 
+  // What upstream tells users about itself that is false for Lincei: it
+  // collects no usage data and has no hosted privacy policy. These are checked
+  // here, not left to the display-name rewrite, so that an upstream rewording
+  // fails `check` instead of quietly shipping T3 Code's notice under Lincei's name.
+  "apps/web/src/legalLinks.ts": {
+    exact: [['"https://t3.codes/privacy-policy"', '"https://github.com/hannesill/lincei#readme"']],
+  },
+  "apps/web/src/components/onboarding/WelcomeWizard.tsx": {
+    exact: [
+      [
+        'T3 Code collects anonymous usage data to help us improve it. To read more about how your\n          data is used and how to opt out, see our{" "}',
+        'Lincei collects no usage data. Agents send what they read, including query results, to the\n          model provider you choose. More in the{" "}',
+      ],
+      ["            privacy policy\n", "            README\n"],
+      ['aria-label="T3 Code">', 'aria-label="Lincei">'],
+      [
+        "                Code\n              </span>",
+        "                Lincei\n              </span>",
+      ],
+    ],
+  },
+  "apps/web/src/components/settings/SettingsPanels.tsx": {
+    exact: [
+      [
+        'description="How we handle your data, including the anonymous usage data T3 Code collects."',
+        'description="Lincei collects no usage data. Agents send what they read to your model provider."',
+      ],
+    ],
+  },
+
   // Upstream tests that assert the values above. When an upstream merge brings
   // a test that fails only on an identity literal, add it with the tokens it pins.
   "apps/desktop/src/app/DesktopAppIdentity.test.ts": { tokens: EVERY_TOKEN },
