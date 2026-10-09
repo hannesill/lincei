@@ -33,6 +33,7 @@ import { HttpClient } from "effect/http";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { LINCEI_CLINICAL_INSTRUCTIONS } from "./agentInstructions.ts";
+import * as ClinicalSkillLinks from "./ClinicalSkillLinks.ts";
 import * as UvInstallation from "./UvInstallation.ts";
 
 /**
@@ -312,6 +313,11 @@ const make = Effect.gen(function* () {
         ["pip", "install", "--python", paths.python, ...requirements],
         "20 minutes",
       );
+      // M4 will not replace a bundle another version wrote, and this step only
+      // runs when the environment is being rebuilt.
+      yield* fileSystem
+        .remove(path.join(realHome, "skills"), { recursive: true, force: true })
+        .pipe(Effect.ignore);
       yield* runStep(
         "skills",
         path.join(paths.binDir, "m4"),
@@ -323,6 +329,29 @@ const make = Effect.gen(function* () {
         Effect.mapError((cause) => new ClinicalProvisionError({ step: "skills", cause })),
       );
     }
+
+    // On every run, so an environment an older Lincei installed gets them too.
+    // Agents can still read the skills from Lincei's home, so this never fails setup.
+    yield* ClinicalSkillLinks.sync({
+      bundle: paths.skillsDir,
+      directories: ClinicalSkillLinks.defaultSkillDirectories({
+        path,
+        platform,
+        environment: hostEnvironment,
+      }),
+    }).pipe(
+      Effect.tap(({ shadowed }) =>
+        shadowed.length === 0
+          ? Effect.void
+          : Effect.logInfo("clinical skills not linked: the user has skills of the same name", {
+              shadowed,
+            }),
+      ),
+      Effect.tapError((cause) => Effect.logWarning("could not link the clinical skills", cause)),
+      Effect.ignore,
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+    );
 
     // The runtime is usable without the demo, so its download never fails setup.
     if (demoDataset !== "ready") {

@@ -16,7 +16,9 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
+import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
 
@@ -30,9 +32,35 @@ export class LinceiRequests extends Context.Service<
   }
 >()("t3/lincei/LinceiRequests") {}
 
+const toRequestError = (error: {
+  readonly message: string;
+  readonly detail?: string | undefined;
+}) =>
+  new LinceiRequestError({
+    message: error.message,
+    ...(error.detail === undefined ? {} : { detail: error.detail }),
+  });
+
 const make = Effect.gen(function* () {
   const clinicalRuntime = yield* ClinicalRuntime.ClinicalRuntime;
+  const clinicalDatasets = yield* ClinicalDatasets.ClinicalDatasets;
   const researchBoard = yield* ResearchBoard.ResearchBoard;
+
+  const datasets = clinicalDatasets.list.pipe(
+    Effect.map((list): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list })),
+    Effect.mapError(toRequestError),
+  );
+
+  /**
+   * M4 and Vitrine live in the clinical runtime, so a request that needs them
+   * before they are installed is answered with how far setup is instead.
+   */
+  const whenInstalled = (answer: Effect.Effect<LinceiResponse, LinceiRequestError>) =>
+    Effect.flatMap(clinicalRuntime.status, (status) =>
+      ClinicalDatasets.m4Installed(status)
+        ? answer
+        : Effect.succeed<LinceiResponse>({ _tag: "Clinical", status }),
+    );
 
   const handle = Effect.fn("LinceiRequests.handle")(function* (
     request: LinceiRequest,
@@ -42,24 +70,43 @@ const make = Effect.gen(function* () {
         return { _tag: "Clinical", status: yield* clinicalRuntime.status };
       case "ClinicalSetup":
         return { _tag: "Clinical", status: yield* clinicalRuntime.setup };
-      case "ResearchBoardOpen": {
-        // Vitrine lives in the clinical runtime, so there is no board before it
-        // is installed. The demo dataset downloads last and is not needed for one.
-        const status = yield* clinicalRuntime.status;
-        const vitrineInstalled =
-          status.state === "ready" || (status.state === "installing" && status.step === "dataset");
-        if (!vitrineInstalled) return { _tag: "Clinical", status };
-        const board = yield* researchBoard.open(request.cwd).pipe(
-          Effect.mapError(
-            (error) =>
-              new LinceiRequestError({
-                message: error.message,
-                ...(error.detail === undefined ? {} : { detail: error.detail }),
-              }),
+      case "ResearchBoardOpen":
+        return yield* whenInstalled(
+          researchBoard.open(request.cwd).pipe(
+            Effect.map((board): LinceiResponse => ({ _tag: "ResearchBoard", board })),
+            Effect.mapError(toRequestError),
           ),
         );
-        return { _tag: "ResearchBoard", board };
-      }
+      case "ResearchBoardActivity":
+        return yield* whenInstalled(
+          researchBoard.activity(request.cwd).pipe(
+            Effect.map(
+              (updatedAt): LinceiResponse => ({
+                _tag: "ResearchBoardActivity",
+                ...(Option.isSome(updatedAt) ? { updatedAt: updatedAt.value } : {}),
+              }),
+            ),
+            Effect.mapError(toRequestError),
+          ),
+        );
+      case "ClinicalDatasets":
+        return yield* whenInstalled(datasets);
+      case "ClinicalDatasetAdd":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .add(request)
+            .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
+        );
+      case "ClinicalDatasetDownload":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .download(request)
+            .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
+        );
+      case "ClinicalDatasetCancel":
+        return yield* whenInstalled(
+          clinicalDatasets.cancel(request.name).pipe(Effect.andThen(datasets)),
+        );
     }
   });
 

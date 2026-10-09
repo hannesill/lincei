@@ -55,6 +55,45 @@ export const ResearchBoard = Schema.Struct({
 });
 export type ResearchBoard = typeof ResearchBoard.Type;
 
+/** How far a dataset is from being queryable: usable, partly prepared, or absent. */
+export const ClinicalDatasetState = Schema.Literals(["ready", "incomplete", "missing"]);
+export type ClinicalDatasetState = typeof ClinicalDatasetState.Type;
+
+/** Work in progress on one dataset, or the reason its last attempt stopped. */
+export const ClinicalDatasetJob = Schema.Struct({
+  kind: Schema.Literals(["add", "download"]),
+  state: Schema.Literals(["running", "failed"]),
+  phase: Schema.Literals(["starting", "downloading", "converting", "indexing"]),
+  /** Files done in this phase, or tables while indexing. */
+  completed: Schema.Number,
+  total: Schema.optional(Schema.Number),
+  /** The file being downloaded. */
+  file: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+      bytes: Schema.Number,
+      totalBytes: Schema.optional(Schema.Number),
+    }),
+  ),
+  /** What is happening, or what went wrong, in words for the user. */
+  message: Schema.String,
+  /** What M4 reported when the job failed. */
+  detail: Schema.optional(Schema.String),
+});
+export type ClinicalDatasetJob = typeof ClinicalDatasetJob.Type;
+
+/** A dataset M4 supports and what this machine holds of it. */
+export const ClinicalDataset = Schema.Struct({
+  name: Schema.String,
+  state: ClinicalDatasetState,
+  /** Downloading it needs a PhysioNet account with access to this dataset. */
+  requiresCredentials: Schema.Boolean,
+  downloadable: Schema.Boolean,
+  sizeGb: Schema.optional(Schema.Number),
+  job: Schema.optional(ClinicalDatasetJob),
+});
+export type ClinicalDataset = typeof ClinicalDataset.Type;
+
 export const LinceiRequest = Schema.Union([
   /** Reads the clinical runtime's state. */
   Schema.TaggedStruct("ClinicalStatus", {}),
@@ -62,6 +101,16 @@ export const LinceiRequest = Schema.Union([
   Schema.TaggedStruct("ClinicalSetup", {}),
   /** Starts the research board for the study in `cwd`, or finds the one running. */
   Schema.TaggedStruct("ResearchBoardOpen", { cwd: Schema.String }),
+  /** Reads when the study in `cwd` last gained or changed a card, without starting anything. */
+  Schema.TaggedStruct("ResearchBoardActivity", { cwd: Schema.String }),
+  /** Lists M4's datasets with what this machine holds of each. */
+  Schema.TaggedStruct("ClinicalDatasets", {}),
+  /** Starts preparing a dataset from raw files already in `source`, a folder on the server. */
+  Schema.TaggedStruct("ClinicalDatasetAdd", { name: Schema.String, source: Schema.String }),
+  /** Starts downloading and preparing a dataset. */
+  Schema.TaggedStruct("ClinicalDatasetDownload", { name: Schema.String }),
+  /** Stops a dataset's running job, or clears its failed one. Finished files are kept. */
+  Schema.TaggedStruct("ClinicalDatasetCancel", { name: Schema.String }),
 ]);
 export type LinceiRequest = typeof LinceiRequest.Type;
 
@@ -72,6 +121,9 @@ export const LinceiResponse = Schema.Union([
    */
   Schema.TaggedStruct("Clinical", { status: ClinicalRuntimeStatus }),
   Schema.TaggedStruct("ResearchBoard", { board: ResearchBoard }),
+  /** `updatedAt` is in epoch milliseconds, and absent while the study has no cards. */
+  Schema.TaggedStruct("ResearchBoardActivity", { updatedAt: Schema.optional(Schema.Number) }),
+  Schema.TaggedStruct("ClinicalDatasets", { datasets: Schema.Array(ClinicalDataset) }),
 ]);
 export type LinceiResponse = typeof LinceiResponse.Type;
 

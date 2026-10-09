@@ -8,6 +8,12 @@
  * the conversation. Vitrine owns the server's lifetime: it outlives a Lincei
  * restart, and starting it again returns the one already running.
  *
+ * `activity` answers "has this study gained a card?" for a client deciding
+ * whether to open the board by itself. It is asked every few seconds while an
+ * agent works, so after one `vitrine status` to learn where the store is, it
+ * only reads file times from the layout Vitrine documents:
+ * `studies/<study>/index.json`, rewritten whenever a card is added or changed.
+ *
  * @module ResearchBoard
  */
 import type { ResearchBoard as ResearchBoardInfo } from "@t3tools/contracts";
@@ -16,6 +22,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
@@ -48,6 +55,11 @@ export class ResearchBoard extends Context.Service<
      * running. Needs the clinical runtime to be installed.
      */
     readonly open: (cwd: string) => Effect.Effect<ResearchBoardInfo, ResearchBoardError>;
+    /**
+     * When the study in `cwd` last gained or changed a card, in epoch
+     * milliseconds. None while it has no cards. Starts nothing.
+     */
+    readonly activity: (cwd: string) => Effect.Effect<Option.Option<number>, ResearchBoardError>;
   }
 >()("t3/lincei/ResearchBoard") {}
 
@@ -65,7 +77,14 @@ const make = Effect.gen(function* () {
   const platform = yield* HostProcessPlatform;
   const processRunner = yield* ProcessRunner.ProcessRunner;
 
-  const open = Effect.fn("ResearchBoard.open")(function* (cwd: string) {
+  /** Where each working directory's study store is, as Vitrine resolved it. */
+  const storeByCwd = new Map<string, string>();
+
+  /** Runs a Vitrine lifecycle command in `cwd` and reads the JSON it prints. */
+  const lifecycleOf = Effect.fn("ResearchBoard.lifecycleOf")(function* (
+    cwd: string,
+    command: "start" | "status",
+  ) {
     const isDirectory = yield* fileSystem.stat(cwd).pipe(
       Effect.map((info) => info.type === "Directory"),
       Effect.orElseSucceed(() => false),
@@ -85,7 +104,7 @@ const make = Effect.gen(function* () {
     const output = yield* processRunner
       .run({
         command: vitrine,
-        args: ["start", "--no-open", "--json"],
+        args: command === "start" ? ["start", "--no-open", "--json"] : ["status", "--json"],
         cwd,
         timeout: "60 seconds",
         outputMode: "truncate",
@@ -93,7 +112,13 @@ const make = Effect.gen(function* () {
       })
       .pipe(
         Effect.mapError(
-          () => new ResearchBoardError({ message: "Could not start the research board." }),
+          () =>
+            new ResearchBoardError({
+              message:
+                command === "start"
+                  ? "Could not start the research board."
+                  : "Could not ask Vitrine where this study is kept.",
+            }),
         ),
       );
 
@@ -108,6 +133,12 @@ const make = Effect.gen(function* () {
           }),
       ),
     );
+    if (lifecycle.data_dir !== null) storeByCwd.set(cwd, lifecycle.data_dir);
+    return { lifecycle, output };
+  });
+
+  const open = Effect.fn("ResearchBoard.open")(function* (cwd: string) {
+    const { lifecycle, output } = yield* lifecycleOf(cwd, "start");
     if (lifecycle.status !== "running" || lifecycle.url === null || lifecycle.port === null) {
       const detail = describeError(lifecycle.error) ?? output.stderr.trim().slice(-800);
       return yield* new ResearchBoardError({
@@ -122,7 +153,28 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return ResearchBoard.of({ open });
+  const activity = Effect.fn("ResearchBoard.activity")(function* (cwd: string) {
+    const store =
+      storeByCwd.get(cwd) ?? (yield* lifecycleOf(cwd, "status")).lifecycle.data_dir ?? undefined;
+    if (store === undefined) return Option.none<number>();
+    const studiesDir = path.join(store, "studies");
+    const studies = yield* fileSystem
+      .readDirectory(studiesDir)
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+    const times = yield* Effect.forEach(
+      studies,
+      (study) =>
+        fileSystem.stat(path.join(studiesDir, study, "index.json")).pipe(
+          Effect.map((info) => Option.map(info.mtime, (time) => time.getTime())),
+          Effect.orElseSucceed(() => Option.none<number>()),
+        ),
+      { concurrency: 8 },
+    );
+    const latest = Math.max(...times.map(Option.getOrElse(() => 0)));
+    return latest > 0 ? Option.some(latest) : Option.none<number>();
+  });
+
+  return ResearchBoard.of({ open, activity });
 });
 
 export const layer = Layer.effect(ResearchBoard, make);

@@ -10,6 +10,7 @@
 import * as Layer from "effect/Layer";
 
 import * as ProcessRunner from "../processRunner.ts";
+import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
@@ -18,6 +19,7 @@ export const activate = ClinicalRuntime.activate;
 
 export const layer = LinceiRequests.layer.pipe(
   Layer.provideMerge(ResearchBoard.layer),
+  Layer.provideMerge(ClinicalDatasets.layer),
   Layer.provideMerge(ClinicalRuntime.layer),
   Layer.provide(ProcessRunner.layer),
 );
