@@ -13,8 +13,11 @@ Lincei adds the clinical layer:
   and the usual analysis stack (pandas, DuckDB, scikit-learn, lifelines, statsmodels). It is first
   on `PATH` for every agent and terminal, so nothing has to be set up per project.
 - **Clinical skills.** Validated definitions the agents read before the matching task: SOFA,
-  Sepsis-3, KDIGO AKI staging, comorbidity scores, cohort pitfalls, and more.
+  Sepsis-3, KDIGO AKI staging, comorbidity scores, cohort pitfalls, and more. They are in the
+  composer's skill picker next to your own skills.
 - **A dataset ready on first run.** The open-access MIMIC-IV demo is downloaded during setup.
+- **Your own datasets.** **Settings → Clinical Data** lists the datasets M4 supports and prepares
+  one from a folder of files you downloaded from PhysioNet, with progress and no terminal.
 - **Private by default.** No telemetry. No hosted relay. Data stays on your machine unless you
   send it to a model provider yourself.
 
@@ -38,8 +41,13 @@ right-click the app and choose **Open** instead.
 
 On first launch Lincei sets up the clinical environment in the background: Python, M4, Vitrine,
 the clinical skills, and the demo dataset. It takes a few minutes and needs a network connection,
-but no terminal. Ask the agent "is the clinical runtime ready?" at any time; it can check and
-repair the setup itself.
+but no terminal. The last step of the first-run wizard and **Settings → Clinical Data** show how
+far it is and let you retry a step that failed. You can also ask the agent "is the clinical
+runtime ready?"; it can check and repair the setup itself.
+
+The clinical skills are linked into `~/.claude/skills` and `~/.agents/skills`, where Claude Code
+and Codex look for skills, so they are available to those tools outside Lincei too. A skill of
+your own with the same name is never replaced.
 
 ## Try it
 
@@ -47,10 +55,10 @@ Open a folder as a project, start a thread, and ask:
 
 > Using the MIMIC-IV demo, build a Sepsis-3 cohort, describe it, and show me the result as cards.
 
-The agent reads the relevant skills, queries the data through M4, publishes tables and figures to
-Vitrine, and opens the study in the built-in browser for you to review. The flask button at the
-top right of a thread opens that study at any time; while Lincei is still setting up, it shows
-what it is working on.
+The agent reads the relevant skills, queries the data through M4, and publishes tables and figures
+to Vitrine. When the first card arrives, Lincei opens the study beside the conversation for you to
+review. The flask button at the top right of a thread opens that study at any time; while Lincei
+is still setting up, it shows what it is working on.
 
 ## Develop
 

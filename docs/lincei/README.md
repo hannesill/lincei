@@ -21,17 +21,20 @@ content. `git log --first-parent` leaves it out.
 
 ## What the overlay consists of
 
-| Part                                                             | Where                                                                                                                                                                      | Hook in upstream files                                                               |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                           | The files that script lists, rewritten by it, never by hand                          |
-| Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                       | One plugin entry in `apps/web/vite.config.ts`                                        |
-| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                                                                                                    | Same file names as upstream, Lincei content                                          |
-| Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                             | Two lines in `apps/server/src/server.ts`                                             |
-| Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                          | One registration in `apps/server/src/mcp/McpHttpServer.ts`                           |
-| What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                         | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`               |
-| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts) | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`   |
-| Research board button and setup status                           | [`apps/web/src/lincei/`](../../apps/web/src/lincei), [`apps/server/src/lincei/ResearchBoard.ts`](../../apps/server/src/lincei/ResearchBoard.ts)                            | `ChatView.tsx` renders `LinceiPanelLayoutControls` in place of `PanelLayoutControls` |
-| Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                       | None                                                                                 |
+| Part                                                             | Where                                                                                                                                                                      | Hook in upstream files                                                                                    |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                           | The files that script lists, rewritten by it, never by hand                                               |
+| Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                       | One plugin entry in `apps/web/vite.config.ts`                                                             |
+| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                                                                                                    | Same file names as upstream, Lincei content                                                               |
+| Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                             | Two lines in `apps/server/src/server.ts`                                                                  |
+| Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                          | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                |
+| What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                         | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                    |
+| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts) | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`                        |
+| Datasets and M4's skills for agents                              | [`ClinicalDatasets.ts`](../../apps/server/src/lincei/ClinicalDatasets.ts), [`ClinicalSkillLinks.ts`](../../apps/server/src/lincei/ClinicalSkillLinks.ts)                   | None                                                                                                      |
+| Research board button, which also opens the board by itself      | [`apps/web/src/lincei/`](../../apps/web/src/lincei), [`apps/server/src/lincei/ResearchBoard.ts`](../../apps/server/src/lincei/ResearchBoard.ts)                            | `ChatView.tsx` renders `LinceiPanelLayoutControls` in place of `PanelLayoutControls`                      |
+| Settings, Clinical Data                                          | [`ClinicalDataSettings.tsx`](../../apps/web/src/lincei/ClinicalDataSettings.tsx), `apps/web/src/routes/settings.clinical.tsx`                                              | Three lines in `settingsSearch.ts`, two in `SettingsSidebarNav.tsx`, and the generated `routeTree.gen.ts` |
+| Clinical step after the first-run wizard                         | [`LinceiWelcomeWizard.tsx`](../../apps/web/src/lincei/LinceiWelcomeWizard.tsx)                                                                                             | `routes/welcome.tsx` renders it in place of `WelcomeWizard`; the stage label is an identity rule          |
+| Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                       | None                                                                                                      |
 
 To see every upstream file Lincei has touched:
 
@@ -65,7 +68,11 @@ Then, for each conflict:
 - **`README.md`, icons, `T3Wordmark.tsx`:** keep Lincei's side.
 - **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `RpcAuthorization.ts`,
   `RpcInstrumentation.ts`, `rpc.ts`, `runtimeInstructions.ts`, `ChatView.tsx`, `SidebarChrome.tsx`,
-  `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
+  `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`, `apps/web/vite.config.ts`):
+  take upstream's side and re-add the hook. `git show HEAD -- <file>` shows what it was.
+- **`apps/web/src/routeTree.gen.ts`:** take upstream's side and build the web app once
+  (`vp run --filter @t3tools/web build`). The router plugin rewrites the file from the route
+  files, which puts `/settings/clinical` back.
 
 Finish with:
 
@@ -101,14 +108,39 @@ has its own home. An environment whose requirements have not changed is left alo
 - **Developing against a local checkout:** set `LINCEI_CLINICAL_REQUIREMENTS`, for example
   `LINCEI_CLINICAL_REQUIREMENTS="m4-infra[research] /path/to/vitrine"`.
 
+### Skills
+
+T3 Code's skill picker lists the skills each provider finds on disk. So that M4's skills appear
+there, and so that an agent loads one when its description fits the task, setup links every skill
+of the bundle into the folders Claude and Codex read user skills from: `~/.claude/skills` (or
+`$CLAUDE_CONFIG_DIR/skills`) and `~/.agents/skills`. These folders belong to the user. A skill of
+theirs with the same name is left alone and wins, and Lincei's links are the ones that point into
+`<home>/clinical/skills`, which is how setup removes stale ones and how to remove them by hand.
+`LINCEI_CLINICAL_SKILL_DIRS` (paths separated like `PATH`) replaces the folders, and setting it
+empty keeps Lincei out of them. Providers that do not read those folders still get the skills
+through the agent instructions, which name `<home>/clinical/skills`.
+
+### Datasets
+
+Settings, Clinical Data lists M4's datasets (`m4 list-datasets --json`) and adds one from a folder
+of raw files (`m4 init <name> --src`) or by download (`m4 download`, then `m4 init`). M4 prints its
+progress as NDJSON events, which `ClinicalDatasets.ts` folds into one job per dataset. Jobs live in
+memory: a server restart drops the job but not the files it finished, and M4 resumes from them.
+Agents do not go through this service. They have the `m4` CLI.
+
+### Research cards
+
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
-study store in `.vitrine` under the directory the agent works in and runs one server per store.
-The agent opens the study with upstream's browser tools (`preview_open`, `preview_navigate`), and
-the user with the research board button, which asks the server to start Vitrine in the thread's
-directory (`ResearchBoard.ts`) and opens the URL it reports. The same button shows setup progress
-and retries a failed setup. A thread in a git worktree therefore has its own study
-store; sharing one store across a project's worktrees is a change to make in Vitrine's directory
-resolution, not here.
+study store in `.vitrine` and runs one server per store. From 0.1.2 a git worktree shares the
+store of its main checkout, so the threads of a project publish into one study wherever they run;
+with an older Vitrine each worktree has its own.
+
+The research board button asks the server to start Vitrine in the thread's directory
+(`ResearchBoard.ts`) and opens the URL it reports. It also shows setup progress and retries a
+failed setup. While an agent works in the thread on screen, the button asks the server every few
+seconds when the study last changed, and opens the board the first time it does, once per thread.
+The server answers from the modification times of `studies/<study>/index.json`, which Vitrine
+documents as rewritten on every card, so asking costs a few `stat` calls and no Python process.
 
 ## Releasing
 
