@@ -10,8 +10,8 @@ Lincei adds the clinical layer:
 
 - **A managed clinical Python environment.** [M4](https://github.com/hannesill/m4) for clinical
   datasets such as MIMIC-IV, [Vitrine](https://github.com/hannesill/vitrine) for research cards,
-  and the usual analysis stack (pandas, DuckDB, scikit-learn, lifelines, statsmodels). It is first
-  on `PATH` for every agent and terminal, so nothing has to be set up per project.
+  and the usual analysis stack (pandas, DuckDB, scikit-learn, lifelines, statsmodels). Every agent
+  is told where it is, so nothing has to be set up per project.
 - **Clinical skills.** Validated definitions the agents read before the matching task: SOFA,
   Sepsis-3, KDIGO AKI staging, comorbidity scores, cohort pitfalls, and more. They are in the
   composer's skill picker next to your own skills.
