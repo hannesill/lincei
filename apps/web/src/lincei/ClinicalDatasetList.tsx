@@ -179,14 +179,17 @@ function DatasetRow({
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         {running ? (
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => onAction({ _tag: "ClinicalDatasetCancel", name })}
-          >
-            Cancel
-          </Button>
+          // Setup's own download of the demo is not a job; it ends with setup.
+          job.kind === "setup" ? null : (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => onAction({ _tag: "ClinicalDatasetCancel", name })}
+            >
+              Cancel
+            </Button>
+          )
         ) : dataset.state === "ready" ? null : (
           <>
             {job?.state === "failed" ? (

@@ -47,27 +47,23 @@ const m4Dataset = (
   ...fields,
 });
 
-const LISTING = JSON.stringify({
-  version: 1,
-  ok: true,
-  command: "list-datasets",
-  data: {
-    datasets: [
-      m4Dataset("mimic-iv-demo", {
-        setup_state: "ready",
-        raw_present: true,
-        parquet_present: true,
-        parquet_size_gb: 0.012,
-      }),
-      m4Dataset("mimic-iv", { setup_state: "credentials_required", requires_authentication: true }),
-      m4Dataset("eicu", {
-        setup_state: "missing_parquet",
-        raw_present: true,
-        requires_authentication: true,
-      }),
-    ],
-  },
-});
+const listingOf = (...datasets: ReadonlyArray<ReturnType<typeof m4Dataset>>) =>
+  JSON.stringify({ version: 1, ok: true, command: "list-datasets", data: { datasets } });
+
+const LISTING = listingOf(
+  m4Dataset("mimic-iv-demo", {
+    setup_state: "ready",
+    raw_present: true,
+    parquet_present: true,
+    parquet_size_gb: 0.012,
+  }),
+  m4Dataset("mimic-iv", { setup_state: "credentials_required", requires_authentication: true }),
+  m4Dataset("eicu", {
+    setup_state: "missing_parquet",
+    raw_present: true,
+    requires_authentication: true,
+  }),
+);
 
 const exited = (code: number, stdout = "", stderr = ""): ProcessRunner.ProcessRunOutput => ({
   stdout,
@@ -95,8 +91,9 @@ const withDatasets = <A, E>(
     readonly datasets: ClinicalDatasets.ClinicalDatasets["Service"];
     readonly commands: Array<ReadonlyArray<string>>;
   }) => Effect.Effect<A, E, FileSystem.FileSystem | Scope.Scope>,
-  status: ClinicalRuntimeStatus = READY,
+  options: { readonly status?: ClinicalRuntimeStatus; readonly listing?: string } = {},
 ) => {
+  const status = options.status ?? READY;
   const commands: Array<ReadonlyArray<string>> = [];
   const layerDependencies = Layer.mergeAll(
     Layer.succeed(
@@ -112,7 +109,9 @@ const withDatasets = <A, E>(
       ProcessRunner.ProcessRunner.of({
         run: (run) => {
           commands.push(run.args);
-          return run.args[0] === "list-datasets" ? Effect.succeed(exited(0, LISTING)) : m4(run);
+          return run.args[0] === "list-datasets"
+            ? Effect.succeed(exited(0, options.listing ?? LISTING))
+            : m4(run);
         },
       }),
     ),
@@ -355,6 +354,26 @@ describe("ClinicalDatasets", () => {
     }),
   );
 
+  it.effect("shows the demo as setup's own download and does not start a second one", () =>
+    withDatasets(
+      () => Effect.succeed(exited(0)),
+      ({ datasets, commands }) =>
+        Effect.gen(function* () {
+          expect(jobOf(yield* datasets.list, "mimic-iv-demo")).toMatchObject({
+            kind: "setup",
+            state: "running",
+          });
+          const failure = yield* datasets.download({ name: "mimic-iv-demo" }).pipe(Effect.flip);
+          expect(failure.message).toBe("mimic-iv-demo is already being prepared.");
+          expect(commands.filter((args) => args[0] !== "list-datasets")).toEqual([]);
+        }),
+      {
+        status: { ...READY, state: "installing", step: "dataset", demoDataset: "not-installed" },
+        listing: listingOf(m4Dataset("mimic-iv-demo", { setup_state: "missing_raw_files" })),
+      },
+    ),
+  );
+
   it.effect("starts nothing before M4 is installed", () =>
     withDatasets(
       () => Effect.succeed(exited(0)),
@@ -364,7 +383,7 @@ describe("ClinicalDatasets", () => {
           expect(failure.message).toBe("The clinical environment is not set up yet.");
           expect(commands).toEqual([]);
         }),
-      { ...READY, state: "installing", step: "packages" },
+      { status: { ...READY, state: "installing", step: "packages" } },
     ),
   );
 });

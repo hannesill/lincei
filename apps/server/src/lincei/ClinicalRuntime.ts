@@ -46,7 +46,8 @@ const DEFAULT_CLINICAL_REQUIREMENTS = [
 ] as const;
 
 const CLINICAL_PYTHON_VERSION = "3.12";
-const DEMO_DATASET = "mimic-iv-demo";
+/** The open dataset setup downloads, so there is something to query on first run. */
+export const DEMO_DATASET = "mimic-iv-demo";
 const OUTPUT_TAIL_CHARACTERS = 800;
 
 /** Whitespace-separated pip requirements replacing the defaults, e.g. a local Vitrine checkout. */

@@ -109,6 +109,14 @@ export class ClinicalDatasets extends Context.Service<
   }
 >()("t3/lincei/ClinicalDatasets") {}
 
+const SETUP_JOB: ClinicalDatasetJob = {
+  kind: "setup",
+  state: "running",
+  phase: "starting",
+  completed: 0,
+  message: "Downloading as part of clinical setup.",
+};
+
 const PHASE_MESSAGES: Record<ClinicalDatasetJob["phase"], string> = {
   starting: "Starting.",
   downloading: "Downloading the raw files.",
@@ -216,6 +224,8 @@ const make = Effect.gen(function* () {
   const jobs = new Map<string, ClinicalDatasetJob>();
   const fibers = new Map<string, Fiber.Fiber<void>>();
   let listing: ReadonlyArray<ClinicalDataset> | undefined;
+  /** Whether work was running when `listing` was read: its end makes the listing stale. */
+  let listedWhileRunning = false;
 
   const m4 = Effect.gen(function* () {
     const status = yield* clinicalRuntime.status;
@@ -279,13 +289,27 @@ const make = Effect.gen(function* () {
     );
   });
 
+  /** Setup downloads the demo dataset itself, outside the jobs here. */
+  const setupIsDownloadingDemo = Effect.map(
+    clinicalRuntime.status,
+    (status) => status.state === "installing" && status.step === "dataset",
+  );
+
   const list = Effect.gen(function* () {
-    // A running job changes nothing M4 reports until it ends, and clients ask
-    // every few seconds while one runs, so M4 is only asked in between.
-    const running = [...jobs.values()].some((job) => job.state === "running");
-    if (listing === undefined || !running) listing = yield* readListing;
+    // Running work changes nothing M4 reports until it ends, and clients ask
+    // every few seconds while it runs, so M4 is only asked in between.
+    const settingUp = yield* setupIsDownloadingDemo;
+    const running = settingUp || [...jobs.values()].some((job) => job.state === "running");
+    if (listing === undefined || !running || listedWhileRunning !== running) {
+      listing = yield* readListing;
+    }
+    listedWhileRunning = running;
     return listing.map((dataset) => {
-      const job = jobs.get(dataset.name);
+      const job =
+        jobs.get(dataset.name) ??
+        (settingUp && dataset.name === ClinicalRuntime.DEMO_DATASET && dataset.state !== "ready"
+          ? SETUP_JOB
+          : undefined);
       return job === undefined ? dataset : { ...dataset, job };
     });
   });
@@ -331,7 +355,7 @@ const make = Effect.gen(function* () {
   /** Runs `work` as the dataset's job in the server's scope and returns its fiber. */
   const start = Effect.fn("ClinicalDatasets.start")(function* (
     name: string,
-    kind: ClinicalDatasetJob["kind"],
+    kind: "add" | "download",
     work: Effect.Effect<void, ClinicalDatasetsError>,
   ) {
     if (!DATASET_NAME.test(name)) {
@@ -339,7 +363,10 @@ const make = Effect.gen(function* () {
     }
     // Fail before there is a job, so the caller hears that nothing started.
     yield* m4;
-    if (jobs.get(name)?.state === "running") {
+    if (
+      jobs.get(name)?.state === "running" ||
+      (name === ClinicalRuntime.DEMO_DATASET && (yield* setupIsDownloadingDemo))
+    ) {
       return yield* new ClinicalDatasetsError({ message: `${name} is already being prepared.` });
     }
     const running: ClinicalDatasetJob = {
