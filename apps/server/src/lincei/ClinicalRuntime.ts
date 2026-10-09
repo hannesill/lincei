@@ -5,7 +5,8 @@
  * (clinical datasets) and Vitrine (research cards). `activate` puts it first on
  * the server's PATH, so every agent, terminal, and project script the server
  * spawns resolves `python`, `m4`, and `vitrine` to it without per-provider
- * wiring. Provisioning shells out to `uv`; nothing else is installed globally.
+ * wiring. Provisioning runs `uv`, fetching Lincei's own copy when the machine
+ * has none, so setup needs no terminal and installs nothing globally.
  *
  * @module ClinicalRuntime
  */
@@ -22,10 +23,12 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import { HttpClient } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { LINCEI_CLINICAL_INSTRUCTIONS } from "./agentInstructions.ts";
+import * as UvInstallation from "./UvInstallation.ts";
 
 /**
  * What a fresh environment installs. Bump the ranges here when M4 or Vitrine
@@ -92,7 +95,7 @@ class ClinicalProvisionError extends Schema.TaggedError<ClinicalProvisionError>(
 }
 
 const STEP_MESSAGES: Record<ClinicalProvisionStep, string> = {
-  uv: "Checking for uv.",
+  uv: "Getting uv to install Python.",
   python: `Creating the Python ${CLINICAL_PYTHON_VERSION} environment.`,
   packages: "Installing M4 and Vitrine.",
   skills: "Installing clinical skills.",
@@ -100,7 +103,7 @@ const STEP_MESSAGES: Record<ClinicalProvisionStep, string> = {
 };
 
 const FAILURE_MESSAGES: Record<ClinicalProvisionStep, string> = {
-  uv: "uv is not installed. Install it from https://docs.astral.sh/uv/ and run setup again.",
+  uv: "Could not get uv, which Lincei installs Python with.",
   python: "Could not create the Python environment.",
   packages: "Could not install M4 and Vitrine. Check the network connection and run setup again.",
   skills: "Could not install the clinical skills.",
@@ -109,6 +112,8 @@ const FAILURE_MESSAGES: Record<ClinicalProvisionStep, string> = {
 
 interface ClinicalPaths {
   readonly home: string;
+  /** Tools Lincei fetched for itself, such as uv. */
+  readonly toolsDir: string;
   readonly venvDir: string;
   readonly binDir: string;
   readonly python: string;
@@ -128,6 +133,7 @@ const clinicalPaths = (input: {
   const binDir = input.join(venvDir, windows ? "Scripts" : "bin");
   return {
     home,
+    toolsDir: input.join(home, "bin"),
     venvDir,
     binDir,
     python: input.join(binDir, windows ? "python.exe" : "python"),
@@ -152,7 +158,8 @@ export const activate = Effect.fn("ClinicalRuntime.activate")(function* (baseDir
   const delimiter = platform === "win32" ? ";" : ":";
   const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
   const entries = (env[pathKey] ?? "").split(delimiter).filter((entry) => entry.length > 0);
-  env[pathKey] = [paths.binDir, ...entries.filter((entry) => entry !== paths.binDir)].join(
+  const managed = [paths.binDir, paths.toolsDir];
+  env[pathKey] = [...managed, ...entries.filter((entry) => !managed.includes(entry))].join(
     delimiter,
   );
   env.LINCEI_CLINICAL_HOME = paths.home;
@@ -189,6 +196,9 @@ const make = Effect.gen(function* () {
   const platform = yield* HostProcessPlatform;
   const hostEnvironment = yield* HostProcessEnvironment;
   const processRunner = yield* ProcessRunner.ProcessRunner;
+  const uvServices = yield* Effect.context<
+    FileSystem.FileSystem | Path.Path | HttpClient.HttpClient | ProcessRunner.ProcessRunner
+  >();
   const scope = yield* Effect.scope;
 
   const paths = clinicalPaths({ baseDir: config.baseDir, platform, join: path.join });
@@ -254,14 +264,8 @@ const make = Effect.gen(function* () {
   );
   const startLock = yield* Semaphore.make(1);
 
-  const runStep = Effect.fn("ClinicalRuntime.runStep")(function* (
-    step: ClinicalProvisionStep,
-    command: string,
-    args: ReadonlyArray<string>,
-    timeout: ProcessRunner.ProcessRunInput["timeout"],
-    env?: NodeJS.ProcessEnv,
-  ) {
-    yield* Ref.update(statusRef, (current) =>
+  const enterStep = (step: ClinicalProvisionStep) =>
+    Ref.update(statusRef, (current) =>
       describe({
         state: "installing",
         step,
@@ -269,6 +273,15 @@ const make = Effect.gen(function* () {
         demoDataset: current.demoDataset,
       }),
     );
+
+  const runStep = Effect.fn("ClinicalRuntime.runStep")(function* (
+    step: ClinicalProvisionStep,
+    command: string,
+    args: ReadonlyArray<string>,
+    timeout: ProcessRunner.ProcessRunInput["timeout"],
+    env?: NodeJS.ProcessEnv,
+  ) {
+    yield* enterStep(step);
     const output = yield* processRunner
       .run({ command, args, timeout, env, outputMode: "truncate", maxOutputBytes: 256 * 1024 })
       .pipe(Effect.mapError((cause) => new ClinicalProvisionError({ step, cause })));
@@ -297,16 +310,22 @@ const make = Effect.gen(function* () {
     });
 
     if (Option.isNone(installed)) {
-      yield* runStep("uv", "uv", ["--version"], "30 seconds");
+      yield* enterStep("uv");
+      const uv = yield* UvInstallation.ensure({ managedDirectory: paths.toolsDir }).pipe(
+        Effect.provide(uvServices),
+        Effect.mapError(
+          (cause) => new ClinicalProvisionError({ step: "uv", cause, outputTail: cause.detail }),
+        ),
+      );
       yield* runStep(
         "python",
-        "uv",
+        uv,
         ["venv", "--allow-existing", "--seed", "--python", CLINICAL_PYTHON_VERSION, paths.venvDir],
         "10 minutes",
       );
       yield* runStep(
         "packages",
-        "uv",
+        uv,
         ["pip", "install", "--python", paths.python, ...requirements],
         "20 minutes",
       );

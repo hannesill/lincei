@@ -85,8 +85,10 @@ startup the server puts its `bin` first on `PATH` and sets `LINCEI_CLINICAL_HOME
 `M4_DATA_DIR` for everything it spawns, so agents, terminals, and project scripts all resolve
 `python`, `m4`, and `vitrine` to it. A user who exports their own `M4_DATA_DIR` keeps it.
 
-Setup shells out to `uv`: create the environment, install the pinned requirements, materialize
-M4's skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. The desktop app runs it
+Setup runs `uv`: create the environment, install the pinned requirements, materialize M4's
+skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. A machine without `uv` gets
+Lincei's own copy in `<home>/clinical/bin`, downloaded from the release pinned (with its digest)
+in `UvInstallation.ts`. The desktop app runs it
 on launch; a dev server waits until an agent calls `lincei_clinical_setup`, because each worktree
 has its own home. An environment whose requirements have not changed is left alone.
 
