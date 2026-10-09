@@ -31,7 +31,7 @@ import { LINCEI_CLINICAL_INSTRUCTIONS } from "./agentInstructions.ts";
  * What a fresh environment installs. Bump the ranges here when M4 or Vitrine
  * ship a release Lincei should adopt; a changed list reinstalls on next setup.
  */
-export const DEFAULT_CLINICAL_REQUIREMENTS = [
+const DEFAULT_CLINICAL_REQUIREMENTS = [
   "m4-infra[research]>=0.5.5,<0.6",
   "vitrine>=0.1.1,<0.2",
 ] as const;
@@ -107,7 +107,7 @@ const FAILURE_MESSAGES: Record<ClinicalProvisionStep, string> = {
   dataset: "Could not download the MIMIC-IV demo dataset.",
 };
 
-export interface ClinicalPaths {
+interface ClinicalPaths {
   readonly home: string;
   readonly venvDir: string;
   readonly binDir: string;
@@ -117,7 +117,7 @@ export interface ClinicalPaths {
   readonly statePath: string;
 }
 
-export const clinicalPaths = (input: {
+const clinicalPaths = (input: {
   readonly baseDir: string;
   readonly platform: NodeJS.Platform;
   readonly join: Path.Path["join"];
