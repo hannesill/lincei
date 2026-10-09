@@ -1,0 +1,201 @@
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off - Standalone maintenance script: synchronous file rewrites, no Effect runtime.
+/**
+ * Lincei's identity, written as edits to upstream T3 Code files.
+ *
+ * Lincei must never share a bundle id, URL scheme, data directory, background
+ * service, or release feed with a T3 Code install on the same machine, and
+ * upstream spells those values as literals. Rather than hand-editing them (and
+ * re-resolving the same conflicts on every upstream merge), the edits live
+ * here and are applied by this script:
+ *
+ *   node scripts/lincei/identity.ts apply   rewrite the governed files
+ *   node scripts/lincei/identity.ts check   fail if any governed file is stale
+ *
+ * After `git merge` reports a conflict in a governed file, take upstream's
+ * side (`git checkout --theirs <file>`) and run `apply`. A rule that no longer
+ * matches means upstream changed that line: update the rule here.
+ *
+ * Display copy ("T3 Code" in UI strings) is not governed here; the web build
+ * rewrites it (apps/web/vite/linceiBrand.ts).
+ */
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
+
+type Replacement = readonly [from: string | RegExp, to: string];
+
+/** Upstream's spellings of the product's identity. */
+const BUNDLE_ID: ReadonlyArray<Replacement> = [
+  ["com.t3tools.T3Code", "studio.lincei.Lincei"],
+  ["com.t3tools.t3code", "studio.lincei.app"],
+];
+const REPOSITORY: ReadonlyArray<Replacement> = [["pingdotgg/t3code", "hannesill/lincei"]];
+const NAME: ReadonlyArray<Replacement> = [
+  ["T3-Code-", "Lincei-"],
+  ["T3 Code", "Lincei"],
+];
+const SCHEME: ReadonlyArray<Replacement> = [
+  ["t3code-dev://", "lincei-dev://"],
+  ["t3code://", "lincei://"],
+  ['"t3code-dev:"', '"lincei-dev:"'],
+  ['"t3code:"', '"lincei:"'],
+];
+// Profile directories, schemes, and service names; not the `t3code/<rule>` lint directives.
+const SLUG: ReadonlyArray<Replacement> = [
+  [/t3code(?!\/(?:no|prefer|require|namespace)-)/g, "lincei"],
+];
+// The `.t3` home directory, but not `.t3Home`, `t3.json`, or `app.t3.codes`.
+const HOME: ReadonlyArray<Replacement> = [[/(?<![\w-])\.t3(?![\w.-])/g, ".lincei"]];
+/** Most specific first, so a longer spelling is not broken up by a shorter one. */
+const EVERY_TOKEN = [...BUNDLE_ID, ...REPOSITORY, ...NAME, ...SLUG, ...HOME];
+
+interface Rules {
+  /** Rewritten wherever they occur. */
+  readonly tokens?: ReadonlyArray<Replacement>;
+  /** Exact text that must be present until it has been replaced. */
+  readonly exact?: ReadonlyArray<readonly [from: string, to: string]>;
+}
+
+const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
+  // Files that only spell identity: every token in them is rewritten.
+  "apps/desktop/src/app/DesktopEarlyElectronStartup.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopEnvironment.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopLegacyLocalStorage.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopStatePaths.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopUserData.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/electron/ElectronProtocol.ts": { tokens: EVERY_TOKEN },
+  "apps/server/src/cli/browser.ts": { tokens: EVERY_TOKEN },
+  "apps/server/src/cloud/bootService.ts": { tokens: EVERY_TOKEN },
+  "apps/server/src/http.ts": { tokens: EVERY_TOKEN },
+  "apps/server/src/os-jank.ts": { tokens: EVERY_TOKEN },
+
+  // Files that mix identity with names other code depends on.
+  "apps/desktop/package.json": {
+    exact: [['"productName": "T3 Code (Alpha)"', '"productName": "Lincei (Alpha)"']],
+  },
+  "apps/desktop/scripts/electron-launcher.mjs": {
+    exact: [
+      ['"T3 Code (Dev)" : "T3 Code (Alpha)"', '"Lincei (Dev)" : "Lincei (Alpha)"'],
+      ["`com.t3tools.t3code.dev.${", "`studio.lincei.app.dev.${"],
+      [': "com.t3tools.t3code";', ': "studio.lincei.app";'],
+      ['? ["t3code-dev"] : ["t3code"]', '? ["lincei-dev"] : ["lincei"]'],
+    ],
+  },
+  // Telemetry stays off unless a Lincei analytics project is configured, and
+  // upstream's project never receives Lincei usage.
+  "apps/server/src/telemetry/AnalyticsService.ts": {
+    exact: [
+      [
+        'Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m")',
+        'Config.withDefault("")',
+      ],
+      [
+        'Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true))',
+        'Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(false))',
+      ],
+    ],
+  },
+  "packages/shared/src/codexAuthHandoff.ts": { tokens: [...SCHEME, ...SLUG] },
+  "packages/shared/src/providerAuthReturnUrl.ts": { tokens: SCHEME },
+  "packages/shared/src/cliRelease.ts": {
+    exact: [
+      [
+        'CLI_RELEASE_REPOSITORY = "pingdotgg/t3code"',
+        'CLI_RELEASE_REPOSITORY = "hannesill/lincei"',
+      ],
+    ],
+  },
+  "scripts/build-desktop-artifact.ts": {
+    exact: [
+      ['DESKTOP_APP_ID = "com.t3tools.t3code"', 'DESKTOP_APP_ID = "studio.lincei.app"'],
+      ['? "T3 Code (Nightly)"', '? "Lincei (Nightly)"'],
+      [
+        '(desktopPackageJson.productName ?? "T3 Code")',
+        '(desktopPackageJson.productName ?? "Lincei")',
+      ],
+      ['artifactName: "T3-Code-${version}', 'artifactName: "Lincei-${version}'],
+      ['"T3 Code captures the active window', '"Lincei captures the active window'],
+      ['name: "T3 Code",', 'name: "Lincei",'],
+      ['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]'],
+      ['executableName: "t3code"', 'executableName: "lincei"'],
+      ['StartupWMClass: "t3code"', 'StartupWMClass: "lincei"'],
+    ],
+  },
+  "scripts/dev-runner.ts": {
+    exact: [['path.join(NodeOS.homedir(), ".t3")', 'path.join(NodeOS.homedir(), ".lincei")']],
+  },
+
+  // Upstream tests that assert the values above. When an upstream merge brings
+  // a test that fails only on an identity literal, add it with the tokens it pins.
+  "apps/desktop/src/app/DesktopAppIdentity.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopClerk.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopEarlyElectronStartup.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopEnvironment.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopLinuxUrlHandler.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopPreReadyFileSystem.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopPreReadyPlatform.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopUserData.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/window/DesktopApplicationMenu.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/window/DesktopWindow.test.ts": { tokens: SCHEME },
+  "apps/server/src/cli/app.test.ts": { tokens: HOME },
+  "apps/server/src/cloud/bootService.test.ts": { tokens: EVERY_TOKEN },
+  "packages/shared/src/cliRelease.test.ts": { tokens: REPOSITORY },
+  "packages/shared/src/codexAuthHandoff.test.ts": { tokens: SCHEME },
+  "packages/shared/src/providerAuthReturnUrl.test.ts": { tokens: [...SCHEME, ...SLUG] },
+  "packages/ssh/src/tunnel.test.ts": { tokens: REPOSITORY },
+  "scripts/build-desktop-artifact.test.ts": {
+    tokens: [...BUNDLE_ID, ...NAME],
+    exact: [['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]']],
+  },
+};
+
+const repoRoot = NodePath.resolve(
+  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
+  "../..",
+);
+
+function rewrite(file: string, rules: Rules, text: string, problems: Array<string>): string {
+  let next = text;
+  for (const [from, to] of rules.tokens ?? []) next = next.replaceAll(from, to);
+  for (const [from, to] of rules.exact ?? []) {
+    if (next.includes(from)) next = next.replaceAll(from, to);
+    else if (!next.includes(to)) {
+      problems.push(`${file}: neither "${from}" nor its replacement is present; update the rule.`);
+    }
+  }
+  return next;
+}
+
+function run(mode: "apply" | "check"): number {
+  const problems: Array<string> = [];
+  const stale: Array<string> = [];
+  for (const [file, rules] of Object.entries(GOVERNED_FILES)) {
+    const absolutePath = NodePath.join(repoRoot, file);
+    if (!NodeFS.existsSync(absolutePath)) {
+      problems.push(`${file}: missing; upstream moved or removed it, update the list.`);
+      continue;
+    }
+    const current = NodeFS.readFileSync(absolutePath, "utf8");
+    const next = rewrite(file, rules, current, problems);
+    if (next === current) continue;
+    stale.push(file);
+    if (mode === "apply") NodeFS.writeFileSync(absolutePath, next);
+  }
+  for (const file of stale) {
+    console.log(mode === "apply" ? `rebranded ${file}` : `stale     ${file}`);
+  }
+  for (const problem of problems) console.error(problem);
+  if (problems.length > 0) return 1;
+  if (mode === "check" && stale.length > 0) {
+    console.error("Run `node scripts/lincei/identity.ts apply`.");
+    return 1;
+  }
+  return 0;
+}
+
+const mode = process.argv[2];
+if (mode !== "apply" && mode !== "check") {
+  console.error("Usage: node scripts/lincei/identity.ts <apply|check>");
+  process.exit(2);
+}
+process.exit(run(mode));
