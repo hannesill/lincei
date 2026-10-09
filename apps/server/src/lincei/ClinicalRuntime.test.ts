@@ -48,8 +48,15 @@ const withRuntime = <A, E>(
     readonly runtime: ClinicalRuntime.ClinicalRuntime["Service"];
     readonly steps: Array<string>;
   }) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
+  options: {
+    /** The agent skill folder of this machine's user; none unless a test looks at it. */
+    readonly skillDirectory?: string;
+    /** The skill the installed M4 bundles. */
+    readonly bundledSkill?: () => string;
+  } = {},
 ) => {
   const steps: Array<string> = [];
+  const bundledSkill = options.bundledSkill ?? (() => "sofa-score");
   const layerProcessRunner = Layer.effect(
     ProcessRunner.ProcessRunner,
     Effect.gen(function* () {
@@ -72,6 +79,16 @@ const withRuntime = <A, E>(
               yield* fileSystem.makeDirectory(binDir, { recursive: true }).pipe(Effect.orDie);
               yield* fileSystem.writeFileString(path.join(binDir, "python"), "").pipe(Effect.orDie);
             }
+            if (stepOf(input) === "skills" && Number(response.code) === 0) {
+              const target = input.args[input.args.indexOf("--target") + 1] ?? "";
+              // Like M4, which will not replace a bundle that is already there.
+              if (yield* fileSystem.exists(target).pipe(Effect.orDie)) return exited(1);
+              const skill = path.join(target, "clinical", bundledSkill());
+              yield* fileSystem.makeDirectory(skill, { recursive: true }).pipe(Effect.orDie);
+              yield* fileSystem
+                .writeFileString(path.join(skill, "SKILL.md"), "")
+                .pipe(Effect.orDie);
+            }
             return response;
           }),
       });
@@ -80,6 +97,10 @@ const withRuntime = <A, E>(
   const layerDependencies = Layer.mergeAll(
     ServerConfig.ServerConfig.layerTest(process.cwd(), { prefix: "lincei-clinical-test-" }),
     Layer.succeed(HostProcessPlatform, "darwin"),
+    // Never the real home: setup links skills into the user's agent folders.
+    Layer.succeed(HostProcessEnvironment, {
+      LINCEI_CLINICAL_SKILL_DIRS: options.skillDirectory ?? "",
+    }),
     ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
     layerProcessRunner,
     // No network: a machine without uv cannot download one either.
@@ -113,6 +134,34 @@ describe("ClinicalRuntime", () => {
           expect(steps).toEqual([]);
         }),
     ),
+  );
+
+  it.effect("offers M4's skills where agents look for skills, following a rebuilt bundle", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const skillDirectory = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "lincei-agent-skills-",
+      });
+      let bundled = "sofa-score";
+      yield* withRuntime(
+        () => exited(0),
+        ({ runtime }) =>
+          Effect.gen(function* () {
+            const { python } = yield* runtime.provision;
+            expect(
+              yield* fileSystem.exists(path.join(skillDirectory, "sofa-score", "SKILL.md")),
+            ).toBe(true);
+
+            // A changed environment is rebuilt, and its M4 may bundle other skills.
+            yield* fileSystem.remove(python);
+            bundled = "kdigo-aki-staging";
+            expect((yield* runtime.provision).state).toBe("ready");
+            expect(yield* fileSystem.readDirectory(skillDirectory)).toEqual(["kdigo-aki-staging"]);
+          }),
+        { skillDirectory, bundledSkill: () => bundled },
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("fails at the uv step when the machine has no uv and it cannot be downloaded", () =>

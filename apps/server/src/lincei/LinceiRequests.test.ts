@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import { ChildProcessSpawner } from "effect/process";
 
 import * as ProcessRunner from "../processRunner.ts";
+import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
@@ -40,19 +41,20 @@ const RUNNING = JSON.stringify({
 
 /**
  * Lincei's request handler over a clinical runtime in `state` and a Vitrine
- * whose `start` prints `vitrineStdout`. `spawned` records what was run where.
+ * that prints `vitrineStdout`, which may depend on the folder it runs in.
+ * `spawned` records what was run where.
  */
 const withRequests = <A, E>(
   input: {
     readonly state: ClinicalRuntimeStatus["state"];
     readonly step?: ClinicalRuntimeStatus["step"];
-    readonly vitrineStdout?: string;
+    readonly vitrineStdout?: string | ((cwd: string | undefined) => string);
   },
   use: (context: {
     readonly requests: LinceiRequests.LinceiRequests["Service"];
     readonly spawned: Array<{ readonly command: string; readonly cwd: string | undefined }>;
     readonly existingDirectory: string;
-  }) => Effect.Effect<A, E>,
+  }) => Effect.Effect<A, E, FileSystem.FileSystem>,
 ) => {
   const spawned: Array<{ readonly command: string; readonly cwd: string | undefined }> = [];
   const status = statusOf(input.state, input.step);
@@ -72,7 +74,10 @@ const withRequests = <A, E>(
           Effect.sync(() => {
             spawned.push({ command: run.command, cwd: run.cwd });
             return {
-              stdout: input.vitrineStdout ?? RUNNING,
+              stdout:
+                typeof input.vitrineStdout === "function"
+                  ? input.vitrineStdout(run.cwd)
+                  : (input.vitrineStdout ?? RUNNING),
               stderr: "",
               code: ChildProcessSpawner.ExitCode(0),
               timedOut: false,
@@ -99,6 +104,7 @@ const withRequests = <A, E>(
     Effect.provide(
       LinceiRequests.layer.pipe(
         Layer.provideMerge(ResearchBoard.layer),
+        Layer.provideMerge(ClinicalDatasets.layer),
         Layer.provideMerge(layerDependencies),
       ),
     ),
@@ -188,6 +194,62 @@ describe("LinceiRequests", () => {
           .handle({ _tag: "ResearchBoardOpen", cwd: `${existingDirectory}/removed` })
           .pipe(Effect.flip);
         expect(failure._tag).toBe("LinceiRequestError");
+        expect(spawned).toEqual([]);
+      }),
+    ),
+  );
+  /** A Vitrine that is not running and keeps its store in the folder it was asked about. */
+  const notRunningIn = (cwd: string | undefined) =>
+    JSON.stringify({
+      status: "not_running",
+      url: null,
+      port: null,
+      data_dir: `${cwd}/.vitrine`,
+      error: null,
+    });
+
+  it.effect("reports when a study last gained a card, asking Vitrine only once", () =>
+    withRequests(
+      { state: "ready", vitrineStdout: notRunningIn },
+      ({ requests, spawned, existingDirectory }) =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          const request = { _tag: "ResearchBoardActivity", cwd: existingDirectory } as const;
+          expect(yield* requests.handle(request)).toEqual({ _tag: "ResearchBoardActivity" });
+
+          const older = `${existingDirectory}/.vitrine/studies/2026-01-01_cohort`;
+          const newer = `${existingDirectory}/.vitrine/studies/2026-01-02_sepsis`;
+          for (const [study, seconds] of [
+            [older, 1_700_000_000],
+            [newer, 1_700_000_500],
+          ] as const) {
+            yield* fileSystem.makeDirectory(study, { recursive: true });
+            yield* fileSystem.writeFileString(`${study}/index.json`, "[]");
+            yield* fileSystem.utimes(`${study}/index.json`, seconds, seconds);
+          }
+
+          expect(yield* requests.handle(request)).toEqual({
+            _tag: "ResearchBoardActivity",
+            updatedAt: 1_700_000_500_000,
+          });
+          // Asked every few seconds while an agent works, so it must not spawn each time.
+          expect(spawned).toHaveLength(1);
+        }),
+    ),
+  );
+
+  it.effect("answers a dataset request with the setup state until M4 is installed", () =>
+    withRequests({ state: "installing", step: "packages" }, ({ requests, spawned }) =>
+      Effect.gen(function* () {
+        for (const request of [
+          { _tag: "ClinicalDatasets" },
+          { _tag: "ClinicalDatasetDownload", name: "mimic-iv-demo" },
+        ] as const) {
+          expect(yield* requests.handle(request)).toMatchObject({
+            _tag: "Clinical",
+            status: { state: "installing" },
+          });
+        }
         expect(spawned).toEqual([]);
       }),
     ),
