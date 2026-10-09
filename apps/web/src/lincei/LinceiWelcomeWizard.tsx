@@ -12,10 +12,9 @@ import { WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "~/component
 import { usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
 
-import { useClinicalSetup } from "./ClinicalDataSettings";
 import { ClinicalDatasetList } from "./ClinicalDatasetList";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
-import { clinicalToolsInstalled, useClinicalStatus } from "./clinicalState";
+import { clinicalToolsInstalled, useClinicalSetup, useClinicalStatus } from "./clinicalState";
 
 /** T3 Code's stages plus Lincei's; `scripts/lincei/identity.ts` adds the last to its header too. */
 const STAGES = ["Connect", "Agents", "Projects", "Clinical"] as const;

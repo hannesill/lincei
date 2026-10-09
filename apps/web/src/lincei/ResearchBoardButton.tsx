@@ -17,7 +17,12 @@ import type { SessionPhase } from "~/types";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 
-import { clinicalToolsInstalled, describeCommandFailure, useClinicalStatus } from "./clinicalState";
+import {
+  clinicalToolsInstalled,
+  describeCommandFailure,
+  useClinicalSetup,
+  useClinicalStatus,
+} from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
 
 const ACTIVITY_POLL_INTERVAL_MS = 4_000;
@@ -82,6 +87,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const { status, refresh: refreshStatus } = useClinicalStatus(environmentId);
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
+  const setUp = useClinicalSetup(environmentId, refreshStatus);
   const [busy, setBusy] = useState(false);
 
   /** Shows the board in the panel. `quiet` when nobody asked: a failure then is not news. */
@@ -189,18 +195,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
     setBusy(true);
     try {
       if (needsSetup) {
-        const started = await request({
-          environmentId: threadRef.environmentId,
-          input: { _tag: "ClinicalSetup" },
-        });
-        if (started._tag === "Failure" && !isAtomCommandInterrupted(started)) {
-          toastManager.add({
-            type: "error",
-            title: "Could not start clinical setup",
-            description: describeCommandFailure(started),
-          });
-        }
-        refreshStatus();
+        await setUp();
         return;
       }
       await openBoard(false);
