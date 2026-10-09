@@ -1,0 +1,79 @@
+name: Lincei release
+
+# Builds the Lincei desktop app for Apple Silicon and attaches it to a draft
+# GitHub release. Upstream's release.yml targets T3 Code's signing, npm, and
+# hosting accounts, so Lincei ships through this workflow instead.
+#
+# The DMG is unsigned unless signing is added here: macOS asks the user to
+# confirm opening it, and auto-update stays off (see docs/lincei/README.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS arm64 DMG
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      # The update feed stays empty until builds are signed.
+      T3CODE_DISABLE_AUTO_UPDATE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Check Lincei identity
+        run: node scripts/lincei/identity.ts check
+
+      - name: Test the Lincei overlay
+        working-directory: apps/server
+        run: vp test run src/lincei
+
+      - name: Align package versions to release version
+        run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
+
+      - name: Build desktop artifact
+        run: |
+          vp run dist:desktop:artifact \
+            --platform mac --target dmg --arch arm64 \
+            --build-version "${{ inputs.version }}" --verbose
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: lincei-macos-arm64
+          path: release/*.dmg
+          if-no-files-found: error
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" release/*.dmg \
+            --draft --title "Lincei ${{ inputs.version }}" \
+            --notes "Unsigned alpha build for Apple Silicon. See README for first-run steps."

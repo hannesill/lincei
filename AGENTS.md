@@ -1,3 +1,24 @@
+# Lincei
+
+This repository is Lincei, an agentic clinical research environment built as a thin overlay on
+T3 Code. It helps clinical researchers direct agents, stay in the loop, and verify results, with
+research milestones shown as visual cards through [Vitrine](https://github.com/hannesill/vitrine).
+
+Read [docs/lincei/README.md](docs/lincei/README.md) before changing anything. In short:
+
+- Lincei code lives in new files (`apps/server/src/lincei/`, `scripts/lincei/`,
+  `apps/web/vite/linceiBrand.ts`). Upstream files get one-line hooks at most, because every edited
+  upstream line can conflict on the next merge. Propose a different seam before adding more.
+- Identity literals (bundle id, URL scheme, `~/.lincei`) are rewritten by
+  `node scripts/lincei/identity.ts apply`, never by hand.
+- Keep upstream's internal names: `@t3tools/*`, `T3CODE_*`, `t3.json`.
+- Before calling work done, run `vp fmt` and typecheck for the packages you changed, and
+  `node scripts/lincei/identity.ts check`. Run tests with `vp test run <files>`.
+- Explain as you go: for non-trivial work, say what the relevant architecture is, which tradeoff
+  you chose, and what a reviewer should look at.
+
+Everything below is upstream's guidance for this codebase and applies to Lincei work too.
+
 # T3 Code
 
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
