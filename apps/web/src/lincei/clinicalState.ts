@@ -6,7 +6,7 @@
  */
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { ClinicalDataset, ClinicalRuntimeStatus, EnvironmentId } from "@t3tools/contracts";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useEnvironmentQuery } from "~/state/query";
 
@@ -60,6 +60,14 @@ export function useClinicalDatasets(
       : linceiQuery({ environmentId, input: { _tag: "ClinicalDatasets" } }),
   );
   const datasets = query.data?._tag === "ClinicalDatasets" ? query.data.datasets : null;
+  // The answer is cached for a minute after the page that asked is gone, and
+  // datasets change behind it (an agent may run M4 itself), so a page that
+  // opens onto a cached answer asks again.
+  const openedOnCachedAnswer = useRef(datasets !== null);
+  const { refresh } = query;
+  useEffect(() => {
+    if (openedOnCachedAnswer.current) refresh();
+  }, [refresh]);
   usePolling(datasets?.some((dataset) => dataset.job?.state === "running") === true, query.refresh);
   return { datasets, error: query.error, refresh: query.refresh };
 }

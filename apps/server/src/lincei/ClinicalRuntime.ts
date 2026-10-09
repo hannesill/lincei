@@ -130,8 +130,8 @@ const clinicalPaths = (input: {
 
 /**
  * Makes this server a Lincei server: puts the managed environment first on its
- * PATH, points M4 at Lincei's shared dataset store, and tells every agent
- * about the clinical tooling. Run after `fixPath`, which rebuilds PATH from
+ * PATH and names it in LINCEI_CLINICAL_BIN, points M4 at Lincei's shared
+ * dataset store, and tells every agent about the clinical tooling. Run after `fixPath`, which rebuilds PATH from
  * the login shell, and before anything spawns a child process or starts a
  * session. A dataset directory the user already exported wins.
  */
@@ -148,6 +148,8 @@ export const activate = Effect.fn("ClinicalRuntime.activate")(function* (baseDir
     delimiter,
   );
   env.LINCEI_CLINICAL_HOME = paths.home;
+  // Agents' login shells reorder PATH, so the instructions name this instead.
+  env.LINCEI_CLINICAL_BIN = paths.binDir;
   if ((env.M4_DATA_DIR ?? "").trim().length === 0) {
     env.M4_DATA_DIR = paths.dataDir;
   }
