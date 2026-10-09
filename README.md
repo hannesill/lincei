@@ -34,9 +34,13 @@ Lincei adds the clinical layer:
 2. Install and sign in to at least one provider, for example
    [Claude Code](https://claude.com/product/claude-code) (`claude auth login`) or
    [Codex CLI](https://developers.openai.com/codex/cli) (`codex login`).
-3. Download the latest Lincei build from
-   [Releases](https://github.com/hannesill/lincei/releases) and drag it into Applications. Alpha
-   builds are not signed yet: the first time, right-click the app and choose **Open**.
+3. Download the latest Lincei build for Apple Silicon Macs from
+   [Releases](https://github.com/hannesill/lincei/releases) and drag it into Applications.
+
+Alpha builds are not signed with an Apple Developer ID yet, so macOS blocks the first launch.
+Open Lincei once and dismiss the warning, then go to **System Settings → Privacy & Security**,
+scroll down to the message about Lincei, and choose **Open Anyway**. On macOS 14 or earlier,
+right-click the app and choose **Open** instead.
 
 On first launch Lincei sets up the clinical environment in the background (a few minutes,
 network required). Ask the agent "is the clinical runtime ready?" at any time; it can check and

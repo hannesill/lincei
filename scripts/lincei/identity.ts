@@ -119,6 +119,17 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
       ['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]'],
       ['executableName: "t3code"', 'executableName: "lincei"'],
       ['StartupWMClass: "t3code"', 'StartupWMClass: "lincei"'],
+      // Upstream only ships signed builds. A build without a Developer ID is
+      // signed ad hoc instead of not at all: Apple Silicon reports a bundle
+      // with no valid signature as "damaged", which the user cannot override.
+      [
+        '...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),',
+        [
+          "...(signed",
+          '        ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") }',
+          '        : { identity: "-", hardenedRuntime: false }),',
+        ].join("\n"),
+      ],
     ],
   },
   "scripts/dev-runner.ts": {

@@ -112,11 +112,19 @@ vp run dist:desktop:dmg:arm64
 ```
 
 Builds are unsigned until a Developer ID certificate and notarization credentials are added to
-the workflow, so macOS asks before opening them and auto-update stays off.
+the workflow, so macOS blocks them until the user allows the app in System Settings. An unsigned
+build also cannot install updates, which is why the workflow builds without an update feed
+(`T3CODE_DESKTOP_UPDATE_REPOSITORY: none`). Drop that line when signing is added.
 
 Upstream's own workflows (`release.yml`, `ci.yml`, the mobile and relay ones) assume T3 Code's
-runners and accounts. Leave the files in place so merges stay clean, and disable them in the
-repository's Actions settings.
+runners and accounts, and `release.yml` runs on a 30-minute schedule. The files stay in place so
+merges stay clean, and every workflow except **Lincei release** is disabled on GitHub. A workflow
+file that a merge adds starts out enabled, so after pushing a merge:
+
+```sh
+gh workflow list --all
+gh workflow disable <new-file>.yml
+```
 
 ## Not carried over from upstream
 

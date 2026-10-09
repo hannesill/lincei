@@ -24,8 +24,11 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     env:
-      # The update feed stays empty until builds are signed.
-      T3CODE_DISABLE_AUTO_UPDATE: "1"
+      # An unsigned build cannot install updates, so it must ship without an
+      # update feed. build-desktop-artifact.ts falls back to GITHUB_REPOSITORY
+      # and only accepts an "owner/repo" value, which this deliberately is not.
+      # Remove it once builds are signed.
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: none
     steps:
       - name: Checkout
         uses: actions/checkout@v6
