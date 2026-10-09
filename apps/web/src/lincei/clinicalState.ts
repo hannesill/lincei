@@ -4,13 +4,18 @@
  * request and response, so these hooks ask again every few seconds for as
  * long as something is in progress and not at all otherwise.
  */
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type { ClinicalDataset, ClinicalRuntimeStatus, EnvironmentId } from "@t3tools/contracts";
 import { useEffect, useRef } from "react";
 
+import { toastManager } from "~/components/ui/toast";
 import { useEnvironmentQuery } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
 
-import { linceiQuery } from "./linceiRequests";
+import { linceiCommand, linceiQuery } from "./linceiRequests";
 
 const PROGRESS_POLL_INTERVAL_MS = 2_500;
 
@@ -77,4 +82,21 @@ export function describeCommandFailure(
 ): string {
   const error = squashAtomCommandFailure(result);
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Starts, or repeats, clinical setup on an environment and says so when it could not. */
+export function useClinicalSetup(environmentId: EnvironmentId | null, refresh: () => void) {
+  const request = useAtomCommand(linceiCommand, { reportFailure: false });
+  return async () => {
+    if (environmentId === null) return;
+    const started = await request({ environmentId, input: { _tag: "ClinicalSetup" } });
+    if (started._tag === "Failure" && !isAtomCommandInterrupted(started)) {
+      toastManager.add({
+        type: "error",
+        title: "Could not start clinical setup",
+        description: describeCommandFailure(started),
+      });
+    }
+    refresh();
+  };
 }

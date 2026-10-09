@@ -1,4 +1,3 @@
-import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
 
 import {
@@ -8,30 +7,11 @@ import {
 } from "~/components/settings/settingsLayout";
 import { useSettingsScope } from "~/components/settings/SettingsScopeContext";
 import { Button } from "~/components/ui/button";
-import { toastManager } from "~/components/ui/toast";
 import { useEnvironmentScope } from "~/state/session";
-import { useAtomCommand } from "~/state/use-atom-command";
 
 import { ClinicalDatasetList } from "./ClinicalDatasetList";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
-import { clinicalToolsInstalled, describeCommandFailure, useClinicalStatus } from "./clinicalState";
-import { linceiCommand } from "./linceiRequests";
-
-/** Starts, or repeats, clinical setup on an environment. */
-export function useClinicalSetup(environmentId: EnvironmentId, refresh: () => void) {
-  const request = useAtomCommand(linceiCommand, { reportFailure: false });
-  return async () => {
-    const started = await request({ environmentId, input: { _tag: "ClinicalSetup" } });
-    if (started._tag === "Failure" && !isAtomCommandInterrupted(started)) {
-      toastManager.add({
-        type: "error",
-        title: "Could not start clinical setup",
-        description: describeCommandFailure(started),
-      });
-    }
-    refresh();
-  };
-}
+import { clinicalToolsInstalled, useClinicalSetup, useClinicalStatus } from "./clinicalState";
 
 function ClinicalDataPanel({ environmentId }: { readonly environmentId: EnvironmentId }) {
   const { status, refresh } = useClinicalStatus(environmentId);
