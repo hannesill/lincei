@@ -92,9 +92,16 @@ Merge often. A weekly merge is a handful of mechanical conflicts; a quarterly on
 ## The clinical runtime
 
 Lincei owns one Python environment at `<home>/clinical/venv`, where `<home>` is `~/.lincei`. At
-startup the server puts its `bin` first on `PATH` and sets `LINCEI_CLINICAL_HOME` and
-`M4_DATA_DIR` for everything it spawns, so agents, terminals, and project scripts all resolve
-`python`, `m4`, and `vitrine` to it. A user who exports their own `M4_DATA_DIR` keeps it.
+startup the server puts its `bin` first on `PATH` and sets `LINCEI_CLINICAL_HOME`,
+`LINCEI_CLINICAL_BIN`, and `M4_DATA_DIR` for everything it spawns. A user who exports their own
+`M4_DATA_DIR` keeps it.
+
+Being first on the server's `PATH` is not enough for agents. They run commands in a login shell,
+and macOS rebuilds `PATH` there with the system's directories in front, where `/usr/bin/m4` is an
+unrelated macro processor and `python` is whatever the user's profile set up. Environment
+variables survive, so the agent instructions tell agents to begin clinical commands with
+`export PATH="$LINCEI_CLINICAL_BIN:$PATH";`. Anything else that needs the environment from a
+login shell has to do the same.
 
 Setup runs `uv`: create the environment, install the pinned requirements, materialize M4's
 skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. A machine without `uv` gets
