@@ -119,6 +119,19 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
       ['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]'],
       ['executableName: "t3code"', 'executableName: "lincei"'],
       ['StartupWMClass: "t3code"', 'StartupWMClass: "lincei"'],
+      // The packaged app's own package.json. Electron derives the keychain
+      // entry that encrypts saved secrets from this name ("<name> Safe
+      // Storage"), so sharing it would have Lincei ask for T3 Code's entry.
+      [
+        '    name: "t3code",\n    version: appVersion,',
+        '    name: "lincei",\n    version: appVersion,',
+      ],
+      [
+        '"T3 Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely."',
+        '"Lincei is an agentic clinical research environment. Direct coding agents at clinical datasets, stay in the loop while they work, and review what they produce as research cards."',
+      ],
+      ['homepage: "https://t3.codes",', 'homepage: "https://github.com/hannesill/lincei",'],
+      ['author: "T3 Tools",', 'author: "Lincei",'],
       // Upstream only ships signed builds. A build without a Developer ID is
       // signed ad hoc instead of not at all: Apple Silicon reports a bundle
       // with no valid signature as "damaged", which the user cannot override.
