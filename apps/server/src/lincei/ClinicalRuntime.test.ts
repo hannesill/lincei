@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
 
 import * as ServerConfig from "../config.ts";
@@ -31,7 +32,7 @@ const exited = (code: number, stderr = ""): ProcessRunner.ProcessRunOutput => ({
 
 /** The step a provisioning command belongs to, named the way the status reports it. */
 const stepOf = ({ command, args }: Invocation) => {
-  if (command === "uv") {
+  if (command === "uv" || command.endsWith("/uv")) {
     return args[0] === "--version" ? "uv" : args[0] === "venv" ? "python" : "packages";
   }
   return args[0] === "skills" ? "skills" : "dataset";
@@ -81,6 +82,13 @@ const withRuntime = <A, E>(
     Layer.succeed(HostProcessPlatform, "darwin"),
     ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
     layerProcessRunner,
+    // No network: a machine without uv cannot download one either.
+    Layer.succeed(
+      HttpClient.HttpClient,
+      HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))),
+      ),
+    ),
   ).pipe(Layer.provideMerge(NodeServices.layer));
   return Effect.gen(function* () {
     const runtime = yield* ClinicalRuntime.ClinicalRuntime;
@@ -107,15 +115,16 @@ describe("ClinicalRuntime", () => {
     ),
   );
 
-  it.effect("tells the user to install uv when it is missing", () =>
+  it.effect("fails at the uv step when the machine has no uv and it cannot be downloaded", () =>
     withRuntime(
       () => "not-found",
       ({ runtime, steps }) =>
         Effect.gen(function* () {
           const status = yield* runtime.provision;
           expect(status).toMatchObject({ state: "failed", step: "uv" });
-          expect(status.message).toContain("https://docs.astral.sh/uv/");
-          expect(steps).toEqual(["uv"]);
+          expect(status.detail).toContain("Could not download uv");
+          // Looked on PATH, then for Lincei's own copy, and ran nothing else.
+          expect(steps).toEqual(["uv", "uv"]);
         }),
     ),
   );
@@ -188,7 +197,9 @@ describe("ClinicalRuntime.activate", () => {
     return Effect.gen(function* () {
       yield* activateWith(env);
       yield* activateWith(env);
-      expect(env.PATH).toBe("/home/ada/.lincei/clinical/venv/bin:/usr/local/bin:/usr/bin");
+      expect(env.PATH).toBe(
+        "/home/ada/.lincei/clinical/venv/bin:/home/ada/.lincei/clinical/bin:/usr/local/bin:/usr/bin",
+      );
       expect(env.M4_DATA_DIR).toBe("/home/ada/.lincei/clinical/m4_data");
       expect(env.LINCEI_CLINICAL_HOME).toBe("/home/ada/.lincei/clinical");
     });
