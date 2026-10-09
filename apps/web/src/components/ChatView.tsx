@@ -11185,7 +11185,7 @@ export default function ChatView(props: ChatViewProps) {
   } satisfies PanelLayoutControlsProps;
   const panelToggleControls = (
     <LinceiPanelLayoutControls
-      research={{ threadRef: activeThreadRef, cwd: activeWorkspaceRoot ?? null, openPreview }}
+      research={{ threadRef: activeThreadRef, cwd: activeWorkspaceRoot, openPreview, phase }}
       {...panelToggleControlProps}
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
     />
