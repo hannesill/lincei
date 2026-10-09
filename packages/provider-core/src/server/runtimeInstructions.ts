@@ -3,6 +3,20 @@ When the t3-code MCP server exposes link_pull_request, you must use it to regist
 </pull_request_linking>`;
 
 /**
+ * What a product built on this server tells every agent: the name it runs
+ * under and instructions of its own. Set once at server startup, before any
+ * session starts.
+ */
+let productContext = { name: "T3 Code", instructions: "" };
+
+export function setRuntimeProductContext(context: {
+  readonly name: string;
+  readonly instructions: string;
+}): void {
+  productContext = { name: toSingleLine(context.name), instructions: context.instructions.trim() };
+}
+
+/**
  * Shared runtime context; omit model and effort when the harness manages them dynamically.
  * `modelName` is the display name users see in the model picker; `model` is the slug.
  */
@@ -20,7 +34,7 @@ export function buildRuntimeInstructions(runtime: {
     modelName && modelName !== model ? `${modelName} (model slug: ${model})` : model;
   const modelInfo = model && model !== "auto" && model !== "default" ? `, as ${modelLabel}` : "";
   const effortInfo = effort ? ` with ${effort} reasoning effort` : "";
-  return `<runtime_info>In case you're asked: you are running in T3 Code through the ${harness} harness${modelInfo}${effortInfo}. No need to mention this otherwise. You can embed images and videos in your response using Markdown with absolute file paths.</runtime_info>\n\n${PULL_REQUEST_LINKING_INSTRUCTIONS}`;
+  return `<runtime_info>In case you're asked: you are running in ${productContext.name} through the ${harness} harness${modelInfo}${effortInfo}. No need to mention this otherwise. You can embed images and videos in your response using Markdown with absolute file paths.</runtime_info>\n\n${PULL_REQUEST_LINKING_INSTRUCTIONS}${productContext.instructions ? `\n\n${productContext.instructions}` : ""}`;
 }
 
 function toSingleLine(value: string): string {
