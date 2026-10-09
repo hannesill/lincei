@@ -61,7 +61,8 @@ export type ClinicalDatasetState = typeof ClinicalDatasetState.Type;
 
 /** Work in progress on one dataset, or the reason its last attempt stopped. */
 export const ClinicalDatasetJob = Schema.Struct({
-  kind: Schema.Literals(["add", "download"]),
+  /** `setup` is the demo dataset's download during clinical setup, which is not a job to cancel. */
+  kind: Schema.Literals(["add", "download", "setup"]),
   state: Schema.Literals(["running", "failed"]),
   phase: Schema.Literals(["starting", "downloading", "converting", "indexing"]),
   /** Files done in this phase, or tables while indexing. */
