@@ -164,6 +164,12 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
       ],
       ["            privacy policy\n", "            README\n"],
       ['aria-label="T3 Code">', 'aria-label="Lincei">'],
+      // The wizard's header names Lincei's own last step, which
+      // apps/web/src/lincei/LinceiWelcomeWizard.tsx shows after upstream's three.
+      [
+        'const ONBOARDING_STAGES = ["Connect", "Agents", "Projects"] as const;',
+        'const ONBOARDING_STAGES = ["Connect", "Agents", "Projects", "Clinical"] as const;',
+      ],
       [
         "                Code\n              </span>",
         "                Lincei\n              </span>",
