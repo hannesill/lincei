@@ -48,7 +48,9 @@ Open a folder as a project, start a thread, and ask:
 > Using the MIMIC-IV demo, build a Sepsis-3 cohort, describe it, and show me the result as cards.
 
 The agent reads the relevant skills, queries the data through M4, publishes tables and figures to
-Vitrine, and opens the study in the built-in browser for you to review.
+Vitrine, and opens the study in the built-in browser for you to review. The flask button at the
+top right of a thread opens that study at any time; while Lincei is still setting up, it shows
+what it is working on.
 
 ## Develop
 

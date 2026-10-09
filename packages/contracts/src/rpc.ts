@@ -4,6 +4,7 @@ import {
   OrchestrationV2SearchThreadResult,
 } from "./orchestrationV2.ts";
 import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
+import { WsLinceiRequestRpc } from "./lincei.ts";
 import {
   McpAppCallToolInput,
   McpAppCallToolResult,
@@ -1994,4 +1995,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeArchivedShellRpc,
   WsOrchestrationV2SubscribeShellRpc,
   WsOrchestrationV2SubscribeThreadRpc,
+  WsLinceiRequestRpc,
 ).middleware(RpcScopeAuthorization);

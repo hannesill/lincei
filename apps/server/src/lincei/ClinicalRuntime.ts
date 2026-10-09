@@ -10,6 +10,11 @@
  *
  * @module ClinicalRuntime
  */
+import {
+  ClinicalDemoDatasetState,
+  ClinicalProvisionStep,
+  type ClinicalRuntimeStatus,
+} from "@t3tools/contracts";
 import { setRuntimeProductContext } from "@t3tools/provider-core/server/runtimeInstructions";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Config from "effect/Config";
@@ -46,32 +51,10 @@ const OUTPUT_TAIL_CHARACTERS = 800;
 /** Whitespace-separated pip requirements replacing the defaults, e.g. a local Vitrine checkout. */
 const requirementsOverride = Config.String("LINCEI_CLINICAL_REQUIREMENTS").pipe(Config.option);
 
-const ClinicalProvisionStep = Schema.Literals(["uv", "python", "packages", "skills", "dataset"]);
-type ClinicalProvisionStep = typeof ClinicalProvisionStep.Type;
-
-const DemoDatasetState = Schema.Literals(["not-installed", "ready", "failed"]);
-type DemoDatasetState = typeof DemoDatasetState.Type;
-
-export const ClinicalRuntimeStatus = Schema.Struct({
-  state: Schema.Literals(["not-installed", "installing", "ready", "failed"]),
-  /** The step in progress while installing, or the one that failed. */
-  step: Schema.optional(ClinicalProvisionStep),
-  message: Schema.String,
-  /** The end of the failing command's output. */
-  detail: Schema.optional(Schema.String),
-  home: Schema.String,
-  python: Schema.String,
-  skillsDir: Schema.String,
-  dataDir: Schema.String,
-  requirements: Schema.Array(Schema.String),
-  demoDataset: DemoDatasetState,
-});
-export type ClinicalRuntimeStatus = typeof ClinicalRuntimeStatus.Type;
-
 /** What the last successful setup installed, so an unchanged environment is not rebuilt. */
 const InstalledState = Schema.Struct({
   requirements: Schema.Array(Schema.String),
-  demoDataset: DemoDatasetState,
+  demoDataset: ClinicalDemoDatasetState,
 });
 type InstalledState = typeof InstalledState.Type;
 const InstalledStateJson = Schema.fromJsonString(InstalledState);
@@ -304,7 +287,7 @@ const make = Effect.gen(function* () {
       .realPath(paths.home)
       .pipe(Effect.orElseSucceed(() => paths.home));
     const installed = yield* installedAndCurrent;
-    let demoDataset: DemoDatasetState = Option.match(installed, {
+    let demoDataset: ClinicalDemoDatasetState = Option.match(installed, {
       onNone: () => "not-installed" as const,
       onSome: (state) => state.demoDataset,
     });

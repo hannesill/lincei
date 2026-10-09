@@ -458,6 +458,7 @@ import {
   type PanelLayoutControlsProps,
   RightPanelMaximizeControl,
 } from "./chat/PanelLayoutControls";
+import { LinceiPanelLayoutControls } from "../lincei/LinceiPanelLayoutControls";
 import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel, type ThreadDetailsPanelProps } from "./chat/ThreadDetailsPanel";
 import { NoActiveThreadState } from "./NoActiveThreadState";
@@ -11183,7 +11184,8 @@ export default function ChatView(props: ChatViewProps) {
     onToggleRightPanel: toggleRightPanel,
   } satisfies PanelLayoutControlsProps;
   const panelToggleControls = (
-    <PanelLayoutControls
+    <LinceiPanelLayoutControls
+      research={{ threadRef: activeThreadRef, cwd: activeWorkspaceRoot ?? null, openPreview }}
       {...panelToggleControlProps}
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
     />

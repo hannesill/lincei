@@ -1,4 +1,4 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import { ClinicalRuntimeStatus, OrchestratorMcpFailure } from "@t3tools/contracts";
 import { Tool, Toolkit } from "effect/ai";
 
 import * as McpInvocationContext from "../../mcp/McpInvocationContext.ts";
@@ -6,7 +6,7 @@ import * as ThreadManagementService from "../../orchestration-v2/ThreadManagemen
 import * as ClinicalRuntime from "../ClinicalRuntime.ts";
 
 const shared = {
-  success: ClinicalRuntime.ClinicalRuntimeStatus,
+  success: ClinicalRuntimeStatus,
   failure: OrchestratorMcpFailure,
   failureMode: "return" as const,
   dependencies: [
