@@ -36,6 +36,12 @@ type DatasetAction = Extract<
   { _tag: "ClinicalDatasetAdd" | "ClinicalDatasetDownload" | "ClinicalDatasetCancel" }
 >;
 
+const FAILURE_TITLES: Record<DatasetAction["_tag"], (name: string) => string> = {
+  ClinicalDatasetAdd: (name) => `Could not add ${name}`,
+  ClinicalDatasetDownload: (name) => `Could not download ${name}`,
+  ClinicalDatasetCancel: (name) => `Could not stop ${name}`,
+};
+
 /** A bar that only moves when progress does: no animation to repaint between updates. */
 function ProgressBar({ fraction }: { readonly fraction: number }) {
   const percent = Math.round(fraction * 100);
@@ -239,17 +245,25 @@ export function ClinicalDatasetList({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
   const [addingTo, setAddingTo] = useState<ClinicalDataset | null>(null);
+  // Stopping a job waits for M4 to exit, which can take a few seconds.
+  const [acting, setActing] = useState<ReadonlySet<string>>(new Set());
 
   const run = async (action: DatasetAction) => {
+    setActing((names) => new Set(names).add(action.name));
     const result = await request({ environmentId, input: action });
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       toastManager.add({
         type: "error",
-        title: `Could not change ${action.name}`,
+        title: FAILURE_TITLES[action._tag](action.name),
         description: describeCommandFailure(result),
       });
     }
     refresh();
+    setActing((names) => {
+      const next = new Set(names);
+      next.delete(action.name);
+      return next;
+    });
   };
 
   if (!enabled) return null;
@@ -267,7 +281,7 @@ export function ClinicalDatasetList({
           <DatasetRow
             key={dataset.name}
             dataset={dataset}
-            disabled={!canOperate}
+            disabled={!canOperate || acting.has(dataset.name)}
             onAction={(action) => void run(action)}
             onAddFromFolder={() => setAddingTo(dataset)}
           />

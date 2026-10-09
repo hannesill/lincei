@@ -251,6 +251,8 @@ describe("ClinicalRuntime.activate", () => {
       );
       expect(env.M4_DATA_DIR).toBe("/home/ada/.lincei/clinical/m4_data");
       expect(env.LINCEI_CLINICAL_HOME).toBe("/home/ada/.lincei/clinical");
+      // An agent's login shell reorders PATH, so agents are given the folder by name.
+      expect(env.LINCEI_CLINICAL_BIN).toBe("/home/ada/.lincei/clinical/venv/bin");
     });
   });
 
@@ -275,6 +277,7 @@ describe("ClinicalRuntime.activate", () => {
       const after = buildRuntimeInstructions({ harness: "Codex" });
       expect(after).toContain("you are running in Lincei through the Codex harness");
       expect(after).toContain("lincei_clinical_setup");
+      expect(after).toContain('export PATH="$LINCEI_CLINICAL_BIN:$PATH";');
       expect(after).toContain("$LINCEI_CLINICAL_HOME/skills/");
     }).pipe(
       Effect.ensuring(

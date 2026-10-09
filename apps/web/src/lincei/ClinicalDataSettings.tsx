@@ -83,10 +83,11 @@ function ClinicalDataPanel({ environmentId }: { readonly environmentId: Environm
         <SettingsRow
           title="Dataset storage"
           description="Where prepared datasets are kept. Agents and M4 read them from here."
-          control={
-            <code className="text-xs break-all text-muted-foreground">{status.dataDir}</code>
-          }
-        />
+        >
+          <code className="block pb-2 text-xs break-all text-muted-foreground">
+            {status.dataDir}
+          </code>
+        </SettingsRow>
       </SettingsSection>
       <SettingsSection title="Datasets">
         {clinicalToolsInstalled(status) ? (
