@@ -14,6 +14,10 @@ in M4 or Vitrine themselves.
 Lincei shares git history with upstream. `git merge-base HEAD t3code/main` is the last upstream
 commit merged in.
 
+Before October 2026 Lincei was a copied tree with no shared history. That history (tag
+`lincei-legacy-main`) is attached as the second parent of one merge commit and contributes no
+content. `git log --first-parent` leaves it out.
+
 ## What the overlay consists of
 
 | Part                                                             | Where                                                                                              | Hook in upstream files                                                 |
