@@ -3707,18 +3707,18 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
   const stagePackageJson: StagePackageJson = {
-    name: "t3code",
+    name: "lincei",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
     packageManager: rootPackageJson.packageManager,
     description:
-      "T3 Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
+      "Lincei is an agentic clinical research environment. Direct coding agents at clinical datasets, stay in the loop while they work, and review what they produce as research cards.",
     license: "MIT",
     // Required by the .deb control file.
-    homepage: "https://t3.codes",
-    author: "T3 Tools",
+    homepage: "https://github.com/hannesill/lincei",
+    author: "Lincei",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,
