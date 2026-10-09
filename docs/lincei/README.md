@@ -9,7 +9,8 @@ Upstream moves fast (over a thousand commits a month). Every line Lincei changes
 file is a line that can conflict, so Lincei code goes in **new files**, and upstream files get
 one-line hooks at most. If a feature seems to need more than a few lines in an upstream file,
 look for a different seam first: an MCP tool, the agent instructions, a build plugin, or a change
-in M4 or Vitrine themselves.
+in M4 or Vitrine themselves. A feature the clients call adds a case to `lincei.request` rather
+than a new RPC method, which would need entries in four upstream files.
 
 Lincei shares git history with upstream. `git merge-base HEAD t3code/main` is the last upstream
 commit merged in.
@@ -20,15 +21,17 @@ content. `git log --first-parent` leaves it out.
 
 ## What the overlay consists of
 
-| Part                                                             | Where                                                                                              | Hook in upstream files                                                 |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                   | The files that script lists, rewritten by it, never by hand            |
-| Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                               | One plugin entry in `apps/web/vite.config.ts`                          |
-| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                            | Same file names as upstream, Lincei content                            |
-| Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)     | Two lines in `apps/server/src/server.ts`                               |
-| Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`             |
-| What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts) | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts` |
-| Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)               | None                                                                   |
+| Part                                                             | Where                                                                                                                                                                      | Hook in upstream files                                                               |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                           | The files that script lists, rewritten by it, never by hand                          |
+| Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                       | One plugin entry in `apps/web/vite.config.ts`                                        |
+| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                                                                                                    | Same file names as upstream, Lincei content                                          |
+| Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                             | Two lines in `apps/server/src/server.ts`                                             |
+| Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                          | One registration in `apps/server/src/mcp/McpHttpServer.ts`                           |
+| What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                         | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`               |
+| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts) | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`   |
+| Research board button and setup status                           | [`apps/web/src/lincei/`](../../apps/web/src/lincei), [`apps/server/src/lincei/ResearchBoard.ts`](../../apps/server/src/lincei/ResearchBoard.ts)                            | `ChatView.tsx` renders `LinceiPanelLayoutControls` in place of `PanelLayoutControls` |
+| Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                       | None                                                                                 |
 
 To see every upstream file Lincei has touched:
 
@@ -60,7 +63,8 @@ Then, for each conflict:
   rule to the new text.
 
 - **`README.md`, icons, `T3Wordmark.tsx`:** keep Lincei's side.
-- **A hook line** (`server.ts`, `McpHttpServer.ts`, `runtimeInstructions.ts`, `SidebarChrome.tsx`,
+- **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `RpcAuthorization.ts`,
+  `RpcInstrumentation.ts`, `rpc.ts`, `runtimeInstructions.ts`, `ChatView.tsx`, `SidebarChrome.tsx`,
   `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
 
 Finish with:
@@ -97,9 +101,12 @@ has its own home. An environment whose requirements have not changed is left alo
 - **Developing against a local checkout:** set `LINCEI_CLINICAL_REQUIREMENTS`, for example
   `LINCEI_CLINICAL_REQUIREMENTS="m4-infra[research] /path/to/vitrine"`.
 
-Research cards need no integration code. Vitrine keeps its study store in `.vitrine` under the
-directory the agent works in, and the agent opens the study with upstream's own browser tools
-(`preview_open`, `preview_navigate`). A thread in a git worktree therefore has its own study
+Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
+study store in `.vitrine` under the directory the agent works in and runs one server per store.
+The agent opens the study with upstream's browser tools (`preview_open`, `preview_navigate`), and
+the user with the research board button, which asks the server to start Vitrine in the thread's
+directory (`ResearchBoard.ts`) and opens the URL it reports. The same button shows setup progress
+and retries a failed setup. A thread in a git worktree therefore has its own study
 store; sharing one store across a project's worktrees is a change to make in Vitrine's directory
 resolution, not here.
 
