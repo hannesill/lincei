@@ -1,10 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import type { ClinicalRuntimeStatus } from "@t3tools/contracts";
+import { type ClinicalRuntimeStatus, LinceiRequest } from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/process";
 
 import * as ProcessRunner from "../processRunner.ts";
@@ -254,4 +255,16 @@ describe("LinceiRequests", () => {
       }),
     ),
   );
+  it("decodes a PhysioNet password into a value that does not print", () => {
+    const request = Schema.decodeUnknownSync(LinceiRequest)({
+      _tag: "ClinicalDatasetDownload",
+      name: "mimic-iv",
+      credentials: { username: "ada", password: "correct-horse-battery-staple" },
+    });
+    // Whatever logs, traces, or formats a request sees this, not the password.
+    for (const printed of [JSON.stringify(request), String(Object.values(request)), `${request}`]) {
+      expect(printed).not.toContain("correct-horse");
+    }
+    expect(JSON.stringify(request)).toContain("<redacted>");
+  });
 });
