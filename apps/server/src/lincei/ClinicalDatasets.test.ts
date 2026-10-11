@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { ChildProcessSpawner } from "effect/process";
 
@@ -227,10 +228,15 @@ describe("ClinicalDatasets", () => {
         }),
       ({ datasets, commands }) =>
         Effect.gen(function* () {
-          yield* Fiber.await(yield* datasets.download({ name: "mimic-iv" }));
+          yield* Fiber.await(
+            yield* datasets.download({
+              name: "mimic-iv",
+              credentials: { username: "ada", password: Redacted.make("not-shown") },
+            }),
+          );
           expect(jobOf(yield* datasets.list, "mimic-iv")).toMatchObject({
             state: "failed",
-            message: expect.stringContaining("does not have access to mimic-iv yet"),
+            message: expect.stringContaining("PhysioNet refused this login for mimic-iv"),
             detail: "PhysioNet access is forbidden for https://physionet.org/files/mimiciv/.",
           });
           // A failed download is not followed by an attempt to prepare nothing.
@@ -353,6 +359,109 @@ describe("ClinicalDatasets", () => {
       );
     }),
   );
+
+  describe("with a PhysioNet login", () => {
+    const PASSWORD = "correct-horse-battery-staple";
+    const credentials = { username: "ada", password: Redacted.make(PASSWORD) };
+
+    it.effect("hands the login to M4 on standard input and nowhere else", () => {
+      const runs: Array<Run> = [];
+      return withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            runs.push(run);
+            return exited(0);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            yield* Fiber.await(yield* datasets.download({ name: "mimic-iv", credentials }));
+
+            const [download, prepare] = runs;
+            expect(download?.args).toEqual([
+              "download",
+              "mimic-iv",
+              "--physionet-credentials-file",
+              "/dev/stdin",
+              "--json",
+              "--events",
+              "ndjson",
+            ]);
+            expect(JSON.parse(download?.stdin ?? "")).toEqual({
+              username: "ada",
+              password: PASSWORD,
+            });
+            expect(JSON.stringify([download?.args, download?.env])).not.toContain(PASSWORD);
+            // Preparing the files needs no login, so it is not given one.
+            expect(prepare?.args[0]).toBe("init");
+            expect(prepare?.stdin).toBeUndefined();
+            expect(JSON.stringify(prepare?.args)).not.toContain("credentials");
+          }),
+      );
+    });
+
+    it.effect("keeps the password out of a failed job, whatever M4 printed", () =>
+      withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            run.onStdoutChunk?.(
+              events({
+                event: "operation_failed",
+                error: {
+                  code: "physionet_access_forbidden",
+                  message: `PhysioNet access is forbidden. Tried ada:${PASSWORD}.`,
+                },
+              }),
+            );
+            return exited(1, "", `Traceback: auth=('ada', '${PASSWORD}')`);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            yield* Fiber.await(yield* datasets.download({ name: "mimic-iv", credentials }));
+            const job = jobOf(yield* datasets.list, "mimic-iv");
+            expect(job).toMatchObject({
+              state: "failed",
+              message: expect.stringContaining("PhysioNet refused this login for mimic-iv"),
+            });
+            expect(JSON.stringify(job)).not.toContain(PASSWORD);
+            expect(JSON.stringify(job)).toContain("<redacted>");
+          }),
+      ),
+    );
+
+    it.effect("does not start a credentialed download without a login", () =>
+      withDatasets(
+        () => Effect.succeed(exited(0)),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            const failure = yield* datasets.download({ name: "mimic-iv" }).pipe(Effect.flip);
+            expect(failure.message).toBe(
+              "Downloading mimic-iv needs a PhysioNet account with access to it.",
+            );
+            expect(commands.filter((args) => args[0] !== "list-datasets")).toEqual([]);
+          }),
+      ),
+    );
+
+    it.effect("downloads an open dataset without the login it was sent", () => {
+      const runs: Array<Run> = [];
+      return withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            runs.push(run);
+            return exited(0);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            yield* Fiber.await(yield* datasets.download({ name: "open-demo", credentials }));
+            expect(runs.map((run) => run.stdin)).toEqual([undefined, undefined]);
+            expect(JSON.stringify(runs.map((run) => run.args))).not.toContain("credentials");
+          }),
+        {
+          listing: listingOf(m4Dataset("open-demo", { setup_state: "missing_raw_files" })),
+        },
+      );
+    });
+  });
 
   it.effect("shows the demo as setup's own download and does not start a second one", () =>
     withDatasets(

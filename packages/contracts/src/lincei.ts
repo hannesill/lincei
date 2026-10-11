@@ -95,6 +95,17 @@ export const ClinicalDataset = Schema.Struct({
 });
 export type ClinicalDataset = typeof ClinicalDataset.Type;
 
+/**
+ * A PhysioNet login for one download. The server passes it to M4 and keeps
+ * nothing. The password decodes to a redacted value, so a request that is
+ * logged, traced, or printed shows `<redacted>` in its place.
+ */
+export const PhysioNetCredentials = Schema.Struct({
+  username: Schema.String,
+  password: Schema.RedactedFromValue(Schema.String),
+});
+export type PhysioNetCredentials = typeof PhysioNetCredentials.Type;
+
 export const LinceiRequest = Schema.Union([
   /** Reads the clinical runtime's state. */
   Schema.TaggedStruct("ClinicalStatus", {}),
@@ -108,8 +119,11 @@ export const LinceiRequest = Schema.Union([
   Schema.TaggedStruct("ClinicalDatasets", {}),
   /** Starts preparing a dataset from raw files already in `source`, a folder on the server. */
   Schema.TaggedStruct("ClinicalDatasetAdd", { name: Schema.String, source: Schema.String }),
-  /** Starts downloading and preparing a dataset. */
-  Schema.TaggedStruct("ClinicalDatasetDownload", { name: Schema.String }),
+  /** Starts downloading and preparing a dataset. Credentialed datasets need the login. */
+  Schema.TaggedStruct("ClinicalDatasetDownload", {
+    name: Schema.String,
+    credentials: Schema.optional(PhysioNetCredentials),
+  }),
   /** Stops a dataset's running job, or clears its failed one. Finished files are kept. */
   Schema.TaggedStruct("ClinicalDatasetCancel", { name: Schema.String }),
 ]);

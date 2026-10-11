@@ -1,7 +1,12 @@
 import type { ClinicalDatasetJob, ClinicalRuntimeStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { clinicalStepStates, describeJobProgress, formatBytes } from "./clinicalPresentation";
+import {
+  clinicalStepStates,
+  connectionProtectsSecrets,
+  describeJobProgress,
+  formatBytes,
+} from "./clinicalPresentation";
 
 const status = (fields: Partial<ClinicalRuntimeStatus>): ClinicalRuntimeStatus => ({
   state: "not-installed",
@@ -91,5 +96,20 @@ describe("formatBytes", () => {
     expect(formatBytes(900)).toBe("900 B");
     expect(formatBytes(6.26 * 1024 ** 3)).toBe("6.3 GB");
     expect(formatBytes(250 * 1024 ** 2)).toBe("250 MB");
+  });
+});
+
+describe("connectionProtectsSecrets", () => {
+  it("allows this machine and encrypted connections", () => {
+    expect(connectionProtectsSecrets("http://127.0.0.1:3773/")).toBe(true);
+    expect(connectionProtectsSecrets("http://localhost:3773")).toBe(true);
+    expect(connectionProtectsSecrets("https://lab-server.tailnet.ts.net")).toBe(true);
+  });
+
+  it("refuses plain HTTP to another machine, and anything it cannot read", () => {
+    expect(connectionProtectsSecrets("http://192.168.1.20:3773")).toBe(false);
+    expect(connectionProtectsSecrets("http://lab-server.local:3773")).toBe(false);
+    expect(connectionProtectsSecrets("not a url")).toBe(false);
+    expect(connectionProtectsSecrets(null)).toBe(false);
   });
 });

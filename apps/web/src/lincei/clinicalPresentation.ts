@@ -9,6 +9,7 @@ import type {
   ClinicalProvisionStep,
   ClinicalRuntimeStatus,
 } from "@t3tools/contracts";
+import { isLoopbackHost } from "@t3tools/shared/preview";
 
 export type ClinicalStepState = "done" | "active" | "failed" | "pending";
 
@@ -99,5 +100,20 @@ export function describeJobProgress(job: ClinicalDatasetJob): {
       return { label: `Building the database: ${completed} of ${total} tables`, fraction };
     case "starting":
       return { label: job.message, fraction: null };
+  }
+}
+
+/**
+ * Whether a password may travel to the environment at `httpBaseUrl`: only to
+ * this machine or over TLS. A server reached over plain HTTP on a network is
+ * a place where anyone on that network can read what is sent.
+ */
+export function connectionProtectsSecrets(httpBaseUrl: string | null): boolean {
+  if (httpBaseUrl === null) return false;
+  try {
+    const url = new URL(httpBaseUrl);
+    return url.protocol === "https:" || isLoopbackHost(url.hostname);
+  } catch {
+    return false;
   }
 }

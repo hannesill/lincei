@@ -16,8 +16,10 @@ Lincei adds the clinical layer:
   Sepsis-3, KDIGO AKI staging, comorbidity scores, cohort pitfalls, and more. They are in the
   composer's skill picker next to your own skills.
 - **A dataset ready on first run.** The open-access MIMIC-IV demo is downloaded during setup.
-- **Your own datasets.** **Settings → Clinical Data** lists the datasets M4 supports and prepares
-  one from a folder of files you downloaded from PhysioNet, with progress and no terminal.
+- **Your own datasets.** **Settings → Clinical Data** lists the datasets M4 supports. It
+  downloads one with your PhysioNet account, or prepares it from a folder of files you already
+  downloaded, with progress and no terminal. Your PhysioNet password is used for that download
+  and never stored, and agents never see it.
 - **Private by default.** No telemetry. No hosted relay. Data stays on your machine unless you
   send it to a model provider yourself.
 

@@ -135,6 +135,24 @@ progress as NDJSON events, which `ClinicalDatasets.ts` folds into one job per da
 memory: a server restart drops the job but not the files it finished, and M4 resumes from them.
 Agents do not go through this service. They have the `m4` CLI.
 
+Credentialed datasets are downloaded with the user's own PhysioNet login, which Lincei never
+stores:
+
+- It is typed into a password field on that page, never into a conversation, where an agent and
+  its model provider would read it. The agent instructions say so too.
+- The dialog only sends it to this machine or over HTTPS (`connectionProtectsSecrets`).
+- In the contract the password is `Schema.RedactedFromValue`, so a request that is logged, traced,
+  or printed shows `<redacted>`. Upstream's RPC instrumentation records the method, not the
+  payload.
+- The server holds it for that one download and gives it to M4 on standard input
+  (`--physionet-credentials-file /dev/stdin`): not on a command line, in the environment, or in a
+  file. The next download asks again; only the username is remembered, in the client's local
+  storage.
+
+`/dev/stdin` does not exist on Windows, where the server refuses credentialed downloads. M4 has a
+`--physionet-credentials-stdin` flag for that on its `lincei/physionet-credentials-stdin` branch;
+use it here once the M4 release that carries it is the minimum in `DEFAULT_CLINICAL_REQUIREMENTS`.
+
 ### Research cards
 
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its

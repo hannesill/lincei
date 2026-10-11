@@ -9,12 +9,17 @@
  * Jobs live in memory. One that a server restart cuts short leaves its
  * finished files behind, and M4 resumes from them when it is started again.
  *
+ * A PhysioNet login is held for the one download it was given for and goes
+ * to M4 through its standard input: never a command line, the environment, a
+ * file, or a log. Nothing keeps it afterwards, so the next download asks again.
+ *
  * @module ClinicalDatasets
  */
 import type {
   ClinicalDataset,
   ClinicalDatasetJob,
   ClinicalRuntimeStatus,
+  PhysioNetCredentials,
 } from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
@@ -25,6 +30,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 import * as ProcessRunner from "../processRunner.ts";
@@ -78,6 +84,11 @@ const M4Event = Schema.Struct({
 type M4Event = typeof M4Event.Type;
 const decodeM4Event = Schema.decodeUnknownOption(Schema.fromJsonString(M4Event));
 
+/** The document M4 reads a PhysioNet login from. */
+const encodeM4Credentials = Schema.encodeSync(
+  Schema.fromJsonString(Schema.Struct({ username: Schema.String, password: Schema.String })),
+);
+
 export class ClinicalDatasetsError extends Schema.TaggedError<ClinicalDatasetsError>()(
   "ClinicalDatasetsError",
   {
@@ -100,9 +111,10 @@ export class ClinicalDatasets extends Context.Service<
       readonly name: string;
       readonly source: string;
     }) => Effect.Effect<Fiber.Fiber<void>, ClinicalDatasetsError>;
-    /** Starts downloading a dataset and preparing it. */
+    /** Starts downloading a dataset and preparing it. Credentialed datasets need the login. */
     readonly download: (input: {
       readonly name: string;
+      readonly credentials?: PhysioNetCredentials | undefined;
     }) => Effect.Effect<Fiber.Fiber<void>, ClinicalDatasetsError>;
     /** Stops a dataset's running job, or clears its failed one. */
     readonly cancel: (name: string) => Effect.Effect<void>;
@@ -177,10 +189,10 @@ export const advanceJob = (job: ClinicalDatasetJob, event: M4Event): ClinicalDat
 /** Why a job stopped, in words for the person who started it. */
 const describeFailure = (name: string, failure: M4Failure | undefined): string => {
   switch (failure?.code) {
+    // PhysioNet answers a wrong password and a missing agreement the same way.
     case "physionet_auth_failed":
-      return "PhysioNet did not accept that username and password.";
     case "physionet_access_forbidden":
-      return `This PhysioNet account does not have access to ${name} yet. Sign the dataset's data use agreement on PhysioNet, then try again.`;
+      return `PhysioNet refused this login for ${name}. Check the username and password, and that the account has signed the dataset's data use agreement on physionet.org.`;
     case "missing_credentials":
       return `Downloading ${name} needs a PhysioNet account with access to it.`;
     case "download_network_failed":
@@ -318,14 +330,33 @@ const make = Effect.gen(function* () {
   const runM4 = Effect.fn("ClinicalDatasets.runM4")(function* (
     name: string,
     args: ReadonlyArray<string>,
+    credentials?: PhysioNetCredentials,
   ) {
     const { command, env } = yield* m4;
     let failure: M4Failure | undefined;
+    const password = credentials === undefined ? undefined : Redacted.value(credentials.password);
+    // M4 redacts the password from what it reports. This is for whatever else
+    // ends up on its error stream, since the end of that is shown to the user.
+    const withoutPassword = (text: string) =>
+      password === undefined || password.length === 0
+        ? text
+        : text.replaceAll(password, "<redacted>");
     const output = yield* processRunner
       .run({
         command,
-        args: [...args, "--json", "--events", "ndjson"],
+        args: [
+          ...args,
+          // M4 reads the login as a JSON document from a path. Its standard
+          // input is the one path that is never a file on disk.
+          ...(credentials === undefined ? [] : ["--physionet-credentials-file", "/dev/stdin"]),
+          "--json",
+          "--events",
+          "ndjson",
+        ],
         env,
+        ...(credentials === undefined || password === undefined
+          ? {}
+          : { stdin: encodeM4Credentials({ username: credentials.username, password }) }),
         timeout: JOB_TIMEOUT,
         outputMode: "truncate",
         maxOutputBytes: 64 * 1024,
@@ -348,9 +379,15 @@ const make = Effect.gen(function* () {
       .join(" ");
     return yield* new ClinicalDatasetsError({
       message: describeFailure(name, failure),
-      detail: detail || output.stderr.trim().slice(-OUTPUT_TAIL_CHARACTERS) || undefined,
+      detail:
+        withoutPassword(detail || output.stderr.trim().slice(-OUTPUT_TAIL_CHARACTERS)) || undefined,
     });
   });
+
+  const requireDatasetName = (name: string) =>
+    DATASET_NAME.test(name)
+      ? Effect.void
+      : Effect.fail(new ClinicalDatasetsError({ message: `"${name}" is not a dataset name.` }));
 
   /** Runs `work` as the dataset's job in the server's scope and returns its fiber. */
   const start = Effect.fn("ClinicalDatasets.start")(function* (
@@ -358,9 +395,7 @@ const make = Effect.gen(function* () {
     kind: "add" | "download",
     work: Effect.Effect<void, ClinicalDatasetsError>,
   ) {
-    if (!DATASET_NAME.test(name)) {
-      return yield* new ClinicalDatasetsError({ message: `"${name}" is not a dataset name.` });
-    }
+    yield* requireDatasetName(name);
     // Fail before there is a job, so the caller hears that nothing started.
     yield* m4;
     if (
@@ -445,14 +480,32 @@ const make = Effect.gen(function* () {
       );
     });
 
-  const download: ClinicalDatasets["Service"]["download"] = ({ name }) =>
-    start(
-      name,
-      "download",
-      runM4(name, ["download", name]).pipe(
-        Effect.andThen(runM4(name, ["init", name, "--no-interactive"])),
-      ),
-    );
+  const download: ClinicalDatasets["Service"]["download"] = ({ name, credentials }) =>
+    Effect.gen(function* () {
+      yield* requireDatasetName(name);
+      // An open dataset is downloaded without a login even when one was sent.
+      const dataset = (yield* list).find((candidate) => candidate.name === name);
+      const login = dataset?.requiresCredentials === true ? credentials : undefined;
+      if (dataset?.requiresCredentials === true && login === undefined) {
+        return yield* new ClinicalDatasetsError({
+          message: `Downloading ${name} needs a PhysioNet account with access to it.`,
+        });
+      }
+      if (login !== undefined && platform === "win32") {
+        return yield* new ClinicalDatasetsError({
+          message:
+            "Lincei cannot download credentialed datasets on Windows yet. Download the files from PhysioNet and add the folder instead.",
+        });
+      }
+      return yield* start(
+        name,
+        "download",
+        runM4(name, ["download", name], login).pipe(
+          // Preparing the downloaded files needs no login.
+          Effect.andThen(runM4(name, ["init", name, "--no-interactive"])),
+        ),
+      );
+    });
 
   const cancel: ClinicalDatasets["Service"]["cancel"] = (name) =>
     Effect.gen(function* () {

@@ -30,6 +30,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { describeDataset, describeJobProgress } from "./clinicalPresentation";
 import { describeCommandFailure, useClinicalDatasets } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
+import { PhysioNetDownloadDialog } from "./PhysioNetDownloadDialog";
 
 type DatasetAction = Extract<
   LinceiRequest,
@@ -146,11 +147,13 @@ function DatasetRow({
   disabled,
   onAction,
   onAddFromFolder,
+  onDownloadWithLogin,
 }: {
   readonly dataset: ClinicalDataset;
   readonly disabled: boolean;
   readonly onAction: (action: DatasetAction) => void;
   readonly onAddFromFolder: () => void;
+  readonly onDownloadWithLogin: () => void;
 }) {
   const { job, name } = dataset;
   const running = job?.state === "running";
@@ -211,14 +214,18 @@ function DatasetRow({
             <Button size="xs" variant="outline" disabled={disabled} onClick={onAddFromFolder}>
               Add from folder…
             </Button>
-            {dataset.downloadable && !dataset.requiresCredentials ? (
+            {dataset.downloadable ? (
               <Button
                 size="xs"
                 variant="outline"
                 disabled={disabled}
-                onClick={() => onAction({ _tag: "ClinicalDatasetDownload", name })}
+                onClick={
+                  dataset.requiresCredentials
+                    ? onDownloadWithLogin
+                    : () => onAction({ _tag: "ClinicalDatasetDownload", name })
+                }
               >
-                Download
+                {dataset.requiresCredentials ? "Download…" : "Download"}
               </Button>
             ) : null}
           </>
@@ -245,6 +252,7 @@ export function ClinicalDatasetList({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
   const [addingTo, setAddingTo] = useState<ClinicalDataset | null>(null);
+  const [signingInFor, setSigningInFor] = useState<ClinicalDataset | null>(null);
   // Stopping a job waits for M4 to exit, which can take a few seconds.
   const [acting, setActing] = useState<ReadonlySet<string>>(new Set());
 
@@ -284,6 +292,7 @@ export function ClinicalDatasetList({
             disabled={!canOperate || acting.has(dataset.name)}
             onAction={(action) => void run(action)}
             onAddFromFolder={() => setAddingTo(dataset)}
+            onDownloadWithLogin={() => setSigningInFor(dataset)}
           />
         ))}
       </ul>
@@ -292,6 +301,14 @@ export function ClinicalDatasetList({
         canBrowse={window.desktopBridge !== undefined && environmentId === primaryEnvironmentId}
         onAdd={(name, source) => void run({ _tag: "ClinicalDatasetAdd", name, source })}
         onClose={() => setAddingTo(null)}
+      />
+      <PhysioNetDownloadDialog
+        dataset={signingInFor}
+        environmentId={environmentId}
+        onDownload={(name, credentials) =>
+          void run({ _tag: "ClinicalDatasetDownload", name, credentials })
+        }
+        onClose={() => setSigningInFor(null)}
       />
     </>
   );
