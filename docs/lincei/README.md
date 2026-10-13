@@ -36,6 +36,7 @@ content. `git log --first-parent` leaves it out.
 | Clinical step after the first-run wizard                         | [`LinceiWelcomeWizard.tsx`](../../apps/web/src/lincei/LinceiWelcomeWizard.tsx)                                                                                                                                                     | `routes/welcome.tsx` renders it in place of `WelcomeWizard`; the stage label is an identity rule                                                                                                                             |
 | Researcher mode and Techie mode                                  | [`apps/web/vite/linceiResearcherMode.ts`](../../apps/web/vite/linceiResearcherMode.ts), [`apps/web/src/lincei/mode/`](../../apps/web/src/lincei/mode), [`LinceiPreferences.ts`](../../apps/server/src/lincei/LinceiPreferences.ts) | One changed line and an import each in `state/server.ts`, `localApi.ts`, `CommandPalette.tsx`, `SettingsSidebarNav.tsx`, `useAvailableSettingsSearchItems.ts`; two in `ChatView.tsx`; the switch row in `SettingsPanels.tsx` |
 | A researcher's wording for upstream's developer copy             | [`apps/web/vite/linceiCopy.ts`](../../apps/web/vite/linceiCopy.ts)                                                                                                                                                                 | None: applied by the brand plugin as it builds                                                                                                                                                                               |
+| Default look (colours, code surfaces, window colour)             | [`apps/web/src/lincei/theme.css`](../../apps/web/src/lincei/theme.css), [`apps/web/vite/linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts)                                                                                       | None in the web app: compiled in by the brand plugin. One governed line in `DesktopWindow.ts`                                                                                                                                |
 | Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                                                                               | None                                                                                                                                                                                                                         |
 
 To see every upstream file Lincei has touched:
@@ -67,7 +68,8 @@ Then, for each conflict:
   If the script reports a rule that no longer matches, upstream changed that line; update the
   rule to the new text.
 
-- **`README.md`, icons, `T3Wordmark.tsx`:** keep Lincei's side.
+- **`README.md`, icons, `T3Wordmark.tsx`, `apps/desktop/resources/dmg/dmg-background-latest.svg`:**
+  keep Lincei's side.
 - **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `RpcAuthorization.ts`,
   `RpcInstrumentation.ts`, `rpc.ts`, `runtimeInstructions.ts`, `ChatView.tsx`, `SidebarChrome.tsx`,
   `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
@@ -273,6 +275,31 @@ Git stays underneath and out of sight. A project that is a git repository still 
 checkpoint after every turn, so rewinding a conversation works there. A plain folder gets none:
 Lincei does not turn a folder the researcher chose into a repository, because a checkpoint copies
 every file that is not ignored into `.git`, and a research folder holds data.
+
+## The default look
+
+Lincei's look is built from its icon: the tile's warm paper is the light canvas, ink is the text,
+slate replaces upstream's near-black in dark, and one accent, a deep petrol, carries buttons,
+links, focus, and the wizard's markers. It replaces upstream's stock look only. A theme the user
+picks, the contrast and glass sliders, and custom fonts are upstream's and keep winning.
+
+- [`theme.css`](../../apps/web/src/lincei/theme.css) overrides upstream's stock tokens with
+  upstream's own selectors. The brand plugin appends it to `index.css` as an `@import`, so
+  Tailwind compiles it with upstream's stylesheet and its rules come last at the same specificity.
+  A `<style>` tag in `index.html` would not work: the app's stylesheet is added to the page at run
+  time, after everything in `<head>`, and would win every tie. The file's header lists the three
+  rules that keep it from fighting upstream or the user.
+- Upstream repeats its stock colours outside CSS: in the boot script and inline style of
+  `index.html`, in the stock palette as theme roles (`packages/shared/src/themePalettes.ts`), and in
+  the Appearance previews. [`linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts) replaces those
+  literals with exact-once rules, the same mechanism as the copy, checked the same way.
+- The colour Electron paints before the page exists is a governed line in `DesktopWindow.ts`.
+- The mark inside the app (`T3Wordmark.tsx`) is the icon's serif L, cut out of a tile in the
+  text colour.
+
+Type is still upstream's system stack. The Icon Composer projects under `assets/*/app-icon.icon/`
+are still upstream's, so `vp run icons:export` would write T3 Code's icons over Lincei's PNGs: do
+not run it until those sources are replaced.
 
 ## Releasing
 
