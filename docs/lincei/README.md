@@ -102,8 +102,21 @@ attribute, so that control is visible again in researcher mode until the selecto
 are updated. The last two never conflict in git, because Lincei does not edit those files; the
 check is the only thing that notices.
 
-A desktop or server test that now fails only because it asserts an upstream identity literal
-(`com.t3tools.t3code`, `t3code://`, `~/.t3`) belongs in the identity script's list of tests.
+The typecheck and the tests show what is left, because none of it conflicts in git:
+
+- **Lincei's own files use upstream's modules.** When the typecheck fails inside `lincei/`,
+  upstream renamed or moved something they import. `git log -S'<old name>' t3code/main` finds the
+  commit, which also shows how upstream changed its own callers; change Lincei's the same way.
+- **New upstream code can carry an identity literal the script has no rule for yet.** A governed
+  test then fails, because its expectation is rewritten and the new line it tests is not (or the
+  other way round, where the test writes the literal differently, such as with escaped dots in a
+  regular expression). Add an exact rule for that line and run `apply`. A desktop or server test
+  that fails only because it asserts an upstream identity literal (`com.t3tools.t3code`,
+  `t3code://`, `~/.t3`) belongs in the identity script's list of tests.
+- **An upstream test that builds a layer Lincei hooks into must pass without Lincei's services.**
+  Hook code therefore reads Lincei's services as optional (`Effect.serviceOption`, as in
+  [`mcp/handlers.ts`](../../apps/server/src/lincei/mcp/handlers.ts)). If such a test stops
+  compiling after a merge, a Lincei requirement has leaked into an upstream layer.
 
 Merge often. A weekly merge is a handful of mechanical conflicts; a quarterly one is a project.
 
@@ -275,13 +288,11 @@ a shortcut, a context menu, or settings search, add it to
 when upstream renames a settings id or a shortcut command.
 
 **Starting settings** ([`researcherDefaults.ts`](../../apps/web/src/lincei/researcherDefaults.ts)).
-Three client settings start differently from upstream's default: the floating browser preview is
-off, because closing the right panel would otherwise leave the research board floating over the
-conversation; archiving a conversation asks first; and in-app notifications are on. The wizard
-writes them once per device when it reaches Lincei's step, through upstream's own settings store,
-so they cost no upstream line and are the user's to change afterwards. The reset arrows in
-Settings still lead to upstream's defaults, and a test fails when upstream's default catches up
-with one of them, which is when to drop it.
+Two client settings start differently from upstream's default: archiving a conversation asks
+first, and in-app notifications are on. The wizard writes them once per device when it reaches
+Lincei's step, through upstream's own settings store, so they cost no upstream line and are the
+user's to change afterwards. The reset arrows in Settings still lead to upstream's defaults, and a
+test fails when upstream's default catches up with one of them, which is when to drop it.
 
 Git stays underneath and out of sight. A project that is a git repository still gets upstream's
 checkpoint after every turn, so rewinding a conversation works there. A plain folder gets none:

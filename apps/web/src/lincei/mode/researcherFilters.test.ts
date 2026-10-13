@@ -1,5 +1,5 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { CommandPaletteGroup } from "~/components/CommandPalette.logic";
 import { SETTINGS_SEARCH_ITEMS } from "~/components/settings/settingsSearch";
