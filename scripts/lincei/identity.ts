@@ -156,6 +156,27 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
     exact: [['path.join(NodeOS.homedir(), ".t3")', 'path.join(NodeOS.homedir(), ".lincei")']],
   },
 
+  // Text a researcher reads that the web build's display-name rewrite cannot
+  // reach, because the server and the desktop shell are built separately: the
+  // page shown after signing in with ChatGPT, the macOS permission helper, the
+  // launcher's own messages, provider status, and the README of a new project.
+  "apps/server/src/provider/CodexAuthCallbackPage.ts": { tokens: NAME },
+  "apps/desktop/src/permissions/MacPermissionHelper.ts": { tokens: NAME },
+  "apps/desktop/src/app/DesktopCliShim.ts": { tokens: NAME },
+  "apps/server/src/provider/ClaudeProvider.ts": {
+    exact: [
+      ['"Claude is disabled in T3 Code settings."', '"Claude is disabled in Lincei settings."'],
+    ],
+  },
+  "apps/server/src/provider/CodexProvider.ts": {
+    exact: [
+      ['"Codex is disabled in T3 Code settings."', '"Codex is disabled in Lincei settings."'],
+    ],
+  },
+  "apps/server/src/project/ManagedProjectFolders.ts": {
+    exact: [['"Created in [T3 Code](https://t3.codes)."', '"Created in Lincei."']],
+  },
+
   // What upstream tells users about itself that is false for Lincei: it
   // collects no usage data and has no hosted privacy policy. These are checked
   // here, not left to the display-name rewrite, so that an upstream rewording
@@ -195,6 +216,14 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   // Upstream tests that assert the values above. When an upstream merge brings
   // a test that fails only on an identity literal, add it with the tokens it pins.
   "apps/desktop/src/app/DesktopAppIdentity.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopCliShim.test.ts": { tokens: NAME },
+  "apps/desktop/src/permissions/MacPermissionHelper.test.ts": { tokens: NAME },
+  "apps/server/src/provider/ProviderRegistry.test.ts": {
+    tokens: [["Codex is disabled in T3 Code settings.", "Codex is disabled in Lincei settings."]],
+  },
+  "apps/server/src/provider/providerStatusCache.test.ts": {
+    tokens: [["Codex is disabled in T3 Code settings.", "Codex is disabled in Lincei settings."]],
+  },
   "apps/desktop/src/app/DesktopClerk.test.ts": { tokens: EVERY_TOKEN },
   "apps/desktop/src/app/DesktopEarlyElectronStartup.test.ts": { tokens: EVERY_TOKEN },
   "apps/desktop/src/app/DesktopEnvironment.test.ts": { tokens: EVERY_TOKEN },
