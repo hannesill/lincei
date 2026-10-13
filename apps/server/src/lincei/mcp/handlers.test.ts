@@ -2,9 +2,11 @@ import { describe, expect, it } from "@effect/vitest";
 import type { ClinicalRuntimeStatus } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Tool, Toolkit } from "effect/ai";
 
 import * as ClinicalRuntime from "../ClinicalRuntime.ts";
 import * as ClinicalHandlers from "./handlers.ts";
+import { ClinicalToolkit } from "./tools.ts";
 
 const READY: ClinicalRuntimeStatus = {
   state: "ready",
@@ -17,13 +19,14 @@ const READY: ClinicalRuntimeStatus = {
   demoDataset: "ready",
 };
 
-// Upstream's tests build `McpHttpServer.layer`, which registers these handlers,
-// from the services upstream knows. This line stops compiling when the
-// handlers start to require the clinical runtime again.
-type Requires<T> = T extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
-const needsNoClinicalRuntime: [
-  Extract<Requires<typeof ClinicalHandlers.layer>, ClinicalRuntime.ClinicalRuntime>,
-] extends [never]
+// Upstream's tests build `McpHttpServer.layer`, which registers this toolkit,
+// from the services upstream knows. What a tool declares as a dependency
+// becomes a requirement of that layer, so this line stops compiling when a
+// tool declares the clinical runtime again.
+type Declared = Tool.HandlerServices<
+  Toolkit.Tools<typeof ClinicalToolkit>[keyof Toolkit.Tools<typeof ClinicalToolkit>]
+>;
+const needsNoClinicalRuntime: [Extract<Declared, ClinicalRuntime.ClinicalRuntime>] extends [never]
   ? true
   : false = true;
 

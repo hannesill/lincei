@@ -4,16 +4,16 @@ import { Tool, Toolkit } from "effect/ai";
 
 import * as McpInvocationContext from "../../mcp/McpInvocationContext.ts";
 import * as ThreadManagementService from "../../orchestration-v2/ThreadManagementService.ts";
-import * as ClinicalRuntime from "../ClinicalRuntime.ts";
 
 const shared = {
   success: ClinicalRuntimeStatus,
   failure: OrchestratorMcpFailure,
   failureMode: "return" as const,
+  // Not the clinical runtime: the handlers read it as an optional service, so
+  // that upstream's MCP server layer requires nothing of Lincei's (handlers.ts).
   dependencies: [
     McpInvocationContext.McpInvocationContext,
     ThreadManagementService.ThreadManagementService,
-    ClinicalRuntime.ClinicalRuntime,
   ],
 };
 
