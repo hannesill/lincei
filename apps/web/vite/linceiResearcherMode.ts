@@ -275,6 +275,20 @@ export const HIDDEN_UNLESS_TECHIE: ReadonlyArray<HiddenControl> = [
     ],
   },
   {
+    // Closing the right panel turns its browser tab into a small floating
+    // window over the conversation. For a researcher that tab is the research
+    // board, which the board button brings back; hidden, upstream parks the
+    // page off screen instead of painting it.
+    what: "Floating mini browser shown when the right panel is closed",
+    selector: "[data-preview-mini-player]",
+    anchors: [
+      {
+        file: "apps/web/src/components/preview/ThreadPreviewMiniPlayer.tsx",
+        text: "data-preview-mini-player={sourceKey}",
+      },
+    ],
+  },
+  {
     what: "Sidebar: terminal-running icon",
     selector: '[data-testid^="sidebar-terminal-status-"]',
     anchors: [

@@ -16,6 +16,11 @@ export interface CopyRule {
 
 export const COPY_RULES: ReadonlyArray<CopyRule> = [
   {
+    file: "apps/web/src/components/settings/providerStatus.ts",
+    from: 'headline: authLabel ? `Not authenticated · ${authLabel}` : "Not authenticated",',
+    to: 'headline: authLabel ? `Not signed in · ${authLabel}` : "Not signed in",',
+  },
+  {
     file: "apps/web/src/components/chat/DraftHeroHeadline.tsx",
     from: '? "What should we work on?"',
     to: '? "What do you want to find out?"',
@@ -113,7 +118,7 @@ export const COPY_RULES: ReadonlyArray<CopyRule> = [
   {
     file: "apps/web/src/components/ProviderUpdateLaunchNotification.logic.ts",
     from: '"Install the update now or review provider settings."',
-    to: '"Install it now, or review your agents in Settings."',
+    to: '"Update now, or review your agents in Settings."',
   },
   {
     file: "apps/web/src/components/ProviderUpdateLaunchNotification.logic.ts",

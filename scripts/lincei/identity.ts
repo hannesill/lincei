@@ -175,14 +175,25 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "apps/server/src/provider/CodexAuthCallbackPage.ts": { tokens: NAME },
   "apps/desktop/src/permissions/MacPermissionHelper.ts": { tokens: NAME },
   "apps/desktop/src/app/DesktopCliShim.ts": { tokens: NAME },
+  // An agent that is not signed in. The wizard and Settings show this beside
+  // their own Sign in button, so the sentence says what to do there instead of
+  // naming a command to type.
   "apps/server/src/provider/ClaudeProvider.ts": {
     exact: [
       ['"Claude is disabled in T3 Code settings."', '"Claude is disabled in Lincei settings."'],
+      [
+        '"Claude Code is not authenticated. Run `claude auth login` and try again."',
+        '"Sign in with your Claude account to use it."',
+      ],
     ],
   },
   "apps/server/src/provider/CodexProvider.ts": {
     exact: [
       ['"Codex is disabled in T3 Code settings."', '"Codex is disabled in Lincei settings."'],
+      [
+        '"Codex CLI is not authenticated. Run `codex login` and try again."',
+        '"Sign in with your ChatGPT account to use it."',
+      ],
     ],
   },
   "apps/server/src/project/ManagedProjectFolders.ts": {
@@ -232,7 +243,13 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "apps/desktop/src/app/DesktopCliShim.test.ts": { tokens: NAME },
   "apps/desktop/src/permissions/MacPermissionHelper.test.ts": { tokens: NAME },
   "apps/server/src/provider/ProviderRegistry.test.ts": {
-    tokens: [["Codex is disabled in T3 Code settings.", "Codex is disabled in Lincei settings."]],
+    tokens: [
+      ["Codex is disabled in T3 Code settings.", "Codex is disabled in Lincei settings."],
+      [
+        "Codex CLI is not authenticated. Run `codex login` and try again.",
+        "Sign in with your ChatGPT account to use it.",
+      ],
+    ],
   },
   "apps/server/src/provider/providerStatusCache.test.ts": {
     tokens: [["Codex is disabled in T3 Code settings.", "Codex is disabled in Lincei settings."]],

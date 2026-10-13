@@ -10,9 +10,6 @@ import type { ClientSettingsPatch } from "@t3tools/contracts";
 import { persistClientSettingsPatch } from "~/hooks/useSettings";
 
 export const RESEARCHER_DEFAULTS = {
-  // The research board lives in the right panel. Closing the panel would
-  // otherwise leave the board floating over the conversation.
-  browserAutoShowFloatingPreview: false,
   // One stray click would otherwise make a conversation disappear.
   confirmThreadArchive: true,
   // Analyses run long: say so when another conversation finishes or needs an answer.

@@ -502,7 +502,7 @@ it.layer(
         assert.strictEqual(status.auth.status, "unauthenticated");
         assert.strictEqual(
           status.message,
-          "Codex CLI is not authenticated. Run `codex login` and try again.",
+          "Sign in with your ChatGPT account to use it.",
         );
       }),
     );
