@@ -3,6 +3,7 @@ import type { ConfirmDialogOptions, ContextMenuItem, LocalApi } from "@t3tools/c
 import { requestConfirmDialog } from "./confirmDialog";
 import { dismissContextMenu, showContextMenuFallback } from "./contextMenuFallback";
 import { readBrowserClientSettings, writeBrowserClientSettings } from "./clientPersistenceStorage";
+import { linceiLocalApi } from "./lincei/mode/contextMenu";
 
 let cachedApi: LocalApi | undefined;
 
@@ -78,7 +79,7 @@ function createBrowserLocalApi(): LocalApi {
 }
 
 export function createLocalApi(): LocalApi {
-  return createBrowserLocalApi();
+  return linceiLocalApi(createBrowserLocalApi());
 }
 
 export function readLocalApi(): LocalApi | undefined {

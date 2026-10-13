@@ -11,6 +11,7 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
 import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
+import { useLinceiSettingsSearchItems } from "../../lincei/mode/settings";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
@@ -31,7 +32,7 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
   const managedTunnelActive =
     cloudLinkState?.managedTunnelActive ?? cloudLinkState?.linked ?? false;
 
-  return useMemo(
+  const available = useMemo(
     () =>
       filterAvailableSettingsSearchItems({
         localEnvironmentDisabled,
@@ -72,4 +73,5 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
       scopeSearch.machine,
     ],
   );
+  return useLinceiSettingsSearchItems(available);
 }

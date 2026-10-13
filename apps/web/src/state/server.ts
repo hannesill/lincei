@@ -18,6 +18,7 @@ import { AsyncResult, Atom } from "effect/reactivity";
 
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
+import { linceiKeybindings } from "../lincei/mode/keybindings";
 import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { environmentSession } from "./session";
 
@@ -107,7 +108,10 @@ export const primaryServerProvidersAtom = Atom.make(
 ).pipe(Atom.withLabel("web-primary-server-providers"));
 
 export const primaryServerKeybindingsAtom = Atom.make((get): ServerConfig["keybindings"] =>
-  mergeWithDefaultKeybindings(get(primaryServerConfigAtom)?.keybindings ?? []),
+  linceiKeybindings(
+    get,
+    mergeWithDefaultKeybindings(get(primaryServerConfigAtom)?.keybindings ?? []),
+  ),
 ).pipe(Atom.withLabel("web-primary-server-keybindings"));
 
 export const primaryServerAvailableEditorsAtom = Atom.make(
