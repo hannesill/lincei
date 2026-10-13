@@ -171,7 +171,6 @@ import {
   type CommandPaletteProject,
   type CommandPaletteSubmenuItem,
   type CommandPaletteView,
-  filterCommandPaletteGroups,
   filterPinnedBrowseEntries,
   getCommandPaletteInputPlaceholder,
   getCommandPaletteMode,
@@ -180,6 +179,7 @@ import {
   reduceCommandPaletteUiState,
   type SearchOverlayMode,
 } from "./CommandPalette.logic";
+import { filterCommandPaletteGroups } from "../lincei/mode/palette";
 import { orderItemsByPreferredIds, sortLogicalProjectsForSidebar } from "./Sidebar.logic";
 import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteContent } from "./CommandPaletteContent";
