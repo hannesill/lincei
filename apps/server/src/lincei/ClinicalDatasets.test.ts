@@ -27,6 +27,7 @@ const m4Dataset = (
     readonly raw_root?: string;
     readonly parquet_root?: string;
     readonly db_path?: string;
+    readonly prepared?: boolean;
   },
 ) => ({
   name,
@@ -752,6 +753,44 @@ describe("ClinicalDatasets", () => {
                 parquet_present: true,
                 parquet_root: elsewhere,
                 db_path: path.join(elsewhere, "eicu.duckdb"),
+              }),
+            ),
+          },
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("leaves the converted files to an M4 that completes a dataset itself", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { baseDir, dataDir } = yield* clinicalHome();
+        const source = yield* rawFolder("patient.csv.gz");
+        const parquetRoot = path.join(dataDir, "parquet", "eicu");
+        yield* fileSystem.makeDirectory(parquetRoot, { recursive: true });
+        yield* fileSystem.writeFileString(path.join(parquetRoot, "patient.parquet"), "");
+        yield* withDatasets(
+          () => Effect.succeed(exited(0)),
+          ({ datasets }) =>
+            Effect.gen(function* () {
+              // Leaves the mark: M4 never says that it finished.
+              yield* Fiber.join(yield* datasets.add({ name: "eicu", source }));
+              yield* Fiber.join(yield* datasets.add({ name: "eicu", source }));
+              // Still not ready, and what M4 had converted is still there for it to build on.
+              expect(datasetOf(yield* datasets.list, "eicu")?.state).toBe("incomplete");
+              expect(yield* fileSystem.exists(path.join(parquetRoot, "patient.parquet"))).toBe(
+                true,
+              );
+            }),
+          {
+            baseDir,
+            listing: listingOf(
+              m4Dataset("eicu", {
+                setup_state: "incomplete",
+                parquet_present: true,
+                parquet_root: parquetRoot,
+                db_path: path.join(dataDir, "databases", "eicu.duckdb"),
+                prepared: false,
               }),
             ),
           },
