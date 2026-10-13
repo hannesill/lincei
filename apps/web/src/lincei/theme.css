@@ -4,20 +4,21 @@
  * (apps/web/vite/linceiBrand.ts), so it is compiled with upstream's stylesheet and
  * its rules come last.
  *
- * Three rules keep it from fighting upstream or the user:
+ * Four rules keep it from fighting upstream or the user:
  *
  * 1. Use upstream's selectors and nothing stronger. A theme the user picks is
  *    applied by html[data-theme-id] rules, which must keep winning. No !important.
  * 2. A literal colour set for light is set again for dark. Upstream's dark block
  *    only resets the tokens it changes, so a light-only value would show in dark.
  * 3. Do not set, in a dark block, a token that a user setting controls through an
- *    attribute on <html> (the diff colours). The two selectors tie, and this file
- *    comes last.
+ *    attribute on <html> (the diff colours). A dark block is at least as strong as
+ *    the attribute rule, and this file comes last.
+ * 4. A colour no theme maps goes in the html:not([data-theme-id]) block, which only
+ *    matches while no theme is chosen. On :root it would stay under every theme.
  */
 
+/* Tokens a theme also maps, and the control radius. Same selectors as upstream's stock blocks. */
 :root {
-  /* Flat surfaces. Upstream lays a noise texture over the body. */
-  --surface-grain: none;
   /* Crisper controls. --radius itself must stay: the composer's outline hard-codes the
      22px it produces (ComposerSurface.tsx). */
   --control-radius: 0.375rem;
@@ -47,20 +48,12 @@
   /* Petrol, the one accent */
   --primary: oklch(0.45 0.07 218);
   --primary-foreground: oklch(0.99 0.004 91);
-  --info: var(--primary);
-  --info-foreground: oklch(0.4 0.065 218);
 
   /* Status. Upstream uses these as text, so they are dark enough to read on paper. */
   --error: oklch(0.5 0.19 27);
   --error-foreground: oklch(0.44 0.16 27);
-  --success: oklch(0.48 0.115 152);
-  --success-foreground: oklch(0.42 0.1 152);
   --warning: oklch(0.5 0.11 65);
   --warning-foreground: oklch(0.45 0.1 62);
-
-  /* Counts beside a changed file. References only, and only here: see rule 3. */
-  --diff-addition-foreground: var(--success-foreground);
-  --diff-deletion-foreground: var(--error-foreground);
 
   --sidebar: oklch(0.948 0.01 91);
   --sidebar-control-surface: var(--accent);
@@ -70,8 +63,6 @@
 
   --terminal-cursor: var(--primary);
   --terminal-selection-background: oklch(0.45 0.07 218 / 20%);
-  --app-scrollbar-thumb: oklch(0.83 0.012 91);
-  --app-scrollbar-thumb-hover: oklch(0.74 0.012 91);
 
   @variant dark {
     /* Slate */
@@ -98,15 +89,11 @@
     /* A pale fill under dark text, so the same colour also reads as text on slate. */
     --primary: oklch(0.78 0.075 218);
     --primary-foreground: oklch(0.215 0.02 225);
-    --info: var(--primary);
-    --info-foreground: oklch(0.82 0.065 218);
     --update-foreground: var(--primary);
 
     --error: oklch(0.72 0.15 25);
     --error-foreground: oklch(0.78 0.12 25);
     --tool-error-icon: var(--error-foreground);
-    --success: oklch(0.76 0.13 152);
-    --success-foreground: oklch(0.8 0.12 152);
     --warning: oklch(0.8 0.125 80);
     --warning-foreground: oklch(0.84 0.12 85);
 
@@ -118,8 +105,6 @@
 
     --terminal-cursor: var(--primary);
     --terminal-selection-background: oklch(0.78 0.075 218 / 25%);
-    --app-scrollbar-thumb: oklch(0.925 0.008 91 / 12%);
-    --app-scrollbar-thumb-hover: oklch(0.925 0.008 91 / 20%);
   }
 }
 
@@ -159,18 +144,47 @@
 }
 
 /*
- * Upstream sets white text on two fills (bg-destructive in button.tsx and badge.tsx,
- * bg-info in PullRequestComposer.tsx). In dark those tokens are light, so that they
- * read as text on slate, and the filled element gets a deeper value of its own. Not
- * under a chosen theme, which brings its own colours.
+ * Tokens no theme maps. Upstream keeps its success and info colours, its grain and
+ * its scrollbar under every theme (index.css, "Success, info, provider, and channel
+ * identity colors remain independent"). Lincei's values for them apply only while no
+ * theme is chosen, so a theme the user picks renders as it does upstream.
  */
 html:not([data-theme-id]) {
+  /* Flat surfaces. Upstream lays a noise texture over the body. */
+  --surface-grain: none;
+
+  --info: var(--primary);
+  --info-foreground: oklch(0.4 0.065 218);
+  --success: oklch(0.48 0.115 152);
+  --success-foreground: oklch(0.42 0.1 152);
+
+  /* Counts beside a changed file. References only, and not in the dark block: rule 3. */
+  --diff-addition-foreground: var(--success-foreground);
+  --diff-deletion-foreground: var(--error-foreground);
+
+  --app-scrollbar-thumb: oklch(0.83 0.012 91);
+  --app-scrollbar-thumb-hover: oklch(0.74 0.012 91);
+
   @variant dark {
-    & .bg-destructive {
-      --destructive: oklch(0.56 0.21 27);
+    --info-foreground: oklch(0.82 0.065 218);
+    --success: oklch(0.76 0.13 152);
+    --success-foreground: oklch(0.8 0.12 152);
+    --app-scrollbar-thumb: oklch(0.925 0.008 91 / 12%);
+    --app-scrollbar-thumb-hover: oklch(0.925 0.008 91 / 20%);
+
+    /*
+     * Upstream hard-codes white text on two fills: bg-destructive (button.tsx,
+     * badge.tsx, and at 90% on the stop button in ComposerPrimaryActions.tsx) and
+     * bg-info (PullRequestComposer.tsx, DeviceStreamView.tsx). In dark those tokens
+     * are light, so that they read as text on slate. An element that pairs the fill
+     * with white text gets a deeper value of its own. Status dots use the same
+     * classes without white text and keep the light token.
+     */
+    & :is(.bg-destructive, .bg-destructive\/90).text-white {
+      --destructive: oklch(0.59 0.21 27);
     }
 
-    & .bg-info {
+    & .bg-info.text-white {
       --info: oklch(0.54 0.08 218);
     }
   }
