@@ -5,8 +5,11 @@
  * walking up from where it runs) and one server per store. Agents publish
  * cards into the store from their thread's working directory; `open` starts,
  * or finds, the server for that same directory so a client can show it beside
- * the conversation. Vitrine owns the server's lifetime: it outlives a Lincei
- * restart, and starting it again returns the one already running.
+ * the conversation. Vitrine's servers never stop by themselves and Vitrine
+ * has ten ports for them, so when this server shuts down it stops the ones
+ * for the folders it opened or watched. Starting one again is quick and finds
+ * the study as it was. Servers in folders this server never touched are left
+ * alone.
  *
  * `activity` answers "has this study gained a card?" for a client deciding
  * whether to open the board by itself. It is asked every few seconds while an
@@ -42,10 +45,16 @@ const decodeVitrineLifecycle = Schema.decodeUnknownEffect(Schema.fromJsonString(
 export class ResearchBoardError extends Schema.TaggedError<ResearchBoardError>()(
   "ResearchBoardError",
   {
+    /** What went wrong and what to do next, in words for the person looking at the board. */
     message: Schema.String,
+    /** What Vitrine reported, for whoever helps them. */
     detail: Schema.optional(Schema.String),
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {}
+
+const TRY_AGAIN =
+  "Press the research board button again; if it keeps failing, quit Lincei and open it again.";
 
 export class ResearchBoard extends Context.Service<
   ResearchBoard,
@@ -80,6 +89,36 @@ const make = Effect.gen(function* () {
   /** Where each working directory's study store is, as Vitrine resolved it. */
   const storeByCwd = new Map<string, string>();
 
+  const vitrineCommand = Effect.map(clinicalRuntime.status, ({ python }) =>
+    path.join(path.dirname(python), platform === "win32" ? "vitrine.exe" : "vitrine"),
+  );
+
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      // One folder per store: several folders can share a study.
+      const folders = new Map([...storeByCwd].map(([cwd, store]) => [store, cwd]));
+      if (folders.size === 0) return;
+      const vitrine = yield* vitrineCommand;
+      // All at once, and each in its own process: a server that is being
+      // killed still gets its boards stopped.
+      yield* Effect.forEach(
+        folders.values(),
+        (cwd) =>
+          processRunner
+            .run({
+              command: vitrine,
+              args: ["stop", "--json"],
+              cwd,
+              timeout: "20 seconds",
+              outputMode: "truncate",
+              maxOutputBytes: 64 * 1024,
+            })
+            .pipe(Effect.ignore),
+        { concurrency: "unbounded", discard: true },
+      );
+    }),
+  );
+
   /** Runs a Vitrine lifecycle command in `cwd` and reads the JSON it prints. */
   const lifecycleOf = Effect.fn("ResearchBoard.lifecycleOf")(function* (
     cwd: string,
@@ -91,16 +130,13 @@ const make = Effect.gen(function* () {
     );
     if (!isDirectory) {
       return yield* new ResearchBoardError({
-        message: "The folder this thread works in no longer exists.",
+        message:
+          "The folder this conversation works in no longer exists, so its research board cannot be shown. Continue in a conversation whose folder is still there.",
         detail: cwd,
       });
     }
 
-    const { python } = yield* clinicalRuntime.status;
-    const vitrine = path.join(
-      path.dirname(python),
-      platform === "win32" ? "vitrine.exe" : "vitrine",
-    );
+    const vitrine = yield* vitrineCommand;
     const output = yield* processRunner
       .run({
         command: vitrine,
@@ -112,12 +148,13 @@ const make = Effect.gen(function* () {
       })
       .pipe(
         Effect.mapError(
-          () =>
+          (cause) =>
             new ResearchBoardError({
               message:
                 command === "start"
-                  ? "Could not start the research board."
-                  : "Could not ask Vitrine where this study is kept.",
+                  ? `Lincei could not start the research board. ${TRY_AGAIN}`
+                  : `Lincei could not look for new research cards in this conversation's study. ${TRY_AGAIN}`,
+              cause,
             }),
         ),
       );
@@ -128,7 +165,7 @@ const make = Effect.gen(function* () {
       Effect.mapError(
         () =>
           new ResearchBoardError({
-            message: "The research board did not report how to reach it.",
+            message: `The research board did not say how to reach it. ${TRY_AGAIN}`,
             detail: (output.stderr.trim() || output.stdout.trim()).slice(-800),
           }),
       ),
@@ -142,7 +179,8 @@ const make = Effect.gen(function* () {
     if (lifecycle.status !== "running" || lifecycle.url === null || lifecycle.port === null) {
       const detail = describeError(lifecycle.error) ?? output.stderr.trim().slice(-800);
       return yield* new ResearchBoardError({
-        message: "The research board did not start.",
+        // Quitting stops the boards Lincei opened, which frees a place for this one.
+        message: `The research board did not start. ${TRY_AGAIN}`,
         ...(detail.length === 0 ? {} : { detail }),
       });
     }
