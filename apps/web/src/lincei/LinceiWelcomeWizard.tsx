@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { Dialog } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { Switch } from "~/components/ui/switch";
 import { WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "~/components/ui/wizard";
 import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
@@ -26,7 +27,10 @@ import {
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import type { ClinicalStatusView } from "./linceiAnswers";
+import { useTechieModeSwitch } from "./mode/techieModeSwitch";
 import { ProviderDataNotice } from "./ProviderDataNotice";
+import { seedResearcherDefaults } from "./researcherDefaults";
+import { TECHIE_MODE_SETTING } from "./settingsSearchItems";
 
 function ClinicalStep({
   environmentId,
@@ -45,6 +49,7 @@ function ClinicalStep({
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const setUp = useClinicalSetup(environmentId, refresh);
   const connection = useEnvironment(environmentId)?.connection.phase;
+  const [techie, setTechie] = useTechieModeSwitch();
   const status = view.phase === "known" ? view.status : null;
   const action = status === null ? null : clinicalSetupAction(status);
   const lost =
@@ -129,6 +134,24 @@ function ClinicalStep({
               </CollapsiblePanel>
             </Collapsible>
           ) : null}
+          {/*
+            Setup is the one place everybody passes, and a developer who misses
+            the terminal would not know to look for a switch in Settings.
+          */}
+          <div className="flex items-start justify-between gap-6 border-t border-border pt-4">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium text-foreground">{TECHIE_MODE_SETTING.title}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                For people who work with code: shows terminals, file changes and git beside the
+                conversation. Leave it off otherwise. You can change it under Settings, General.
+              </p>
+            </div>
+            <Switch
+              checked={techie}
+              onCheckedChange={setTechie}
+              aria-label={TECHIE_MODE_SETTING.title}
+            />
+          </div>
         </div>
       </ScrollArea>
       <div className="mt-5 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
@@ -180,11 +203,11 @@ export function LinceiWelcomeWizard(props: ComponentProps<typeof WelcomeWizard>)
     return (
       <WelcomeWizard
         {...props}
-        onDone={(projectRef) =>
-          environmentId === null || view.phase === "absent"
-            ? props.onDone(projectRef)
-            : setFinished({ projectRef })
-        }
+        onDone={(projectRef) => {
+          if (environmentId === null || view.phase === "absent") return props.onDone(projectRef);
+          seedResearcherDefaults();
+          setFinished({ projectRef });
+        }}
       />
     );
   }

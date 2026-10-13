@@ -3,7 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { searchSettings } from "~/components/settings/settingsSearch";
 
 import { withoutTechieSettings } from "./mode/researcherFilters";
-import { CLINICAL_SETTINGS, LINCEI_SETTINGS_SEARCH_ITEMS } from "./settingsSearchItems";
+import {
+  CLINICAL_SETTINGS,
+  LINCEI_SETTINGS_SEARCH_ITEMS,
+  TECHIE_MODE_SETTING,
+} from "./settingsSearchItems";
 
 /** Where the first result for a query leads, as the sidebar and the palette would go. */
 const firstResult = (query: string) => {
@@ -26,9 +30,19 @@ describe("Clinical Data in settings search", () => {
   });
 
   it("only points at anchors the page renders", () => {
-    const anchors = new Set<string>(Object.values(CLINICAL_SETTINGS).map(({ id }) => id));
+    const anchors = new Set<string>([
+      ...Object.values(CLINICAL_SETTINGS).map(({ id }) => id),
+      TECHIE_MODE_SETTING.id,
+    ]);
     for (const item of LINCEI_SETTINGS_SEARCH_ITEMS) {
       expect(anchors.has("targetId" in item ? item.targetId : item.id), item.id).toBe(true);
+    }
+  });
+
+  it("leads a researcher-mode search for a developer feature to the Techie mode switch", () => {
+    for (const query of ["techie", "terminal", "git", "keyboard shortcuts", "developer"]) {
+      const found = withoutTechieSettings(searchSettings(query)).map((item) => item.id);
+      expect(found, query).toContain(TECHIE_MODE_SETTING.id);
     }
   });
 

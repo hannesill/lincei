@@ -1,7 +1,8 @@
 /**
  * What Settings search, and the command palette that searches the same list,
- * find for Clinical Data. `settingsSearch.ts` spreads these into upstream's
- * catalog, which is the one change that file needs.
+ * find for Lincei's own settings: Clinical Data and the Techie mode switch.
+ * `settingsSearch.ts` spreads these into upstream's catalog, which is the one
+ * change that file needs.
  */
 import type { SettingsSearchItem } from "~/components/settings/settingsSearch";
 
@@ -12,7 +13,19 @@ export const CLINICAL_SETTINGS = {
   datasets: { id: "clinical-datasets", title: "Datasets" },
 } as const;
 
+/** The row on Settings, General that switches between researcher mode and upstream's full feature set. */
+export const TECHIE_MODE_SETTING = { id: "techie-mode", title: "Techie mode" } as const;
+
 export const LINCEI_SETTINGS_SEARCH_ITEMS = [
+  {
+    // Found by what it brings back: in researcher mode those settings are not
+    // in the list, so their names lead here instead of nowhere.
+    ...TECHIE_MODE_SETTING,
+    to: "/settings/general",
+    searchTerms: [
+      "techie mode developer researcher advanced code terminal git branch worktree diff pull request source control keybindings keyboard shortcuts connections remote",
+    ],
+  },
   {
     ...CLINICAL_SETTINGS.tools,
     to: "/settings/clinical",
