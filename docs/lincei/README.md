@@ -21,20 +21,22 @@ content. `git log --first-parent` leaves it out.
 
 ## What the overlay consists of
 
-| Part                                                             | Where                                                                                                                                                                      | Hook in upstream files                                                                                    |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                           | The files that script lists, rewritten by it, never by hand                                               |
-| Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                       | One plugin entry in `apps/web/vite.config.ts`                                                             |
-| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                                                                                                    | Same file names as upstream, Lincei content                                                               |
-| Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                             | Two lines in `apps/server/src/server.ts`                                                                  |
-| Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                          | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                |
-| What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                         | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                    |
-| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts) | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`                        |
-| Datasets and M4's skills for agents                              | [`ClinicalDatasets.ts`](../../apps/server/src/lincei/ClinicalDatasets.ts), [`ClinicalSkillLinks.ts`](../../apps/server/src/lincei/ClinicalSkillLinks.ts)                   | None                                                                                                      |
-| Research board button, which also opens the board by itself      | [`apps/web/src/lincei/`](../../apps/web/src/lincei), [`apps/server/src/lincei/ResearchBoard.ts`](../../apps/server/src/lincei/ResearchBoard.ts)                            | `ChatView.tsx` renders `LinceiPanelLayoutControls` in place of `PanelLayoutControls`                      |
-| Settings, Clinical Data                                          | [`ClinicalDataSettings.tsx`](../../apps/web/src/lincei/ClinicalDataSettings.tsx), `apps/web/src/routes/settings.clinical.tsx`                                              | Three lines in `settingsSearch.ts`, two in `SettingsSidebarNav.tsx`, and the generated `routeTree.gen.ts` |
-| Clinical step after the first-run wizard                         | [`LinceiWelcomeWizard.tsx`](../../apps/web/src/lincei/LinceiWelcomeWizard.tsx)                                                                                             | `routes/welcome.tsx` renders it in place of `WelcomeWizard`; the stage label is an identity rule          |
-| Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                       | None                                                                                                      |
+| Part                                                             | Where                                                                                                                                                                                                                              | Hook in upstream files                                                                                                                                                                                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                                                                                   | The files that script lists, rewritten by it, never by hand                                                                                                                                                                  |
+| Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                                                                               | One plugin entry in `apps/web/vite.config.ts`                                                                                                                                                                                |
+| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                                                                                                                                                            | Same file names as upstream, Lincei content                                                                                                                                                                                  |
+| Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                                                                                     | Two lines in `apps/server/src/server.ts`                                                                                                                                                                                     |
+| Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
+| What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                                                                                 | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                                                                                                                                       |
+| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts)                                                         | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`                                                                                                                                           |
+| Datasets and M4's skills for agents                              | [`ClinicalDatasets.ts`](../../apps/server/src/lincei/ClinicalDatasets.ts), [`ClinicalSkillLinks.ts`](../../apps/server/src/lincei/ClinicalSkillLinks.ts)                                                                           | None                                                                                                                                                                                                                         |
+| Research board button, which also opens the board by itself      | [`apps/web/src/lincei/`](../../apps/web/src/lincei), [`apps/server/src/lincei/ResearchBoard.ts`](../../apps/server/src/lincei/ResearchBoard.ts)                                                                                    | `ChatView.tsx` renders `LinceiPanelLayoutControls` in place of `PanelLayoutControls`                                                                                                                                         |
+| Settings, Clinical Data                                          | [`ClinicalDataSettings.tsx`](../../apps/web/src/lincei/ClinicalDataSettings.tsx), `apps/web/src/routes/settings.clinical.tsx`                                                                                                      | Three lines in `settingsSearch.ts`, two in `SettingsSidebarNav.tsx`, and the generated `routeTree.gen.ts`                                                                                                                    |
+| Clinical step after the first-run wizard                         | [`LinceiWelcomeWizard.tsx`](../../apps/web/src/lincei/LinceiWelcomeWizard.tsx)                                                                                                                                                     | `routes/welcome.tsx` renders it in place of `WelcomeWizard`; the stage label is an identity rule                                                                                                                             |
+| Researcher mode and Techie mode                                  | [`apps/web/vite/linceiResearcherMode.ts`](../../apps/web/vite/linceiResearcherMode.ts), [`apps/web/src/lincei/mode/`](../../apps/web/src/lincei/mode), [`LinceiPreferences.ts`](../../apps/server/src/lincei/LinceiPreferences.ts) | One changed line and an import each in `state/server.ts`, `localApi.ts`, `CommandPalette.tsx`, `SettingsSidebarNav.tsx`, `useAvailableSettingsSearchItems.ts`; two in `ChatView.tsx`; the switch row in `SettingsPanels.tsx` |
+| A researcher's wording for upstream's developer copy             | [`apps/web/vite/linceiCopy.ts`](../../apps/web/vite/linceiCopy.ts)                                                                                                                                                                 | None: applied by the brand plugin as it builds                                                                                                                                                                               |
+| Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                                                                               | None                                                                                                                                                                                                                         |
 
 To see every upstream file Lincei has touched:
 
@@ -68,8 +70,12 @@ Then, for each conflict:
 - **`README.md`, icons, `T3Wordmark.tsx`:** keep Lincei's side.
 - **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `RpcAuthorization.ts`,
   `RpcInstrumentation.ts`, `rpc.ts`, `runtimeInstructions.ts`, `ChatView.tsx`, `SidebarChrome.tsx`,
-  `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`, `apps/web/vite.config.ts`):
-  take upstream's side and re-add the hook. `git show HEAD -- <file>` shows what it was.
+  `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
+  `useAvailableSettingsSearchItems.ts`, `SettingsPanels.tsx`, `CommandPalette.tsx`, `localApi.ts`,
+  `state/server.ts`, `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
+  `git show HEAD -- <file>` shows what it was. Every hook is an import of something under
+  `lincei/` and one line that uses it, so `git grep -n lincei -- <file>` on the old version lists
+  them. `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its hook.
 - **`apps/web/src/routeTree.gen.ts`:** take upstream's side and build the web app once
   (`vp run --filter @t3tools/web build`). The router plugin rewrites the file from the route
   files, which puts `/settings/clinical` back.
@@ -81,8 +87,17 @@ vp i
 node scripts/lincei/identity.ts check
 vp run --filter t3 --filter @t3tools/desktop --filter @t3tools/web typecheck
 (cd apps/server && vp test run src/lincei)
+(cd apps/web && vp test run src/lincei)
 (cd apps/desktop && vp test run)
 ```
+
+`identity.ts check` reads three things. A governed file that is stale: run `apply`. A string in
+`apps/web/vite/linceiCopy.ts` that upstream reworded or moved: decide whether Lincei still wants
+its own wording for the new text and update `from`. A source text that a researcher-mode selector
+in `apps/web/vite/linceiResearcherMode.ts` depends on: upstream renamed an aria-label or a data
+attribute, so that control is visible again in researcher mode until the selector and its anchor
+are updated. The last two never conflict in git, because Lincei does not edit those files; the
+check is the only thing that notices.
 
 A desktop or server test that now fails only because it asserts an upstream identity literal
 (`com.t3tools.t3code`, `t3code://`, `~/.t3`) belongs in the identity script's list of tests.
@@ -108,10 +123,17 @@ skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. A machine 
 Lincei's own copy in `<home>/clinical/bin`, downloaded from the release pinned (with its digest)
 in `UvInstallation.ts`. The desktop app runs it
 on launch; a dev server waits until an agent calls `lincei_clinical_setup`, because each worktree
-has its own home. An environment whose requirements have not changed is left alone.
+has its own home. An environment whose requirements have not changed is left alone, unless the
+request says `force`, which installs everything again to repair tools that are installed but
+broken. When an update of the requirements fails (offline, say) and the installed tools still
+run, they stay usable and the status says the update is pending.
+
+What setup and the dataset jobs report is read by someone who may never have opened a terminal.
+Every `message` says what happened and what to do next, in plain words; command output goes in
+`detail`, which the clients keep behind a disclosure.
 
 - **Adopting an M4 or Vitrine release:** change `DEFAULT_CLINICAL_REQUIREMENTS` in
-  `ClinicalRuntime.ts`. The next setup reinstalls.
+  `ClinicalRuntime.ts`. The next launch installs the new versions.
 - **Developing against a local checkout:** set `LINCEI_CLINICAL_REQUIREMENTS`, for example
   `LINCEI_CLINICAL_REQUIREMENTS="m4-infra[research] /path/to/vitrine"`.
 
@@ -131,9 +153,20 @@ through the agent instructions, which name `<home>/clinical/skills`.
 
 Settings, Clinical Data lists M4's datasets (`m4 list-datasets --json`) and adds one from a folder
 of raw files (`m4 init <name> --src`) or by download (`m4 download`, then `m4 init`). M4 prints its
-progress as NDJSON events, which `ClinicalDatasets.ts` folds into one job per dataset. Jobs live in
-memory: a server restart drops the job but not the files it finished, and M4 resumes from them.
-Agents do not go through this service. They have the `m4` CLI.
+progress as NDJSON events, which `ClinicalDatasets.ts` folds into one job per dataset. Setup's
+demo download is such a job too, so every M4 run that writes a dataset has one owner. Agents do
+not go through this service. They have the `m4` CLI.
+
+Jobs live in memory; what a job left unfinished does not. M4 (0.5.5) calls a dataset ready as soon
+as some converted files and a database exist, and converts nothing once any converted file exists,
+so a preparation that was cancelled or killed came back as a ready dataset with tables missing.
+Before M4 prepares a dataset, Lincei writes a mark at `<home>/clinical/preparing/<name>` and
+removes it only when M4 reports completion. A marked dataset is never ready, and the next Add or
+Download first removes the converted files and the database M4 reports for it, so everything is
+converted again; downloaded raw files are kept, so downloads still resume. Lincei removes those
+files only in its own store under `<home>`. With a store the user chose (`M4_DATA_DIR`) the job
+stops and says so. M4's `lincei/physionet-credentials-stdin` branch fixes the cause; the mark can
+go once that release is the minimum.
 
 Credentialed datasets are downloaded with the user's own PhysioNet login, which Lincei never
 stores:
@@ -144,21 +177,49 @@ stores:
 - In the contract the password is `Schema.RedactedFromValue`, so a request that is logged, traced,
   or printed shows `<redacted>`. Upstream's RPC instrumentation records the method, not the
   payload.
-- The server holds it for that one download and gives it to M4 on standard input
-  (`--physionet-credentials-file /dev/stdin`): not on a command line, in the environment, or in a
-  file. The next download asks again; only the username is remembered, in the client's local
-  storage.
+- The server holds it for that one download and gives it to M4 on standard input: not on a
+  command line, in the environment, or in a file. The next download asks again; only the username
+  is remembered, in the client's local storage.
+- It is sent only when M4 says the dataset downloads from `https://physionet.org/`. A dataset
+  definition in M4's data folder can replace a built-in one, address included, and agents can
+  write that folder.
+- M4 runs with plain tracebacks (`_TYPER_STANDARD_TRACEBACK`), because its default ones print
+  local variables, and the password is redacted from M4's output before that output is cut down.
 
-`/dev/stdin` does not exist on Windows, where the server refuses credentialed downloads. M4 has a
-`--physionet-credentials-stdin` flag for that on its `lincei/physionet-credentials-stdin` branch;
-use it here once the M4 release that carries it is the minimum in `DEFAULT_CLINICAL_REQUIREMENTS`.
+Where the installed M4 has `--physionet-credentials-stdin` (its
+`lincei/physionet-credentials-stdin` branch, not yet released), Lincei uses it on every platform.
+With M4 0.5.5 the login goes through `--physionet-credentials-file /dev/stdin`, which works on
+macOS only: on Linux a child process's standard input is a socket that cannot be opened by path,
+and Windows has no such path. There the server reports credentialed datasets as not downloadable,
+so the clients offer "Add from folder" and never ask for a password.
+
+PhysioNet requires that an AI service used with credentialed data keeps none of it, does not train
+on it, and has no human review, and makes the researcher responsible for checking that. Agents
+send what they read to the model provider, so the clients say this wherever a credentialed dataset
+comes in: the download dialog, the add-from-folder dialog, and the first-run step.
 
 ### Research cards
 
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
-study store in `.vitrine` and runs one server per store. From 0.1.2 a git worktree shares the
-store of its main checkout, so the threads of a project publish into one study wherever they run;
-with an older Vitrine each worktree has its own.
+study store in `.vitrine` under the directory a script runs in, and runs one server per store.
+From 0.1.2 a git worktree shares the store of its main checkout, so the threads of a project
+publish into one study wherever they run; with an older Vitrine each worktree has its own.
+
+Three things follow from "the directory a script runs in", and each has bitten:
+
+- An agent that changes directory before publishing writes to another study, and the board
+  beside the conversation stays empty. The agent instructions say to publish from the folder the
+  conversation started in, or to set `VITRINE_DATA_DIR`.
+- The store sits in the project folder, holds the rows behind every card, and upstream snapshots
+  the folder with `git add -A` after every turn. From 0.1.2 Vitrine writes a `.gitignore` into its
+  store. With 0.1.1 the store shows up in the turn's changed files and goes into the hidden
+  checkpoint commits.
+- Vitrine's servers never stop by themselves and it has ten ports. The server stops the boards of
+  the folders it opened or watched when it shuts down (`ResearchBoard.ts`).
+
+Vitrine opens the system browser when a script's first card starts its server. Lincei sets
+`VITRINE_OPEN_BROWSER=0`, which 0.1.2 honours; for 0.1.1 the agent instructions say to run
+`vitrine start --no-open` first.
 
 The research board button asks the server to start Vitrine in the thread's directory
 (`ResearchBoard.ts`) and opens the URL it reports. It also shows setup progress and retries a
@@ -166,6 +227,52 @@ failed setup. While an agent works in the thread on screen, the button asks the 
 seconds when the study last changed, and opens the board the first time it does, once per thread.
 The server answers from the modification times of `studies/<study>/index.json`, which Vitrine
 documents as rewritten on every card, so asking costs a few `stat` calls and no Python process.
+
+## Researcher mode and Techie mode
+
+Lincei's user is a clinical researcher. Upstream's is a developer, and its interface says so on
+every screen: terminals, diffs, branches, worktrees, pull requests, runtime modes. Lincei keeps all
+of that function and hides the surfaces unless **Techie mode** is on. The switch is the first row
+of Settings, General; it is off by default, takes effect at once, and closes nothing, so a
+terminal that was open is still there when the mode is turned back on.
+
+Four layers, cheapest first:
+
+1. **What agents are told** ([`agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)).
+   The conversation is most of what a researcher reads. With Techie mode off agents get a second
+   block: plain language, results on cards, code and SQL on request, files and git handled
+   quietly. The server builds this text, so the mode is stored on the server:
+   [`LinceiPreferences.ts`](../../apps/server/src/lincei/LinceiPreferences.ts) keeps it in
+   `lincei.json` beside upstream's `settings.json` and calls `setRuntimeProductContext` again on
+   every change. Most providers pick that up on their next turn; Claude when its process next
+   starts. Clients read and write it through `lincei.request`.
+2. **Copy** ([`linceiCopy.ts`](../../apps/web/vite/linceiCopy.ts)). Exact upstream strings and a
+   researcher's wording, replaced as the bundle is built. It is the same in both modes.
+3. **Controls on screen** ([`linceiResearcherMode.ts`](../../apps/web/vite/linceiResearcherMode.ts)).
+   One table of selectors. The build turns it into a stylesheet scoped to
+   `html:not([data-lincei-techie="true"])` and a boot script that sets that attribute from the
+   cached mode before first paint. Upstream has few test ids, so most selectors use an aria-label
+   or a data attribute; each entry names the source text it depends on, and `identity.ts check`
+   fails when that text is gone. A selector that stops matching hides nothing: a broken rule means
+   the control reappears, never that something else disappears.
+4. **Surfaces that act from data** ([`mode/`](../../apps/web/src/lincei/mode)). A hidden palette
+   row still runs on Enter, and a shortcut needs no row at all. So the command palette, keyboard
+   shortcuts, context menus, settings search, and the settings nav are filtered where upstream
+   builds them, each through one hook line, and the right panel's terminal, diff, pull-request and
+   device surfaces are marked unavailable, which also stops the letter keys its launcher listens
+   to. The thread view treats every folder as plain (`mode/git.ts`): no branch strip, no worktree
+   choice.
+
+To hide another control: add an entry to the table with its selector and anchors, run
+`node scripts/lincei/identity.ts check`, and, if the control can also be reached from the palette,
+a shortcut, a context menu, or settings search, add it to
+[`researcherFilters.ts`](../../apps/web/src/lincei/mode/researcherFilters.ts), whose test fails
+when upstream renames a settings id or a shortcut command.
+
+Git stays underneath and out of sight. A project that is a git repository still gets upstream's
+checkpoint after every turn, so rewinding a conversation works there. A plain folder gets none:
+Lincei does not turn a folder the researcher chose into a repository, because a checkpoint copies
+every file that is not ignored into `.git`, and a research folder holds data.
 
 ## Releasing
 

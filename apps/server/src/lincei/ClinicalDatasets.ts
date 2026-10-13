@@ -16,8 +16,9 @@
  * clinical home, and removes it only when M4 reports the preparation complete.
  * A marked dataset is never reported ready, and the next attempt first removes
  * the converted files and the database M4 reports for it, so M4 converts
- * everything again. Only what M4 made, inside its dataset store, is removed:
- * never raw files, and never the folder the user pointed at.
+ * everything again. Only what M4 made, inside Lincei's own dataset store, is
+ * removed: never raw files, never the folder the user pointed at, and nothing
+ * at all in a store the user chose themselves with `M4_DATA_DIR`.
  *
  * A PhysioNet login is held for the one download it was given for and goes
  * to M4 through its standard input: never a command line, the environment, a
