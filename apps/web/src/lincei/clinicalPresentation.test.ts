@@ -1,11 +1,27 @@
-import type { ClinicalDatasetJob, ClinicalRuntimeStatus } from "@t3tools/contracts";
+import type {
+  ClinicalDataset,
+  ClinicalDatasetJob,
+  ClinicalRuntimeStatus,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import upstreamWizard from "../components/onboarding/WelcomeWizard.tsx?raw";
+
 import {
+  clinicalSetupAction,
+  clinicalSetupUnsettled,
+  clinicalStepFooter,
   clinicalStepStates,
+  clinicalToolsInstalled,
   connectionProtectsSecrets,
+  datasetDisplayName,
+  describeDataset,
   describeJobProgress,
+  describeLostConnection,
+  folderPathProblem,
   formatBytes,
+  WIZARD_STAGES,
+  withDatasetName,
 } from "./clinicalPresentation";
 
 const status = (fields: Partial<ClinicalRuntimeStatus>): ClinicalRuntimeStatus => ({
@@ -88,6 +104,178 @@ describe("describeJobProgress", () => {
     expect(describeJobProgress(job({ completed: 4, total: 4 })).label).toBe(
       "Downloading file 4 of 4",
     );
+  });
+});
+
+describe("WIZARD_STAGES", () => {
+  it("reads the same as the header of the wizard's first three steps", () => {
+    const list = WIZARD_STAGES.map((stage) => JSON.stringify(stage)).join(", ");
+    expect(upstreamWizard).toContain(`const ONBOARDING_STAGES = [${list}] as const;`);
+  });
+});
+
+describe("clinicalToolsInstalled", () => {
+  it("counts the tools as installed while only the demo is still downloading", () => {
+    expect(clinicalToolsInstalled(status({ state: "ready" }))).toBe(true);
+    expect(clinicalToolsInstalled(status({ state: "installing", step: "dataset" }))).toBe(true);
+    expect(clinicalToolsInstalled(status({ state: "installing", step: "packages" }))).toBe(false);
+    expect(clinicalToolsInstalled(status({ state: "failed", step: "dataset" }))).toBe(false);
+  });
+});
+
+describe("clinicalSetupAction", () => {
+  it("offers the step that moves setup on, and nothing while it runs or is done", () => {
+    expect(clinicalSetupAction(status({ state: "not-installed" }))).toBe("Set up");
+    expect(clinicalSetupAction(status({ state: "failed", step: "python" }))).toBe("Try again");
+    expect(clinicalSetupAction(status({ state: "installing", step: "uv" }))).toBeNull();
+    expect(clinicalSetupAction(status({ state: "ready", demoDataset: "ready" }))).toBeNull();
+  });
+
+  it("offers the demo again when only its download failed", () => {
+    expect(clinicalSetupAction(status({ state: "ready", demoDataset: "failed" }))).toBe(
+      "Retry the demo download",
+    );
+  });
+
+  it("offers another try when tools that work could not be updated", () => {
+    const updateFailed = status({ state: "ready", demoDataset: "ready", step: "packages" });
+    expect(clinicalSetupAction(updateFailed)).toBe("Try again");
+    expect(clinicalSetupUnsettled(updateFailed)).toBe(true);
+    expect(statesOf({ state: "ready", demoDataset: "ready", step: "packages" })).toEqual([
+      "done",
+      "done",
+      "failed",
+      "done",
+      "done",
+    ]);
+  });
+
+  it("has nothing more to show once everything is in place", () => {
+    expect(clinicalSetupUnsettled(status({ state: "ready", demoDataset: "ready" }))).toBe(false);
+    expect(clinicalSetupUnsettled(status({ state: "installing", step: "uv" }))).toBe(true);
+  });
+});
+
+describe("clinicalStepFooter", () => {
+  const footer = (fields: Partial<ClinicalRuntimeStatus>) =>
+    clinicalStepFooter({ phase: "known", status: status(fields) });
+
+  it("promises that setup keeps running only while it runs", () => {
+    expect(footer({ state: "installing", step: "packages" })).toContain("keeps running");
+    for (const stopped of [
+      footer({ state: "failed", step: "packages" }),
+      footer({ state: "not-installed" }),
+      footer({ state: "ready", demoDataset: "failed" }),
+      clinicalStepFooter({ phase: "loading" }),
+      clinicalStepFooter({ phase: "failed", message: "No answer.", detail: null }),
+    ]) {
+      expect(stopped).not.toContain("keep");
+    }
+  });
+
+  it("says what stopped and where to pick it up", () => {
+    expect(footer({ state: "failed", step: "packages" })).toBe(
+      "Setup stopped. Try again here, or later under Settings, Clinical Data.",
+    );
+    expect(footer({ state: "ready", demoDataset: "failed" })).toBe(
+      "The demo dataset is missing. Retry here, or later under Settings, Clinical Data.",
+    );
+  });
+});
+
+describe("datasetDisplayName", () => {
+  it("names the datasets Lincei knows and falls back to M4's id", () => {
+    expect(datasetDisplayName("mimic-iv-demo")).toBe("MIMIC-IV demo");
+    expect(datasetDisplayName("mimic-iv")).toBe("MIMIC-IV");
+    expect(datasetDisplayName("mimic-iv-note")).toBe("MIMIC-IV Note");
+    expect(datasetDisplayName("eicu")).toBe("eICU");
+    expect(datasetDisplayName("my-registry")).toBe("my-registry");
+    expect(datasetDisplayName("constructor")).toBe("constructor");
+  });
+});
+
+describe("withDatasetName", () => {
+  it("names the dataset in a sentence the server wrote with its id", () => {
+    expect(withDatasetName("PhysioNet refused this login for mimic-iv.", "mimic-iv")).toBe(
+      "PhysioNet refused this login for MIMIC-IV.",
+    );
+    expect(withDatasetName("eicu is already being prepared.", "eicu")).toBe(
+      "eICU is already being prepared.",
+    );
+  });
+
+  it("leaves longer ids, paths, and unknown datasets as they are", () => {
+    expect(withDatasetName("Preparing mimic-iv-note did not finish.", "mimic-iv")).toBe(
+      "Preparing mimic-iv-note did not finish.",
+    );
+    expect(withDatasetName("Looked in /data/mimic-iv/hosp.", "mimic-iv")).toBe(
+      "Looked in /data/mimic-iv/hosp.",
+    );
+    expect(withDatasetName("Preparing my-registry did not finish.", "my-registry")).toBe(
+      "Preparing my-registry did not finish.",
+    );
+  });
+});
+
+describe("describeDataset", () => {
+  const dataset = (fields: Partial<ClinicalDataset>): ClinicalDataset => ({
+    name: "mimic-iv",
+    state: "missing",
+    requiresCredentials: false,
+    downloadable: true,
+    ...fields,
+  });
+
+  it("says where a dataset is, or is not, in the reader's words", () => {
+    expect(describeDataset(dataset({ state: "ready", sizeGb: 6.26 }))).toBe(
+      "Ready to query. 6.3 GB on this computer.",
+    );
+    expect(describeDataset(dataset({ state: "ready", sizeGb: 6.26 }), "lab-server")).toBe(
+      "Ready to query. 6.3 GB on lab-server.",
+    );
+    expect(describeDataset(dataset({ requiresCredentials: true }))).toBe(
+      "Not on this computer. Needs a PhysioNet account with access to it.",
+    );
+  });
+
+  it("says how to finish one that is partly there", () => {
+    expect(describeDataset(dataset({ state: "incomplete" }))).toBe(
+      "Partly prepared. Download it or add it from a folder again to finish.",
+    );
+  });
+});
+
+describe("folderPathProblem", () => {
+  it("takes a full path on any system", () => {
+    expect(folderPathProblem("/Users/ada/Downloads/mimic-iv")).toBeNull();
+    expect(folderPathProblem("C:\\data\\mimic-iv")).toBeNull();
+    expect(folderPathProblem("\\\\server\\share\\mimic-iv")).toBeNull();
+  });
+
+  it("explains a path the server would only call missing", () => {
+    expect(folderPathProblem("~/Downloads/mimic-iv")).toContain("instead of ~");
+    expect(folderPathProblem("Downloads/mimic-iv")).toContain("full path");
+  });
+});
+
+describe("describeLostConnection", () => {
+  it("speaks of a background service on this computer, and what to do if it stays", () => {
+    const lost = describeLostConnection({ otherComputer: null, reconnecting: true });
+    expect(lost.title).toBe("Lincei lost the connection to its background service");
+    expect(lost.detail).toContain("Lincei is reconnecting");
+    expect(lost.detail).toContain("quit Lincei and open it again");
+  });
+
+  it("does not claim to be reconnecting once it has given up", () => {
+    const lost = describeLostConnection({ otherComputer: null, reconnecting: false });
+    expect(lost.detail).not.toContain("is reconnecting");
+    expect(lost.detail).toContain("Reconnect below");
+  });
+
+  it("names another computer instead of a service nobody there has seen", () => {
+    const lost = describeLostConnection({ otherComputer: "lab-server", reconnecting: true });
+    expect(lost.title).toBe("Lincei lost the connection to lab-server");
+    expect(lost.detail).toContain("check that lab-server is on");
   });
 });
 

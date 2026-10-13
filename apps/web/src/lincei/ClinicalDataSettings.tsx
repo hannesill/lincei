@@ -1,4 +1,5 @@
-import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import type { ReactNode } from "react";
 
 import {
   SettingsPageContainer,
@@ -7,69 +8,110 @@ import {
 } from "~/components/settings/settingsLayout";
 import { useSettingsScope } from "~/components/settings/SettingsScopeContext";
 import { Button } from "~/components/ui/button";
+import { environmentCatalog } from "~/connection/catalog";
+import { type EnvironmentPresentation, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { ClinicalDatasetList } from "./ClinicalDatasetList";
+import { ClinicalStatusNote } from "./ClinicalNote";
+import {
+  clinicalSetupAction,
+  clinicalSetupUnsettled,
+  clinicalToolsInstalled,
+  describeLostConnection,
+} from "./clinicalPresentation";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
-import { clinicalToolsInstalled, useClinicalSetup, useClinicalStatus } from "./clinicalState";
+import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
+import { CLINICAL_SETTINGS } from "./settingsSearchItems";
 
-function ClinicalDataPanel({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const { status, refresh } = useClinicalStatus(environmentId);
+/**
+ * The settings page frame without upstream's "Applying settings for <project>
+ * across <environment>". That sentence picks where a setting is written, and
+ * nothing on this page is a setting with a scope. The frame renders it as a
+ * `<p>` around its project picker, which is what the class finds; should
+ * upstream change that, the sentence comes back and nothing else goes.
+ */
+function ClinicalPage({ children }: { readonly children: ReactNode }) {
+  return (
+    <SettingsPageContainer className="[&>p:has([aria-label^='Project_scope'])]:hidden">
+      {children}
+    </SettingsPageContainer>
+  );
+}
+
+function ClinicalDataPanel({
+  environment,
+  onThisComputer,
+}: {
+  readonly environment: EnvironmentPresentation;
+  readonly onThisComputer: boolean;
+}) {
+  const { environmentId } = environment;
+  const { view, refresh } = useClinicalStatus(environmentId);
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const setUp = useClinicalSetup(environmentId, refresh);
-  if (status === null) {
+  // A page without a picker has to say whose tools it shows when that is not obvious.
+  const elsewhere = onThisComputer ? null : (
+    <p className="px-3 text-sm text-muted-foreground sm:px-4">
+      These are the clinical research tools and datasets on {environment.label}.
+    </p>
+  );
+
+  if (view.phase !== "known") {
     return (
-      <SettingsPageContainer>
-        <p className="text-sm text-muted-foreground">
-          This environment has no clinical research tools.
-        </p>
-      </SettingsPageContainer>
+      <ClinicalPage>
+        {elsewhere}
+        <SettingsSection {...CLINICAL_SETTINGS.tools}>
+          <div className="px-3 py-3 sm:px-4">
+            <ClinicalStatusNote view={view} onRetry={refresh} />
+          </div>
+        </SettingsSection>
+      </ClinicalPage>
     );
   }
-  const demoFailed = status.state === "ready" && status.demoDataset === "failed";
-  const setupLabel =
-    status.state === "not-installed"
-      ? "Set up"
-      : status.state === "failed"
-        ? "Try again"
-        : demoFailed
-          ? "Retry the demo download"
-          : null;
+
+  const { status } = view;
+  const action = clinicalSetupAction(status);
   return (
-    <SettingsPageContainer>
-      <SettingsSection title="Environment">
+    <ClinicalPage>
+      {elsewhere}
+      <SettingsSection {...CLINICAL_SETTINGS.tools}>
         <SettingsRow
-          title="Clinical research tools"
+          title="Setup"
           description={status.message}
           control={
-            setupLabel === null ? undefined : (
+            action === null ? undefined : (
               <Button
                 size="sm"
                 variant="outline"
                 disabled={!canOperate}
                 onClick={() => void setUp()}
               >
-                {setupLabel}
+                {action}
               </Button>
             )
           }
         >
-          {status.state === "ready" && !demoFailed ? null : (
+          {clinicalSetupUnsettled(status) ? (
             <div className="pb-2">
               <ClinicalSetupProgress status={status} />
             </div>
-          )}
+          ) : null}
         </SettingsRow>
         <SettingsRow
-          title="Dataset storage"
-          description="Where prepared datasets are kept. Agents and M4 read them from here."
+          {...CLINICAL_SETTINGS.location}
+          // Not "Lincei's own folder": a user who set M4_DATA_DIR keeps their store.
+          description={`Prepared datasets are kept in one folder on ${
+            onThisComputer ? "this computer" : environment.label
+          }. Agents read them from there.`}
         >
-          <code className="block pb-2 text-xs break-all text-muted-foreground">
+          <p className="pb-2 font-mono text-xs break-all text-muted-foreground/70">
             {status.dataDir}
-          </code>
+          </p>
         </SettingsRow>
       </SettingsSection>
-      <SettingsSection title="Datasets">
+      <SettingsSection {...CLINICAL_SETTINGS.datasets}>
         {clinicalToolsInstalled(status) ? (
           <ClinicalDatasetList environmentId={environmentId} enabled />
         ) : (
@@ -78,21 +120,92 @@ function ClinicalDataPanel({ environmentId }: { readonly environmentId: Environm
           </p>
         )}
       </SettingsSection>
-    </SettingsPageContainer>
+    </ClinicalPage>
   );
 }
 
-/** Settings → Clinical Data: the clinical tools and datasets of the selected environment. */
-export function ClinicalDataSettings() {
-  const { environment, scope } = useSettingsScope();
-  if (!environment) {
+/**
+ * What the page says when the server that holds the clinical research tools
+ * cannot be reached. For most people that server is a background service of
+ * the app itself, so "connect an environment" is nothing they could act on.
+ */
+function LostConnection({
+  target,
+  onThisComputer,
+}: {
+  readonly target: EnvironmentPresentation | null;
+  readonly onThisComputer: boolean;
+}) {
+  const reconnect = useAtomCommand(environmentCatalog.retryNow, { reportFailure: false });
+  if (target === null) {
     return (
-      <p className="p-8 text-sm text-muted-foreground">
-        {scope.kind === "environment"
-          ? `Reconnect ${scope.label} to manage its clinical data.`
-          : "Connect an environment to manage its clinical data."}
-      </p>
+      <ClinicalPage>
+        <SettingsSection {...CLINICAL_SETTINGS.tools}>
+          <SettingsRow
+            title="Lincei is not connected to a computer that runs it"
+            description="The clinical research tools live with Lincei's background service. Open the Lincei app on the computer that has them."
+          />
+        </SettingsSection>
+      </ClinicalPage>
     );
   }
-  return <ClinicalDataPanel environmentId={environment.environmentId} />;
+  const { phase } = target.connection;
+  const reconnecting = phase === "connecting" || phase === "reconnecting";
+  const lost = describeLostConnection({
+    otherComputer: onThisComputer ? null : target.label,
+    reconnecting,
+  });
+  return (
+    <ClinicalPage>
+      <SettingsSection {...CLINICAL_SETTINGS.tools}>
+        <SettingsRow
+          title={lost.title}
+          description={lost.detail}
+          control={
+            reconnecting ? undefined : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void reconnect(target.environmentId)}
+              >
+                Reconnect
+              </Button>
+            )
+          }
+        />
+      </SettingsSection>
+    </ClinicalPage>
+  );
+}
+
+/**
+ * Settings, Clinical Data: the clinical research tools and datasets of one
+ * computer. That is the computer the settings selection resolves to: the one
+ * this app runs on, unless another was picked on a page that has the picker.
+ */
+export function ClinicalDataSettings() {
+  const { environment, environments } = useSettingsScope();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  if (environment) {
+    return (
+      <ClinicalDataPanel
+        // What the panel holds between answers belongs to one computer.
+        key={environment.environmentId}
+        environment={environment}
+        onThisComputer={environment.environmentId === primaryEnvironmentId}
+      />
+    );
+  }
+  // Nothing in the selection is connected. The page is about this computer
+  // when it is in the selection, and about the first one in it otherwise.
+  const target =
+    environments.find((candidate) => candidate.environmentId === primaryEnvironmentId) ??
+    environments[0] ??
+    null;
+  return (
+    <LostConnection
+      target={target}
+      onThisComputer={target !== null && target.environmentId === primaryEnvironmentId}
+    />
+  );
 }

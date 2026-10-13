@@ -1,23 +1,40 @@
 /**
- * What the clinical environment and its datasets look like from a client.
- * Both change on the server while work runs there, and Lincei's one RPC is
- * request and response, so these hooks ask again every few seconds for as
- * long as something is in progress and not at all otherwise.
+ * What the clinical research tools and their datasets look like from a
+ * client. Both change on the server while work runs there, and Lincei's one
+ * RPC is request and response, so these hooks ask again every few seconds for
+ * as long as something is in progress, and hand out `refresh` for the moments
+ * that may have changed the answer.
  */
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import type { ClinicalDataset, ClinicalRuntimeStatus, EnvironmentId } from "@t3tools/contracts";
-import { useEffect, useRef } from "react";
+import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import type { ClinicalDataset, EnvironmentId, LinceiRequest } from "@t3tools/contracts";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { useContext, useEffect, useState } from "react";
 
 import { toastManager } from "~/components/ui/toast";
-import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import {
+  classifyLinceiFailure,
+  clinicalStatusView,
+  type ClinicalStatusView,
+  type DatasetAnswer,
+  datasetListView,
+  type DatasetListView,
+  describeLinceiFailure,
+  type LinceiQueryResult,
+} from "./linceiAnswers";
 import { linceiCommand, linceiQuery } from "./linceiRequests";
 
 const PROGRESS_POLL_INTERVAL_MS = 2_500;
+/** How long a first answer may take before the surface says so and offers to ask again. */
+const SLOW_ANSWER_MS = 10_000;
+
+const CLINICAL_STATUS = { _tag: "ClinicalStatus" } as const satisfies LinceiRequest;
+const CLINICAL_DATASETS = { _tag: "ClinicalDatasets" } as const satisfies LinceiRequest;
+
+const NOTHING_TO_ASK = Atom.make(AsyncResult.initial<never, never>(false)).pipe(
+  Atom.withLabel("lincei:query:none"),
+);
 
 function usePolling(active: boolean, refresh: () => void) {
   useEffect(() => {
@@ -27,61 +44,83 @@ function usePolling(active: boolean, refresh: () => void) {
   }, [active, refresh]);
 }
 
-/** The clinical environment's setup state, or null against a server that is not Lincei. */
+/** One read from a Lincei server as the cache holds it. Null without a server to ask. */
+function useLinceiRead(
+  environmentId: EnvironmentId | null,
+  input: LinceiRequest | null,
+): { readonly result: LinceiQueryResult | null; readonly refresh: () => void } {
+  const atom =
+    environmentId === null || input === null ? null : linceiQuery({ environmentId, input });
+  const selected = atom ?? NOTHING_TO_ASK;
+  const result: LinceiQueryResult = useAtomValue(selected);
+  const refresh = useAtomRefresh(selected);
+  // An answer stays cached for a minute after the surface that asked is gone,
+  // and what it describes changes behind it (an agent may run setup or M4
+  // itself), so a surface that starts reading an answer that is already there
+  // asks again.
+  const registry = useContext(RegistryContext);
+  useEffect(() => {
+    if (atom !== null && registry.get(atom)._tag !== "Initial") refresh();
+  }, [atom, registry, refresh]);
+  return { result: atom === null ? null : result, refresh };
+}
+
+/**
+ * What is known about the clinical research tools on an environment: still
+ * being asked, refused, failed, absent because the server is not Lincei, or
+ * the status itself. Asks again every few seconds while setup runs.
+ */
 export function useClinicalStatus(environmentId: EnvironmentId | null): {
-  readonly status: ClinicalRuntimeStatus | null;
+  readonly view: ClinicalStatusView;
   readonly refresh: () => void;
 } {
-  const query = useEnvironmentQuery(
-    environmentId === null
-      ? null
-      : linceiQuery({ environmentId, input: { _tag: "ClinicalStatus" } }),
-  );
-  const status = query.data?._tag === "Clinical" ? query.data.status : null;
-  usePolling(status?.state === "installing", query.refresh);
-  return { status, refresh: query.refresh };
+  const { result, refresh } = useLinceiRead(environmentId, CLINICAL_STATUS);
+  const view = clinicalStatusView(result);
+  usePolling(view.phase === "known" && view.status.state === "installing", refresh);
+  return { view, refresh };
 }
 
-/** Whether M4 and Vitrine can be used: the demo dataset downloads after they are installed. */
-export function clinicalToolsInstalled(status: ClinicalRuntimeStatus | null): boolean {
-  return (
-    status !== null &&
-    (status.state === "ready" || (status.state === "installing" && status.step === "dataset"))
-  );
-}
-
-/** M4's datasets, once M4 is installed. */
+/** M4's datasets on an environment. Only asked once M4 is installed there. */
 export function useClinicalDatasets(
   environmentId: EnvironmentId | null,
   enabled: boolean,
 ): {
-  readonly datasets: ReadonlyArray<ClinicalDataset> | null;
-  readonly error: string | null;
+  readonly view: DatasetListView;
+  /** The first answer is overdue: say so, since it may never come. */
+  readonly takingLong: boolean;
   readonly refresh: () => void;
+  /** Shows the list a dataset command answered with, ahead of the next read. */
+  readonly accept: (datasets: ReadonlyArray<ClinicalDataset>) => void;
 } {
-  const query = useEnvironmentQuery(
-    environmentId === null || !enabled
-      ? null
-      : linceiQuery({ environmentId, input: { _tag: "ClinicalDatasets" } }),
+  const { result, refresh } = useLinceiRead(environmentId, enabled ? CLINICAL_DATASETS : null);
+  const [answer, setAnswer] = useState<DatasetAnswer | null>(null);
+  const view = datasetListView(result, answer);
+  usePolling(
+    view.phase === "listed" && view.datasets.some((dataset) => dataset.job?.state === "running"),
+    refresh,
   );
-  const datasets = query.data?._tag === "ClinicalDatasets" ? query.data.datasets : null;
-  // The answer is cached for a minute after the page that asked is gone, and
-  // datasets change behind it (an agent may run M4 itself), so a page that
-  // opens onto a cached answer asks again.
-  const openedOnCachedAnswer = useRef(datasets !== null);
-  const { refresh } = query;
-  useEffect(() => {
-    if (openedOnCachedAnswer.current) refresh();
-  }, [refresh]);
-  usePolling(datasets?.some((dataset) => dataset.job?.state === "running") === true, query.refresh);
-  return { datasets, error: query.error, refresh: query.refresh };
-}
 
-export function describeCommandFailure(
-  result: Parameters<typeof squashAtomCommandFailure>[0],
-): string {
-  const error = squashAtomCommandFailure(result);
-  return error instanceof Error ? error.message : String(error);
+  const waiting = view.phase === "loading";
+  const [attempt, setAttempt] = useState(0);
+  const [takingLong, setTakingLong] = useState(false);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setTakingLong(true), SLOW_ANSWER_MS);
+    return () => {
+      clearTimeout(timer);
+      setTakingLong(false);
+    };
+  }, [waiting, attempt]);
+
+  return {
+    view,
+    takingLong,
+    refresh: () => {
+      setAttempt((count) => count + 1);
+      refresh();
+    },
+    accept: (datasets) => setAnswer({ datasets, at: Date.now() }),
+  };
 }
 
 /** Starts, or repeats, clinical setup on an environment and says so when it could not. */
@@ -90,12 +129,11 @@ export function useClinicalSetup(environmentId: EnvironmentId | null, refresh: (
   return async () => {
     if (environmentId === null) return;
     const started = await request({ environmentId, input: { _tag: "ClinicalSetup" } });
-    if (started._tag === "Failure" && !isAtomCommandInterrupted(started)) {
-      toastManager.add({
-        type: "error",
-        title: "Could not start clinical setup",
-        description: describeCommandFailure(started),
-      });
+    if (started._tag === "Failure") {
+      const description = describeLinceiFailure(classifyLinceiFailure(started.cause));
+      if (description !== null) {
+        toastManager.add({ type: "error", title: "Could not start clinical setup", description });
+      }
     }
     refresh();
   };

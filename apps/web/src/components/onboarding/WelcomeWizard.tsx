@@ -112,7 +112,7 @@ type WizardStep = "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
-const ONBOARDING_STAGES = ["Connect", "Agents", "Projects", "Clinical"] as const;
+const ONBOARDING_STAGES = ["Computer", "Agent", "Import", "Data"] as const;
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some projects or conversations may be missing.";
 
 export function WelcomeWizard({

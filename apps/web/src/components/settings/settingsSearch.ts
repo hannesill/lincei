@@ -5,6 +5,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { commandLabel } from "./KeybindingsSettings.logic";
+import { LINCEI_SETTINGS_SEARCH_ITEMS } from "../../lincei/settingsSearchItems";
 import {
   validateSettingsScopeSearch,
   type ResolvedSettingsScope,
@@ -923,6 +924,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/archived",
     searchTerms: ["restore reopen deleted history projects"],
   },
+  ...LINCEI_SETTINGS_SEARCH_ITEMS,
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;
 
 export type SettingsSearchItemId = (typeof SETTINGS_SEARCH_ITEMS)[number]["id"];
