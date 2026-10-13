@@ -87,6 +87,9 @@ const M4Dataset = Schema.Struct({
   raw_root: Schema.optional(Schema.NullOr(Schema.String)),
   parquet_root: Schema.optional(Schema.NullOr(Schema.String)),
   db_path: Schema.optional(Schema.NullOr(Schema.String)),
+  // Reported by an M4 that records when a dataset's preparation finished and
+  // completes an unfinished one itself (after 0.5.5). Absent before that.
+  prepared: Schema.optional(Schema.Boolean),
 });
 type M4Dataset = typeof M4Dataset.Type;
 
@@ -677,10 +680,11 @@ const make = Effect.gen(function* () {
    * The mark it runs under is what keeps an interrupted run from passing for
    * a prepared dataset; see the module comment.
    *
-   * M4 reuses whatever converted files it finds. So they are removed first
-   * unless they are known to be complete: when the mark says a run here did
-   * not finish, and also when they are there without a database, which is what
-   * a conversion interrupted outside Lincei leaves (an agent's own, say).
+   * M4 0.5.5 reuses whatever converted files it finds. So they are removed
+   * first unless they are known to be complete: when the mark says a run here
+   * did not finish, and also when they are there without a database, which is
+   * what a conversion interrupted outside Lincei leaves (an agent's own, say).
+   * A later M4 completes an unfinished dataset itself and is left to.
    */
   const prepare = Effect.fn("ClinicalDatasets.prepare")(function* (
     name: string,
@@ -704,7 +708,11 @@ const make = Effect.gen(function* () {
           }),
       ),
     );
-    if (leftUnfinished) yield* removePrepared(name, kind, keep, reported);
+    // An M4 that reports `prepared` converts whatever is missing and never
+    // leaves half a table under its final name, so there is nothing to clear.
+    if (leftUnfinished && reported?.prepared === undefined) {
+      yield* removePrepared(name, kind, keep, reported);
+    }
     yield* runM4(name, kind, args);
     yield* fileSystem.remove(markPath, { force: true }).pipe(
       Effect.mapError(
