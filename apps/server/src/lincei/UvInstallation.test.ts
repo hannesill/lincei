@@ -39,6 +39,8 @@ const exited = (code: number): ProcessRunner.ProcessRunOutput => ({
 const ensureOn = (input: {
   readonly uvOnPath: boolean;
   readonly release?: UvInstallation.UvRelease;
+  /** A kind of computer Lincei has no uv release for. */
+  readonly unsupported?: boolean;
 }) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -80,7 +82,7 @@ const ensureOn = (input: {
 
     const result = yield* UvInstallation.ensure({
       managedDirectory,
-      release: input.release ?? RELEASE,
+      ...(input.unsupported === true ? {} : { release: input.release ?? RELEASE }),
     }).pipe(
       Effect.provideService(ProcessRunner.ProcessRunner, processRunner),
       Effect.provideService(HttpClient.HttpClient, httpClient),
@@ -99,7 +101,7 @@ const ensureOn = (input: {
     Effect.scoped,
     Effect.provide(
       Layer.mergeAll(
-        Layer.succeed(HostProcessPlatform, "darwin"),
+        Layer.succeed(HostProcessPlatform, input.unsupported === true ? "win32" : "darwin"),
         Layer.succeed(HostProcessArchitecture, "arm64"),
       ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),
@@ -132,10 +134,30 @@ describe("UvInstallation", () => {
       });
       expect(machine.result).toMatchObject({
         _tag: "Failure",
-        failure: { detail: expect.stringContaining("SHA-256") },
+        failure: {
+          reason: "verification",
+          // For the researcher: what happened and what to do. For whoever helps: the rest.
+          message: expect.stringContaining("so nothing was installed. Try again"),
+          detail: expect.stringContaining("SHA-256"),
+        },
       });
       expect(machine.commands).not.toContain("tar");
       expect(machine.leftovers).toEqual([]);
+    }),
+  );
+
+  it.effect("does not send a researcher off to install uv where Lincei has none to fetch", () =>
+    Effect.gen(function* () {
+      const machine = yield* ensureOn({ uvOnPath: false, unsupported: true });
+      expect(machine.result).toMatchObject({
+        _tag: "Failure",
+        failure: {
+          reason: "unsupported-platform",
+          message:
+            "Lincei cannot install the clinical research tools on this kind of computer yet. It can on a Mac and on most Linux computers.",
+        },
+      });
+      expect(machine.downloads()).toBe(0);
     }),
   );
 });

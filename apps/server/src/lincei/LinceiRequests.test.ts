@@ -1,13 +1,14 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { type ClinicalRuntimeStatus, LinceiRequest } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/process";
 
+import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
@@ -40,10 +41,17 @@ const RUNNING = JSON.stringify({
   error: null,
 });
 
+type Spawned = {
+  readonly command: string;
+  readonly args: ReadonlyArray<string>;
+  readonly cwd: string | undefined;
+};
+
 /**
- * Lincei's request handler over a clinical runtime in `state` and a Vitrine
- * that prints `vitrineStdout`, which may depend on the folder it runs in.
- * `spawned` records what was run where.
+ * Lincei's request handler over clinical research tools in `state` and a
+ * Vitrine that prints `vitrineStdout`, which may depend on the folder it runs
+ * in. `spawned` records what was run where, up to and including what the
+ * server runs while it shuts down.
  */
 const withRequests = <A, E>(
   input: {
@@ -53,11 +61,11 @@ const withRequests = <A, E>(
   },
   use: (context: {
     readonly requests: LinceiRequests.LinceiRequests["Service"];
-    readonly spawned: Array<{ readonly command: string; readonly cwd: string | undefined }>;
+    readonly spawned: Array<Spawned>;
     readonly existingDirectory: string;
   }) => Effect.Effect<A, E, FileSystem.FileSystem>,
 ) => {
-  const spawned: Array<{ readonly command: string; readonly cwd: string | undefined }> = [];
+  const spawned: Array<Spawned> = [];
   const status = statusOf(input.state, input.step);
   const layerDependencies = Layer.mergeAll(
     Layer.succeed(
@@ -65,7 +73,7 @@ const withRequests = <A, E>(
       ClinicalRuntime.ClinicalRuntime.of({
         status: Effect.succeed(status),
         provision: Effect.succeed(status),
-        setup: Effect.succeed({ ...status, state: "installing" }),
+        setup: () => Effect.succeed({ ...status, state: "installing" }),
       }),
     ),
     Layer.succeed(
@@ -73,7 +81,7 @@ const withRequests = <A, E>(
       ProcessRunner.ProcessRunner.of({
         run: (run) =>
           Effect.sync(() => {
-            spawned.push({ command: run.command, cwd: run.cwd });
+            spawned.push({ command: run.command, args: run.args, cwd: run.cwd });
             return {
               stdout:
                 typeof input.vitrineStdout === "function"
@@ -91,6 +99,9 @@ const withRequests = <A, E>(
       }),
     ),
     Layer.succeed(HostProcessPlatform, "darwin"),
+    ServerConfig.layerTest(process.cwd(), { prefix: "lincei-requests-test-" }),
+    // Never the developer's own dataset store.
+    Layer.succeed(HostProcessEnvironment, {}),
   ).pipe(Layer.provideMerge(NodeServices.layer));
 
   return Effect.gen(function* () {
@@ -130,7 +141,11 @@ describe("LinceiRequests", () => {
         });
         // Vitrine finds the study from where it runs, so it must run in that folder.
         expect(spawned).toEqual([
-          { command: "/home/ada/.lincei/clinical/venv/bin/vitrine", cwd: existingDirectory },
+          {
+            command: "/home/ada/.lincei/clinical/venv/bin/vitrine",
+            args: ["start", "--no-open", "--json"],
+            cwd: existingDirectory,
+          },
         ]);
       }),
     ),
@@ -163,6 +178,49 @@ describe("LinceiRequests", () => {
     ),
   );
 
+  it.effect("stops the boards it opened or watched when the server shuts down", () =>
+    Effect.gen(function* () {
+      const context = yield* withRequests(
+        {
+          state: "ready",
+          // A study store is found from the folder Vitrine runs in, or from one above it.
+          vitrineStdout: (cwd) =>
+            JSON.stringify({
+              status: "running",
+              url: "http://vitrine.localhost:7741",
+              port: 7741,
+              data_dir: `${cwd?.replace(/\/analysis$/, "")}/.vitrine`,
+              error: null,
+            }),
+        },
+        (machine) =>
+          Effect.gen(function* () {
+            const fileSystem = yield* FileSystem.FileSystem;
+            const folder = (name: string) => `${machine.existingDirectory}/${name}`;
+            for (const name of ["sepsis/analysis", "aki", "untouched"]) {
+              yield* fileSystem.makeDirectory(folder(name), { recursive: true });
+            }
+            yield* machine.requests.handle({ _tag: "ResearchBoardOpen", cwd: folder("sepsis") });
+            yield* machine.requests.handle({
+              _tag: "ResearchBoardActivity",
+              cwd: folder("sepsis/analysis"),
+            });
+            yield* machine.requests.handle({ _tag: "ResearchBoardActivity", cwd: folder("aki") });
+            expect(machine.spawned.some((run) => run.args[0] === "stop")).toBe(false);
+            return { spawned: machine.spawned, folder };
+          }),
+      );
+
+      // Vitrine's servers never stop by themselves, and it has ten ports for them.
+      const stopped = context.spawned.filter((run) => run.args[0] === "stop");
+      expect(stopped.every((run) => run.args.join(" ") === "stop --json")).toBe(true);
+      // Once per study, from a folder that finds it, and never where this server did not look.
+      expect(stopped.map((run) => run.cwd?.replace(/\/analysis$/, "")).sort()).toEqual(
+        [context.folder("aki"), context.folder("sepsis")].sort(),
+      );
+    }),
+  );
+
   it.effect("reports why the board did not start", () =>
     withRequests(
       {
@@ -182,6 +240,9 @@ describe("LinceiRequests", () => {
             .pipe(Effect.flip);
           expect(failure).toMatchObject({
             _tag: "LinceiRequestError",
+            // What to do, for the user; what Vitrine said, for whoever helps them.
+            message:
+              "The research board did not start. Press the research board button again; if it keeps failing, quit Lincei and open it again.",
             detail: "port 7741 is in use",
           });
         }),

@@ -28,13 +28,19 @@ export type ClinicalProvisionStep = typeof ClinicalProvisionStep.Type;
 export const ClinicalDemoDatasetState = Schema.Literals(["not-installed", "ready", "failed"]);
 export type ClinicalDemoDatasetState = typeof ClinicalDemoDatasetState.Type;
 
-/** The state of the Python environment Lincei manages for clinical research. */
+/** The state of the clinical research tools Lincei installs and keeps current. */
 export const ClinicalRuntimeStatus = Schema.Struct({
+  /**
+   * `ready` means the tools can be used. It is also the state after an update
+   * of working tools failed: they keep working, `message` says so, and `step`
+   * and `detail` describe the failed update as they do for `failed`.
+   */
   state: Schema.Literals(["not-installed", "installing", "ready", "failed"]),
   /** The step in progress while installing, or the one that failed. */
   step: Schema.optional(ClinicalProvisionStep),
+  /** What is happening, or what went wrong and what to do next, in words for the user. */
   message: Schema.String,
-  /** The end of the failing command's output. */
+  /** The end of the failing command's output, for whoever helps the user. */
   detail: Schema.optional(Schema.String),
   home: Schema.String,
   python: Schema.String,
@@ -55,13 +61,20 @@ export const ResearchBoard = Schema.Struct({
 });
 export type ResearchBoard = typeof ResearchBoard.Type;
 
-/** How far a dataset is from being queryable: usable, partly prepared, or absent. */
+/**
+ * How far a dataset is from being queryable: usable, partly prepared, or
+ * absent. A dataset whose preparation was cancelled, interrupted, or failed is
+ * `incomplete` until an Add or Download for it completes, whatever is on disk.
+ */
 export const ClinicalDatasetState = Schema.Literals(["ready", "incomplete", "missing"]);
 export type ClinicalDatasetState = typeof ClinicalDatasetState.Type;
 
 /** Work in progress on one dataset, or the reason its last attempt stopped. */
 export const ClinicalDatasetJob = Schema.Struct({
-  /** `setup` is the demo dataset's download during clinical setup, which is not a job to cancel. */
+  /**
+   * `setup` is the demo dataset's download during clinical setup. It reports
+   * progress like any other job, and is not one to cancel: it ends with setup.
+   */
   kind: Schema.Literals(["add", "download", "setup"]),
   state: Schema.Literals(["running", "failed"]),
   phase: Schema.Literals(["starting", "downloading", "converting", "indexing"]),
@@ -76,9 +89,9 @@ export const ClinicalDatasetJob = Schema.Struct({
       totalBytes: Schema.optional(Schema.Number),
     }),
   ),
-  /** What is happening, or what went wrong, in words for the user. */
+  /** What is happening, or what went wrong and what to do next, in words for the user. */
   message: Schema.String,
-  /** What M4 reported when the job failed. */
+  /** What M4 reported when the job failed, for whoever helps the user. */
   detail: Schema.optional(Schema.String),
 });
 export type ClinicalDatasetJob = typeof ClinicalDatasetJob.Type;
@@ -89,6 +102,11 @@ export const ClinicalDataset = Schema.Struct({
   state: ClinicalDatasetState,
   /** Downloading it needs a PhysioNet account with access to this dataset. */
   requiresCredentials: Schema.Boolean,
+  /**
+   * Whether this server can download it. False for a dataset that needs a
+   * PhysioNet login on a server that has no safe way to hand M4 one, so a
+   * client offers "Add from folder" there and never asks for a password.
+   */
   downloadable: Schema.Boolean,
   sizeGb: Schema.optional(Schema.Number),
   job: Schema.optional(ClinicalDatasetJob),
@@ -107,10 +125,14 @@ export const PhysioNetCredentials = Schema.Struct({
 export type PhysioNetCredentials = typeof PhysioNetCredentials.Type;
 
 export const LinceiRequest = Schema.Union([
-  /** Reads the clinical runtime's state. */
+  /** Reads the state of the clinical research tools. */
   Schema.TaggedStruct("ClinicalStatus", {}),
-  /** Starts installing or repairing the clinical runtime in the background. */
-  Schema.TaggedStruct("ClinicalSetup", {}),
+  /**
+   * Starts installing, updating, or completing the clinical research tools in
+   * the background, and answers with the state of that run. `force` installs
+   * everything again, to repair tools that are installed but do not work.
+   */
+  Schema.TaggedStruct("ClinicalSetup", { force: Schema.optional(Schema.Boolean) }),
   /** Starts the research board for the study in `cwd`, or finds the one running. */
   Schema.TaggedStruct("ResearchBoardOpen", { cwd: Schema.String }),
   /** Reads when the study in `cwd` last gained or changed a card, without starting anything. */
@@ -131,8 +153,9 @@ export type LinceiRequest = typeof LinceiRequest.Type;
 
 export const LinceiResponse = Schema.Union([
   /**
-   * The clinical runtime's state. Also the answer to a request that needs the
-   * runtime before it is ready, so the client can show what it is waiting for.
+   * The state of the clinical research tools. Also the answer to a request
+   * that needs them before they are installed, so the client can show what it
+   * is waiting for.
    */
   Schema.TaggedStruct("Clinical", { status: ClinicalRuntimeStatus }),
   Schema.TaggedStruct("ResearchBoard", { board: ResearchBoard }),
@@ -145,7 +168,9 @@ export type LinceiResponse = typeof LinceiResponse.Type;
 export class LinceiRequestError extends Schema.TaggedError<LinceiRequestError>()(
   "LinceiRequestError",
   {
+    /** What went wrong and what to do next, in words for the user. */
     message: Schema.String,
+    /** Technical output, for whoever helps the user. Never needed to act on `message`. */
     detail: Schema.optional(Schema.String),
   },
 ) {}
