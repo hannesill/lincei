@@ -124,6 +124,14 @@ export const PhysioNetCredentials = Schema.Struct({
 });
 export type PhysioNetCredentials = typeof PhysioNetCredentials.Type;
 
+/**
+ * What a Lincei user has chosen that the server acts on. With Techie mode off,
+ * the default, agents are told they work with a researcher and the clients
+ * hide developer surfaces; with it on, Lincei is upstream's full feature set.
+ */
+export const LinceiPreferences = Schema.Struct({ techieMode: Schema.Boolean });
+export type LinceiPreferences = typeof LinceiPreferences.Type;
+
 export const LinceiRequest = Schema.Union([
   /** Reads the state of the clinical research tools. */
   Schema.TaggedStruct("ClinicalStatus", {}),
@@ -148,6 +156,10 @@ export const LinceiRequest = Schema.Union([
   }),
   /** Stops a dataset's running job, or clears its failed one. Finished files are kept. */
   Schema.TaggedStruct("ClinicalDatasetCancel", { name: Schema.String }),
+  /** Reads the user's preferences. */
+  Schema.TaggedStruct("Preferences", {}),
+  /** Changes them. Agents are told from their next turn; other clients see it when they next ask. */
+  Schema.TaggedStruct("PreferencesUpdate", { techieMode: Schema.Boolean }),
 ]);
 export type LinceiRequest = typeof LinceiRequest.Type;
 
@@ -162,6 +174,7 @@ export const LinceiResponse = Schema.Union([
   /** `updatedAt` is in epoch milliseconds, and absent while the study has no cards. */
   Schema.TaggedStruct("ResearchBoardActivity", { updatedAt: Schema.optional(Schema.Number) }),
   Schema.TaggedStruct("ClinicalDatasets", { datasets: Schema.Array(ClinicalDataset) }),
+  Schema.TaggedStruct("Preferences", { preferences: LinceiPreferences }),
 ]);
 export type LinceiResponse = typeof LinceiResponse.Type;
 

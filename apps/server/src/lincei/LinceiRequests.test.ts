@@ -12,6 +12,7 @@ import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
+import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
 
@@ -116,6 +117,7 @@ const withRequests = <A, E>(
     Effect.provide(
       LinceiRequests.layer.pipe(
         Layer.provideMerge(ResearchBoard.layer),
+        Layer.provideMerge(LinceiPreferences.layer),
         Layer.provideMerge(ClinicalDatasets.layer),
         Layer.provideMerge(layerDependencies),
       ),
@@ -297,6 +299,25 @@ describe("LinceiRequests", () => {
           // Asked every few seconds while an agent works, so it must not spawn each time.
           expect(spawned).toHaveLength(1);
         }),
+    ),
+  );
+
+  it.effect("reads and changes Techie mode, whatever the state of the clinical tools", () =>
+    withRequests({ state: "not-installed" }, ({ requests }) =>
+      Effect.gen(function* () {
+        expect(yield* requests.handle({ _tag: "Preferences" })).toEqual({
+          _tag: "Preferences",
+          preferences: { techieMode: false },
+        });
+        expect(yield* requests.handle({ _tag: "PreferencesUpdate", techieMode: true })).toEqual({
+          _tag: "Preferences",
+          preferences: { techieMode: true },
+        });
+        expect(yield* requests.handle({ _tag: "Preferences" })).toEqual({
+          _tag: "Preferences",
+          preferences: { techieMode: true },
+        });
+      }),
     ),
   );
 
