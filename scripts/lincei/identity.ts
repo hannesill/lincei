@@ -16,11 +16,18 @@
  * matches means upstream changed that line: update the rule here.
  *
  * Display copy ("T3 Code" in UI strings) is not governed here; the web build
- * rewrites it (apps/web/vite/linceiBrand.ts).
+ * rewrites it (apps/web/vite/linceiBrand.ts). What that build relies on in
+ * upstream's source is checked here, though: the developer copy it replaces
+ * (linceiCopy.ts) and the attributes its researcher-mode stylesheet selects on
+ * (linceiResearcherMode.ts). Those files are never edited, so `check` is the
+ * only thing that notices upstream rewording one.
  */
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
+import { COPY_RULES } from "../../apps/web/vite/linceiCopy.ts";
+import { HIDDEN_UNLESS_TECHIE } from "../../apps/web/vite/linceiResearcherMode.ts";
 
 type Replacement = readonly [from: string | RegExp, to: string];
 
@@ -226,9 +233,41 @@ function rewrite(file: string, rules: Rules, text: string, problems: Array<strin
   return next;
 }
 
+function occurrences(text: string, part: string): number {
+  return text.split(part).length - 1;
+}
+
+/** What the web build needs upstream's source to still say. */
+function checkBuildTimeRules(problems: Array<string>): void {
+  const read = (file: string): string | null => {
+    const absolutePath = NodePath.join(repoRoot, file);
+    return NodeFS.existsSync(absolutePath) ? NodeFS.readFileSync(absolutePath, "utf8") : null;
+  };
+  for (const rule of COPY_RULES) {
+    const text = read(rule.file);
+    const found = text === null ? 0 : occurrences(text, rule.from);
+    if (found === 1) continue;
+    problems.push(
+      `${rule.file}: expected ${JSON.stringify(rule.from)} once, found it ${found} times; ` +
+        "upstream reworded or moved this copy, update apps/web/vite/linceiCopy.ts.",
+    );
+  }
+  for (const control of HIDDEN_UNLESS_TECHIE) {
+    for (const anchor of control.anchors) {
+      const text = read(anchor.file);
+      if (text !== null && text.includes(anchor.text)) continue;
+      problems.push(
+        `${anchor.file}: ${JSON.stringify(anchor.text)} is gone, so "${control.what}" is no longer ` +
+          "hidden in researcher mode; update apps/web/vite/linceiResearcherMode.ts.",
+      );
+    }
+  }
+}
+
 function run(mode: "apply" | "check"): number {
   const problems: Array<string> = [];
   const stale: Array<string> = [];
+  checkBuildTimeRules(problems);
   for (const [file, rules] of Object.entries(GOVERNED_FILES)) {
     const absolutePath = NodePath.join(repoRoot, file);
     if (!NodeFS.existsSync(absolutePath)) {
