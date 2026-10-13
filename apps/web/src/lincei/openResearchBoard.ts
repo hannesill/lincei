@@ -14,6 +14,7 @@ import type {
   ClinicalRuntimeStatus,
   EnvironmentId,
   LinceiRequest,
+  PreviewAdjustInput,
   ScopedThreadRef,
 } from "@t3tools/contracts";
 
@@ -47,14 +48,35 @@ export interface BoardTarget {
     readonly input: LinceiRequest;
   }) => Promise<LinceiCommandResult>;
   readonly openPreview: OpenPreviewMutation;
+  /** Upstream's command for how a browser tab on the server renders. */
+  readonly adjustPreview: (target: {
+    readonly environmentId: EnvironmentId;
+    readonly input: PreviewAdjustInput;
+  }) => Promise<unknown>;
 }
 
-async function showBoard({
-  threadRef,
-  cwd,
-  request,
-  openPreview,
-}: BoardTarget): Promise<BoardOpening> {
+/**
+ * Gives the board's tab the appearance the app has now. A tab that agents can
+ * drive too is rendered through upstream's browser driver, which shows pages
+ * light unless told otherwise, so a board left to "follow the system" would be
+ * a white page beside a dark app. Asked again each time the board is shown,
+ * which is how it follows a change of theme.
+ */
+function matchAppAppearance({ threadRef, adjustPreview }: BoardTarget, tabId: string | null): void {
+  if (tabId === null) return;
+  const tab = readThreadPreviewState(threadRef).sessions[tabId];
+  if (tab === undefined || tab.runtime !== "server") return;
+  const colorScheme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+  if (tab.colorScheme === colorScheme) return;
+  // Appearance only: a board that stays light is still the board.
+  void adjustPreview({
+    environmentId: threadRef.environmentId,
+    input: { threadId: threadRef.threadId, tabId: tab.tabId, colorScheme },
+  }).catch(() => undefined);
+}
+
+async function showBoard(target: BoardTarget): Promise<BoardOpening> {
+  const { threadRef, cwd, request, openPreview } = target;
   // The button does not offer the board in such a window. This is for a
   // window that lost its browser between the button's render and the click.
   if (!isPreviewAvailableFor(threadRef.environmentId)) {
@@ -89,10 +111,14 @@ async function showBoard({
   if (tabId !== null) {
     setActivePreviewTab(threadRef, tabId);
     useRightPanelStore.getState().openBrowser(threadRef, tabId);
+    matchAppAppearance(target, tabId);
     return { _tag: "Shown" };
   }
   const opened = await openUrlInPreview({ threadRef, url, openPreview });
-  if (opened._tag === "Success") return { _tag: "Shown" };
+  if (opened._tag === "Success") {
+    matchAppAppearance(target, findBoardTab(readThreadPreviewState(threadRef).sessions, url));
+    return { _tag: "Shown" };
+  }
   // The board is running; it is upstream's browser that did not take the tab.
   return {
     _tag: "Unavailable",

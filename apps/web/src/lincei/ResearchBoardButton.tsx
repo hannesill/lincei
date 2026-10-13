@@ -8,6 +8,7 @@ import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import type { SessionPhase } from "~/types";
@@ -89,6 +90,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const canShowBoard = usePreviewAvailable(environmentId);
   const { view, refresh: refreshStatus } = useClinicalStatus(environmentId);
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
+  const adjustPreview = useAtomCommand(previewEnvironment.adjust, { reportFailure: false });
   const setUp = useClinicalSetup(environmentId, refreshStatus);
   const [busy, setBusy] = useState(false);
   const shown = useBoardShown(threadRef === null ? null : scopedThreadKey(threadRef));
@@ -135,11 +137,15 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
         // Nobody asked for the board, so failing to show it is not worth a
         // message. The thread stays unmarked and the next card tries again.
         onNews: () =>
-          void openResearchBoard({ threadRef: watched, cwd: folder, request, openPreview }).then(
-            (opening) => {
-              if (opening._tag === "Shown") markBoardShown(scopedThreadKey(watched));
-            },
-          ),
+          void openResearchBoard({
+            threadRef: watched,
+            cwd: folder,
+            request,
+            openPreview,
+            adjustPreview,
+          }).then((opening) => {
+            if (opening._tag === "Shown") markBoardShown(scopedThreadKey(watched));
+          }),
       }),
     );
     watcher.current = held.watcher;
@@ -147,12 +153,12 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
       watcher.current = null;
       held.release();
     };
-  }, [watchable, environmentId, threadId, folder, request, openPreview]);
+  }, [watchable, environmentId, threadId, folder, request, openPreview, adjustPreview]);
   useEffect(() => {
     if (running) watcher.current?.start();
     else watcher.current?.finish();
     // The same list as above, so a watcher made mid-turn is started too.
-  }, [running, watchable, environmentId, threadId, folder, request, openPreview]);
+  }, [running, watchable, environmentId, threadId, folder, request, openPreview, adjustPreview]);
 
   const button = describeBoardButton({
     view,
@@ -172,7 +178,13 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
       return;
     }
     // The server answers from the tools' state now, not the one on screen.
-    const opening = await openResearchBoard({ threadRef, cwd: folder, request, openPreview });
+    const opening = await openResearchBoard({
+      threadRef,
+      cwd: folder,
+      request,
+      openPreview,
+      adjustPreview,
+    });
     switch (opening._tag) {
       case "Shown":
         markBoardShown(scopedThreadKey(threadRef));
