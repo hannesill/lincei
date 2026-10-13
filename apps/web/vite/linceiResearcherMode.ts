@@ -410,6 +410,174 @@ export const HIDDEN_UNLESS_TECHIE: ReadonlyArray<HiddenControl> = [
     ],
   },
   {
+    what: "Settings: Diff colors",
+    selector: "#diff-color-scheme",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "diff-color-scheme",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Branch and worktree controls under the composer",
+    selector: "#composer-context",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "composer-context",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Terminal font",
+    selector: "#terminal-font",
+    anchors: [
+      { file: "apps/web/src/components/settings/settingsSearch.ts", text: 'id: "terminal-font",' },
+    ],
+  },
+  {
+    what: "Settings: Usage providers",
+    selector: "#usage-providers",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "usage-providers",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Cursor account usage",
+    selector: "#cursor-keychain-usage",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "cursor-keychain-usage",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Provider health check interval",
+    selector: "#provider-health-check-interval",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "provider-health-check-interval",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Browser profiles",
+    selector: "#browser-profiles",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "browser-profiles",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Browser viewport (device toolbar)",
+    selector: "#browser-default-viewport",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "browser-default-viewport",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Browser recording frame rate",
+    selector: "#browser-recording-frame-rate",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "browser-recording-frame-rate",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Browser recording key presses",
+    selector: "#browser-recording-key-presses",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "browser-recording-key-presses",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Browser recording mouse presses",
+    selector: "#browser-recording-mouse-presses",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "browser-recording-mouse-presses",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Device hub",
+    selector: "#device-hub",
+    anchors: [
+      { file: "apps/web/src/components/settings/settingsSearch.ts", text: 'id: "device-hub",' },
+    ],
+  },
+  {
+    what: "Settings: Simulator support",
+    selector: "#device-platform-support",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "device-platform-support",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Agent device access",
+    selector: "#agent-device-access",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "agent-device-access",',
+      },
+    ],
+  },
+  {
+    what: "Settings: Device hosts",
+    selector: "#device-hosts",
+    anchors: [
+      { file: "apps/web/src/components/settings/settingsSearch.ts", text: 'id: "device-hosts",' },
+    ],
+  },
+  {
+    what: "Settings: Project actions (shell commands)",
+    selector: "#project-actions",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "project-actions",',
+      },
+    ],
+  },
+  {
+    what: "Settings: device sections",
+    selector: "section#devices",
+    anchors: [
+      { file: "apps/web/src/components/settings/IntegrationsSettings.tsx", text: 'id="devices"' },
+    ],
+  },
+  {
+    what: "Settings: provider runtime (binary path, config directory, launch arguments)",
+    selector: '[id^="provider-instance-"][id$="-runtime"]',
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/ProviderInstanceCard.tsx",
+        text: "id={`provider-instance-${instanceId}-runtime`}",
+      },
+    ],
+  },
+  {
     what: "Settings: legacy features",
     selector: "section#legacy-features",
     anchors: [
