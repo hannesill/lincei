@@ -29,10 +29,10 @@ content. `git log --first-parent` leaves it out.
 | Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                                                                                     | Two lines in `apps/server/src/server.ts`                                                                                                                                                                                     |
 | Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
 | What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                                                                                 | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                                                                                                                                       |
-| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts)                                                         | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`                                                                                                                                           |
+| Requests from the clients (`lincei.request`)                     | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts)                                                         | One line each in `rpc.ts`, `ws.ts`, `RpcAuthorization.ts`, `RpcInstrumentation.ts`, and the export in `packages/contracts/src/index.ts`                                                                                      |
 | Datasets and M4's skills for agents                              | [`ClinicalDatasets.ts`](../../apps/server/src/lincei/ClinicalDatasets.ts), [`ClinicalSkillLinks.ts`](../../apps/server/src/lincei/ClinicalSkillLinks.ts)                                                                           | None                                                                                                                                                                                                                         |
 | Research board button, which also opens the board by itself      | [`apps/web/src/lincei/`](../../apps/web/src/lincei), [`apps/server/src/lincei/ResearchBoard.ts`](../../apps/server/src/lincei/ResearchBoard.ts)                                                                                    | `ChatView.tsx` renders `LinceiPanelLayoutControls` in place of `PanelLayoutControls`                                                                                                                                         |
-| Settings, Clinical Data                                          | [`ClinicalDataSettings.tsx`](../../apps/web/src/lincei/ClinicalDataSettings.tsx), `apps/web/src/routes/settings.clinical.tsx`                                                                                                      | Three lines in `settingsSearch.ts`, two in `SettingsSidebarNav.tsx`, and the generated `routeTree.gen.ts`                                                                                                                    |
+| Settings, Clinical Data                                          | [`ClinicalDataSettings.tsx`](../../apps/web/src/lincei/ClinicalDataSettings.tsx), `apps/web/src/routes/settings.clinical.tsx`                                                                                                      | Five lines in `settingsSearch.ts`, two in `SettingsSidebarNav.tsx`, and the generated `routeTree.gen.ts`                                                                                                                     |
 | Clinical step after the first-run wizard                         | [`LinceiWelcomeWizard.tsx`](../../apps/web/src/lincei/LinceiWelcomeWizard.tsx)                                                                                                                                                     | `routes/welcome.tsx` renders it in place of `WelcomeWizard`; the stage label is an identity rule                                                                                                                             |
 | Researcher mode and Techie mode                                  | [`apps/web/vite/linceiResearcherMode.ts`](../../apps/web/vite/linceiResearcherMode.ts), [`apps/web/src/lincei/mode/`](../../apps/web/src/lincei/mode), [`LinceiPreferences.ts`](../../apps/server/src/lincei/LinceiPreferences.ts) | One changed line and an import each in `state/server.ts`, `localApi.ts`, `CommandPalette.tsx`, `SettingsSidebarNav.tsx`, `useAvailableSettingsSearchItems.ts`; two in `ChatView.tsx`; the switch row in `SettingsPanels.tsx` |
 | A researcher's wording for upstream's developer copy             | [`apps/web/vite/linceiCopy.ts`](../../apps/web/vite/linceiCopy.ts)                                                                                                                                                                 | None: applied by the brand plugin as it builds                                                                                                                                                                               |
@@ -71,7 +71,8 @@ Then, for each conflict:
 - **`README.md`, icons, `T3Wordmark.tsx`, `apps/desktop/resources/dmg/dmg-background-latest.svg`:**
   keep Lincei's side.
 - **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `RpcAuthorization.ts`,
-  `RpcInstrumentation.ts`, `rpc.ts`, `runtimeInstructions.ts`, `ChatView.tsx`, `SidebarChrome.tsx`,
+  `RpcInstrumentation.ts`, `rpc.ts`, `packages/contracts/src/index.ts`, `runtimeInstructions.ts`,
+  `ChatView.tsx`, `SidebarChrome.tsx`,
   `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
   `useAvailableSettingsSearchItems.ts`, `SettingsPanels.tsx`, `CommandPalette.tsx`, `localApi.ts`,
   `state/server.ts`, `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
@@ -235,8 +236,10 @@ documents as rewritten on every card, so asking costs a few `stat` calls and no 
 Lincei's user is a clinical researcher. Upstream's is a developer, and its interface says so on
 every screen: terminals, diffs, branches, worktrees, pull requests, runtime modes. Lincei keeps all
 of that function and hides the surfaces unless **Techie mode** is on. The switch is the first row
-of Settings, General; it is off by default, takes effect at once, and closes nothing, so a
-terminal that was open is still there when the mode is turned back on.
+of Settings, General and the last row of the first-run wizard; it is off by default, takes effect
+at once, and closes nothing, so a terminal that was open is still there when the mode is turned
+back on. Settings search and the command palette find it under the names of what it hides
+(terminal, git, keyboard shortcuts), which in researcher mode would otherwise find nothing.
 
 Four layers, cheapest first:
 
@@ -271,6 +274,15 @@ a shortcut, a context menu, or settings search, add it to
 [`researcherFilters.ts`](../../apps/web/src/lincei/mode/researcherFilters.ts), whose test fails
 when upstream renames a settings id or a shortcut command.
 
+**Starting settings** ([`researcherDefaults.ts`](../../apps/web/src/lincei/researcherDefaults.ts)).
+Three client settings start differently from upstream's default: the floating browser preview is
+off, because closing the right panel would otherwise leave the research board floating over the
+conversation; archiving a conversation asks first; and in-app notifications are on. The wizard
+writes them once per device when it reaches Lincei's step, through upstream's own settings store,
+so they cost no upstream line and are the user's to change afterwards. The reset arrows in
+Settings still lead to upstream's defaults, and a test fails when upstream's default catches up
+with one of them, which is when to drop it.
+
 Git stays underneath and out of sight. A project that is a git repository still gets upstream's
 checkpoint after every turn, so rewinding a conversation works there. A plain folder gets none:
 Lincei does not turn a folder the researcher chose into a repository, because a checkpoint copies
@@ -287,7 +299,7 @@ picks, the contrast and glass sliders, and custom fonts are upstream's and keep 
   upstream's own selectors. The brand plugin appends it to `index.css` as an `@import`, so
   Tailwind compiles it with upstream's stylesheet and its rules come last at the same specificity.
   A `<style>` tag in `index.html` would not work: the app's stylesheet is added to the page at run
-  time, after everything in `<head>`, and would win every tie. The file's header lists the three
+  time, after everything in `<head>`, and would win every tie. The file's header lists the four
   rules that keep it from fighting upstream or the user.
 - Upstream repeats its stock colours outside CSS: in the boot script and inline style of
   `index.html`, in the stock palette as theme roles (`packages/shared/src/themePalettes.ts`), and in
