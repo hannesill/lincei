@@ -65,19 +65,46 @@ const RELEASES: Readonly<Record<string, UvRelease>> = {
   ),
 };
 
+/**
+ * Why there is no uv to run, in words for a researcher who has never heard of
+ * it: clinical setup shows these as they are.
+ */
+const MESSAGES = {
+  "unsupported-platform":
+    "Lincei cannot install the clinical research tools on this kind of computer yet. It can on a Mac and on most Linux computers.",
+  download:
+    "Lincei could not download the installer for the clinical research tools. Check the internet connection, then try again. Some hospital and university networks block this download; if it keeps failing, try another network.",
+  verification:
+    "The installer Lincei downloaded is not the one it expects, so nothing was installed. Try again; if it keeps happening, the network may be altering downloads, so try another network.",
+  storage:
+    "Lincei could not save the installer for the clinical research tools on this computer. Check that the disk has free space, then try again.",
+} as const;
+
 export class UvInstallationError extends Schema.TaggedError<UvInstallationError>()(
   "UvInstallationError",
   {
+    reason: Schema.Literals(["unsupported-platform", "download", "verification", "storage"]),
+    /** The technical account, for whoever helps the user. */
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
-  override get message() {
-    return this.detail;
+  override get message(): string {
+    return MESSAGES[this.reason];
   }
 }
 
 const isInstallationError = Schema.is(UvInstallationError);
+
+/** Reports whatever one stage of the installation fails with as that stage's failure. */
+const failingAs =
+  (reason: UvInstallationError["reason"], detail: string) =>
+  <A, E, R>(stage: Effect.Effect<A, E, R>) =>
+    stage.pipe(
+      Effect.mapError((cause) =>
+        isInstallationError(cause) ? cause : new UvInstallationError({ reason, detail, cause }),
+      ),
+    );
 
 /**
  * Resolves the uv command to run: the one on PATH, or Lincei's own copy in
@@ -116,67 +143,75 @@ export const ensure = Effect.fn("UvInstallation.ensure")(function* (input: {
   const release = input.release ?? RELEASES[`${platform}-${arch}`];
   if (release === undefined) {
     return yield* new UvInstallationError({
-      detail:
-        "uv is not installed, and Lincei cannot install it on this platform. Install it from https://docs.astral.sh/uv/ and run setup again.",
+      reason: "unsupported-platform",
+      detail: `uv is not on PATH, and no uv release is pinned for ${platform}-${arch}.`,
     });
   }
 
   return yield* Effect.gen(function* () {
-    yield* fileSystem.makeDirectory(input.managedDirectory, { recursive: true });
-    const staging = yield* fileSystem.makeTempDirectoryScoped({
-      directory: input.managedDirectory,
-      prefix: ".install-",
-    });
+    const staging = yield* fileSystem
+      .makeDirectory(input.managedDirectory, { recursive: true })
+      .pipe(
+        Effect.andThen(
+          fileSystem.makeTempDirectoryScoped({
+            directory: input.managedDirectory,
+            prefix: ".install-",
+          }),
+        ),
+        failingAs("storage", "The folder for Lincei's own tools could not be written."),
+      );
     const archivePath = path.join(staging, "uv.tar.gz");
     const hash = NodeCrypto.createHash("sha256");
     let downloadedBytes = 0;
-    const response = yield* http
-      .execute(HttpClientRequest.get(release.url))
-      .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-    yield* response.stream.pipe(
-      Stream.tap((chunk) => {
-        downloadedBytes += chunk.byteLength;
-        if (downloadedBytes > release.archiveBytes) {
-          return Effect.fail(
-            new UvInstallationError({
-              detail: "The uv download was larger than the pinned release.",
-            }),
-          );
-        }
-        hash.update(chunk);
-        return Effect.void;
-      }),
-      Stream.run(fileSystem.sink(archivePath, { flag: "wx", mode: 0o600 })),
+    yield* http.execute(HttpClientRequest.get(release.url)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((response) =>
+        response.stream.pipe(
+          Stream.tap((chunk) => {
+            downloadedBytes += chunk.byteLength;
+            if (downloadedBytes > release.archiveBytes) {
+              return Effect.fail(
+                new UvInstallationError({
+                  reason: "verification",
+                  detail: `The uv download was larger than the pinned release (${release.archiveBytes} bytes).`,
+                }),
+              );
+            }
+            hash.update(chunk);
+            return Effect.void;
+          }),
+          Stream.run(fileSystem.sink(archivePath, { flag: "wx", mode: 0o600 })),
+        ),
+      ),
       Effect.timeout("15 minutes"),
+      failingAs("download", `Downloading uv ${UV_VERSION} from its GitHub release did not finish.`),
     );
     if (downloadedBytes !== release.archiveBytes || hash.digest("hex") !== release.sha256) {
       return yield* new UvInstallationError({
-        detail: "The uv download failed its size or SHA-256 check. Nothing was installed.",
+        reason: "verification",
+        detail: `The uv download (${downloadedBytes} bytes) does not match the size and SHA-256 digest of the pinned release.`,
       });
     }
 
     // The archive holds one directory with `uv` and `uvx` in it.
-    const unpacked = yield* processRunner.run({
-      command: "tar",
-      args: ["-xzf", archivePath, "-C", staging, "--strip-components=1"],
-      timeout: "2 minutes",
-      outputMode: "truncate",
-      maxOutputBytes: 4096,
-    });
+    const unpacked = yield* processRunner
+      .run({
+        command: "tar",
+        args: ["-xzf", archivePath, "-C", staging, "--strip-components=1"],
+        timeout: "2 minutes",
+        outputMode: "truncate",
+        maxOutputBytes: 4096,
+      })
+      .pipe(failingAs("storage", "tar could not be run on the uv archive."));
     if (Number(unpacked.code) !== 0) {
-      return yield* new UvInstallationError({ detail: "Could not unpack the uv download." });
+      return yield* new UvInstallationError({
+        reason: "storage",
+        detail: "tar could not unpack the uv archive.",
+      });
     }
-    yield* fileSystem.rename(path.join(staging, path.basename(managed)), managed);
+    yield* fileSystem
+      .rename(path.join(staging, path.basename(managed)), managed)
+      .pipe(failingAs("storage", "The unpacked uv could not be moved into place."));
     return managed;
-  }).pipe(
-    Effect.scoped,
-    Effect.mapError((cause) =>
-      isInstallationError(cause)
-        ? cause
-        : new UvInstallationError({
-            detail: "Could not download uv. Check the network connection and run setup again.",
-            cause,
-          }),
-    ),
-  );
+  }).pipe(Effect.scoped);
 });

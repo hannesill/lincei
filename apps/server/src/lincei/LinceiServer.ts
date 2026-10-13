@@ -17,9 +17,11 @@ import * as ResearchBoard from "./ResearchBoard.ts";
 
 export const activate = ClinicalRuntime.activate;
 
+// Clinical setup ends by asking the datasets service for the demo dataset, so
+// that service sits below the one that installs the tools.
 export const layer = LinceiRequests.layer.pipe(
   Layer.provideMerge(ResearchBoard.layer),
-  Layer.provideMerge(ClinicalDatasets.layer),
   Layer.provideMerge(ClinicalRuntime.layer),
+  Layer.provideMerge(ClinicalDatasets.layer),
   Layer.provide(ProcessRunner.layer),
 );

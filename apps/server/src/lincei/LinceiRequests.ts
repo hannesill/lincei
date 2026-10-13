@@ -52,12 +52,12 @@ const make = Effect.gen(function* () {
   );
 
   /**
-   * M4 and Vitrine live in the clinical runtime, so a request that needs them
-   * before they are installed is answered with how far setup is instead.
+   * A request that needs M4 or Vitrine before they are installed is answered
+   * with how far setup is instead.
    */
   const whenInstalled = (answer: Effect.Effect<LinceiResponse, LinceiRequestError>) =>
     Effect.flatMap(clinicalRuntime.status, (status) =>
-      ClinicalDatasets.m4Installed(status)
+      ClinicalRuntime.toolsInstalled(status)
         ? answer
         : Effect.succeed<LinceiResponse>({ _tag: "Clinical", status }),
     );
@@ -69,7 +69,7 @@ const make = Effect.gen(function* () {
       case "ClinicalStatus":
         return { _tag: "Clinical", status: yield* clinicalRuntime.status };
       case "ClinicalSetup":
-        return { _tag: "Clinical", status: yield* clinicalRuntime.setup };
+        return { _tag: "Clinical", status: yield* clinicalRuntime.setup({ force: request.force }) };
       case "ResearchBoardOpen":
         return yield* whenInstalled(
           researchBoard.open(request.cwd).pipe(
