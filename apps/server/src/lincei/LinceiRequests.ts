@@ -20,6 +20,7 @@ import * as Option from "effect/Option";
 
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
+import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
 
 /** The RPC method this service answers, for the transport's handler table. */
@@ -45,6 +46,7 @@ const make = Effect.gen(function* () {
   const clinicalRuntime = yield* ClinicalRuntime.ClinicalRuntime;
   const clinicalDatasets = yield* ClinicalDatasets.ClinicalDatasets;
   const researchBoard = yield* ResearchBoard.ResearchBoard;
+  const linceiPreferences = yield* LinceiPreferences.LinceiPreferences;
 
   const datasets = clinicalDatasets.list.pipe(
     Effect.map((list): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list })),
@@ -107,6 +109,13 @@ const make = Effect.gen(function* () {
         return yield* whenInstalled(
           clinicalDatasets.cancel(request.name).pipe(Effect.andThen(datasets)),
         );
+      case "Preferences":
+        return { _tag: "Preferences", preferences: yield* linceiPreferences.get };
+      case "PreferencesUpdate":
+        return {
+          _tag: "Preferences",
+          preferences: yield* linceiPreferences.update({ techieMode: request.techieMode }),
+        };
     }
   });
 

@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
+import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
 
@@ -21,6 +22,7 @@ export const activate = ClinicalRuntime.activate;
 // that service sits below the one that installs the tools.
 export const layer = LinceiRequests.layer.pipe(
   Layer.provideMerge(ResearchBoard.layer),
+  Layer.provideMerge(LinceiPreferences.layer),
   Layer.provideMerge(ClinicalRuntime.layer),
   Layer.provideMerge(ClinicalDatasets.layer),
   Layer.provide(ProcessRunner.layer),
