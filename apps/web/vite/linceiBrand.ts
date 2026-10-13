@@ -2,6 +2,7 @@ import type { Plugin } from "vite-plus";
 
 import { COPY_RULES, type CopyRule } from "./linceiCopy.ts";
 import { researcherModeHeadTags } from "./linceiResearcherMode.ts";
+import { THEME_SOURCE_RULES, THEME_STYLESHEET } from "./linceiTheme.ts";
 
 /**
  * Upstream display strings and what Lincei shows instead. Upstream writes its
@@ -25,11 +26,19 @@ function rebrand(text: string): string | null {
   return next === text ? null : next;
 }
 
-/** The copy rules for one module, by the repository path its id ends with. */
-function copyRulesFor(id: string): ReadonlyArray<CopyRule> {
+/** Exact upstream text and what the build puts in its place: wording, and the default look's colours. */
+const SOURCE_RULES: ReadonlyArray<CopyRule> = [...COPY_RULES, ...THEME_SOURCE_RULES];
+const INDEX_HTML = "apps/web/index.html";
+
+/** The rules for one module, by the repository path its id ends with. */
+function sourceRulesFor(id: string): ReadonlyArray<CopyRule> {
   const path = id.split("?")[0] ?? id;
-  return COPY_RULES.filter((rule) => path.endsWith(`/${rule.file}`));
+  return SOURCE_RULES.filter((rule) => path.endsWith(`/${rule.file}`));
 }
+
+const reworded = (rule: CopyRule) =>
+  `${rule.file} no longer contains ${JSON.stringify(rule.from)}. ` +
+  "Upstream reworded or moved it; update the rule in apps/web/vite/linceiCopy.ts or linceiTheme.ts.";
 
 /**
  * Builds Lincei's web client out of upstream's source, in dev and production:
@@ -38,6 +47,9 @@ function copyRulesFor(id: string): ReadonlyArray<CopyRule> {
  * - replaces the developer copy listed in linceiCopy.ts with a researcher's
  *   words, and fails the build when upstream has reworded one of those
  *   strings, so the old text cannot ship unnoticed;
+ * - gives the app Lincei's default look: theme.css joins upstream's
+ *   stylesheet as its last rules, and the stock colours upstream repeats
+ *   outside CSS are replaced the same way as copy (linceiTheme.ts);
  * - adds the stylesheet and boot script of researcher mode to the page
  *   (linceiResearcherMode.ts).
  *
@@ -53,23 +65,35 @@ export function linceiBrandPlugin(): Plugin {
       enabled = config.mode !== "test";
     },
     transform(code, id) {
-      if (!enabled || id.includes("/node_modules/") || !SOURCE_FILE.test(id)) return null;
+      if (!enabled || id.includes("/node_modules/")) return null;
+      if ((id.split("?")[0] ?? id).endsWith(`/${THEME_STYLESHEET.host}`)) {
+        // Tailwind compiles this source next and resolves the import, so
+        // theme.css is compiled with upstream's stylesheet, comes last at the
+        // same specificity, and is watched in dev. A tag in index.html would
+        // come before the app's stylesheet and lose every tie.
+        return { code: `${code}\n@import "${THEME_STYLESHEET.specifier}";\n`, map: null };
+      }
+      if (!SOURCE_FILE.test(id)) return null;
       let next = code;
-      for (const rule of copyRulesFor(id)) {
-        if (!next.includes(rule.from)) {
-          this.error(
-            `${rule.file} no longer contains ${JSON.stringify(rule.from)}. ` +
-              "Upstream reworded or moved it; update apps/web/vite/linceiCopy.ts.",
-          );
-        }
+      for (const rule of sourceRulesFor(id)) {
+        if (!next.includes(rule.from)) this.error(reworded(rule));
         next = next.replace(rule.from, rule.to);
       }
       next = rebrand(next) ?? next;
       return next === code ? null : { code: next, map: null };
     },
-    transformIndexHtml(html) {
-      if (!enabled) return html;
-      return { html: rebrand(html) ?? html, tags: researcherModeHeadTags() };
+    transformIndexHtml: {
+      // Before Vite touches the page, so the rules see upstream's source text.
+      order: "pre",
+      handler(html) {
+        if (!enabled) return html;
+        let next = html;
+        for (const rule of SOURCE_RULES.filter((rule) => rule.file === INDEX_HTML)) {
+          if (!next.includes(rule.from)) throw new Error(reworded(rule));
+          next = next.replace(rule.from, rule.to);
+        }
+        return { html: rebrand(next) ?? next, tags: researcherModeHeadTags() };
+      },
     },
   };
 }

@@ -28,6 +28,7 @@ import * as NodeURL from "node:url";
 
 import { COPY_RULES } from "../../apps/web/vite/linceiCopy.ts";
 import { HIDDEN_UNLESS_TECHIE } from "../../apps/web/vite/linceiResearcherMode.ts";
+import { THEME_SOURCE_RULES } from "../../apps/web/vite/linceiTheme.ts";
 
 type Replacement = readonly [from: string | RegExp, to: string];
 
@@ -156,6 +157,17 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
     exact: [['path.join(NodeOS.homedir(), ".t3")', 'path.join(NodeOS.homedir(), ".lincei")']],
   },
 
+  // The colour Electron paints before the page exists: Lincei's canvas
+  // (apps/web/src/lincei/theme.css), not upstream's black and white.
+  "apps/desktop/src/window/DesktopWindow.ts": {
+    exact: [
+      [
+        'return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";',
+        'return shouldUseDarkColors ? "#131b1e" : "#f7f5ef";',
+      ],
+    ],
+  },
+
   // Text a researcher reads that the web build's display-name rewrite cannot
   // reach, because the server and the desktop shell are built separately: the
   // page shown after signing in with ChatGPT, the macOS permission helper, the
@@ -272,13 +284,13 @@ function checkBuildTimeRules(problems: Array<string>): void {
     const absolutePath = NodePath.join(repoRoot, file);
     return NodeFS.existsSync(absolutePath) ? NodeFS.readFileSync(absolutePath, "utf8") : null;
   };
-  for (const rule of COPY_RULES) {
+  for (const rule of [...COPY_RULES, ...THEME_SOURCE_RULES]) {
     const text = read(rule.file);
     const found = text === null ? 0 : occurrences(text, rule.from);
     if (found === 1) continue;
     problems.push(
       `${rule.file}: expected ${JSON.stringify(rule.from)} once, found it ${found} times; ` +
-        "upstream reworded or moved this copy, update apps/web/vite/linceiCopy.ts.",
+        "upstream reworded or moved it, update the rule in apps/web/vite/linceiCopy.ts or linceiTheme.ts.",
     );
   }
   for (const control of HIDDEN_UNLESS_TECHIE) {
