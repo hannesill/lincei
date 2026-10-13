@@ -8,7 +8,7 @@
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type { ClinicalDataset, EnvironmentId, LinceiRequest } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { toastManager } from "~/components/ui/toast";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -95,8 +95,32 @@ export function useClinicalDatasets(
   const { result, refresh } = useLinceiRead(environmentId, enabled ? CLINICAL_DATASETS : null);
   const [answer, setAnswer] = useState<DatasetAnswer | null>(null);
   const view = datasetListView(result, answer);
+
+  // Setup downloads the demo dataset as one of these datasets' jobs. A list
+  // that was on screen before setup ran would see it neither start nor end,
+  // because it only asks again while it knows of a running job; it would go
+  // on showing an earlier failure beside a setup that says ready. So the list
+  // asks again whenever setup moves on, and keeps asking while setup is at
+  // the demo dataset. Whoever shows the list keeps the status itself fresh.
+  const setup = clinicalStatusView(
+    useLinceiRead(environmentId, enabled ? CLINICAL_STATUS : null).result,
+  );
+  const setupStage =
+    setup.phase === "known"
+      ? `${setup.status.state}:${setup.status.step ?? ""}:${setup.status.demoDataset}`
+      : setup.phase;
+  const lastSetupStage = useRef(setupStage);
+  useEffect(() => {
+    if (lastSetupStage.current === setupStage) return;
+    lastSetupStage.current = setupStage;
+    refresh();
+  }, [setupStage, refresh]);
   usePolling(
-    view.phase === "listed" && view.datasets.some((dataset) => dataset.job?.state === "running"),
+    (setup.phase === "known" &&
+      setup.status.state === "installing" &&
+      setup.status.step === "dataset") ||
+      (view.phase === "listed" &&
+        view.datasets.some((dataset) => dataset.job?.state === "running")),
     refresh,
   );
 
