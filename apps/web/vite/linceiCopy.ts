@@ -125,4 +125,44 @@ export const COPY_RULES: ReadonlyArray<CopyRule> = [
     from: "                No settings found\n",
     to: "                No settings found. Developer settings appear when Techie mode is on.\n",
   },
+  {
+    file: "apps/web/src/components/NoProjectsHero.tsx",
+    from: '"Add a project to start your first thread."',
+    to: '"Add a project folder to start."',
+  },
+  {
+    file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
+    from: "        Connect your computers\n",
+    to: "        Choose where the work runs\n",
+  },
+  {
+    file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
+    from: "Choose one or more computers. We’ll set up agents and projects on each.",
+    to: "Agents run on the computer you pick, next to your data. Most people use this one.",
+  },
+  {
+    file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
+    from: 'title="Connect your agents"',
+    to: 'title="Sign in to an agent"',
+  },
+  {
+    file: "apps/web/src/components/chat/ChatComposer.tsx",
+    from: '"Ask anything..."',
+    to: '"Ask a question..."',
+  },
+  {
+    file: "apps/web/src/components/settings/settingsSearch.ts",
+    from: '"/settings/providers": "Providers",',
+    to: '"/settings/providers": "Agents",',
+  },
+  {
+    file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
+    from: '<h1 className="text-2xl font-semibold tracking-tight text-foreground">Your projects</h1>',
+    to: '<h1 className="text-2xl font-semibold tracking-tight text-foreground">Earlier work</h1>',
+  },
+  {
+    file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
+    from: "Looking for projects from Claude Code and Codex…",
+    to: "Looking for earlier Claude Code and Codex projects…",
+  },
 ];
