@@ -289,6 +289,27 @@ export const HIDDEN_UNLESS_TECHIE: ReadonlyArray<HiddenControl> = [
     ],
   },
   {
+    // The way into the floating mini browser from the tab's own toolbar.
+    what: "Browser: float the tab over the chat",
+    selector: 'button[aria-label="Float preview over chat"]',
+    anchors: [
+      {
+        file: "apps/web/src/components/preview/PreviewChromeRow.tsx",
+        text: '"Float preview over chat"',
+      },
+    ],
+  },
+  {
+    what: "Settings: show the floating mini browser when an agent opens a page",
+    selector: "#browser-auto-show-floating-preview",
+    anchors: [
+      {
+        file: "apps/web/src/components/settings/settingsSearch.ts",
+        text: 'id: "browser-auto-show-floating-preview",',
+      },
+    ],
+  },
+  {
     what: "Sidebar: terminal-running icon",
     selector: '[data-testid^="sidebar-terminal-status-"]',
     anchors: [

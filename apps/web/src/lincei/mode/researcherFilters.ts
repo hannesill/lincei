@@ -137,6 +137,7 @@ export const TECHIE_SETTINGS_IDS: ReadonlySet<string> = new Set([
   "provider-health-check-interval",
   "browser-profiles",
   "browser-default-viewport",
+  "browser-auto-show-floating-preview",
   "browser-recording-frame-rate",
   "browser-recording-key-presses",
   "browser-recording-mouse-presses",
