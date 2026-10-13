@@ -1,82 +1,144 @@
 import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
-import { AuthOrchestrationOperateScope, type ClinicalRuntimeStatus } from "@t3tools/contracts";
-import { ArrowRightIcon } from "lucide-react";
-import { type ComponentProps, useState } from "react";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
+import { type ComponentProps, type RefObject, useEffect, useRef, useState } from "react";
 
 import { WelcomeWizard } from "~/components/onboarding/WelcomeWizard";
 import { T3Wordmark } from "~/components/T3Wordmark";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { Dialog } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "~/components/ui/wizard";
-import { usePrimaryEnvironmentId } from "~/state/environments";
+import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
 
 import { ClinicalDatasetList } from "./ClinicalDatasetList";
+import { ClinicalStatusNote } from "./ClinicalNote";
+import {
+  clinicalSetupAction,
+  clinicalStepFooter,
+  clinicalToolsInstalled,
+  describeLostConnection,
+  WIZARD_STAGES,
+} from "./clinicalPresentation";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
-import { clinicalToolsInstalled, useClinicalSetup, useClinicalStatus } from "./clinicalState";
-
-/** T3 Code's stages plus Lincei's; `scripts/lincei/identity.ts` adds the last to its header too. */
-const STAGES = ["Connect", "Agents", "Projects", "Clinical"] as const;
+import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
+import type { ClinicalStatusView } from "./linceiAnswers";
+import { ProviderDataNotice } from "./ProviderDataNotice";
 
 function ClinicalStep({
   environmentId,
-  status,
+  view,
   refresh,
+  headingRef,
   onContinue,
 }: {
   readonly environmentId: EnvironmentId;
-  readonly status: ClinicalRuntimeStatus;
+  readonly view: ClinicalStatusView;
   readonly refresh: () => void;
+  /** Where focus lands when the step opens, so that Return does not leave it at once. */
+  readonly headingRef: RefObject<HTMLHeadingElement | null>;
   readonly onContinue: () => void;
 }) {
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const setUp = useClinicalSetup(environmentId, refresh);
-  const needsStart = status.state === "not-installed" || status.state === "failed";
+  const connection = useEnvironment(environmentId)?.connection.phase;
+  const status = view.phase === "known" ? view.status : null;
+  const action = status === null ? null : clinicalSetupAction(status);
+  const lost =
+    connection === undefined || connection === "connected"
+      ? null
+      : describeLostConnection({
+          otherComputer: null,
+          reconnecting: connection === "connecting" || connection === "reconnecting",
+        });
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-2xl font-semibold tracking-tight text-foreground outline-none"
+      >
         Clinical research tools
       </h1>
-      <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-        Lincei installs M4 for clinical datasets and Vitrine for research cards into its own folder,
-        with a small open demo of MIMIC-IV to try things on. {status.message}
-      </p>
-      <ScrollArea scrollFade className="mt-5 h-auto max-h-[min(32rem,55dvh)]">
+      {/*
+        The one scrolling region of the step. Its height is what the window
+        leaves after the dialog's header, this heading and the footer below,
+        so Continue stays in view however much is shown here.
+      */}
+      <ScrollArea
+        scrollFade
+        className="mt-2.5 h-auto max-h-[max(8rem,min(32rem,calc(100dvh-20rem)))] max-sm:max-h-[max(8rem,calc(100dvh-25rem))]"
+      >
         <div className="space-y-5 pr-3">
-          <div className="flex items-start justify-between gap-6">
-            <ClinicalSetupProgress status={status} />
-            {needsStart ? (
-              <Button variant="outline" disabled={!canOperate} onClick={() => void setUp()}>
-                {status.state === "failed" ? "Try again" : "Set up"}
-              </Button>
-            ) : null}
+          <div className="space-y-2.5">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Lincei installs M4 for clinical datasets and Vitrine for research cards into its own
+              folder, with a small open demo of MIMIC-IV to try things on.
+            </p>
+            {/* Its own line: it says what happened and what to do next. */}
+            {status === null ? null : (
+              <p className="text-sm leading-relaxed text-foreground">{status.message}</p>
+            )}
           </div>
-          {clinicalToolsInstalled(status) ? (
-            <section className="space-y-2">
-              <h2 className="text-sm font-medium">Datasets</h2>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Optional. MIMIC-IV, eICU and the other credentialed datasets need your own PhysioNet
-                access. You can add them now or later.
-              </p>
-              <div className="rounded-xl bg-card ring-1 ring-black/5 dark:ring-white/5">
-                <ClinicalDatasetList environmentId={environmentId} enabled />
-              </div>
-            </section>
+          {lost === null ? null : (
+            <Alert variant="warning">
+              <AlertTitle>{lost.title}</AlertTitle>
+              <AlertDescription>{lost.detail}</AlertDescription>
+            </Alert>
+          )}
+          {view.phase === "known" ? (
+            <div className="flex items-start justify-between gap-6">
+              <ClinicalSetupProgress status={view.status} className="flex-1" />
+              {action === null ? null : (
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={!canOperate}
+                  onClick={() => void setUp()}
+                >
+                  {action}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <ClinicalStatusNote view={view} onRetry={refresh} />
+          )}
+          {status !== null && clinicalToolsInstalled(status) ? (
+            <Collapsible>
+              <CollapsibleTrigger
+                type="button"
+                className="group flex items-center gap-1 text-left text-sm text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRightIcon className="size-3.5 shrink-0 group-data-panel-open:rotate-90" />
+                Add MIMIC-IV, eICU or other datasets (optional)
+              </CollapsibleTrigger>
+              <CollapsiblePanel>
+                <div className="space-y-3 pt-3">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    MIMIC-IV, eICU and the other credentialed datasets need your own PhysioNet
+                    access. You can add them now or later.
+                  </p>
+                  <ProviderDataNotice subject="these datasets" />
+                  <div className="rounded-xl bg-card ring-1 ring-black/5 dark:ring-white/5">
+                    <ClinicalDatasetList environmentId={environmentId} enabled />
+                  </div>
+                </div>
+              </CollapsiblePanel>
+            </Collapsible>
           ) : null}
         </div>
       </ScrollArea>
-      <div className="mt-6 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="mt-5 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-          Setup and downloads keep running after you continue. Find them again under Settings,
-          Clinical Data.
+          {clinicalStepFooter(view)}
         </p>
-        <div className="flex shrink-0 justify-end">
-          <Button autoFocus onClick={onContinue}>
-            Continue
-            <ArrowRightIcon className="size-3.5" />
-          </Button>
-        </div>
+        <Button className="shrink-0 self-end" onClick={onContinue}>
+          Continue
+          <ArrowRightIcon className="size-3.5" />
+        </Button>
       </div>
     </>
   );
@@ -89,31 +151,52 @@ function ClinicalStep({
  *
  * The step comes after upstream's wizard has marked onboarding complete, so
  * leaving the app here does not bring the wizard back; everything on the step
- * is also under Settings, Clinical Data. Against a server that is not Lincei
- * the step is skipped.
+ * is also under Settings, Clinical Data. The step is shown whatever is known
+ * about the clinical research tools, including nothing yet. Only a server
+ * that is not Lincei has no step.
  */
 export function LinceiWelcomeWizard(props: ComponentProps<typeof WelcomeWizard>) {
   const environmentId = usePrimaryEnvironmentId();
-  const { status, refresh } = useClinicalStatus(environmentId);
+  const { view, refresh } = useClinicalStatus(environmentId);
   const [finished, setFinished] = useState<{
     readonly projectRef: ScopedProjectRef | undefined;
   } | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  if (finished === null || environmentId === null || status === null) {
+  // The answer can arrive after upstream's wizard is done. If it is "this
+  // server is not Lincei", the step that was waiting for it has nothing to
+  // show and setup ends as upstream's would have.
+  const { onDone } = props;
+  const nothingToShow = finished !== null && (environmentId === null || view.phase === "absent");
+  // Setup ends once, whether the step ends it or a second click on Continue tries to.
+  const left = useRef(false);
+  useEffect(() => {
+    if (!nothingToShow || finished === null || left.current) return;
+    left.current = true;
+    void onDone(finished.projectRef);
+  }, [nothingToShow, finished, onDone]);
+
+  if (finished === null) {
     return (
       <WelcomeWizard
         {...props}
         onDone={(projectRef) =>
-          environmentId === null || status === null
+          environmentId === null || view.phase === "absent"
             ? props.onDone(projectRef)
             : setFinished({ projectRef })
         }
       />
     );
   }
+  if (environmentId === null || view.phase === "absent") return null;
   return (
     <Dialog open disablePointerDismissal onOpenChange={(_, event) => event.cancel()}>
-      <WizardPopup size="wide" bottomStickOnMobile={false} showCloseButton={false}>
+      <WizardPopup
+        size="wide"
+        bottomStickOnMobile={false}
+        showCloseButton={false}
+        initialFocus={headingRef}
+      >
         <WizardHeader
           title="Set up Lincei"
           identity={
@@ -125,14 +208,19 @@ export function LinceiWelcomeWizard(props: ComponentProps<typeof WelcomeWizard>)
             </div>
           }
         >
-          <WizardSteps steps={STAGES} currentStep={STAGES.length - 1} />
+          <WizardSteps steps={WIZARD_STAGES} currentStep={WIZARD_STAGES.length - 1} />
         </WizardHeader>
         <WizardPanel>
           <ClinicalStep
             environmentId={environmentId}
-            status={status}
+            view={view}
             refresh={refresh}
-            onContinue={() => void props.onDone(finished.projectRef)}
+            headingRef={headingRef}
+            onContinue={() => {
+              if (left.current) return;
+              left.current = true;
+              void props.onDone(finished.projectRef);
+            }}
           />
         </WizardPanel>
       </WizardPopup>

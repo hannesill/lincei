@@ -1,7 +1,7 @@
 /**
  * The client side of Lincei's one RPC (see `packages/contracts/src/lincei.ts`).
- * A server that is not Lincei does not know the method, so a failed query
- * doubles as "this environment has no Lincei features".
+ * A server that is not Lincei does not know the method and says so in its
+ * answer, which `linceiAnswers.ts` tells apart from a request that failed.
  */
 import {
   createEnvironmentRpcCommand,
