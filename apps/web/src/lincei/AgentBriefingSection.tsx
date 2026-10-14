@@ -89,7 +89,7 @@ function SkillList({
     a === "clinical" ? -1 : b === "clinical" ? 1 : a.localeCompare(b),
   );
   return (
-    <div className="space-y-4 pb-2">
+    <div className="space-y-4 pt-3">
       {categories.map((category) => (
         <section key={category} className="space-y-2">
           <h4 className="text-xs font-medium text-muted-foreground">{categoryTitle(category)}</h4>
@@ -141,7 +141,7 @@ export function AgentBriefingSection({ environmentId }: { readonly environmentId
               view.answer.techieMode ? "Techie mode" : "researcher mode"
             }; a project folder can add its own in AGENTS.md or CLAUDE.md.`}
           >
-            <div className="pb-2">
+            <div className="pt-2 pb-3">
               <Disclosure label="Show the instructions">
                 {() => <pre className={TEXT_CLASS}>{view.answer.instructions}</pre>}
               </Disclosure>
@@ -156,7 +156,11 @@ export function AgentBriefingSection({ environmentId }: { readonly environmentId
             }
           >
             {view.answer.skills.length === 0 ? null : (
-              <SkillList environmentId={environmentId} skills={view.answer.skills} />
+              <div className="pt-2 pb-3">
+                <Disclosure label={`Show the ${view.answer.skills.length} skills`}>
+                  {() => <SkillList environmentId={environmentId} skills={view.answer.skills} />}
+                </Disclosure>
+              </div>
             )}
           </SettingsRow>
         </>
