@@ -181,8 +181,8 @@ removes it only when M4 reports completion. A marked dataset is never ready, and
 Download first removes the converted files and the database M4 reports for it, so everything is
 converted again; downloaded raw files are kept, so downloads still resume. Lincei removes those
 files only in its own store under `<home>`. With a store the user chose (`M4_DATA_DIR`) the job
-stops and says so. M4's `lincei/physionet-credentials-stdin` branch fixes the cause; the mark can
-go once that release is the minimum.
+stops and says so. M4 0.5.6 fixes the cause and is now the minimum, so the mark can go once no
+environment set up with 0.5.5 is left (setup replaces M4 when the minimum changes).
 
 Credentialed datasets are downloaded with the user's own PhysioNet login, which Lincei never
 stores:
@@ -202,24 +202,34 @@ stores:
 - M4 runs with plain tracebacks (`_TYPER_STANDARD_TRACEBACK`), because its default ones print
   local variables, and the password is redacted from M4's output before that output is cut down.
 
-Where the installed M4 has `--physionet-credentials-stdin` (its
-`lincei/physionet-credentials-stdin` branch, not yet released), Lincei uses it on every platform.
-With M4 0.5.5 the login goes through `--physionet-credentials-file /dev/stdin`, which works on
-macOS only: on Linux a child process's standard input is a socket that cannot be opened by path,
-and Windows has no such path. There the server reports credentialed datasets as not downloadable,
-so the clients offer "Add from folder" and never ask for a password.
+Where the installed M4 has `--physionet-credentials-stdin` (0.5.6 and later), Lincei uses it on
+every platform. An environment still on M4 0.5.5 gets the login through
+`--physionet-credentials-file /dev/stdin`, which works on macOS only: on Linux a child process's
+standard input is a socket that cannot be opened by path, and Windows has no such path. There the
+server reports credentialed datasets as not downloadable, so the clients offer "Add from folder"
+and never ask for a password.
+
+PhysioNet reads a login only from clients whose user agent starts with `Wget/` or `libwfdb/`
+(`HTTP_AUTH_USER_AGENT` in physionet-build's `project/utility.py`) and answers everyone else 403, as
+if the account had no access. M4 0.5.5 sent a browser user agent, so no credentialed download could
+work; 0.5.6 sends a Wget-compatible one with a login. Only since then does M4 tell a wrong
+password (`physionet_auth_failed`) from an account without access (`physionet_access_forbidden`).
 
 PhysioNet requires that an AI service used with credentialed data keeps none of it, does not train
 on it, and has no human review, and makes the researcher responsible for checking that. Agents
 send what they read to the model provider, so the clients say this wherever a credentialed dataset
-comes in: the download dialog, the add-from-folder dialog, and the first-run step.
+comes in: both dataset dialogs, the first-run step, and Settings, Clinical Data. The two dialogs go
+ahead only once the researcher ticks that they checked their account, every time, because the
+account an agent uses can change. `physioNet.tsx` links the pages a researcher needs on the way:
+credentialing, training, each dataset's page with its data use agreement, and PhysioNet's rules
+for AI services.
 
 ### Research cards
 
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
 study store in `.vitrine` under the directory a script runs in, and runs one server per store.
-From 0.1.2 a git worktree shares the store of its main checkout, so the threads of a project
-publish into one study wherever they run; with an older Vitrine each worktree has its own.
+A git worktree shares the store of its main checkout (Vitrine 0.1.2, the minimum), so the
+threads of a project publish into one study wherever they run.
 
 Three things follow from "the directory a script runs in", and each has bitten:
 
@@ -227,15 +237,15 @@ Three things follow from "the directory a script runs in", and each has bitten:
   beside the conversation stays empty. The agent instructions say to publish from the folder the
   conversation started in, or to set `VITRINE_DATA_DIR`.
 - The store sits in the project folder, holds the rows behind every card, and upstream snapshots
-  the folder with `git add -A` after every turn. From 0.1.2 Vitrine writes a `.gitignore` into its
-  store. With 0.1.1 the store shows up in the turn's changed files and goes into the hidden
+  the folder with `git add -A` after every turn. Vitrine writes a `.gitignore` into its store;
+  before 0.1.2 the store showed up in the turn's changed files and went into the hidden
   checkpoint commits.
 - Vitrine's servers never stop by themselves and it has ten ports. The server stops the boards of
   the folders it opened or watched when it shuts down (`ResearchBoard.ts`).
 
 Vitrine opens the system browser when a script's first card starts its server. Lincei sets
-`VITRINE_OPEN_BROWSER=0`, which 0.1.2 honours; for 0.1.1 the agent instructions say to run
-`vitrine start --no-open` first.
+`VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2; the agent instructions also say to run
+`vitrine start --no-open` first, for an environment set up before that.
 
 The research board button asks the server to start Vitrine in the thread's directory
 (`ResearchBoard.ts`) and opens the URL it reports. It also shows setup progress and retries a
