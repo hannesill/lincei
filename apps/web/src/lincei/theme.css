@@ -1,208 +1,356 @@
 /*
- * Lincei's default look: the colours and code surfaces a user sees before
- * choosing a theme. Type is still upstream's system stack. The web build appends this file to index.css as an @import
- * (apps/web/vite/linceiBrand.ts), so it is compiled with upstream's stylesheet and
- * its rules come last.
+ * Lincei's default look: what a user sees before choosing a theme. Ink on white paper (paper
+ * on black in dark), square corners, an ink line around what holds input or floats, and a
+ * hard offset shadow under floating layers. Greys carry the structure; the only hues are
+ * error, warning and success, so the research board stays the most colourful thing on
+ * screen. Type is still upstream's system stack.
+ *
+ * The web build appends this file to index.css as an @import (apps/web/vite/linceiBrand.ts),
+ * so it is compiled with upstream's stylesheet and its rules come last.
  *
  * Four rules keep it from fighting upstream or the user:
  *
- * 1. Use upstream's selectors and nothing stronger. A theme the user picks is
- *    applied by html[data-theme-id] rules, which must keep winning. No !important.
- * 2. A literal colour set for light is set again for dark. Upstream's dark block
- *    only resets the tokens it changes, so a light-only value would show in dark.
- * 3. Do not set, in a dark block, a token that a user setting controls through an
- *    attribute on <html> (the diff colours). A dark block is at least as strong as
- *    the attribute rule, and this file comes last.
- * 4. A colour no theme maps goes in the html:not([data-theme-id]) block, which only
- *    matches while no theme is chosen. On :root it would stay under every theme.
+ * 1. Use upstream's selectors and nothing stronger for a token a theme also maps. A theme the
+ *    user picks is applied by html[data-theme-id] rules, which must keep winning. No !important.
+ * 2. A literal colour set for light is set again for dark. Upstream's dark block only resets
+ *    the tokens it changes, so a light-only value would show in dark.
+ * 3. Do not set, in a dark block, a token that a user setting controls through an attribute
+ *    on <html> (the diff colours). A dark block is at least as strong as the attribute rule,
+ *    and this file comes last.
+ * 4. Everything else goes under html:not([data-theme-id]), which only matches while no theme
+ *    is chosen: tokens no theme maps, and every rule about a component's corners, border or
+ *    shadow. On :root it would stay under every theme.
+ *
+ * A component rule selects on an attribute upstream renders (mostly data-slot), and every
+ * selector in this file is listed, with the upstream text it depends on, in THEME_SELECTORS
+ * (apps/web/vite/linceiTheme.ts). `node scripts/lincei/identity.ts check` fails when that
+ * text is gone or a selector here is missing from the list. A selector that stops matching
+ * brings back upstream's look for that one component.
  */
 
-/* Tokens a theme also maps, and the control radius. Same selectors as upstream's stock blocks. */
+/* Tokens a theme also maps. Same selectors as upstream's stock blocks. */
 :root {
-  /* Crisper controls. --radius itself must stay: the composer's outline hard-codes the
-     22px it produces (ComposerSurface.tsx). */
-  --control-radius: 0.375rem;
-
   /* Paper */
-  --background: oklch(0.97 0.008 91);
-  --card: oklch(0.995 0.003 91);
-  --popover: oklch(0.995 0.003 91);
-  --secondary: oklch(0.948 0.01 91);
-  --muted: oklch(0.948 0.01 91);
-  --accent: oklch(0.925 0.012 91);
-  --border: oklch(0.875 0.013 91);
-  /* Control borders reach 3:1 on the canvas, the sheet and the sidebar. */
-  --input: oklch(0.62 0.012 91);
+  --background: #ffffff;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --secondary: #f2f2f2;
+  --muted: #f2f2f2;
+  --accent: #ebebeb;
+  --code-background: #f7f7f7;
+  /* Quiet structure: dividers, list separators, settings groups. */
+  --border: #dedede;
+  /* Ink around everything that holds input: fields, outline buttons, checkboxes, the composer.
+     Floating layers take their border and shadow from it too (below). */
+  --input: #1a1a1a;
 
   /* Ink */
-  --foreground: oklch(0.24 0.008 85);
+  --foreground: #1a1a1a;
   --card-foreground: var(--foreground);
   --popover-foreground: var(--foreground);
   --secondary-foreground: var(--foreground);
-  --accent-foreground: oklch(0.2 0.008 85);
-  /* Strong enough that upstream's 70% tier still reaches 4.5:1. */
-  --muted-foreground: oklch(0.34 0.012 88);
+  --accent-foreground: var(--foreground);
+  /* Dark enough that upstream's 70% tier still reaches 4.5:1 on the sidebar. */
+  --muted-foreground: #333333;
   /* The composer shows this at 75%. */
-  --placeholder: oklch(0.4 0.012 88);
+  --placeholder: #474747;
 
-  /* Petrol, the one accent */
-  --primary: oklch(0.45 0.07 218);
-  --primary-foreground: oklch(0.99 0.004 91);
+  /* The primary action is solid ink, and focus rings follow it (--ring). */
+  --primary: #1a1a1a;
+  --primary-foreground: #ffffff;
 
-  /* Status. Upstream uses these as text, so they are dark enough to read on paper. */
-  --error: oklch(0.5 0.19 27);
-  --error-foreground: oklch(0.44 0.16 27);
-  --warning: oklch(0.5 0.11 65);
-  --warning-foreground: oklch(0.45 0.1 62);
+  /* Status. Upstream uses these as text, so they are dark enough to read on white. */
+  --error: #b81d1d;
+  --error-foreground: #a31b1b;
+  --warning: #8a5a00;
+  --warning-foreground: #764c00;
 
-  --sidebar: oklch(0.948 0.01 91);
+  --sidebar: #f5f5f5;
   --sidebar-control-surface: var(--accent);
-  --sidebar-row-hover: var(--background);
-  --sidebar-row-active: var(--card);
-  --sidebar-row-selected: var(--card);
+  --sidebar-row-hover: #ebebeb;
+  --sidebar-row-active: #e3e3e3;
+  --sidebar-row-selected: #ebebeb;
 
   --terminal-cursor: var(--primary);
-  --terminal-selection-background: oklch(0.45 0.07 218 / 20%);
+  --terminal-selection-background: rgb(26 26 26 / 18%);
 
   @variant dark {
-    /* Slate */
-    --background: oklch(0.215 0.013 225);
-    --card: oklch(0.245 0.014 225);
-    --popover: oklch(0.245 0.014 225);
+    --background: #0a0a0a;
+    --card: #1a1a1a;
+    --popover: #1a1a1a;
     --surface-raised: var(--card);
-    --secondary: oklch(0.925 0.008 91 / 6%);
-    --muted: oklch(0.925 0.008 91 / 6%);
-    --accent: oklch(0.925 0.008 91 / 8%);
-    --border: oklch(0.925 0.008 91 / 12%);
-    --input: oklch(0.54 0.016 225);
-    /* Deeper than the canvas. The syntax colours are tuned for near-black. */
-    --code-background: oklch(0.17 0.01 225);
+    --secondary: rgb(255 255 255 / 6%);
+    --muted: rgb(255 255 255 / 6%);
+    --accent: rgb(255 255 255 / 9%);
+    --code-background: color-mix(in srgb, var(--card) 90%, var(--background));
+    --border: rgb(255 255 255 / 13%);
+    /* Grey rather than paper: upstream also fills fields and pressed toggles with it. */
+    --input: #717171;
 
-    --foreground: oklch(0.925 0.008 91);
+    --foreground: #f5f5f5;
     --card-foreground: var(--foreground);
     --popover-foreground: var(--foreground);
     --secondary-foreground: var(--foreground);
     --accent-foreground: var(--foreground);
-    --muted-foreground: oklch(0.77 0.012 215);
+    --muted-foreground: #b8b8b8;
     --placeholder: var(--muted-foreground);
 
-    /* A pale fill under dark text, so the same colour also reads as text on slate. */
-    --primary: oklch(0.78 0.075 218);
-    --primary-foreground: oklch(0.215 0.02 225);
+    --primary: #f5f5f5;
+    --primary-foreground: #0a0a0a;
     --update-foreground: var(--primary);
 
-    --error: oklch(0.72 0.15 25);
-    --error-foreground: oklch(0.78 0.12 25);
+    --error: #f2857d;
+    --error-foreground: #f7a39c;
     --tool-error-icon: var(--error-foreground);
-    --warning: oklch(0.8 0.125 80);
-    --warning-foreground: oklch(0.84 0.12 85);
+    --warning: #dcae55;
+    --warning-foreground: #e8c27a;
 
-    --sidebar: var(--card);
+    --sidebar: #000000;
     --sidebar-control-surface: var(--muted);
-    --sidebar-row-hover: var(--accent);
-    --sidebar-row-active: var(--accent);
-    --sidebar-row-selected: var(--muted);
+    --sidebar-row-hover: rgb(255 255 255 / 8%);
+    --sidebar-row-active: rgb(255 255 255 / 12%);
+    --sidebar-row-selected: rgb(255 255 255 / 8%);
 
     --terminal-cursor: var(--primary);
-    --terminal-selection-background: oklch(0.78 0.075 218 / 25%);
+    --terminal-selection-background: rgb(245 245 245 / 22%);
   }
 }
 
-/* Upstream gives the sidebar subtree its own copy of these tokens, as literals. */
+/* Upstream gives the sidebar subtree its own copy of these tokens, as literals. In dark its
+   rows keep upstream's formulas, which mix the (now neutral) foreground. */
 [data-app-sidebar] {
-  --background: oklch(0.97 0.008 91);
-  --foreground: oklch(0.24 0.008 85);
-  --card: oklch(0.995 0.003 91);
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
   --card-foreground: var(--foreground);
-  --accent: oklch(0.925 0.012 91);
-  --accent-foreground: oklch(0.2 0.008 85);
-  --muted: oklch(0.948 0.01 91);
-  --muted-foreground: oklch(0.34 0.012 88);
-  --border: oklch(0.875 0.013 91);
-  --input: oklch(0.62 0.012 91);
-  --sidebar: oklch(0.948 0.01 91);
+  --accent: #ebebeb;
+  --accent-foreground: var(--foreground);
+  --muted: #f2f2f2;
+  --muted-foreground: #333333;
+  --border: #dedede;
+  --input: #1a1a1a;
+  --sidebar: #f5f5f5;
   --sidebar-foreground: var(--foreground);
   --sidebar-muted-foreground: var(--muted-foreground);
   --sidebar-control-surface: var(--accent);
-  --sidebar-row-hover: var(--background);
-  --sidebar-row-active: var(--card);
-  --sidebar-row-selected: var(--card);
+  --sidebar-row-hover: #ebebeb;
+  --sidebar-row-active: #e3e3e3;
+  --sidebar-row-selected: #ebebeb;
   --sidebar-border: var(--border);
 
-  /* In dark the sidebar is deeper than the canvas. Rows keep upstream's formulas. */
   @variant dark {
-    --background: oklch(0.185 0.011 225);
-    --foreground: oklch(0.925 0.008 91);
-    --card: oklch(0.185 0.011 225);
-    --accent: oklch(0.925 0.008 91 / 8%);
+    --background: #000000;
+    --foreground: #f5f5f5;
+    --card: #000000;
+    --accent: rgb(255 255 255 / 9%);
     --accent-foreground: var(--foreground);
-    --muted: oklch(0.925 0.008 91 / 6%);
-    --muted-foreground: oklch(0.77 0.012 215);
-    --border: oklch(0.925 0.008 91 / 12%);
-    --input: oklch(0.54 0.016 225);
+    --muted: rgb(255 255 255 / 6%);
+    --muted-foreground: #b8b8b8;
+    --border: rgb(255 255 255 / 13%);
+    --input: #717171;
+    --sidebar: #000000;
   }
 }
 
 /*
- * Tokens no theme maps. Upstream keeps its success and info colours, its grain and
- * its scrollbar under every theme (index.css, "Success, info, provider, and channel
- * identity colors remain independent"). Lincei's values for them apply only while no
- * theme is chosen, so a theme the user picks renders as it does upstream.
+ * Tokens no theme maps. Upstream keeps its radius, success and info colours, grain and
+ * scrollbar under every theme (index.css, "Success, info, provider, and channel identity
+ * colors remain independent"), so Lincei's values for them apply only while no theme is
+ * chosen.
  */
 html:not([data-theme-id]) {
+  /* Square corners for whatever reads the token (the desktop browser's pick overlay too).
+     The rule further down squares the literal radii. */
+  --radius: 0px;
+  --control-radius: 0px;
+
   /* Flat surfaces. Upstream lays a noise texture over the body. */
   --surface-grain: none;
 
+  /* Running states and links in chat are ink, like everything else that is not a status. */
   --info: var(--primary);
-  --info-foreground: oklch(0.4 0.065 218);
-  --success: oklch(0.48 0.115 152);
-  --success-foreground: oklch(0.42 0.1 152);
+  --info-foreground: var(--foreground);
+  --success: #1f7a3d;
+  --success-foreground: #1a6a35;
 
   /* Counts beside a changed file. References only, and not in the dark block: rule 3. */
   --diff-addition-foreground: var(--success-foreground);
   --diff-deletion-foreground: var(--error-foreground);
 
-  --app-scrollbar-thumb: oklch(0.83 0.012 91);
-  --app-scrollbar-thumb-hover: oklch(0.74 0.012 91);
+  --app-scrollbar-thumb: #d4d4d4;
+  --app-scrollbar-thumb-hover: #b3b3b3;
 
   @variant dark {
-    --info-foreground: oklch(0.82 0.065 218);
-    --success: oklch(0.76 0.13 152);
-    --success-foreground: oklch(0.8 0.12 152);
-    --app-scrollbar-thumb: oklch(0.925 0.008 91 / 12%);
-    --app-scrollbar-thumb-hover: oklch(0.925 0.008 91 / 20%);
+    --success: #6dbf86;
+    --success-foreground: #8bd0a0;
+    --app-scrollbar-thumb: rgb(255 255 255 / 14%);
+    --app-scrollbar-thumb-hover: rgb(255 255 255 / 22%);
 
     /*
-     * Upstream hard-codes white text on two fills: bg-destructive (button.tsx,
-     * badge.tsx, and at 90% on the stop button in ComposerPrimaryActions.tsx) and
-     * bg-info (PullRequestComposer.tsx, DeviceStreamView.tsx). In dark those tokens
-     * are light, so that they read as text on slate. An element that pairs the fill
-     * with white text gets a deeper value of its own. Status dots use the same
-     * classes without white text and keep the light token.
+     * Upstream hard-codes white text on two fills: bg-destructive (button.tsx, badge.tsx,
+     * and at 90% on the stop button in ComposerPrimaryActions.tsx) and bg-info
+     * (PullRequestComposer.tsx, DeviceStreamView.tsx). In dark those tokens are light, so
+     * that they read as text on black. An element that pairs the fill with white text gets a
+     * deeper value of its own. No attribute marks that pairing, so these two selectors are
+     * the only ones here that name utility classes; their anchors are the class strings.
      */
     & :is(.bg-destructive, .bg-destructive\/90).text-white {
-      --destructive: oklch(0.59 0.21 27);
+      --destructive: #d42c2c;
     }
 
     & .bg-info.text-white {
-      --info: oklch(0.54 0.08 218);
+      --info: #4d4d4d;
     }
   }
 }
 
 /*
- * Code in chat sits on the code tokens, as upstream already arranges under a theme
- * (index.css, "Chat code blocks join the other code surfaces"). The stock look puts it
- * on --secondary and on 32% of --input, which in this palette are too far from the
- * white and near-black the syntax colours are tuned for.
+ * Square corners, on every element and pseudo-element, including the rounded-full pills and
+ * literal radii no token reaches. Universal on purpose: it depends on no upstream text, and
+ * whatever upstream adds next is square too. Not layered, so it wins over every utility.
  */
-:is(.chat-markdown, .composer-tiptap) .chat-markdown-codeblock {
+html:not([data-theme-id]) *,
+html:not([data-theme-id]) ::before,
+html:not([data-theme-id]) ::after {
+  border-radius: 0;
+}
+
+/* A rule of its own: a browser without the pseudo-element drops the whole selector list. */
+html:not([data-theme-id]) ::-webkit-scrollbar-thumb {
+  border-radius: 0;
+}
+
+/* A radio button stays a circle, so that it does not read as a checkbox. */
+html:not([data-theme-id]) :is([data-slot="radio"], [data-slot="radio-indicator"]),
+html:not([data-theme-id]) :is([data-slot="radio"], [data-slot="radio-indicator"])::before {
+  border-radius: 9999px;
+}
+
+/* Floating layers: an ink border and a hard shadow in place of upstream's blurred one. */
+html:not([data-theme-id])
+  :is(
+    [data-slot="menu-popup"],
+    [data-slot="select-popup"] > :has(> [data-slot="select-list"]),
+    [data-slot="combobox-popup"],
+    [data-slot="autocomplete-popup"],
+    [data-slot="popover-popup"]:not(:has([data-thread-details-panel])),
+    [data-slot="preview-card-popup"],
+    [data-slot="toast-viewport"] > *,
+    [data-slot="toast-popup"],
+    [data-slot="dialog-popup"]:not(:has([aria-label^="Close "][aria-label$=" preview"])),
+    [data-slot="alert-dialog-popup"],
+    [data-slot="command-dialog-popup"]
+  ) {
+  border-color: var(--contrast-input);
+  box-shadow: 3px 3px 0 var(--contrast-input);
+}
+
+html:not([data-theme-id]) [data-slot="tooltip-popup"] {
+  border-color: var(--contrast-input);
+  box-shadow: 2px 2px 0 var(--contrast-input);
+}
+
+/*
+ * The composer: the ink line in place of upstream's 8% hairline, and no blurred drop
+ * shadow. With the strip below it, upstream clips the shared backdrop to a rounded shape;
+ * the same shape with square corners keeps the backdrop inside the outline.
+ */
+html:not([data-theme-id]) [data-slot="composer-shell"] {
+  --chat-composer-outline: var(--contrast-input);
+}
+
+html:not([data-theme-id]) :is([data-slot="composer-host"], [data-chat-composer-main-surface]),
+html:not([data-theme-id]) [data-slot="composer-context-strip"]::before {
+  box-shadow: none;
+}
+
+html:not([data-theme-id]) [data-slot="composer-context-strip"]::before {
+  border-color: var(--chat-composer-outline);
+}
+
+@supports (clip-path: shape(from 0 0, line to 1px 1px)) {
+  html:not([data-theme-id]) [data-slot="composer-shell"][data-with-context]::before {
+    clip-path: polygon(
+      0 0,
+      100% 0,
+      100% calc(100% - var(--chat-composer-context-extension)),
+      calc(100% - var(--chat-composer-drawer-inset))
+        calc(100% - var(--chat-composer-context-extension)),
+      calc(100% - var(--chat-composer-drawer-inset)) 100%,
+      var(--chat-composer-drawer-inset) 100%,
+      var(--chat-composer-drawer-inset) calc(100% - var(--chat-composer-context-extension)),
+      0 calc(100% - var(--chat-composer-context-extension))
+    );
+  }
+}
+
+/*
+ * Upstream fills an unchecked switch, a pressed toggle and a segmented track with --input,
+ * which is ink here. A switch is an ink outline with an ink thumb until it is on (solid ink,
+ * paper thumb); a pressed toggle sits on the hover grey; a segmented group has a grey track
+ * and outlines the chosen segment. The ring variables keep the focus ring, which is a
+ * box-shadow as well.
+ */
+html:not([data-theme-id]) [data-slot="switch"][data-unchecked] {
+  background-color: var(--background);
+  box-shadow:
+    inset 0 0 0 1px var(--contrast-input),
+    var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000);
+}
+
+html:not([data-theme-id]) [data-slot="switch"][data-unchecked] > [data-slot="switch-thumb"] {
+  background-color: var(--contrast-input);
+}
+
+html:not([data-theme-id]) [data-slot="toggle"][data-pressed]:not([data-variant="segmented"]) {
+  background-color: var(--accent);
+}
+
+html:not([data-theme-id]) [data-slot="toggle-group"][data-variant="segmented"] {
+  background-color: var(--muted);
+}
+
+html:not([data-theme-id])
+  [data-slot="toggle-group"][data-variant="segmented"]
+  [data-slot="toggle"][data-pressed] {
+  box-shadow:
+    inset 0 0 0 1px var(--contrast-input),
+    var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000);
+}
+
+/* Links in chat are ink like the prose around them, so they are underlined. */
+html:not([data-theme-id])
+  .chat-markdown
+  a:not(.chat-markdown-file-link, [data-footnote-ref], [data-footnote-backref]) {
+  background-image: none;
+  text-decoration: underline 1px;
+  text-underline-offset: 0.2em;
+}
+
+html:not([data-theme-id])
+  .chat-markdown
+  a:not(.chat-markdown-file-link, [data-footnote-ref], [data-footnote-backref]):is(
+    :hover,
+    :focus-visible
+  ) {
+  text-decoration-thickness: 2px;
+}
+
+/*
+ * Code in chat sits on the code tokens, as upstream already arranges under a theme
+ * (index.css, "Chat code blocks join the other code surfaces"). The stock look puts it on
+ * --secondary and on 32% of --input, which in dark is a mid grey under syntax colours tuned
+ * for near-black.
+ */
+html:not([data-theme-id]) :is(.chat-markdown, .composer-tiptap) .chat-markdown-codeblock {
   background-color: var(--code-background);
   border-color: var(--contrast-border);
   color: var(--code-foreground);
 }
 
-.chat-markdown pre {
+html:not([data-theme-id]) .chat-markdown pre {
   background-color: var(--code-background);
   color: var(--code-foreground);
 }

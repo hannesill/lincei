@@ -36,7 +36,7 @@ content. `git log --first-parent` leaves it out.
 | Clinical step after the first-run wizard                         | [`LinceiWelcomeWizard.tsx`](../../apps/web/src/lincei/LinceiWelcomeWizard.tsx)                                                                                                                                                     | `routes/welcome.tsx` renders it in place of `WelcomeWizard`; the stage label is an identity rule                                                                                                                             |
 | Researcher mode and Techie mode                                  | [`apps/web/vite/linceiResearcherMode.ts`](../../apps/web/vite/linceiResearcherMode.ts), [`apps/web/src/lincei/mode/`](../../apps/web/src/lincei/mode), [`LinceiPreferences.ts`](../../apps/server/src/lincei/LinceiPreferences.ts) | One changed line and an import each in `state/server.ts`, `localApi.ts`, `CommandPalette.tsx`, `SettingsSidebarNav.tsx`, `useAvailableSettingsSearchItems.ts`; two in `ChatView.tsx`; the switch row in `SettingsPanels.tsx` |
 | A researcher's wording for upstream's developer copy             | [`apps/web/vite/linceiCopy.ts`](../../apps/web/vite/linceiCopy.ts)                                                                                                                                                                 | None: applied by the brand plugin as it builds                                                                                                                                                                               |
-| Default look (colours, code surfaces, window colour)             | [`apps/web/src/lincei/theme.css`](../../apps/web/src/lincei/theme.css), [`apps/web/vite/linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts)                                                                                       | None in the web app: compiled in by the brand plugin. One governed line in `DesktopWindow.ts`                                                                                                                                |
+| Default look (colours, corners, borders, shadows)                | [`apps/web/src/lincei/theme.css`](../../apps/web/src/lincei/theme.css), [`apps/web/vite/linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts)                                                                                       | None: compiled in by the brand plugin                                                                                                                                                                                        |
 | Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                                                                               | None                                                                                                                                                                                                                         |
 
 To see every upstream file Lincei has touched:
@@ -94,13 +94,15 @@ vp run --filter t3 --filter @t3tools/desktop --filter @t3tools/web typecheck
 (cd apps/desktop && vp test run)
 ```
 
-`identity.ts check` reads three things. A governed file that is stale: run `apply`. A string in
-`apps/web/vite/linceiCopy.ts` that upstream reworded or moved: decide whether Lincei still wants
-its own wording for the new text and update `from`. A source text that a researcher-mode selector
-in `apps/web/vite/linceiResearcherMode.ts` depends on: upstream renamed an aria-label or a data
-attribute, so that control is visible again in researcher mode until the selector and its anchor
-are updated. The last two never conflict in git, because Lincei does not edit those files; the
-check is the only thing that notices.
+`identity.ts check` reads four things. A governed file that is stale: run `apply`. A string in
+`apps/web/vite/linceiCopy.ts` or a colour in `apps/web/vite/linceiTheme.ts` that upstream reworded
+or moved: decide whether Lincei still wants its own text for the new one and update `from`. A
+source text that a researcher-mode selector in `apps/web/vite/linceiResearcherMode.ts` depends on:
+upstream renamed an aria-label or a data attribute, so that control is visible again in researcher
+mode until the selector and its anchor are updated. A source text that a selector of the default
+look depends on (`THEME_SELECTORS` in `linceiTheme.ts`): that component has upstream's look again
+until `theme.css` and its entry are updated. The last three never conflict in git, because Lincei
+does not edit those files; the check is the only thing that notices.
 
 The typecheck and the tests show what is left, because none of it conflicts in git:
 
@@ -320,22 +322,34 @@ every file that is not ignored into `.git`, and a research folder holds data.
 
 ## The default look
 
-Lincei's look is built from its icon: the tile's warm paper is the light canvas, ink is the text,
-slate replaces upstream's near-black in dark, and one accent, a deep petrol, carries buttons,
-links, focus, and the wizard's markers. It replaces upstream's stock look only. A theme the user
-picks, the contrast and glass sliders, and custom fonts are upstream's and keep winning.
+Lincei's look is a quiet version of the neobrutalism of its research cards: ink on white paper
+(Vitrine's dark palette in dark), square corners, an ink line around what holds input or floats,
+and a small hard shadow under menus, dialogs, tooltips, and toasts. Dividers and list separators
+stay quiet grey, and the only hues are error, warning, and success, so the research board is the
+most colourful thing on screen. It replaces upstream's stock look only. A theme the user picks,
+the contrast and glass sliders, and custom fonts are upstream's and keep winning.
 
-- [`theme.css`](../../apps/web/src/lincei/theme.css) overrides upstream's stock tokens with
-  upstream's own selectors. The brand plugin appends it to `index.css` as an `@import`, so
-  Tailwind compiles it with upstream's stylesheet and its rules come last at the same specificity.
-  A `<style>` tag in `index.html` would not work: the app's stylesheet is added to the page at run
-  time, after everything in `<head>`, and would win every tie. The file's header lists the four
-  rules that keep it from fighting upstream or the user.
-- Upstream repeats its stock colours outside CSS: in the boot script and inline style of
-  `index.html`, in the stock palette as theme roles (`packages/shared/src/themePalettes.ts`), and in
-  the Appearance previews. [`linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts) replaces those
-  literals with exact-once rules, the same mechanism as the copy, checked the same way.
-- The colour Electron paints before the page exists is a governed line in `DesktopWindow.ts`.
+- [`theme.css`](../../apps/web/src/lincei/theme.css) sets upstream's tokens with upstream's own
+  selectors, and puts everything no theme maps under `html:not([data-theme-id])`. The brand plugin
+  appends it to `index.css` as an `@import`, so Tailwind compiles it with upstream's stylesheet and
+  its rules come last at the same specificity. A `<style>` tag in `index.html` would not work: the
+  app's stylesheet is added to the page at run time, after everything in `<head>`, and would win
+  every tie. The file's header lists the four rules that keep it from fighting upstream or the
+  user.
+- Tokens cannot do all of it: Tailwind writes each shadow into its `shadow-*` utility, and
+  `rounded-full` and arbitrary radii are literals. One universal rule squares every corner except
+  a radio's, and a few component rules select on `data-slot` and similar attributes.
+  `THEME_SELECTORS` in [`linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts) lists every selector
+  of theme.css with the upstream text it depends on.
+- `--input` is ink in light, which puts the ink line on fields, outline buttons, and checkboxes
+  without a selector. Upstream also fills an unchecked switch, a pressed toggle, and a segmented
+  track with it; those get rules of their own, and they are the selectors whose breaking is worse
+  than upstream's look coming back.
+- Upstream repeats its stock colours outside CSS, in the stock palette as theme roles
+  (`packages/shared/src/themePalettes.ts`) and in the Appearance previews. linceiTheme.ts replaces
+  those literals with exact-once rules, the same mechanism as the copy, checked the same way. The
+  canvas is upstream's own white and near-black, so the boot script in `index.html` and the colour
+  Electron paints before the page exists stay upstream's.
 - The mark inside the app (`T3Wordmark.tsx`) is the icon's serif L, cut out of a tile in the
   text colour.
 
