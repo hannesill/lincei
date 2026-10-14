@@ -1,20 +1,23 @@
 /**
- * The client settings a new Lincei install starts with where upstream's
- * default suits a developer. They are written once per device, when first-run
- * setup reaches Lincei's step, through upstream's own settings store. After
- * that they are the user's, and the reset arrows in Settings still lead to
- * upstream's defaults.
+ * The settings a new Lincei install starts with where upstream's default
+ * suits a developer. They are written once per device, when first-run setup
+ * reaches Lincei's step, through upstream's own settings writer, which sends
+ * the server's keys to the server. After that they are the user's, and the
+ * reset arrows in Settings still lead to upstream's defaults.
  */
-import type { ClientSettingsPatch } from "@t3tools/contracts";
-
-import { persistClientSettingsPatch } from "~/hooks/useSettings";
+import type { ClientSettingsPatch, ServerSettingsPatch } from "@t3tools/contracts";
 
 export const RESEARCHER_DEFAULTS = {
   // One stray click would otherwise make a conversation disappear.
   confirmThreadArchive: true,
   // Analyses run long: say so when another conversation finishes or needs an answer.
   inAppNotificationsEnabled: true,
-} as const satisfies ClientSettingsPatch;
+  // "Auto": the agent approves routine steps itself and asks before anything
+  // risky. Upstream's default runs every command and edit without asking,
+  // on a computer that may hold patient data. Researcher mode hides the
+  // picker, so this is the mode a researcher works in.
+  defaultRuntimeMode: "auto",
+} as const satisfies ServerSettingsPatch & ClientSettingsPatch;
 
 const SEEDED_KEY = "lincei:researcher-defaults";
 
@@ -36,7 +39,9 @@ export function seedOnce(storage: Pick<Storage, "getItem" | "setItem">, apply: (
   }
 }
 
-/** Gives this device Lincei's starting settings, the first time only. */
-export function seedResearcherDefaults(): void {
-  seedOnce(window.localStorage, () => void persistClientSettingsPatch(RESEARCHER_DEFAULTS));
+/** Gives this device Lincei's starting settings, the first time only, through `update`. */
+export function seedResearcherDefaults(
+  update: (patch: ServerSettingsPatch & ClientSettingsPatch) => void,
+): void {
+  seedOnce(window.localStorage, () => update(RESEARCHER_DEFAULTS));
 }

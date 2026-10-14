@@ -1,4 +1,4 @@
-import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
+import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { RESEARCHER_DEFAULTS, seedOnce } from "./researcherDefaults";
@@ -36,7 +36,9 @@ describe("Lincei's starting settings", () => {
 
   it("each differ from upstream's default; one that no longer does can be removed", () => {
     for (const [key, value] of Object.entries(RESEARCHER_DEFAULTS)) {
-      expect(DEFAULT_CLIENT_SETTINGS[key as keyof typeof RESEARCHER_DEFAULTS], key).not.toBe(value);
+      expect(DEFAULT_UNIFIED_SETTINGS[key as keyof typeof RESEARCHER_DEFAULTS], key).not.toBe(
+        value,
+      );
     }
   });
 });
