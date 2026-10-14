@@ -24,6 +24,15 @@ function servedFrom(rawUrl: string): string | null {
   }
 }
 
+/** Whether a page is one of Vitrine's boards, which it names `vitrine.localhost` (`_DISPLAY_HOST`). */
+export function isBoardPage(rawUrl: string): boolean {
+  try {
+    return new URL(rawUrl).hostname === "vitrine.localhost";
+  } catch {
+    return false;
+  }
+}
+
 type BrowserTab = Pick<
   PreviewSessionSnapshot,
   "tabId" | "navStatus" | "runtime" | "reveal" | "updatedAt"
