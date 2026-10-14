@@ -18,8 +18,9 @@
  * Display copy ("T3 Code" in UI strings) is not governed here; the web build
  * rewrites it (apps/web/vite/linceiBrand.ts). What that build relies on in
  * upstream's source is checked here, though: the developer copy it replaces
- * (linceiCopy.ts) and the attributes its researcher-mode stylesheet selects on
- * (linceiResearcherMode.ts). Those files are never edited, so `check` is the
+ * (linceiCopy.ts), the attributes its researcher-mode stylesheet selects on
+ * (linceiResearcherMode.ts), and the colours and selectors of the default look
+ * (linceiTheme.ts, theme.css). Those files are never edited, so `check` is the
  * only thing that notices upstream rewording one.
  */
 import * as NodeFS from "node:fs";
@@ -28,7 +29,11 @@ import * as NodeURL from "node:url";
 
 import { COPY_RULES } from "../../apps/web/vite/linceiCopy.ts";
 import { HIDDEN_UNLESS_TECHIE } from "../../apps/web/vite/linceiResearcherMode.ts";
-import { THEME_SOURCE_RULES } from "../../apps/web/vite/linceiTheme.ts";
+import {
+  THEME_SELECTORS,
+  THEME_SOURCE_RULES,
+  THEME_STYLESHEET,
+} from "../../apps/web/vite/linceiTheme.ts";
 
 type Replacement = readonly [from: string | RegExp, to: string];
 
@@ -155,17 +160,6 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   },
   "scripts/dev-runner.ts": {
     exact: [['path.join(NodeOS.homedir(), ".t3")', 'path.join(NodeOS.homedir(), ".lincei")']],
-  },
-
-  // The colour Electron paints before the page exists: Lincei's canvas
-  // (apps/web/src/lincei/theme.css), not upstream's black and white.
-  "apps/desktop/src/window/DesktopWindow.ts": {
-    exact: [
-      [
-        'return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";',
-        'return shouldUseDarkColors ? "#131b1e" : "#f7f5ef";',
-      ],
-    ],
   },
 
   // Text a researcher reads that the web build's display-name rewrite cannot
@@ -320,6 +314,49 @@ function checkBuildTimeRules(problems: Array<string>): void {
           "hidden in researcher mode; update apps/web/vite/linceiResearcherMode.ts.",
       );
     }
+  }
+  checkThemeSelectors(read(THEME_STYLESHEET.file) ?? "", read, problems);
+}
+
+const collapse = (text: string): string => text.replace(/\s+/g, " ");
+
+/**
+ * The default look's selectors (theme.css) against their list in linceiTheme.ts: every anchor
+ * is still in upstream's source, every listed selector is still in the stylesheet, and every
+ * attribute or class the stylesheet selects on is listed.
+ */
+function checkThemeSelectors(
+  stylesheet: string,
+  read: (file: string) => string | null,
+  problems: Array<string>,
+): void {
+  const css = collapse(stylesheet.replace(/\/\*[\s\S]*?\*\//g, ""));
+  const listed = THEME_SELECTORS.map((entry) => ({ entry, selector: collapse(entry.selector) }));
+  for (const { entry, selector } of listed) {
+    if (!css.includes(selector)) {
+      problems.push(
+        `${THEME_STYLESHEET.file} no longer contains ${JSON.stringify(entry.selector)}; ` +
+          `drop "${entry.what}" from THEME_SELECTORS in apps/web/vite/linceiTheme.ts.`,
+      );
+    }
+    for (const anchor of entry.anchors) {
+      const text = read(anchor.file);
+      if (text !== null && text.includes(anchor.text)) continue;
+      problems.push(
+        `${anchor.file}: ${JSON.stringify(anchor.text)} is gone, so the selector for ` +
+          `"${entry.what}" may no longer match; update theme.css and its entry in ` +
+          "apps/web/vite/linceiTheme.ts, which says what a broken one does.",
+      );
+    }
+  }
+  // Attribute selectors and class names, outside comments; numbers such as `.5rem` start with a digit.
+  const selectedOn = new Set(css.match(/\[[^\]]+\]|\.(?:[A-Za-z_-]|\\.)(?:[\w-]|\\.)*/g) ?? []);
+  for (const part of selectedOn) {
+    if (listed.some(({ selector }) => selector.includes(part))) continue;
+    problems.push(
+      `${THEME_STYLESHEET.file} selects on ${part}, which no entry of THEME_SELECTORS in ` +
+        "apps/web/vite/linceiTheme.ts names; add it with the upstream text it depends on.",
+    );
   }
 }
 
