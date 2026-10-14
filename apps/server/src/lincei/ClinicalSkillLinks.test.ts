@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import * as ClinicalSkillLinks from "./ClinicalSkillLinks.ts";
@@ -138,5 +139,53 @@ describe("ClinicalSkillLinks", () => {
       ]);
       expect(directories({ HOME: "/home/ada", LINCEI_CLINICAL_SKILL_DIRS: "" })).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+  it.effect("describes each skill and says which ones a skill of the user's replaces", () =>
+    withBundle(["clinical/sofa-score", "system/m4-api"], ({ bundle, home, fileSystem, path }) =>
+      Effect.gen(function* () {
+        yield* fileSystem.writeFileString(
+          path.join(bundle, "clinical", "sofa-score", "SKILL.md"),
+          "---\nname: sofa-score\ndescription: >\n  Calculate SOFA\n  for ICU patients.\n---\n# SOFA",
+        );
+        const claude = path.join(home, ".claude", "skills");
+        const agents = path.join(home, ".agents", "skills");
+        yield* ClinicalSkillLinks.sync({ bundle, directories: [claude, agents] });
+        // The user's own m4-api, in one of the two folders, after Lincei linked its own.
+        yield* fileSystem.remove(path.join(agents, "m4-api"));
+        yield* fileSystem.makeDirectory(path.join(agents, "m4-api"));
+
+        const skills = yield* ClinicalSkillLinks.describe({
+          bundle,
+          directories: [claude, agents],
+        });
+
+        expect(skills).toEqual([
+          {
+            name: "sofa-score",
+            category: "clinical",
+            description: "Calculate SOFA for ICU patients.",
+            shadowed: false,
+          },
+          { name: "m4-api", category: "system", description: "", shadowed: true },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("reads a skill's text by its name, and nothing outside the bundle", () =>
+    withBundle(["clinical/sofa-score"], ({ bundle, home, fileSystem, path }) =>
+      Effect.gen(function* () {
+        const outside = path.join(home, "secret");
+        yield* fileSystem.makeDirectory(outside, { recursive: true });
+        yield* fileSystem.writeFileString(path.join(outside, "SKILL.md"), "not a skill");
+
+        expect(yield* ClinicalSkillLinks.readSkill({ bundle, name: "sofa-score" })).toEqual(
+          Option.some("# clinical/sofa-score"),
+        );
+        for (const name of ["../../home/secret", "secret", ""]) {
+          expect(yield* ClinicalSkillLinks.readSkill({ bundle, name })).toEqual(Option.none());
+        }
+      }),
+    ),
   );
 });

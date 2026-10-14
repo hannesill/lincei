@@ -132,6 +132,18 @@ export type PhysioNetCredentials = typeof PhysioNetCredentials.Type;
 export const LinceiPreferences = Schema.Struct({ techieMode: Schema.Boolean });
 export type LinceiPreferences = typeof LinceiPreferences.Type;
 
+/** One of M4's skills, as Lincei offers it to agents. */
+export const ClinicalSkill = Schema.Struct({
+  name: Schema.String,
+  /** M4's grouping, such as `clinical` or `system`. */
+  category: Schema.String,
+  /** What an agent matches a task against. */
+  description: Schema.String,
+  /** A skill of the user's has this name, and agents that load skills by name get theirs. */
+  shadowed: Schema.Boolean,
+});
+export type ClinicalSkill = typeof ClinicalSkill.Type;
+
 export const LinceiRequest = Schema.Union([
   /** Reads the state of the clinical research tools. */
   Schema.TaggedStruct("ClinicalStatus", {}),
@@ -160,6 +172,10 @@ export const LinceiRequest = Schema.Union([
   Schema.TaggedStruct("Preferences", {}),
   /** Changes them. Agents are told from their next turn; other clients see it when they next ask. */
   Schema.TaggedStruct("PreferencesUpdate", { techieMode: Schema.Boolean }),
+  /** Reads what Lincei gives every agent: its instructions for the current mode, and M4's skills. */
+  Schema.TaggedStruct("AgentBriefing", {}),
+  /** Reads the full text of one of M4's skills. */
+  Schema.TaggedStruct("ClinicalSkillText", { name: Schema.String }),
 ]);
 export type LinceiRequest = typeof LinceiRequest.Type;
 
@@ -175,6 +191,13 @@ export const LinceiResponse = Schema.Union([
   Schema.TaggedStruct("ResearchBoardActivity", { updatedAt: Schema.optional(Schema.Number) }),
   Schema.TaggedStruct("ClinicalDatasets", { datasets: Schema.Array(ClinicalDataset) }),
   Schema.TaggedStruct("Preferences", { preferences: LinceiPreferences }),
+  Schema.TaggedStruct("AgentBriefing", {
+    /** What Lincei adds to every agent session's instructions, as of the next turn. */
+    instructions: Schema.String,
+    techieMode: Schema.Boolean,
+    skills: Schema.Array(ClinicalSkill),
+  }),
+  Schema.TaggedStruct("ClinicalSkillText", { name: Schema.String, text: Schema.String }),
 ]);
 export type LinceiResponse = typeof LinceiResponse.Type;
 

@@ -20,6 +20,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   CLINICAL_ACCESS_REFUSED,
   classifyLinceiFailure,
+  answerView,
   clinicalStatusView,
   datasetActionOutcome,
   datasetListView,
@@ -125,6 +126,34 @@ describe("classifyLinceiFailure", () => {
       message: NO_ANSWER,
       detail: null,
     });
+  });
+});
+
+describe("answerView", () => {
+  const briefing: LinceiResponse = {
+    _tag: "AgentBriefing",
+    instructions: "<lincei_clinical_research/>",
+    techieMode: false,
+    skills: [],
+  };
+
+  it("shows the answer it waits for, and keeps it while a newer read fails", () => {
+    const known = { phase: "known", answer: briefing };
+    expect(answerView(succeeded(briefing), "AgentBriefing")).toEqual(known);
+    expect(answerView(failed(broken, succeeded(briefing)), "AgentBriefing")).toEqual(known);
+  });
+
+  it("says what went wrong in words, and waits through an interruption", () => {
+    expect(answerView(failed(broken), "AgentBriefing")).toEqual({ phase: "failed", ...problem });
+    expect(answerView(failed(refused), "AgentBriefing")).toMatchObject({
+      phase: "failed",
+      detail: null,
+    });
+    expect(answerView(failed(Cause.interrupt()), "AgentBriefing")).toEqual({ phase: "loading" });
+  });
+
+  it("does not take another answer for the one it waits for", () => {
+    expect(answerView(succeeded(clinical), "AgentBriefing")).toEqual({ phase: "loading" });
   });
 });
 

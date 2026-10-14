@@ -5,6 +5,7 @@ import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hos
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/process";
 
@@ -75,6 +76,11 @@ const withRequests = <A, E>(
         status: Effect.succeed(status),
         provision: Effect.succeed(status),
         setup: () => Effect.succeed({ ...status, state: "installing" }),
+        skills: Effect.succeed([
+          { name: "sofa-score", category: "clinical", description: "SOFA", shadowed: false },
+        ]),
+        skillText: (name) =>
+          Effect.succeed(name === "sofa-score" ? Option.some("# SOFA") : Option.none()),
       }),
     ),
     Layer.succeed(
@@ -317,6 +323,38 @@ describe("LinceiRequests", () => {
           _tag: "Preferences",
           preferences: { techieMode: true },
         });
+      }),
+    ),
+  );
+
+  it.effect("shows what agents are told in the mode in force, and one skill's text", () =>
+    withRequests({ state: "ready" }, ({ requests }) =>
+      Effect.gen(function* () {
+        const researcher = yield* requests.handle({ _tag: "AgentBriefing" });
+        expect(researcher).toMatchObject({
+          _tag: "AgentBriefing",
+          techieMode: false,
+          skills: [{ name: "sofa-score", shadowed: false }],
+        });
+        expect(researcher._tag === "AgentBriefing" && researcher.instructions).toContain(
+          "<lincei_researcher>",
+        );
+
+        yield* requests.handle({ _tag: "PreferencesUpdate", techieMode: true });
+        const techie = yield* requests.handle({ _tag: "AgentBriefing" });
+        expect(techie._tag === "AgentBriefing" && techie.instructions).not.toContain(
+          "<lincei_researcher>",
+        );
+
+        expect(yield* requests.handle({ _tag: "ClinicalSkillText", name: "sofa-score" })).toEqual({
+          _tag: "ClinicalSkillText",
+          name: "sofa-score",
+          text: "# SOFA",
+        });
+        const unknown = yield* Effect.flip(
+          requests.handle({ _tag: "ClinicalSkillText", name: "../../etc/passwd" }),
+        );
+        expect(unknown.message).toContain("no clinical skill");
       }),
     ),
   );

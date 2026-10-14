@@ -11,6 +11,7 @@ export const CLINICAL_SETTINGS = {
   tools: { id: "clinical-tools", title: "Clinical research tools" },
   location: { id: "clinical-dataset-location", title: "Dataset location" },
   datasets: { id: "clinical-datasets", title: "Datasets" },
+  agents: { id: "clinical-agents", title: "What agents get" },
 } as const;
 
 /** The row on Settings, General that switches between researcher mode and upstream's full feature set. */
@@ -42,6 +43,13 @@ export const LINCEI_SETTINGS_SEARCH_ITEMS = [
     ...CLINICAL_SETTINGS.location,
     to: "/settings/clinical",
     searchTerms: ["clinical data dataset storage folder path disk space where kept"],
+  },
+  {
+    ...CLINICAL_SETTINGS.agents,
+    to: "/settings/clinical",
+    searchTerms: [
+      "what agents get agent instructions system prompt told skills clinical skills sofa sepsis kdigo cohort m4 skill text",
+    ],
   },
   {
     // The board has no settings of its own; what it needs is the tools.
