@@ -289,6 +289,32 @@ export const HIDDEN_UNLESS_TECHIE: ReadonlyArray<HiddenControl> = [
     ],
   },
   {
+    // The research board is a page Lincei opens for the researcher, not one they
+    // browse: an address, back and forward, and capture tools only frame it.
+    // Recognised by its address, because Vitrine serves boards on 127.0.0.1 or
+    // localhost, ports 7741 to 7750 (`_MAX_PORT` in vitrine/server.py). Other
+    // pages keep their bar.
+    what: "Browser: the address bar while the tab shows a research board",
+    selector:
+      "form[data-surface-subheader]:has([data-preview-url-input]:is(" +
+      '[value^="http://127.0.0.1:774"], [value^="http://localhost:774"], ' +
+      '[value^="http://127.0.0.1:7750/"], [value^="http://localhost:7750/"]))',
+    anchors: [
+      {
+        file: "apps/web/src/components/preview/PreviewChromeRow.tsx",
+        text: "data-surface-subheader",
+      },
+      {
+        file: "apps/web/src/components/preview/PreviewChromeRow.tsx",
+        text: "value={inputFocused ? draft : url}",
+      },
+      {
+        file: "apps/web/src/components/preview/PreviewChromeRow.tsx",
+        text: "data-preview-url-input",
+      },
+    ],
+  },
+  {
     // The way into the floating mini browser from the tab's own toolbar.
     what: "Browser: float the tab over the chat",
     selector: 'button[aria-label="Float preview over chat"]',
