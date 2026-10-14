@@ -16,7 +16,7 @@ import type { SessionPhase } from "~/types";
 import { clinicalToolsInstalled } from "./clinicalPresentation";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
-import { openResearchBoard } from "./openResearchBoard";
+import { followAppAppearance, openResearchBoard } from "./openResearchBoard";
 import {
   createResearchBoardWatcher,
   createWatcherKeeper,
@@ -95,6 +95,16 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const [busy, setBusy] = useState(false);
   const shown = useBoardShown(threadRef === null ? null : scopedThreadKey(threadRef));
   const running = phase === "running";
+
+  // The app's appearance lives in the class of <html>; a board shown before a
+  // switch between light and dark is given the new one.
+  useEffect(() => {
+    if (environmentId === null || threadId === null) return;
+    const target = { threadRef: scopeThreadRef(environmentId, threadId), adjustPreview };
+    const observer = new MutationObserver(() => followAppAppearance(target));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [environmentId, threadId, adjustPreview]);
 
   // An agent can run or repair setup, and nothing else tells this window, so
   // the status is read again when a turn starts and when it ends.

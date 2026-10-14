@@ -8,6 +8,7 @@ import {
   createWatcherKeeper,
   describeBoardButton,
   findBoardTab,
+  isBoardPage,
   noteBoardActivity,
 } from "./researchBoardLogic";
 
@@ -22,6 +23,16 @@ const tab = (tabId: string, url: string | null, fields: Partial<Tab> = {}): Tab 
 
 const tabs = (...list: ReadonlyArray<Tab>) =>
   Object.fromEntries(list.map((entry) => [entry.tabId, entry]));
+
+describe("isBoardPage", () => {
+  it("knows Vitrine's boards by the name Vitrine gives them, on any port and page", () => {
+    expect(isBoardPage("http://vitrine.localhost:7741/")).toBe(true);
+    expect(isBoardPage("http://vitrine.localhost:7750/#/study/demo")).toBe(true);
+    expect(isBoardPage("http://localhost:7741/")).toBe(false);
+    expect(isBoardPage("https://physionet.org/")).toBe(false);
+    expect(isBoardPage("not a url")).toBe(false);
+  });
+});
 
 describe("findBoardTab", () => {
   const board = "http://127.0.0.1:7741/";

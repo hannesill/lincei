@@ -29,7 +29,7 @@ import {
   describeLinceiFailure,
   type LinceiCommandResult,
 } from "./linceiAnswers";
-import { BOARD_NEEDS_BROWSER, findBoardTab } from "./researchBoardLogic";
+import { BOARD_NEEDS_BROWSER, findBoardTab, isBoardPage } from "./researchBoardLogic";
 
 export type BoardOpening =
   /** The board is on screen, in a tab that was there or a new one. */
@@ -62,7 +62,10 @@ export interface BoardTarget {
  * a white page beside a dark app. Asked again each time the board is shown,
  * which is how it follows a change of theme.
  */
-function matchAppAppearance({ threadRef, adjustPreview }: BoardTarget, tabId: string | null): void {
+function matchAppAppearance(
+  { threadRef, adjustPreview }: Pick<BoardTarget, "threadRef" | "adjustPreview">,
+  tabId: string | null,
+): void {
   if (tabId === null) return;
   const tab = readThreadPreviewState(threadRef).sessions[tabId];
   if (tab === undefined || tab.runtime !== "server") return;
@@ -73,6 +76,18 @@ function matchAppAppearance({ threadRef, adjustPreview }: BoardTarget, tabId: st
     environmentId: threadRef.environmentId,
     input: { threadId: threadRef.threadId, tabId: tab.tabId, colorScheme },
   }).catch(() => undefined);
+}
+
+/**
+ * Gives the thread's boards the app's appearance again. A board keeps the one
+ * it was shown with, so this runs when the app switches between light and
+ * dark while a board is open.
+ */
+export function followAppAppearance(target: Pick<BoardTarget, "threadRef" | "adjustPreview">) {
+  for (const tab of Object.values(readThreadPreviewState(target.threadRef).sessions)) {
+    if (tab.navStatus._tag !== "Loading" && tab.navStatus._tag !== "Success") continue;
+    if (isBoardPage(tab.navStatus.url)) matchAppAppearance(target, tab.tabId);
+  }
 }
 
 async function showBoard(target: BoardTarget): Promise<BoardOpening> {
