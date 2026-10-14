@@ -36,10 +36,17 @@ Lincei adds the clinical layer:
 2. Download the latest Lincei build for Apple Silicon Macs from
    [Releases](https://github.com/hannesill/lincei/releases) and drag it into Applications.
 
-Alpha builds are not signed with an Apple Developer ID yet, so macOS blocks the first launch.
-Open Lincei once and dismiss the warning, then go to **System Settings → Privacy & Security**,
-scroll down to the message about Lincei, and choose **Open Anyway**. On macOS 14 or earlier,
-right-click the app and choose **Open** instead.
+Lincei is not signed with an Apple Developer ID yet, so macOS blocks the first launch and says it
+cannot verify the app. Open Lincei once and choose **Done**, then go to **System Settings →
+Privacy & Security**, scroll down to the message about Lincei, and choose **Open Anyway**. On
+macOS 14 or earlier, right-click the app and choose **Open** instead. You do this once per
+download.
+
+Lincei does not update itself yet. To update, quit Lincei, download the new build from
+[Releases](https://github.com/hannesill/lincei/releases), and replace the app in Applications;
+your conversations and datasets stay. Allow it in Privacy & Security again, as above. On its first
+launch macOS asks whether Lincei may use "lincei Safe Storage" in your keychain, where Lincei keeps
+its sign-ins encrypted: enter your Mac password and choose **Always Allow**.
 
 On first launch Lincei sets up the clinical environment in the background: Python, M4, Vitrine,
 the clinical skills, and the demo dataset. It takes a few minutes and needs a network connection,

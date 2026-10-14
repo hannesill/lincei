@@ -196,8 +196,8 @@ describe("datasetDisplayName", () => {
 
 describe("withDatasetName", () => {
   it("names the dataset in a sentence the server wrote with its id", () => {
-    expect(withDatasetName("PhysioNet refused this login for mimic-iv.", "mimic-iv")).toBe(
-      "PhysioNet refused this login for MIMIC-IV.",
+    expect(withDatasetName("This account has no access to mimic-iv yet.", "mimic-iv")).toBe(
+      "This account has no access to MIMIC-IV yet.",
     );
     expect(withDatasetName("eicu is already being prepared.", "eicu")).toBe(
       "eICU is already being prepared.",

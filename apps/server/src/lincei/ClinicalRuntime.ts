@@ -51,8 +51,8 @@ import * as UvInstallation from "./UvInstallation.ts";
  * ship a release Lincei should adopt; a changed list updates on next setup.
  */
 const DEFAULT_CLINICAL_REQUIREMENTS = [
-  "m4-infra[research]>=0.5.5,<0.6",
-  "vitrine>=0.1.1,<0.2",
+  "m4-infra[research]>=0.5.6,<0.6",
+  "vitrine>=0.1.2,<0.2",
 ] as const;
 
 const CLINICAL_PYTHON_VERSION = "3.12";

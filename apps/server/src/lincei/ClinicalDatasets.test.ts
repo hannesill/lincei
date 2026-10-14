@@ -436,7 +436,9 @@ describe("ClinicalDatasets", () => {
           );
           expect(jobOf(yield* datasets.list, "mimic-iv")).toMatchObject({
             state: "failed",
-            message: expect.stringContaining("PhysioNet refused this login for mimic-iv"),
+            message: expect.stringContaining(
+              "This PhysioNet account has no access to mimic-iv yet",
+            ),
             detail: "PhysioNet access is forbidden for https://physionet.org/files/mimiciv/.",
           });
           // A failed download is not followed by an attempt to prepare nothing.

@@ -278,10 +278,12 @@ const loginNotPossible = (name: string) =>
 /** Why M4 stopped, in words for the person who started the job, with what to do next. */
 const describeFailure = (name: string, kind: JobKind, code: string | undefined): string => {
   switch (code) {
-    // PhysioNet answers a wrong password and a missing agreement the same way.
+    // M4 0.5.5 sent the login in a way PhysioNet ignores, so there every
+    // login ended in "forbidden". Since 0.5.6 a wrong password is its own case.
     case "physionet_auth_failed":
+      return `PhysioNet did not accept this username and password. Check them by signing in on physionet.org, then choose Download again.`;
     case "physionet_access_forbidden":
-      return `PhysioNet refused this login for ${name}. Check the username and password, and that the account has signed the dataset's data use agreement on physionet.org, then choose Download again.`;
+      return `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Download again.`;
     case "missing_credentials":
       return `The PhysioNet login did not reach the download of ${name}. Choose Download and sign in again.`;
     case "download_network_failed":

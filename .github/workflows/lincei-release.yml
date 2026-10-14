@@ -79,4 +79,4 @@ jobs:
         run: |
           gh release create "v${{ inputs.version }}" release/*.dmg \
             --draft --title "Lincei ${{ inputs.version }}" \
-            --notes "Unsigned alpha build for Apple Silicon. See README for first-run steps."
+            --notes "Build for Apple Silicon Macs. It is not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update."
