@@ -24,6 +24,7 @@ import {
 import { useClinicalDatasets } from "./clinicalState";
 import { datasetActionOutcome, type DatasetActionOutcome } from "./linceiAnswers";
 import { linceiCommand } from "./linceiRequests";
+import { PhysioNetLink, physioNetProjectPage } from "./physioNet";
 import { PhysioNetDownloadDialog } from "./PhysioNetDownloadDialog";
 import { TechnicalDetails } from "./TechnicalDetails";
 
@@ -82,6 +83,9 @@ function DatasetRow({
   const { job, name } = dataset;
   const running = job?.state === "running";
   const progress = running ? describeJobProgress(job) : null;
+  // Where the account gets access: the data use agreement is signed on the dataset's own page.
+  const projectPage =
+    dataset.requiresCredentials && dataset.state !== "ready" ? physioNetProjectPage(name) : null;
   return (
     <li className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:gap-6 sm:px-4">
       <div className="min-w-0 flex-1 space-y-1">
@@ -92,7 +96,17 @@ function DatasetRow({
           ) : null}
         </div>
         {progress === null ? (
-          <p className="text-xs text-muted-foreground">{describeDataset(dataset, place)}</p>
+          <p className="text-xs text-muted-foreground">
+            {describeDataset(dataset, place)}
+            {projectPage === null ? null : (
+              <>
+                {" "}
+                <PhysioNetLink href={projectPage}>
+                  {datasetDisplayName(name)} on PhysioNet
+                </PhysioNetLink>
+              </>
+            )}
+          </p>
         ) : (
           <div className="space-y-1.5">
             <p id={progressId} className="text-xs wrap-anywhere text-muted-foreground">

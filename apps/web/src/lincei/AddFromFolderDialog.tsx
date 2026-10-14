@@ -17,7 +17,7 @@ import { readLocalApi } from "~/localApi";
 
 import { datasetDisplayName, folderPathProblem, withDatasetName } from "./clinicalPresentation";
 import { type DatasetActionOutcome, NO_ANSWER } from "./linceiAnswers";
-import { ProviderDataNotice } from "./ProviderDataNotice";
+import { ProviderDataAcknowledgement, ProviderDataNotice } from "./ProviderDataNotice";
 import { useLastPresent } from "./useLastPresent";
 
 interface AddFromFolderProps {
@@ -51,11 +51,14 @@ function AddFromFolderForm({
   const problemId = useId();
   const [source, setSource] = useState(lastFolder);
   const [problem, setProblem] = useState<string | null>(null);
+  // Only credentialed data comes with PhysioNet's rules for AI services.
+  const [acknowledged, setAcknowledged] = useState(!dataset.requiresCredentials);
   const name = datasetDisplayName(dataset.name);
   const folder = source.trim();
+  const ready = !checking && acknowledged && folder.length > 0;
 
   const submit = async () => {
-    if (checking || folder.length === 0) return;
+    if (!ready) return;
     const unusable = folderPathProblem(folder);
     if (unusable !== null) {
       setProblem(unusable);
@@ -142,14 +145,22 @@ function AddFromFolderForm({
               computer in front of you.
             </p>
           )}
-          {dataset.requiresCredentials ? <ProviderDataNotice /> : null}
+          {dataset.requiresCredentials ? (
+            <div className="grid gap-2.5">
+              <ProviderDataNotice />
+              <ProviderDataAcknowledgement
+                checked={acknowledged}
+                onCheckedChange={setAcknowledged}
+              />
+            </div>
+          ) : null}
         </form>
       </DialogPanel>
       <DialogFooter variant="bare">
         <Button variant="ghost" disabled={checking} onClick={onClose}>
           Cancel
         </Button>
-        <Button disabled={checking || folder.length === 0} onClick={() => void submit()}>
+        <Button disabled={!ready} onClick={() => void submit()}>
           {checking ? "Checking the folder…" : "Add dataset"}
         </Button>
       </DialogFooter>

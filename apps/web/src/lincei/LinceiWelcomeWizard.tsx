@@ -28,6 +28,7 @@ import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import type { ClinicalStatusView } from "./linceiAnswers";
 import { useTechieModeSwitch } from "./mode/techieModeSwitch";
+import { PhysioNetAccessSteps } from "./physioNet";
 import { ProviderDataNotice } from "./ProviderDataNotice";
 import { seedResearcherDefaults } from "./researcherDefaults";
 import { TECHIE_MODE_SETTING } from "./settingsSearchItems";
@@ -122,9 +123,9 @@ function ClinicalStep({
               </CollapsibleTrigger>
               <CollapsiblePanel>
                 <div className="space-y-3 pt-3">
+                  <PhysioNetAccessSteps />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    MIMIC-IV, eICU and the other credentialed datasets need your own PhysioNet
-                    access. You can add them now or later.
+                    You can add them now or later, under Settings, Clinical Data.
                   </p>
                   <ProviderDataNotice subject="these datasets" />
                   <div className="rounded-xl bg-card ring-1 ring-black/5 dark:ring-white/5">
