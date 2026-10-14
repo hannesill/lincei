@@ -13,6 +13,7 @@ import { type EnvironmentPresentation, usePrimaryEnvironmentId } from "~/state/e
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import { AgentBriefingSection } from "./AgentBriefingSection";
 import { ClinicalDatasetList } from "./ClinicalDatasetList";
 import { ClinicalStatusNote } from "./ClinicalNote";
 import {
@@ -128,6 +129,7 @@ function ClinicalDataPanel({
           </p>
         )}
       </SettingsSection>
+      <AgentBriefingSection environmentId={environmentId} />
     </ClinicalPage>
   );
 }

@@ -165,6 +165,12 @@ theirs with the same name is left alone and wins, and Lincei's links are the one
 empty keeps Lincei out of them. Providers that do not read those folders still get the skills
 through the agent instructions, which name `<home>/clinical/skills`.
 
+Settings, Clinical Data, What agents get shows the same thing read-only: the instructions for the
+current mode, and each skill with its description and whether a skill of the user's takes its
+place. Upstream shows neither anywhere, and a researcher should be able to check what an agent was
+told. A skill's text is asked for only when its row is opened (`ClinicalSkillText`), so the page
+does not carry the whole bundle over the connection.
+
 ### Datasets
 
 Settings, Clinical Data lists M4's datasets (`m4 list-datasets --json`) and adds one from a folder
@@ -298,10 +304,13 @@ a shortcut, a context menu, or settings search, add it to
 when upstream renames a settings id or a shortcut command.
 
 **Starting settings** ([`researcherDefaults.ts`](../../apps/web/src/lincei/researcherDefaults.ts)).
-Two client settings start differently from upstream's default: archiving a conversation asks
-first, and in-app notifications are on. The wizard writes them once per device when it reaches
-Lincei's step, through upstream's own settings store, so they cost no upstream line and are the
-user's to change afterwards. The reset arrows in Settings still lead to upstream's defaults, and a
+Three settings start differently from upstream's default: archiving a conversation asks first,
+in-app notifications are on, and new conversations run in upstream's "Auto" permission mode
+instead of "Full access" (Claude runs in Claude Code's auto mode; Codex runs sandboxed to the
+project with its automatic reviewer deciding the rest). Researcher mode hides the permission
+picker, so this is the mode a researcher works in. The wizard writes them once per device when it
+reaches Lincei's step, through upstream's settings writer, which sends the permission default to
+the server, so they cost no upstream line and are the user's to change afterwards. The reset arrows in Settings still lead to upstream's defaults, and a
 test fails when upstream's default catches up with one of them, which is when to drop it.
 
 Git stays underneath and out of sight. A project that is a git repository still gets upstream's

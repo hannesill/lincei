@@ -6,14 +6,21 @@
  * that may have changed the answer.
  */
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import type { ClinicalDataset, EnvironmentId, LinceiRequest } from "@t3tools/contracts";
+import type {
+  ClinicalDataset,
+  EnvironmentId,
+  LinceiRequest,
+  LinceiResponse,
+} from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { toastManager } from "~/components/ui/toast";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import {
+  answerView,
+  type AnswerView,
   classifyLinceiFailure,
   clinicalStatusView,
   type ClinicalStatusView,
@@ -31,6 +38,7 @@ const SLOW_ANSWER_MS = 10_000;
 
 const CLINICAL_STATUS = { _tag: "ClinicalStatus" } as const satisfies LinceiRequest;
 const CLINICAL_DATASETS = { _tag: "ClinicalDatasets" } as const satisfies LinceiRequest;
+const AGENT_BRIEFING = { _tag: "AgentBriefing" } as const satisfies LinceiRequest;
 
 const NOTHING_TO_ASK = Atom.make(AsyncResult.initial<never, never>(false)).pipe(
   Atom.withLabel("lincei:query:none"),
@@ -161,4 +169,28 @@ export function useClinicalSetup(environmentId: EnvironmentId | null, refresh: (
     }
     refresh();
   };
+}
+
+/** What Lincei gives every agent on an environment: its instructions and M4's skills. */
+export function useAgentBriefing(environmentId: EnvironmentId | null): {
+  readonly view: AnswerView<Extract<LinceiResponse, { readonly _tag: "AgentBriefing" }>>;
+  readonly refresh: () => void;
+} {
+  const { result, refresh } = useLinceiRead(environmentId, AGENT_BRIEFING);
+  return { view: answerView(result, "AgentBriefing"), refresh };
+}
+
+/** The text of one of M4's skills, asked for only while `wanted`. */
+export function useClinicalSkillText(
+  environmentId: EnvironmentId | null,
+  name: string,
+  wanted: boolean,
+): {
+  readonly view: AnswerView<Extract<LinceiResponse, { readonly _tag: "ClinicalSkillText" }>>;
+  readonly refresh: () => void;
+} {
+  // One request object per skill, so the query cache keeps one entry for it.
+  const input = useMemo(() => ({ _tag: "ClinicalSkillText", name }) as const, [name]);
+  const { result, refresh } = useLinceiRead(environmentId, wanted ? input : null);
+  return { view: answerView(result, "ClinicalSkillText"), refresh };
 }

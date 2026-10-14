@@ -140,6 +140,39 @@ export function clinicalStatusView(result: LinceiQueryResult | null): ClinicalSt
   }
 }
 
+/** One read whose answer a surface shows as it is, such as what agents are told. */
+export type AnswerView<Answer> =
+  | { readonly phase: "loading" }
+  | ({ readonly phase: "failed" } & LinceiProblem)
+  | { readonly phase: "known"; readonly answer: Answer };
+
+/**
+ * Reads a query whose answer has the tag `tag`. Like the status, the last
+ * good answer stays while a newer request is on its way or has failed.
+ */
+export function answerView<Tag extends LinceiResponse["_tag"]>(
+  result: LinceiQueryResult | null,
+  tag: Tag,
+): AnswerView<Extract<LinceiResponse, { readonly _tag: Tag }>> {
+  if (result === null) return { phase: "loading" };
+  const answer =
+    result._tag === "Success"
+      ? result.value
+      : result._tag === "Failure"
+        ? Option.getOrNull(Option.map(result.previousSuccess, (previous) => previous.value))
+        : null;
+  if (answer !== null && answer._tag === tag) {
+    return { phase: "known", answer: answer as Extract<LinceiResponse, { readonly _tag: Tag }> };
+  }
+  if (result._tag !== "Failure") return { phase: "loading" };
+  const failure = classifyLinceiFailure(result.cause);
+  if (failure.reason === "failed") {
+    return { phase: "failed", message: failure.message, detail: failure.detail };
+  }
+  const message = describeLinceiFailure(failure);
+  return message === null ? { phase: "loading" } : { phase: "failed", message, detail: null };
+}
+
 /** The dataset list a command answered with, and when, so it can outrank an older read. */
 export interface DatasetAnswer {
   readonly datasets: ReadonlyArray<ClinicalDataset>;

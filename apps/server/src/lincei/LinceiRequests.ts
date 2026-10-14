@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
+import { linceiAgentInstructions } from "./agentInstructions.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
@@ -116,6 +117,24 @@ const make = Effect.gen(function* () {
           _tag: "Preferences",
           preferences: yield* linceiPreferences.update({ techieMode: request.techieMode }),
         };
+      case "AgentBriefing": {
+        const { techieMode } = yield* linceiPreferences.get;
+        return {
+          _tag: "AgentBriefing",
+          instructions: linceiAgentInstructions({ techieMode }),
+          techieMode,
+          skills: yield* clinicalRuntime.skills,
+        };
+      }
+      case "ClinicalSkillText": {
+        const text = yield* clinicalRuntime.skillText(request.name);
+        if (Option.isNone(text)) {
+          return yield* new LinceiRequestError({
+            message: `Lincei has no clinical skill called "${request.name.slice(0, 60)}". Open Settings, Clinical Data again to see the current list.`,
+          });
+        }
+        return { _tag: "ClinicalSkillText", name: request.name, text: text.value };
+      }
     }
   });
 

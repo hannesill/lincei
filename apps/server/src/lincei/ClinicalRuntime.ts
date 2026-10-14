@@ -188,6 +188,10 @@ export class ClinicalRuntime extends Context.Service<
     readonly setup: (options?: {
       readonly force?: boolean | undefined;
     }) => Effect.Effect<ClinicalRuntimeStatus>;
+    /** M4's skills as agents get them. None before setup has put the bundle in place. */
+    readonly skills: Effect.Effect<ReadonlyArray<ClinicalSkillLinks.BundledSkill>>;
+    /** The text of one of M4's skills, read from Lincei's copy of the bundle. */
+    readonly skillText: (name: string) => Effect.Effect<Option.Option<string>>;
   }
 >()("t3/lincei/ClinicalRuntime") {}
 
@@ -228,6 +232,11 @@ const make = Effect.gen(function* () {
     platform,
     environment: hostEnvironment,
     join: path.join,
+  });
+  const skillDirectories = ClinicalSkillLinks.defaultSkillDirectories({
+    path,
+    platform,
+    environment: hostEnvironment,
   });
   const requirements = Option.match(yield* requirementsOverride, {
     onNone: (): ReadonlyArray<string> => DEFAULT_CLINICAL_REQUIREMENTS,
@@ -422,11 +431,7 @@ const make = Effect.gen(function* () {
     // Agents can still read the skills from Lincei's home, so this never fails setup.
     yield* ClinicalSkillLinks.sync({
       bundle: paths.skillsDir,
-      directories: ClinicalSkillLinks.defaultSkillDirectories({
-        path,
-        platform,
-        environment: hostEnvironment,
-      }),
+      directories: skillDirectories,
     }).pipe(
       Effect.tap(({ shadowed }) =>
         shadowed.length === 0
@@ -586,7 +591,22 @@ const make = Effect.gen(function* () {
     yield* setup();
   }
 
-  return ClinicalRuntime.of({ status, provision, setup });
+  const skills = ClinicalSkillLinks.describe({
+    bundle: paths.skillsDir,
+    directories: skillDirectories,
+  }).pipe(
+    Effect.orElseSucceed((): ReadonlyArray<ClinicalSkillLinks.BundledSkill> => []),
+    Effect.provideService(FileSystem.FileSystem, fileSystem),
+    Effect.provideService(Path.Path, path),
+  );
+  const skillText: ClinicalRuntime["Service"]["skillText"] = (name) =>
+    ClinicalSkillLinks.readSkill({ bundle: paths.skillsDir, name }).pipe(
+      Effect.orElseSucceed(() => Option.none<string>()),
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+    );
+
+  return ClinicalRuntime.of({ status, provision, setup, skills, skillText });
 });
 
 export const layer = Layer.effect(ClinicalRuntime, make);
