@@ -17,6 +17,9 @@ export const RESEARCHER_DEFAULTS = {
   // on a computer that may hold patient data. Researcher mode hides the
   // picker, so this is the mode a researcher works in.
   defaultRuntimeMode: "auto",
+  // Solid surfaces: through upstream's frosted glass, whatever lies behind the
+  // composer and menus shows as grey smudges on Lincei's plain white look.
+  glassOpacity: 100,
 } as const satisfies ServerSettingsPatch & ClientSettingsPatch;
 
 const SEEDED_KEY = "lincei:researcher-defaults";
