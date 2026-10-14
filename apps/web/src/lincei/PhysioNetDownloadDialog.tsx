@@ -23,7 +23,8 @@ import {
   withDatasetName,
 } from "./clinicalPresentation";
 import { type DatasetActionOutcome, NO_ANSWER } from "./linceiAnswers";
-import { ProviderDataNotice } from "./ProviderDataNotice";
+import { PHYSIONET_PAGES, PhysioNetLink, physioNetProjectPage } from "./physioNet";
+import { ProviderDataAcknowledgement, ProviderDataNotice } from "./ProviderDataNotice";
 import { useLastPresent } from "./useLastPresent";
 
 /** The username is remembered on this device so only the password is typed again. */
@@ -75,14 +76,17 @@ function LoginForm({
   // The password lives in this field and the one request that carries it.
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
   const baseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const computer = useEnvironment(environmentId)?.label ?? "that computer";
   // No address means Lincei is between connections, which is not the same as
   // an address that would expose the password.
   const connected = baseUrl !== null;
   const mayType = connected && connectionProtectsSecrets(baseUrl);
-  const ready = mayType && !starting && username.trim().length > 0 && password.length > 0;
+  const ready =
+    mayType && acknowledged && !starting && username.trim().length > 0 && password.length > 0;
   const name = datasetDisplayName(dataset.name);
+  const projectPage = physioNetProjectPage(dataset.name);
 
   const submit = async () => {
     if (!ready) return;
@@ -106,8 +110,15 @@ function LoginForm({
       <DialogHeader>
         <DialogTitle>Download {name}</DialogTitle>
         <DialogDescription>
-          Sign in with your PhysioNet account. It needs access to {name}: the required training and
-          a signed data use agreement on physionet.org.
+          Sign in with your PhysioNet account. It needs access to {name}: credentialing, the{" "}
+          <PhysioNetLink href={PHYSIONET_PAGES.training}>required training</PhysioNetLink>, and the
+          data use agreement signed on{" "}
+          {projectPage === null ? (
+            "physionet.org"
+          ) : (
+            <PhysioNetLink href={projectPage}>the dataset&apos;s page</PhysioNetLink>
+          )}
+          .
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
@@ -170,7 +181,10 @@ function LoginForm({
             Lincei uses the password for this download only and does not save it, so it asks again
             next time. Files already downloaded are kept if the download stops.
           </p>
-          <ProviderDataNotice />
+          <div className="grid gap-2.5">
+            <ProviderDataNotice />
+            <ProviderDataAcknowledgement checked={acknowledged} onCheckedChange={setAcknowledged} />
+          </div>
           {/* Lets Return in a field start the download. */}
           <button type="submit" hidden />
         </form>

@@ -1,4 +1,6 @@
-const PHYSIONET_GUIDANCE_URL = "https://physionet.org/news/post/llm-responsible-use/";
+import { Checkbox } from "~/components/ui/checkbox";
+
+import { PHYSIONET_PAGES, PhysioNetLink } from "./physioNet";
 
 /**
  * What a researcher has to know before credentialed data comes into reach of
@@ -17,15 +19,33 @@ export function ProviderDataNotice({
       Agents send what they read from {subject}, including query results, to your AI provider.
       PhysioNet allows this only with a service that keeps none of the data, does not train on it,
       and has no human review. Checking that for your account is your responsibility.{" "}
-      {/* A new window is how the desktop app hands a link to the system browser. */}
-      <a
-        className="underline underline-offset-2 hover:text-foreground"
-        href={PHYSIONET_GUIDANCE_URL}
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        PhysioNet&apos;s guidance
-      </a>
+      <PhysioNetLink href={PHYSIONET_PAGES.aiUse}>
+        PhysioNet&apos;s rules for AI services
+      </PhysioNetLink>
     </p>
+  );
+}
+
+/**
+ * The researcher's confirmation, under the notice, that their AI provider
+ * account meets those rules. A dialog that brings credentialed data in does
+ * not go ahead without it. It is asked every time rather than remembered,
+ * because the account an agent uses can change between datasets.
+ */
+export function ProviderDataAcknowledgement({
+  checked,
+  onCheckedChange,
+}: {
+  readonly checked: boolean;
+  readonly onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-foreground">
+      {/* One line high, so the box sits on the first line of the sentence. */}
+      <span className="flex h-lh shrink-0 items-center">
+        <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
+      </span>
+      I have checked that my AI provider account meets these rules.
+    </label>
   );
 }

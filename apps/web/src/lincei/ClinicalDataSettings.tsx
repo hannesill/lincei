@@ -22,6 +22,8 @@ import {
   describeLostConnection,
 } from "./clinicalPresentation";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
+import { PhysioNetAccessSteps } from "./physioNet";
+import { ProviderDataNotice } from "./ProviderDataNotice";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { CLINICAL_SETTINGS } from "./settingsSearchItems";
 
@@ -113,7 +115,13 @@ function ClinicalDataPanel({
       </SettingsSection>
       <SettingsSection {...CLINICAL_SETTINGS.datasets}>
         {clinicalToolsInstalled(status) ? (
-          <ClinicalDatasetList environmentId={environmentId} enabled />
+          <>
+            <ClinicalDatasetList environmentId={environmentId} enabled />
+            <div className="space-y-2 border-t border-border/60 px-3 py-3 sm:px-4">
+              <PhysioNetAccessSteps />
+              <ProviderDataNotice subject="these datasets" />
+            </div>
+          </>
         ) : (
           <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
             Datasets appear here once the clinical research tools are set up.
