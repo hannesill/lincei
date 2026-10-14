@@ -306,8 +306,9 @@ a shortcut, a context menu, or settings search, add it to
 when upstream renames a settings id or a shortcut command.
 
 **Starting settings** ([`researcherDefaults.ts`](../../apps/web/src/lincei/researcherDefaults.ts)).
-Three settings start differently from upstream's default: archiving a conversation asks first,
-in-app notifications are on, and new conversations run in upstream's "Auto" permission mode
+Four settings start differently from upstream's default: archiving a conversation asks first,
+in-app notifications are on, surfaces are solid instead of frosted glass (which shows grey smudges
+on the plain white look), and new conversations run in upstream's "Auto" permission mode
 instead of "Full access" (Claude runs in Claude Code's auto mode; Codex runs sandboxed to the
 project with its automatic reviewer deciding the rest). Researcher mode hides the permission
 picker, so this is the mode a researcher works in. The wizard writes them once per device when it
