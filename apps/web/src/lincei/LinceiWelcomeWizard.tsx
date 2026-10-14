@@ -12,6 +12,7 @@ import { Dialog } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
 import { WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "~/components/ui/wizard";
+import { useUpdatePrimarySettings } from "~/hooks/useSettings";
 import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
 import { useEnvironmentScope } from "~/state/session";
 
@@ -186,6 +187,7 @@ export function LinceiWelcomeWizard(props: ComponentProps<typeof WelcomeWizard>)
     readonly projectRef: ScopedProjectRef | undefined;
   } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const updateSettings = useUpdatePrimarySettings();
 
   // The answer can arrive after upstream's wizard is done. If it is "this
   // server is not Lincei", the step that was waiting for it has nothing to
@@ -206,7 +208,7 @@ export function LinceiWelcomeWizard(props: ComponentProps<typeof WelcomeWizard>)
         {...props}
         onDone={(projectRef) => {
           if (environmentId === null || view.phase === "absent") return props.onDone(projectRef);
-          seedResearcherDefaults();
+          seedResearcherDefaults(updateSettings);
           setFinished({ projectRef });
         }}
       />
