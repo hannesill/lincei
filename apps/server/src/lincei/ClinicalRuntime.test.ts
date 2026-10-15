@@ -616,6 +616,14 @@ describe("ClinicalRuntime.activate", () => {
     });
   });
 
+  it.effect("leaves Vitrine's board name alone outside Windows", () => {
+    const env: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
+    return Effect.gen(function* () {
+      yield* activateWith(env);
+      expect(env.VITRINE_DISPLAY_HOST).toBeUndefined();
+    });
+  });
+
   it.effect("keeps a dataset directory the user exported", () => {
     const env: NodeJS.ProcessEnv = { PATH: "/usr/bin", M4_DATA_DIR: "/data/m4" };
     return Effect.gen(function* () {
@@ -664,6 +672,8 @@ describe("ClinicalRuntime.activate", () => {
       );
       expect(env.PATH).toBeUndefined();
       expect(env.LINCEI_CLINICAL_BIN).toBe("C:\\Users\\ada\\.lincei\\clinical\\venv\\Scripts");
+      // Vitrine would otherwise name its board 127.0.0.1 there.
+      expect(env.VITRINE_DISPLAY_HOST).toBe("vitrine.localhost");
       expect(buildRuntimeInstructions({ harness: "Codex" })).toContain(
         '$env:Path = "$env:LINCEI_CLINICAL_BIN;$env:Path";',
       );

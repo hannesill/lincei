@@ -7,12 +7,13 @@ name: Lincei server archives
 # reads them, and the desktop app downloads them onto a remote host over SSH
 # (packages/shared/src/cliRelease.ts names the files).
 #
-# Run it after the Lincei release workflow, with the same version: it attaches
-# the archives and SHA256SUMS to that draft release. A workflow that calls it
-# must create the release first.
+# The Lincei release workflow calls it after creating the draft release; run it
+# by hand only to rebuild the archives of an existing release. It attaches the
+# archives to that release and adds their lines to its SHA256SUMS.
 #
 # There is no archive for Intel Macs or Windows: Node single executables do
-# not run on x64 macOS, and Lincei does not ship for Windows.
+# not run on x64 macOS, and Lincei's identity rules cover only install.sh, not
+# upstream's install.ps1, so browser mode is not offered on Windows yet.
 
 on:
   workflow_dispatch:
@@ -138,10 +139,21 @@ jobs:
           merge-multiple: true
           path: release-cli
 
-      # The installers verify every download against this file.
+      # The installers verify every download against the release's one
+      # SHA256SUMS, which already lists the desktop builds; keep those lines and
+      # replace any earlier archive lines.
       - name: Write checksums
         working-directory: release-cli
-        run: sha256sum t3-* > SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing="$RUNNER_TEMP/existing-sums"
+          gh release download "v${{ inputs.version }}" --repo "${{ github.repository }}" \
+            --pattern SHA256SUMS --dir "$existing" || true
+          if [[ -f "$existing/SHA256SUMS" ]]; then
+            grep -v ' \*\{0,1\}t3-' "$existing/SHA256SUMS" > SHA256SUMS || true
+          fi
+          sha256sum t3-* >> SHA256SUMS
 
       - name: Attach to the release
         env:

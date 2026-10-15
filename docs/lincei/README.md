@@ -355,11 +355,13 @@ every file that is not ignored into `.git`, and a research folder holds data.
 
 The server the desktop app bundles also runs on its own and serves the web app to a browser, as
 upstream's `t3` does. Lincei ships it as upstream's CLI archives (`t3-<version>-<platform>.tar.gz`
-and `SHA256SUMS`, made by `scripts/build-cli-archive.ts`), which the **Lincei server archives**
-workflow (`lincei-server.yml`) attaches to a release after **Lincei release** has created it.
+and their lines in the release's `SHA256SUMS`, made by `scripts/build-cli-archive.ts`), which
+**Lincei release** attaches by calling `lincei-server.yml`; run that workflow by hand only to
+rebuild the archives of an existing release.
 They are also what the desktop app installs on a remote host over SSH and what `t3 update` reads,
 all through `packages/shared/src/cliRelease.ts`, whose repository is an identity rule. There is
-none for Intel Macs, where Node single executables do not run, or for Windows.
+none for Intel Macs, where Node single executables do not run, or for Windows, where the
+identity rules do not yet cover upstream's `install.ps1`.
 
 `scripts/install.sh`, rewritten by the identity script, installs an archive as the command
 `lincei`. It must never be `t3`, which would take the place of a T3 Code install's command.
@@ -415,7 +417,9 @@ because Lincei ships no mobile app.
 
 Run the **Lincei release** workflow with a version. It builds DMGs for Apple Silicon and Intel
 Macs, NSIS installers for Windows x64 and arm64, and AppImages for Linux x64 and arm64, and
-attaches them and a `SHA256SUMS` to one draft GitHub release. The assets carry no version
+attaches them and a `SHA256SUMS` to one draft GitHub release. It then calls **Lincei server
+archives** (`lincei-server.yml`), which adds the browser-mode server archives to the same release
+and their lines to the same `SHA256SUMS`. The desktop assets carry no version
 (`Lincei-mac-arm64.dmg`, `Lincei-win-x64.exe`, `Lincei-linux-x64.AppImage`), so the README and the
 website link to `releases/latest/download/<name>`. GitHub's `latest` skips drafts and
 pre-releases: publish the draft as a regular release, or those links break.
@@ -449,7 +453,8 @@ The Linux build also writes a `.deb`, which the workflow does not ship: its pack
 
 Upstream's own workflows (`release.yml`, `ci.yml`, the mobile and relay ones) assume T3 Code's
 runners and accounts, and `release.yml` runs on a 30-minute schedule. The files stay in place so
-merges stay clean, and every workflow except **Lincei release** is disabled on GitHub. A workflow
+merges stay clean, and every workflow except **Lincei release** and **Lincei server archives**
+is disabled on GitHub. A workflow
 file that a merge adds starts out enabled, so after pushing a merge:
 
 ```sh
