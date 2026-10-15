@@ -141,10 +141,24 @@ const M4Event = Schema.Struct({
 type M4Event = typeof M4Event.Type;
 const decodeM4Event = Schema.decodeUnknownOption(Schema.fromJsonString(M4Event));
 
+/**
+ * JSON with every character outside ASCII written as an escape. M4 decodes
+ * its standard input with the system's code page, which on Windows is not
+ * UTF-8, and ASCII reads the same in all of them.
+ */
+const asciiJson = (json: string) =>
+  json.replace(/[\u007f-￿]/g, (unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`);
+
 /** The document M4 reads a PhysioNet login from. */
-const encodeM4Credentials = Schema.encodeSync(
-  Schema.fromJsonString(Schema.Struct({ username: Schema.String, password: Schema.String })),
-);
+const encodeM4Credentials = (credentials: {
+  readonly username: string;
+  readonly password: string;
+}) =>
+  asciiJson(
+    Schema.encodeSync(
+      Schema.fromJsonString(Schema.Struct({ username: Schema.String, password: Schema.String })),
+    )(credentials),
+  );
 
 export class ClinicalDatasetsError extends Schema.TaggedError<ClinicalDatasetsError>()(
   "ClinicalDatasetsError",
@@ -343,11 +357,18 @@ const lineReader = (onLine: (line: string) => void) => {
  * output, such as a crash report.
  */
 const hiding = (secret: string | undefined) => {
-  // Also as it is written inside the JSON document M4 was sent.
+  // Also as it is written inside the JSON document M4 was sent, with and
+  // without its escapes.
   const forms =
     secret === undefined || secret.length === 0
       ? []
-      : [...new Set([secret, JSON.stringify(secret).slice(1, -1)])];
+      : [
+          ...new Set([
+            secret,
+            JSON.stringify(secret).slice(1, -1),
+            asciiJson(JSON.stringify(secret)).slice(1, -1),
+          ]),
+        ];
   const longest = Math.max(0, ...forms.map((form) => form.length));
   const hide = (text: string) =>
     forms.reduce((hidden, form) => hidden.replaceAll(form, "<redacted>"), text);

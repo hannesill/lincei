@@ -1,5 +1,8 @@
+import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -67,46 +70,52 @@ describe("ClinicalSkillLinks", () => {
     ),
   );
 
-  it.effect("removes its links to skills the bundle dropped, and nothing else", () =>
-    withBundle(
-      ["clinical/sofa-score", "clinical/old-score"],
-      ({ bundle, home, fileSystem, path }) =>
-        Effect.gen(function* () {
-          const directory = path.join(home, ".agents", "skills");
-          yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] });
-          yield* fileSystem.makeDirectory(path.join(directory, "my-skill"));
-          const elsewhere = path.join(home, "elsewhere");
-          yield* fileSystem.makeDirectory(elsewhere);
-          yield* fileSystem.symlink(elsewhere, path.join(directory, "linked-by-user"));
+  it.effect.skipIf(!symlinksSupported)(
+    "removes its links to skills the bundle dropped, and nothing else",
+    () =>
+      withBundle(
+        ["clinical/sofa-score", "clinical/old-score"],
+        ({ bundle, home, fileSystem, path }) =>
+          Effect.gen(function* () {
+            const directory = path.join(home, ".agents", "skills");
+            yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] });
+            yield* fileSystem.makeDirectory(path.join(directory, "my-skill"));
+            const elsewhere = path.join(home, "elsewhere");
+            yield* fileSystem.makeDirectory(elsewhere);
+            yield* fileSystem.symlink(elsewhere, path.join(directory, "linked-by-user"));
 
-          yield* fileSystem.remove(path.join(bundle, "clinical", "old-score"), { recursive: true });
-          yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] });
+            yield* fileSystem.remove(path.join(bundle, "clinical", "old-score"), {
+              recursive: true,
+            });
+            yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] });
 
-          expect((yield* fileSystem.readDirectory(directory)).toSorted()).toEqual([
-            "linked-by-user",
-            "my-skill",
-            "sofa-score",
-          ]);
-        }),
-    ),
+            expect((yield* fileSystem.readDirectory(directory)).toSorted()).toEqual([
+              "linked-by-user",
+              "my-skill",
+              "sofa-score",
+            ]);
+          }),
+      ),
   );
 
-  it.effect("treats a folder that links to another as the same folder", () =>
-    withBundle(["clinical/sofa-score"], ({ bundle, home, fileSystem, path }) =>
-      Effect.gen(function* () {
-        const shared = path.join(home, ".agents", "skills");
-        const alias = path.join(home, ".claude", "skills");
-        yield* fileSystem.makeDirectory(shared, { recursive: true });
-        yield* fileSystem.makeDirectory(path.dirname(alias), { recursive: true });
-        yield* fileSystem.symlink(shared, alias);
+  it.effect.skipIf(!symlinksSupported)(
+    "treats a folder that links to another as the same folder",
+    () =>
+      withBundle(["clinical/sofa-score"], ({ bundle, home, fileSystem, path }) =>
+        Effect.gen(function* () {
+          const shared = path.join(home, ".agents", "skills");
+          const alias = path.join(home, ".claude", "skills");
+          yield* fileSystem.makeDirectory(shared, { recursive: true });
+          yield* fileSystem.makeDirectory(path.dirname(alias), { recursive: true });
+          yield* fileSystem.symlink(shared, alias);
 
-        const result = yield* ClinicalSkillLinks.sync({ bundle, directories: [alias, shared] });
+          const result = yield* ClinicalSkillLinks.sync({ bundle, directories: [alias, shared] });
 
-        // The second folder's link is the first one's, not a user skill in its way.
-        expect(result.shadowed).toEqual([]);
-        expect(yield* fileSystem.readDirectory(shared)).toEqual(["sofa-score"]);
-      }),
-    ),
+          // The second folder's link is the first one's, not a user skill in its way.
+          expect(result.shadowed).toEqual([]);
+          expect(yield* fileSystem.readDirectory(shared)).toEqual(["sofa-score"]);
+        }),
+      ),
   );
 
   it.effect("touches no folder when there is no bundle", () =>
@@ -138,7 +147,69 @@ describe("ClinicalSkillLinks", () => {
         "/b",
       ]);
       expect(directories({ HOME: "/home/ada", LINCEI_CLINICAL_SKILL_DIRS: "" })).toEqual([]);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide(NodePath.layerPosix)),
+  );
+
+  it.effect("looks in the Windows user profile, whatever HOME says", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const directories = (environment: NodeJS.ProcessEnv) =>
+        ClinicalSkillLinks.defaultSkillDirectories({ path, platform: "win32", environment });
+
+      // Git Bash and some managed PCs set HOME; Claude and Codex use the profile.
+      expect(directories({ HOME: "/c/Users/ada", USERPROFILE: "C:\\Users\\ada" })).toEqual([
+        "C:\\Users\\ada\\.claude\\skills",
+        "C:\\Users\\ada\\.agents\\skills",
+      ]);
+      // Separated like PATH, which on Windows means a semicolon.
+      expect(
+        directories({ USERPROFILE: "C:\\Users\\ada", LINCEI_CLINICAL_SKILL_DIRS: "C:\\a;D:\\b" }),
+      ).toEqual(["C:\\a", "D:\\b"]);
+    }).pipe(Effect.provide(NodePath.layerWin32)),
+  );
+
+  // On a Windows host these are real junctions; elsewhere Node makes a symlink.
+  it.effect("links with junctions on Windows and knows them as its own afterwards", () =>
+    withBundle(
+      ["clinical/sofa-score", "clinical/old-score"],
+      ({ bundle, home, fileSystem, path }) =>
+        Effect.gen(function* () {
+          const directory = path.join(home, ".claude", "skills");
+          expect(yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] })).toEqual({
+            shadowed: [],
+          });
+          expect(
+            yield* fileSystem.readFileString(path.join(directory, "sofa-score", "SKILL.md")),
+          ).toBe("# clinical/sofa-score");
+
+          yield* fileSystem.remove(path.join(bundle, "clinical", "old-score"), { recursive: true });
+          // Its own links are neither the user's skills nor in the way.
+          expect(yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] })).toEqual({
+            shadowed: [],
+          });
+          expect(yield* fileSystem.readDirectory(directory)).toEqual(["sofa-score"]);
+          expect(
+            yield* ClinicalSkillLinks.describe({ bundle, directories: [directory] }),
+          ).toMatchObject([{ name: "sofa-score", shadowed: false }]);
+        }).pipe(Effect.provideService(HostProcessPlatform, "win32")),
+    ),
+  );
+
+  it.effect.skipIf(!symlinksSupported)(
+    "on Windows, knows a link of its own whatever case its target is spelled in",
+    () =>
+      withBundle(["clinical/sofa-score"], ({ bundle, home, fileSystem, path }) =>
+        Effect.gen(function* () {
+          const directory = path.join(home, ".claude", "skills");
+          yield* fileSystem.makeDirectory(directory, { recursive: true });
+          const source = path.join(yield* fileSystem.realPath(bundle), "clinical", "sofa-score");
+          yield* fileSystem.symlink(source.toUpperCase(), path.join(directory, "sofa-score"));
+
+          expect(yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] })).toEqual({
+            shadowed: [],
+          });
+        }).pipe(Effect.provideService(HostProcessPlatform, "win32")),
+      ),
   );
   it.effect("describes each skill and says which ones a skill of the user's replaces", () =>
     withBundle(["clinical/sofa-score", "system/m4-api"], ({ bundle, home, fileSystem, path }) =>

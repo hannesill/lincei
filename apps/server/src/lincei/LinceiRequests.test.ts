@@ -1,3 +1,4 @@
+import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { type ClinicalRuntimeStatus, LinceiRequest } from "@t3tools/contracts";
@@ -109,7 +110,8 @@ const withRequests = <A, E>(
     ServerConfig.layerTest(process.cwd(), { prefix: "lincei-requests-test-" }),
     // Never the developer's own dataset store.
     Layer.succeed(HostProcessEnvironment, {}),
-  ).pipe(Layer.provideMerge(NodeServices.layer));
+    // The paths above are a Mac's, whatever this host is.
+  ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodePath.layerPosix)));
 
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;

@@ -38,12 +38,17 @@ Lincei adds the clinical layer:
      for Apple Silicon (M1 and later) or
      [`Lincei-mac-x64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-x64.dmg)
      for Intel. Open it and drag Lincei into Applications.
+   - **Windows:** [`Lincei-win-x64.exe`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-win-x64.exe),
+     or [`Lincei-win-arm64.exe`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-win-arm64.exe)
+     on an ARM PC (Snapdragon). Run it; it installs Lincei for your user account, without
+     administrator rights, and adds it to the Start menu.
    - **Linux:** [`Lincei-linux-x64.AppImage`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-linux-x64.AppImage),
      or [`Lincei-linux-arm64.AppImage`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-linux-arm64.AppImage)
      on ARM. Make it executable and run it: `chmod +x Lincei-linux-x64.AppImage`, then
      `./Lincei-linux-x64.AppImage`.
 
-There is no Windows build yet.
+On Windows, the installer is not signed yet, so Windows SmartScreen says it protected your PC.
+Choose **More info**, then **Run anyway**.
 
 On a Mac, Lincei is not signed with an Apple Developer ID yet, so macOS blocks the first launch and
 says it cannot verify the app. Open Lincei once and choose **Done**, then go to **System Settings →
@@ -53,11 +58,11 @@ more. On macOS 14 or earlier, right-click the app and choose **Open** instead. Y
 download, and the installer window shows the same steps.
 
 Lincei does not update itself yet. To update, quit Lincei, download the new build from
-[Releases](https://github.com/hannesill/lincei/releases), and replace the app in Applications, or
-the AppImage on Linux; your conversations and datasets stay. On a Mac, allow it in Privacy &
-Security again, as above. On its first launch macOS asks whether Lincei may use "lincei Safe
-Storage" in your keychain, where Lincei keeps its sign-ins encrypted: enter your Mac password and
-choose **Always Allow**.
+[Releases](https://github.com/hannesill/lincei/releases), and replace the app in Applications, run
+the new installer on Windows, or replace the AppImage on Linux; your conversations and datasets
+stay. On a Mac, allow it in Privacy & Security again, as above. On its first launch macOS asks
+whether Lincei may use "lincei Safe Storage" in your keychain, where Lincei keeps its sign-ins
+encrypted: enter your Mac password and choose **Always Allow**.
 
 On first launch Lincei sets up the clinical environment in the background: Python, M4, Vitrine,
 the clinical skills, and the demo dataset. It takes a few minutes and needs a network connection,
@@ -65,9 +70,10 @@ but no terminal. The last step of the first-run wizard and **Settings → Clinic
 far it is and let you retry a step that failed. You can also ask the agent "is the clinical
 runtime ready?"; it can check and repair the setup itself.
 
-The clinical skills are linked into `~/.claude/skills` and `~/.agents/skills`, where Claude Code
-and Codex look for skills, so they are available to those tools outside Lincei too. A skill of
-your own with the same name is never replaced.
+The clinical skills are linked into `~/.claude/skills` and `~/.agents/skills` (on Windows, the
+`.claude\skills` and `.agents\skills` folders in your user folder), where Claude Code and Codex
+look for skills, so they are available to those tools outside Lincei too. A skill of your own with
+the same name is never replaced.
 
 ## Try it
 
