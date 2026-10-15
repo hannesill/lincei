@@ -8,6 +8,7 @@
  * looks for it among the thread's sessions, and uses upstream's own calls to
  * select or open it.
  */
+import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import type {
@@ -15,21 +16,38 @@ import type {
   EnvironmentId,
   LinceiRequest,
   PreviewAdjustInput,
+  PreviewRuntime,
   ScopedThreadRef,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import { type OpenPreviewMutation, openUrlInPreview } from "~/browser/openFileInPreview";
-import { isPreviewAvailableFor, previewRuntimeFor } from "~/browser/previewRuntime";
-import { readThreadPreviewState, setActivePreviewTab } from "~/previewStateStore";
+import { previewRuntimeFor } from "~/browser/previewRuntime";
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
+import {
+  isPreviewSupportedInRuntime,
+  readThreadPreviewState,
+  setActivePreviewTab,
+} from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
+import {
+  readEnvironmentSupportsServerBrowser,
+  useEnvironmentSupportsServerBrowser,
+} from "~/state/entities";
+import { readPreparedConnection, usePreparedConnection } from "~/state/session";
 
 import {
   classifyLinceiFailure,
   describeLinceiFailure,
   type LinceiCommandResult,
 } from "./linceiAnswers";
-import { BOARD_NEEDS_BROWSER, findBoardTab, isBoardPage } from "./researchBoardLogic";
+import {
+  BOARD_NEEDS_BROWSER,
+  boardTabRuntime,
+  findBoardTab,
+  isBoardPage,
+} from "./researchBoardLogic";
 
 export type BoardOpening =
   /** The board is on screen, in a tab that was there or a new one. */
@@ -53,6 +71,33 @@ export interface BoardTarget {
     readonly environmentId: EnvironmentId;
     readonly input: PreviewAdjustInput;
   }) => Promise<unknown>;
+}
+
+/**
+ * Whether this window's own browser runs on the computer of the server behind
+ * `target`: the desktop app's own server, or one inside this computer (WSL).
+ * Upstream's `reachesEnvironmentLoopback` in `browserTargetResolver.ts` makes
+ * the same test and does not export it.
+ */
+const ownBrowserBesideServer = (target: ConnectionTarget | undefined): boolean =>
+  isPreviewSupportedInRuntime() &&
+  target !== undefined &&
+  (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
+
+/** Where the board of an environment opens in this window, or null where it cannot. */
+function boardRuntimeFor(environmentId: EnvironmentId): PreviewRuntime | null {
+  return boardTabRuntime({
+    preferred: previewRuntimeFor(environmentId),
+    ownBrowserBesideServer: ownBrowserBesideServer(readPreparedConnection(environmentId)?.target),
+    serverBrowser: readEnvironmentSupportsServerBrowser(environmentId),
+  });
+}
+
+/** Whether this window can show an environment's boards at all, for a control to say so. */
+export function useBoardShowable(environmentId: EnvironmentId | null): boolean {
+  const serverBrowser = useEnvironmentSupportsServerBrowser(environmentId);
+  const connection = Option.getOrNull(usePreparedConnection(environmentId));
+  return serverBrowser || ownBrowserBesideServer(connection?.target);
 }
 
 /**
@@ -92,9 +137,10 @@ export function followAppAppearance(target: Pick<BoardTarget, "threadRef" | "adj
 
 async function showBoard(target: BoardTarget): Promise<BoardOpening> {
   const { threadRef, cwd, request, openPreview } = target;
+  const runtime = boardRuntimeFor(threadRef.environmentId);
   // The button does not offer the board in such a window. This is for a
   // window that lost its browser between the button's render and the click.
-  if (!isPreviewAvailableFor(threadRef.environmentId)) {
+  if (runtime === null) {
     return { _tag: "Unavailable", message: BOARD_NEEDS_BROWSER };
   }
   const started = await request({
@@ -116,9 +162,9 @@ async function showBoard(target: BoardTarget): Promise<BoardOpening> {
 
   const { board } = started.value;
   // A browser tab that runs on the server reaches Vitrine's own address. A
-  // tab on this machine needs a loopback URL the resolver can route.
+  // tab in this window, which runs beside the server, gets a loopback URL.
   const url =
-    previewRuntimeFor(threadRef.environmentId) === "server"
+    runtime === "server"
       ? board.url
       : resolveDiscoveredServerUrl(threadRef.environmentId, `http://127.0.0.1:${board.port}/`);
 
@@ -129,7 +175,15 @@ async function showBoard(target: BoardTarget): Promise<BoardOpening> {
     matchAppAppearance(target, tabId);
     return { _tag: "Shown" };
   }
-  const opened = await openUrlInPreview({ threadRef, url, openPreview });
+  const opened = await openUrlInPreview({
+    threadRef,
+    url,
+    // Upstream would open a server elsewhere's tab in this window's browser.
+    openPreview:
+      runtime === "server"
+        ? (open) => openPreview({ ...open, input: { ...open.input, runtime } })
+        : openPreview,
+  });
   if (opened._tag === "Success") {
     matchAppAppearance(target, findBoardTab(readThreadPreviewState(threadRef).sessions, url));
     return { _tag: "Shown" };

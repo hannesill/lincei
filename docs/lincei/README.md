@@ -258,10 +258,12 @@ Vitrine opens the system browser when a script's first card starts its server. L
 `VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2.
 
 The research board button asks the server to start Vitrine in the thread's directory
-(`ResearchBoard.ts`) and opens the URL it reports. It also shows setup progress and retries a
-failed setup. While an agent works in the thread on screen, the button asks the server every few
-seconds when the study last changed, and opens the board the first time that is later than the
-start of the turn, once per thread. The server answers from the modification times of
+(`ResearchBoard.ts`) and opens the URL it reports. Vitrine listens on loopback only, so the board's
+tab has to run on the server's computer: the desktop app connected to a server elsewhere opens it in
+that server's browser, where upstream would open the tab in its own. The button also shows setup
+progress and retries a failed setup. While an agent works in the thread on screen, the button asks
+the server every few seconds when the study last changed, and opens the board the first time that is
+later than the start of the turn, once per thread. The server answers from the modification times of
 `studies/<study>/index.json`, which Vitrine documents as rewritten on every card, so asking costs a
 few `stat` calls and no Python process. Both times are the server's clock, which is why the turn's
 start comes from the thread and not from when this window saw it begin.

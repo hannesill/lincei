@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { CLINICAL_ACCESS_REFUSED } from "./linceiAnswers";
 import {
   BOARD_NEEDS_BROWSER,
+  boardTabRuntime,
   createResearchBoardWatcher,
   createWatcherKeeper,
   describeBoardButton,
@@ -94,6 +95,38 @@ describe("findBoardTab", () => {
       tab("tab_2", board, { updatedAt: "2026-10-13T11:00:00.000Z" }),
     );
     expect(findBoardTab(open, board)).toBe("tab_2");
+  });
+});
+
+describe("boardTabRuntime", () => {
+  it("runs the board of a server elsewhere on that server, where Vitrine listens", () => {
+    // The desktop app connected to another computer: upstream would open the tab here.
+    expect(
+      boardTabRuntime({ preferred: undefined, ownBrowserBesideServer: false, serverBrowser: true }),
+    ).toBe("server");
+  });
+
+  it("keeps upstream's choice wherever that reaches the board", () => {
+    expect(
+      boardTabRuntime({ preferred: "server", ownBrowserBesideServer: true, serverBrowser: true }),
+    ).toBe("server");
+    // A server inside this computer (WSL), or one too old to run tabs itself.
+    expect(
+      boardTabRuntime({ preferred: undefined, ownBrowserBesideServer: true, serverBrowser: true }),
+    ).toBe("desktop");
+    expect(
+      boardTabRuntime({ preferred: undefined, ownBrowserBesideServer: true, serverBrowser: false }),
+    ).toBe("desktop");
+  });
+
+  it("has no tab for a board that no browser of this window reaches", () => {
+    expect(
+      boardTabRuntime({
+        preferred: undefined,
+        ownBrowserBesideServer: false,
+        serverBrowser: false,
+      }),
+    ).toBeNull();
   });
 });
 
