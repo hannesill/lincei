@@ -167,6 +167,10 @@ export const activate = Effect.fn("ClinicalRuntime.activate")(function* (baseDir
   // Lincei shows the research board beside the conversation. Without this, the
   // first card an agent publishes also opens the board in the system browser.
   env.VITRINE_OPEN_BROWSER = "0";
+  // On Windows Vitrine names its board 127.0.0.1, because some Windows browsers
+  // do not resolve localhost subdomains. Lincei shows the board in Chromium,
+  // which always does, and recognises a board by this name (isBoardPage).
+  if (platform === "win32") env.VITRINE_DISPLAY_HOST ??= "vitrine.localhost";
   setRuntimeProductContext({
     name: "Lincei",
     instructions: linceiAgentInstructions({ techieMode: false, platform }),
