@@ -8,5 +8,10 @@
   <text x="320" y="104" fill="#1A1A1A" font-family="Helvetica" font-size="23" font-weight="700" text-anchor="middle">Drag Lincei into Applications.</text>
   <path d="M274 204H356" stroke="#1A1A1A" stroke-width="4"/>
   <path d="M354 193L370 204L354 215Z" fill="#1A1A1A"/>
-  <text x="320" y="367" fill="#333333" font-family="Helvetica" font-size="12" font-weight="400" text-anchor="middle">Once copied, open it from Applications.</text>
+  <!-- First launch of an app without a Developer ID: the steps are in README.md, under Install. -->
+  <rect x="62" y="314" width="520" height="76" fill="#1A1A1A"/>
+  <rect x="58" y="310" width="520" height="76" fill="#FFFFFF" stroke="#1A1A1A" stroke-width="2"/>
+  <text x="76" y="332" fill="#1A1A1A" font-family="Helvetica" font-size="12" font-weight="700">macOS blocks the first launch of each download. To allow it:</text>
+  <text x="76" y="352" fill="#1A1A1A" font-family="Helvetica" font-size="12" font-weight="400">1. Open Lincei from Applications. When macOS refuses, choose Done, not Move to Trash.</text>
+  <text x="76" y="371" fill="#1A1A1A" font-family="Helvetica" font-size="12" font-weight="400">2. System Settings → Privacy &amp; Security → Open Anyway, then your Mac password.</text>
 </svg>
