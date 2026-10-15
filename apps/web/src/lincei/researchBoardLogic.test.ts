@@ -149,7 +149,7 @@ describe("createResearchBoardWatcher", () => {
   it("sees a card published between the last look and the end of the turn", async () => {
     const { study, watcher, settle } = watch();
     study.updatedAt = 500;
-    watcher.start();
+    watcher.start(null);
     await settle();
     study.updatedAt = 900;
     watcher.finish();
@@ -160,7 +160,7 @@ describe("createResearchBoardWatcher", () => {
   it("does not report what was there when the turn began", async () => {
     const { study, watcher, settle } = watch();
     study.updatedAt = 500;
-    watcher.start();
+    watcher.start(null);
     await settle();
     watcher.finish();
     await settle();
@@ -170,23 +170,53 @@ describe("createResearchBoardWatcher", () => {
   it("starts each turn from what is there then", async () => {
     const { study, watcher, settle } = watch();
     study.updatedAt = 500;
-    watcher.start();
+    watcher.start(null);
     await settle();
     watcher.finish();
     await settle();
     // Another thread of the project adds a card between this thread's turns.
     study.updatedAt = 900;
-    watcher.start();
+    watcher.start(null);
     await settle();
     watcher.finish();
     await settle();
     expect(study.news).toBe(0);
   });
 
+  it("reports a card the turn published before its first look was answered", async () => {
+    const { study, watcher, settle } = watch();
+    // The turn began at 700; by the time the first look is answered it has a card.
+    study.updatedAt = 900;
+    watcher.start(700);
+    await settle();
+    expect(study.news).toBe(1);
+  });
+
+  it("judges against the turn's start, not what the first look found", async () => {
+    const { study, watcher, settle } = watch();
+    study.updatedAt = 500;
+    watcher.start(700);
+    await settle();
+    expect(study.news).toBe(0);
+    study.updatedAt = 900;
+    watcher.finish();
+    await settle();
+    expect(study.news).toBe(1);
+  });
+
+  it("takes the turn's start when it is known only after the turn began", async () => {
+    const { study, watcher, settle } = watch();
+    study.updatedAt = 900;
+    watcher.start(null);
+    watcher.start(700);
+    await settle();
+    expect(study.news).toBe(1);
+  });
+
   it("learns nothing from a look that could not be answered", async () => {
     const { study, watcher, settle } = watch();
     study.updatedAt = undefined;
-    watcher.start();
+    watcher.start(null);
     await settle();
     study.updatedAt = 900;
     watcher.finish();
@@ -201,7 +231,7 @@ describe("createResearchBoardWatcher", () => {
     await settle();
     expect(study.looks).toBe(0);
     watcher.dispose();
-    watcher.start();
+    watcher.start(null);
     await settle();
     expect(study.looks).toBe(0);
   });
@@ -236,7 +266,7 @@ describe("createWatcherKeeper", () => {
   it("hands a turn's watcher to the holder that takes over at once", () => {
     const { keeper, create, counts, aMomentLater } = keep();
     const first = keeper.hold("thread", create);
-    first.watcher.start();
+    first.watcher.start(null);
     first.release();
     const second = keeper.hold("thread", create);
     aMomentLater();
@@ -251,7 +281,7 @@ describe("createWatcherKeeper", () => {
   it("disposes a watcher nobody took over, and makes a new one when asked again", () => {
     const { keeper, create, counts, aMomentLater } = keep();
     const first = keeper.hold("thread", create);
-    first.watcher.start();
+    first.watcher.start(null);
     first.release();
     aMomentLater();
     first.watcher.finish();
@@ -268,7 +298,7 @@ describe("createWatcherKeeper", () => {
     first.release();
     first.release();
     aMomentLater();
-    second.watcher.start();
+    second.watcher.start(null);
     expect(counts.looks).toBe(1);
     second.watcher.dispose();
   });

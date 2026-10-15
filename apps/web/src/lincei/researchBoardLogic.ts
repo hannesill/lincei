@@ -64,16 +64,21 @@ export function findBoardTab(
   );
 }
 
-/** When a watcher last saw a study change; `updatedAt` is null while the study has no cards. */
+/**
+ * What a watcher has seen of a study: when it last changed, or when the turn
+ * began, which is what the turn's cards are judged against. Null while the
+ * study has no cards. Times are the server's epoch milliseconds.
+ */
 export interface BoardSighting {
   readonly updatedAt: number | null;
 }
 
 /**
- * Decides whether an answer about a study's activity is news. The first
- * answer never is: cards that were there before the watcher looked are not
- * what it waits for. After that, news is a change later than the last one
- * seen, and seeing it uses it up, so one card is reported once.
+ * Decides whether an answer about a study's activity is news: a change later
+ * than the last one seen. Seeing it uses it up, so one card is reported once.
+ * Without anything seen yet the answer is never news, because cards that were
+ * there before the watcher looked are not what it waits for; it becomes the
+ * baseline instead.
  */
 export function noteBoardActivity(
   seen: BoardSighting | null,
@@ -88,8 +93,14 @@ export function noteBoardActivity(
 }
 
 export interface ResearchBoardWatcher {
-  /** A turn began: look now, then every `intervalMs`. What is there now is this turn's baseline. */
-  readonly start: () => void;
+  /**
+   * A turn began at `startedAt`: look now, then every `intervalMs`. A change
+   * after `startedAt` is news, including a card published before the first
+   * look was answered. Where the start is not known (null) the first answer
+   * is the baseline. A start that becomes known later in the turn is taken,
+   * as long as nothing has been seen yet.
+   */
+  readonly start: (startedAt: number | null) => void;
   /**
    * The turn ended: look once more. A card published after the last regular
    * look would otherwise go unseen until the next turn made it old news.
@@ -112,6 +123,8 @@ export function createResearchBoardWatcher(input: {
   // Each turn keeps its own baseline, so the last look of one turn is still
   // judged against that turn when the next has already begun.
   let turn: { seen: BoardSighting | null } | null = null;
+  const since = (startedAt: number | null): BoardSighting | null =>
+    startedAt === null ? null : { updatedAt: startedAt };
   let timer: ReturnType<typeof setInterval> | undefined;
   let disposed = false;
 
@@ -124,9 +137,14 @@ export function createResearchBoardWatcher(input: {
   };
 
   return {
-    start: () => {
-      if (disposed || timer !== undefined) return;
-      const current = { seen: null };
+    start: (startedAt) => {
+      if (disposed) return;
+      if (timer !== undefined) {
+        // The thread can say when its turn began a moment after it began.
+        if (turn !== null && turn.seen === null) turn.seen = since(startedAt);
+        return;
+      }
+      const current: { seen: BoardSighting | null } = { seen: since(startedAt) };
       turn = current;
       timer = setInterval(() => void look(current), input.intervalMs);
       void look(current);

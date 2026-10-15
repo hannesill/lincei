@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { FlaskConicalIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -9,6 +10,7 @@ import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useThreadShell } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";
 import type { SessionPhase } from "~/types";
@@ -95,6 +97,11 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const [busy, setBusy] = useState(false);
   const shown = useBoardShown(threadRef === null ? null : scopedThreadKey(threadRef));
   const running = phase === "running";
+  // When the work in the thread began, on the server's clock like the study's
+  // times: a card from after it is this turn's.
+  const shell = useThreadShell(threadRef);
+  const workStartedAt = shell === null ? null : resolveThreadWorkingStartedAt(shell);
+  const turnStartedAt = workStartedAt === null ? null : Date.parse(workStartedAt);
 
   // The app's appearance lives in the class of <html>; a board shown before a
   // switch between light and dark is given the new one.
@@ -165,10 +172,20 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
     };
   }, [watchable, environmentId, threadId, folder, request, openPreview, adjustPreview]);
   useEffect(() => {
-    if (running) watcher.current?.start();
+    if (running) watcher.current?.start(turnStartedAt);
     else watcher.current?.finish();
     // The same list as above, so a watcher made mid-turn is started too.
-  }, [running, watchable, environmentId, threadId, folder, request, openPreview, adjustPreview]);
+  }, [
+    running,
+    turnStartedAt,
+    watchable,
+    environmentId,
+    threadId,
+    folder,
+    request,
+    openPreview,
+    adjustPreview,
+  ]);
 
   const button = describeBoardButton({
     view,
