@@ -3,7 +3,9 @@
  * client. Both change on the server while work runs there, and Lincei's one
  * RPC is request and response, so these hooks ask again every few seconds for
  * as long as something is in progress, and hand out `refresh` for the moments
- * that may have changed the answer.
+ * that may have changed the answer. Agents change datasets with M4 itself,
+ * which nothing tells a client, so a dataset list on screen also asks again
+ * now and then.
  */
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type {
@@ -33,6 +35,8 @@ import {
 import { linceiCommand, linceiQuery } from "./linceiRequests";
 
 const PROGRESS_POLL_INTERVAL_MS = 2_500;
+/** How often a dataset list asks again with nothing running. Each answer runs M4 once on the server. */
+const IDLE_POLL_INTERVAL_MS = 30_000;
 /** How long a first answer may take before the surface says so and offers to ask again. */
 const SLOW_ANSWER_MS = 10_000;
 
@@ -49,6 +53,22 @@ function usePolling(active: boolean, refresh: () => void) {
     if (!active) return;
     const timer = setInterval(refresh, PROGRESS_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
+  }, [active, refresh]);
+}
+
+/** Asks again when the window regains focus, and every so often while it has it. */
+function useRefreshWhileFocused(active: boolean, refresh: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => {
+      if (document.hasFocus()) refresh();
+    }, IDLE_POLL_INTERVAL_MS);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [active, refresh]);
 }
 
@@ -123,14 +143,14 @@ export function useClinicalDatasets(
     lastSetupStage.current = setupStage;
     refresh();
   }, [setupStage, refresh]);
-  usePolling(
+  const working =
     (setup.phase === "known" &&
       setup.status.state === "installing" &&
       setup.status.step === "dataset") ||
-      (view.phase === "listed" &&
-        view.datasets.some((dataset) => dataset.job?.state === "running")),
-    refresh,
-  );
+    (view.phase === "listed" && view.datasets.some((dataset) => dataset.job?.state === "running"));
+  usePolling(working, refresh);
+  // A dataset an agent prepares with M4 itself has no job here to watch.
+  useRefreshWhileFocused(enabled && !working, refresh);
 
   const waiting = view.phase === "loading";
   const [attempt, setAttempt] = useState(0);
