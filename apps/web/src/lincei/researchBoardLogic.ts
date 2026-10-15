@@ -27,9 +27,9 @@ function servedFrom(rawUrl: string): string | null {
 }
 
 /**
- * Where a window shows a research board: in the right panel, which takes
- * Lincei's built-in browser (the desktop app's, or one the server runs), or in
- * a browser tab of its own. Null where it cannot be shown at all.
+ * Where a window shows a research board: in the right panel, which takes the
+ * desktop app's built-in browser, or in a browser tab of its own. Null where it
+ * cannot be shown at all.
  */
 export type BoardPlace = "panel" | "tab" | null;
 
@@ -38,13 +38,21 @@ export type BoardPlace = "panel" | "tab" | null;
  * the computer the server runs on, so a plain browser reaches it only on that
  * computer, which it is when it reaches the server at a loopback address too.
  * `serverUrl` is the address this window connects to the server at.
+ *
+ * Only the desktop app's own browser counts as a panel. Every server also
+ * offers upstream's streamed server browser, but that needs a browser set up
+ * on the server (`t3 browser setup`), which a researcher has not done, and the
+ * panel would wait on it forever. The desktop app still uses it for a server
+ * elsewhere (`boardTabRuntime`), where its own browser cannot reach the board.
  */
 export function boardPlace(input: {
-  /** Whether a tab in the right panel's browser reaches the board (`boardTabRuntime`). */
+  /** Whether this window is the desktop app, whose built-in browser fills the panel. */
+  readonly desktopBrowser: boolean;
+  /** Whether a tab in the panel reaches the board (`boardTabRuntime`). */
   readonly panelReachesBoard: boolean;
   readonly serverUrl: string | null;
 }): BoardPlace {
-  if (input.panelReachesBoard) return "panel";
+  if (input.desktopBrowser) return input.panelReachesBoard ? "panel" : null;
   if (input.serverUrl === null || !URL.canParse(input.serverUrl)) return null;
   const { hostname } = new URL(input.serverUrl);
   // Browsers resolve every `*.localhost` name to the loopback address.

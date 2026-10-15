@@ -8,9 +8,8 @@
  * looks for it among the thread's sessions, and uses upstream's own calls to
  * select or open it.
  *
- * A plain browser window has no such tabs unless the server runs a browser of
- * its own. On the computer the server runs on, it opens the board in a browser
- * tab instead (`openResearchBoardInTab`).
+ * A plain browser window shows the board in a browser tab of its own instead,
+ * on the computer the server runs on (`openResearchBoardInTab`).
  */
 import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";

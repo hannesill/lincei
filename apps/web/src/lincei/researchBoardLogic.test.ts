@@ -346,9 +346,12 @@ describe("createWatcherKeeper", () => {
 });
 
 describe("boardPlace", () => {
-  it("shows the board in the panel wherever this window has a browser for it", () => {
+  it("shows the board in the desktop app's panel wherever a tab there reaches it", () => {
     for (const serverUrl of ["http://localhost:3773", "http://192.168.1.20:3773", null]) {
-      expect(boardPlace({ panelReachesBoard: true, serverUrl })).toBe("panel");
+      expect(boardPlace({ desktopBrowser: true, panelReachesBoard: true, serverUrl })).toBe(
+        "panel",
+      );
+      expect(boardPlace({ desktopBrowser: true, panelReachesBoard: false, serverUrl })).toBeNull();
     }
   });
 
@@ -359,7 +362,10 @@ describe("boardPlace", () => {
       "http://[::1]:3773",
       "http://lincei.localhost:3773",
     ]) {
-      expect(boardPlace({ panelReachesBoard: false, serverUrl })).toBe("tab");
+      // Even where the server offers its own browser, which would wait on `t3 browser setup`.
+      for (const panelReachesBoard of [false, true]) {
+        expect(boardPlace({ desktopBrowser: false, panelReachesBoard, serverUrl })).toBe("tab");
+      }
     }
   });
 
@@ -371,7 +377,9 @@ describe("boardPlace", () => {
       "not a url",
       null,
     ]) {
-      expect(boardPlace({ panelReachesBoard: false, serverUrl })).toBeNull();
+      for (const panelReachesBoard of [false, true]) {
+        expect(boardPlace({ desktopBrowser: false, panelReachesBoard, serverUrl })).toBeNull();
+      }
     }
   });
 });
