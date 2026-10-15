@@ -1,11 +1,13 @@
 name: Lincei release
 
-# Builds the Lincei desktop app for Apple Silicon and attaches it to a draft
-# GitHub release. Upstream's release.yml targets T3 Code's signing, npm, and
-# hosting accounts, so Lincei ships through this workflow instead.
+# Builds the Lincei desktop app for macOS (Apple Silicon and Intel) and Linux
+# (x64 and arm64) and attaches every build to one draft GitHub release.
+# Upstream's release.yml targets T3 Code's runners and its signing, npm, and
+# hosting accounts, so Lincei ships through this workflow instead. Windows is
+# left out: Lincei cannot install the clinical tools there (UvInstallation.ts).
 #
-# The DMG is unsigned unless signing is added here: macOS asks the user to
-# confirm opening it, and auto-update stays off (see docs/lincei/README.md).
+# The builds are unsigned: macOS asks the user to confirm opening the app, and
+# auto-update stays off (see docs/lincei/README.md).
 
 on:
   workflow_dispatch:
@@ -16,13 +18,76 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  macos:
-    name: macOS arm64 DMG
-    runs-on: macos-15
-    timeout-minutes: 45
+  check:
+    name: Check the Lincei overlay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Check Lincei identity
+        run: node scripts/lincei/identity.ts check
+
+      - name: Test the Lincei overlay
+        working-directory: apps/server
+        run: vp test run src/lincei
+
+  # One build per platform and architecture, each on a GitHub-hosted runner.
+  # The Intel DMG is cross-built on Apple Silicon, as upstream does. Linux
+  # builds run on their own architecture: node-pty compiles from source there,
+  # and the browser secret helper links against the host's libsecret.
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64 DMG
+            runner: macos-15
+            platform: mac
+            target: dmg
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+            ext: dmg
+          - label: macOS x64 DMG
+            runner: macos-15
+            platform: mac
+            target: dmg
+            arch: x64
+            rust_target: x86_64-apple-darwin
+            ext: dmg
+          - label: Linux x64 AppImage
+            runner: ubuntu-24.04
+            platform: linux
+            target: AppImage
+            arch: x64
+            rust_target: x86_64-unknown-linux-gnu
+            ext: AppImage
+          - label: Linux arm64 AppImage
+            runner: ubuntu-24.04-arm
+            platform: linux
+            target: AppImage
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            ext: AppImage
     env:
       # An unsigned build cannot install updates, so it must ship without an
       # update feed. build-desktop-artifact.ts falls back to GITHUB_REPOSITORY
@@ -48,14 +113,16 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.rust_target }}
 
-      - name: Check Lincei identity
-        run: node scripts/lincei/identity.ts check
-
-      - name: Test the Lincei overlay
-        working-directory: apps/server
-        run: vp test run src/lincei
+      - name: Install Linux build libraries
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev pkg-config
+          if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
+            sudo apt-get install -y imagemagick
+          fi
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
@@ -63,20 +130,68 @@ jobs:
       - name: Build desktop artifact
         run: |
           vp run dist:desktop:artifact \
-            --platform mac --target dmg --arch arm64 \
+            --platform "${{ matrix.platform }}" --target "${{ matrix.target }}" \
+            --arch "${{ matrix.arch }}" \
             --build-version "${{ inputs.version }}" --verbose
 
-      - name: Upload DMG
+      # electron-builder names files after the version; the release gets
+      # names without one, so releases/latest/download/<name> is a stable link
+      # for the website and the README. The Linux build also writes a .deb,
+      # which still carries T3 Code's package metadata and is not shipped.
+      - name: Name the release asset
+        run: |
+          shopt -s nullglob
+          built=(release/*.${{ matrix.ext }})
+          if [[ ${#built[@]} -ne 1 ]]; then
+            echo "::error::Expected one .${{ matrix.ext }} in release/, found ${#built[@]}."
+            exit 1
+          fi
+          mkdir -p asset
+          cp "${built[0]}" "asset/Lincei-${{ matrix.platform }}-${{ matrix.arch }}.${{ matrix.ext }}"
+
+      - name: Upload build
         uses: actions/upload-artifact@v7
         with:
-          name: lincei-macos-arm64
-          path: release/*.dmg
+          name: lincei-${{ matrix.platform }}-${{ matrix.arch }}
+          path: asset/*
           if-no-files-found: error
 
+  release:
+    name: Create draft release
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download builds
+        uses: actions/download-artifact@v8
+        with:
+          pattern: lincei-*
+          merge-multiple: true
+          path: assets
+
+      - name: Write checksums
+        working-directory: assets
+        run: sha256sum Lincei-* > SHA256SUMS
+
+      # --target pins the tag to the commit that was built; a draft's tag is
+      # otherwise created from the default branch when it is published.
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          gh release create "v${{ inputs.version }}" release/*.dmg \
-            --draft --title "Lincei ${{ inputs.version }}" \
-            --notes "Build for Apple Silicon Macs. It is not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update."
+          cat > notes.md <<'EOF'
+          | File | For |
+          | --- | --- |
+          | `Lincei-mac-arm64.dmg` | Macs with Apple Silicon (M1 and later) |
+          | `Lincei-mac-x64.dmg` | Macs with an Intel processor |
+          | `Lincei-linux-x64.AppImage` | Linux on x86-64 PCs |
+          | `Lincei-linux-arm64.AppImage` | Linux on ARM64 |
+
+          The Mac builds are not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update. On Linux, make the AppImage executable (`chmod +x`) and run it. `SHA256SUMS` lists each file's checksum.
+          EOF
+          gh release create "v$VERSION" assets/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --draft --title "Lincei $VERSION" --notes-file notes.md

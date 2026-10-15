@@ -19,7 +19,8 @@
  * server does put them first on its own PATH, but agents run commands in a
  * login shell, and on macOS that reorders PATH with the system's programs in
  * front: `m4` is then /usr/bin/m4, an unrelated macro processor, and `python`
- * is whatever the user's profile set up. Environment variables survive that.
+ * is whatever the user's profile set up. Debian's /etc/profile replaces PATH
+ * altogether. Environment variables survive both.
  *
  * It names the skills' folder as well as their names because only some
  * providers load skills from the user's skill folders, where
