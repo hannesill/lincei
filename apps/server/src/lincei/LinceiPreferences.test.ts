@@ -44,7 +44,7 @@ describe("LinceiPreferences", () => {
         const preferences = yield* LinceiPreferences.LinceiPreferences;
         expect(yield* preferences.update({ techieMode: true })).toEqual({ techieMode: true });
         expect(agentsAreTold()).not.toContain("<lincei_researcher>");
-        expect(agentsAreTold()).toContain("<lincei_clinical_research>");
+        expect(agentsAreTold()).toContain("<lincei>");
 
         yield* preferences.update({ techieMode: false });
         expect(agentsAreTold()).toContain("<lincei_researcher>");

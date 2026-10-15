@@ -255,8 +255,7 @@ Three things follow from "the directory a script runs in", and each has bitten:
   the folders it opened or watched when it shuts down (`ResearchBoard.ts`).
 
 Vitrine opens the system browser when a script's first card starts its server. Lincei sets
-`VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2; the agent instructions also say to run
-`vitrine start --no-open` first, for an environment set up before that.
+`VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2.
 
 The research board button asks the server to start Vitrine in the thread's directory
 (`ResearchBoard.ts`) and opens the URL it reports. It also shows setup progress and retries a
