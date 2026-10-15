@@ -25,7 +25,7 @@ content. `git log --first-parent` leaves it out.
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                                                                                   | The files that script lists, rewritten by it, never by hand                                                                                                                                                                  |
 | Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                                                                               | One plugin entry in `apps/web/vite.config.ts`                                                                                                                                                                                |
-| Mark and icons                                                   | `apps/web/src/components/T3Wordmark.tsx`, `assets/`, `apps/web/public/`                                                                                                                                                            | Same file names as upstream, Lincei content                                                                                                                                                                                  |
+| Mark and icons                                                   | [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts) draws `assets/` and `apps/web/public/`; `apps/web/src/components/T3Wordmark.tsx`                                                                                        | Same file names as upstream, Lincei content                                                                                                                                                                                  |
 | Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                                                                                     | Two lines in `apps/server/src/server.ts`                                                                                                                                                                                     |
 | Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
 | What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                                                                                 | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                                                                                                                                       |
@@ -68,8 +68,10 @@ Then, for each conflict:
   If the script reports a rule that no longer matches, upstream changed that line; update the
   rule to the new text.
 
-- **`README.md`, icons, `T3Wordmark.tsx`, `apps/desktop/resources/dmg/dmg-background-latest.svg`:**
-  keep Lincei's side.
+- **`README.md`, `T3Wordmark.tsx`, `apps/desktop/resources/dmg/dmg-background-latest.svg`:** keep
+  Lincei's side.
+- **An icon under `assets/` or `apps/web/public/`:** take either side, then run
+  `node scripts/lincei/icons.ts`.
 - **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `RpcAuthorization.ts`,
   `RpcInstrumentation.ts`, `rpc.ts`, `packages/contracts/src/index.ts`, `runtimeInstructions.ts`,
   `ChatView.tsx`, `SidebarChrome.tsx`,
@@ -352,12 +354,17 @@ the contrast and glass sliders, and custom fonts are upstream's and keep winning
   those literals with exact-once rules, the same mechanism as the copy, checked the same way. The
   canvas is upstream's own white and near-black, so the boot script in `index.html` and the colour
   Electron paints before the page exists stay upstream's.
-- The mark inside the app (`T3Wordmark.tsx`) is the icon's serif L, cut out of a tile in the
-  text colour.
+- The mark is the same card in black and white: an ink outline and a hard shadow twice as thick,
+  as on Vitrine's buttons, around a serif L. `T3Wordmark.tsx` draws it in the text colour.
 
-Type is still upstream's system stack. The Icon Composer projects under `assets/*/app-icon.icon/`
-are still upstream's, so `vp run icons:export` would write T3 Code's icons over Lincei's PNGs: do
-not run it until those sources are replaced.
+Type is still upstream's system stack.
+
+The app icons and favicons are drawn by [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts)
+and written to upstream's icon files, so the build scripts read them unchanged. After changing the
+drawing, run `node scripts/lincei/icons.ts`. Development builds get the mark inverted, to tell them
+apart from an installed Lincei. Never run `vp run icons:export`: it renders upstream's Icon
+Composer projects and would put T3 Code's icons back. The iOS and Android icons stay upstream's,
+because Lincei ships no mobile app.
 
 ## Releasing
 
