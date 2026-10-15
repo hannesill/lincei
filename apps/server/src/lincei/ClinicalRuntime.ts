@@ -591,9 +591,14 @@ const make = Effect.gen(function* () {
   const setup: ClinicalRuntime["Service"]["setup"] = (options) =>
     joinOrStart(options?.force === true).pipe(Effect.andThen(status));
 
-  // The desktop app is the clinical product, so it prepares itself. A dev
-  // server keeps one home per worktree and installs only when asked.
-  if (config.mode === "desktop" && config.devUrl === undefined) {
+  // The desktop app is the clinical product, and so is a server that serves the
+  // built web app to a browser (`t3` from a release archive or a build from
+  // source), so both prepare themselves. A dev server keeps one home per
+  // worktree and installs only when asked, as does a server with no web app.
+  if (
+    config.devUrl === undefined &&
+    (config.mode === "desktop" || config.staticDir !== undefined)
+  ) {
     yield* setup();
   }
 

@@ -161,6 +161,49 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "scripts/dev-runner.ts": {
     exact: [['path.join(NodeOS.homedir(), ".t3")', 'path.join(NodeOS.homedir(), ".lincei")']],
   },
+  // The installer for running Lincei in a browser (README). It installs the
+  // server archive of a Lincei release and names the command `lincei`, so it
+  // never takes the place of a T3 Code `t3` on the same machine; `update` and
+  // `uninstall` follow whatever name the command was started by. The archive
+  // and its executable keep upstream's `t3` names, which the SSH runtime
+  // installer and `t3 update` derive from `cliRelease.ts`. Exact rules see the
+  // text after the tokens are rewritten.
+  "scripts/install.sh": {
+    tokens: [...REPOSITORY, ...NAME, ...HOME],
+    exact: [
+      [
+        "curl -fsSL https://t3.codes/install.sh | sh",
+        "curl -fsSL https://raw.githubusercontent.com/hannesill/lincei/main/scripts/install.sh | sh",
+      ],
+      ["where the `t3` symlink goes", "where the `lincei` symlink goes"],
+      [`printf '\\nt3 install: %s\\n'`, `printf '\\nlincei install: %s\\n'`],
+      [
+        [
+          "  printf '  %s\\n' '██████████ ████████ ' >&2",
+          "  printf '  %s\\n' '    ███       ▄██▀       Lincei' >&2",
+          `  printf '  %s%s     %sCLI installer%s\\n' '    ███       ████▄ ' "$reset" "$muted" "$reset$bold" >&2`,
+          "  printf '  %s\\n' '    ███    ▄     ███' >&2",
+          "  printf '  %s\\n' '    ███    ███████▀ ' >&2",
+        ].join("\n"),
+        `  printf '  %s%s  %sinstaller%s\\n' 'Lincei' "$reset" "$muted" "$reset$bold" >&2`,
+      ],
+      [
+        'fail "unsupported operating system $(uname -s); use the desktop app or npm"',
+        'fail "unsupported operating system $(uname -s); use the desktop app"',
+      ],
+      [
+        'fail "t3 ${version} has no release archive for ${platform}-${arch}; releases before the self-contained CLI can only be installed with \\`npm install -g t3@${version}\\`"',
+        'fail "Lincei ${version} has no release archive for ${platform}-${arch}"',
+      ],
+      ['step "Setting up the t3 command..."', 'step "Setting up the lincei command..."'],
+      [
+        'ln -sfn "${target_dir}/t3" "${bin_dir}/t3"',
+        'ln -sfn "${target_dir}/t3" "${bin_dir}/lincei"',
+      ],
+      ["Run %st3%s to get started.", "Run %slincei%s to get started."],
+      ["then run %st3%s.", "then run %slincei%s."],
+    ],
+  },
 
   // Text a researcher reads that the web build's display-name rewrite cannot
   // reach, because the server and the desktop shell are built separately: the
@@ -263,6 +306,10 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "packages/shared/src/codexAuthHandoff.test.ts": { tokens: SCHEME },
   "packages/shared/src/providerAuthReturnUrl.test.ts": { tokens: [...SCHEME, ...SLUG] },
   "packages/ssh/src/tunnel.test.ts": { tokens: REPOSITORY },
+  "scripts/install.test.ts": {
+    tokens: NAME,
+    exact: [['NodePath.join(root, "bin/t3")', 'NodePath.join(root, "bin/lincei")']],
+  },
   "scripts/build-desktop-artifact.test.ts": {
     tokens: [...BUNDLE_ID, ...NAME],
     exact: [['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]']],

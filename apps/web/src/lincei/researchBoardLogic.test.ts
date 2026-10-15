@@ -4,12 +4,14 @@ import { describe, expect, it } from "vite-plus/test";
 import { CLINICAL_ACCESS_REFUSED } from "./linceiAnswers";
 import {
   BOARD_NEEDS_BROWSER,
+  boardPlace,
   createResearchBoardWatcher,
   createWatcherKeeper,
   describeBoardButton,
   findBoardTab,
   isBoardPage,
   noteBoardActivity,
+  type BoardPlace,
 } from "./researchBoardLogic";
 
 type Tab = Pick<PreviewSessionSnapshot, "tabId" | "navStatus" | "runtime" | "reveal" | "updatedAt">;
@@ -280,6 +282,37 @@ describe("createWatcherKeeper", () => {
   });
 });
 
+describe("boardPlace", () => {
+  it("shows the board in the panel wherever this window has a browser for it", () => {
+    for (const serverUrl of ["http://localhost:3773", "http://192.168.1.20:3773", null]) {
+      expect(boardPlace({ previewAvailable: true, serverUrl })).toBe("panel");
+    }
+  });
+
+  it("opens a tab of its own in a browser on the computer the server runs on", () => {
+    for (const serverUrl of [
+      "http://localhost:3773",
+      "http://127.0.0.1:3773/",
+      "http://[::1]:3773",
+      "http://lincei.localhost:3773",
+    ]) {
+      expect(boardPlace({ previewAvailable: false, serverUrl })).toBe("tab");
+    }
+  });
+
+  it("has nowhere to show it from another device, which cannot reach Vitrine", () => {
+    for (const serverUrl of [
+      "http://192.168.1.20:3773",
+      "https://workstation.tail1234.ts.net",
+      "http://100.101.102.103:3773",
+      "not a url",
+      null,
+    ]) {
+      expect(boardPlace({ previewAvailable: false, serverUrl })).toBeNull();
+    }
+  });
+});
+
 describe("describeBoardButton", () => {
   const status = (fields: Partial<ClinicalRuntimeStatus>): ClinicalRuntimeStatus => ({
     state: "ready",
@@ -293,7 +326,7 @@ describe("describeBoardButton", () => {
     ...fields,
   });
   /** A thread with a folder, in a window with a browser, on a connection that may act. */
-  const usual = { hasFolder: true, canShowBoard: true, canOperate: true };
+  const usual = { hasFolder: true, place: "panel" as BoardPlace, canOperate: true };
   const known = (fields: Partial<ClinicalRuntimeStatus>, where: Partial<typeof usual> = {}) =>
     describeBoardButton({
       view: { phase: "known", status: status(fields) },
@@ -336,6 +369,20 @@ describe("describeBoardButton", () => {
     });
   });
 
+  it("says when the board opens in a tab of its own", () => {
+    expect(known({}, { place: "tab" })).toEqual({
+      label: "Open research board in a new tab",
+      marker: "none",
+      enabled: true,
+    });
+    expect(
+      known(
+        { state: "installing", step: "dataset", message: "Downloading the demo." },
+        { place: "tab" },
+      ),
+    ).toMatchObject({ label: "Open research board in a new tab. Downloading the demo." });
+  });
+
   it("shows setup that is running, failed, or not started", () => {
     expect(known({ state: "installing", step: "packages", message: "Installing." })).toMatchObject({
       label: "Setting up the clinical research tools. Installing.",
@@ -364,7 +411,7 @@ describe("describeBoardButton", () => {
       marker: "none",
       enabled: false,
     });
-    expect(known({}, { canShowBoard: false })).toEqual({
+    expect(known({}, { place: null })).toEqual({
       label: BOARD_NEEDS_BROWSER,
       marker: "none",
       enabled: false,
@@ -372,7 +419,7 @@ describe("describeBoardButton", () => {
   });
 
   it("still starts setup where there is no board to open", () => {
-    for (const where of [{ hasFolder: false }, { canShowBoard: false }]) {
+    for (const where of [{ hasFolder: false }, { place: null }]) {
       expect(known({ state: "not-installed" }, where)?.enabled).toBe(true);
       expect(known({ state: "failed", step: "uv" }, where)?.enabled).toBe(true);
       expect(known({ state: "installing", step: "uv", message: "Getting ready." }, where)).toEqual({
@@ -385,7 +432,7 @@ describe("describeBoardButton", () => {
 
   it("does not promise a board during the demo download when it cannot show one", () => {
     const downloading = { state: "installing", step: "dataset", message: "Downloading." } as const;
-    expect(known(downloading, { canShowBoard: false })).toEqual({
+    expect(known(downloading, { place: null })).toEqual({
       label: "Setting up the clinical research tools. Downloading.",
       marker: "working",
       enabled: false,
