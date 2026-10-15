@@ -236,8 +236,9 @@ for AI services.
 
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
 study store in `.vitrine` under the directory a script runs in, and runs one server per store.
-A git worktree shares the store of its main checkout (Vitrine 0.1.2, the minimum), so the
-threads of a project publish into one study wherever they run.
+A git worktree shares the store of its main checkout, so the threads of a project publish into
+one study wherever they run. Vitrine 0.1.3, the minimum, locks a study's index, so two agents
+publishing at once keep each other's cards.
 
 Three things follow from "the directory a script runs in", and each has bitten:
 
