@@ -594,7 +594,7 @@ describe("ClinicalRuntime.activate", () => {
   it.effect("tells every agent it runs in Lincei and how to reach the clinical tools", () =>
     Effect.gen(function* () {
       const before = buildRuntimeInstructions({ harness: "Codex" });
-      expect(before).not.toContain("lincei_clinical_research");
+      expect(before).not.toContain("<lincei>");
 
       yield* ClinicalRuntime.activate("/home/ada/.lincei").pipe(
         Effect.provideService(HostProcessEnvironment, { PATH: "/usr/bin" }),
