@@ -13,6 +13,7 @@
  */
 import { setRuntimeProductContext } from "@t3tools/provider-core/server/runtimeInstructions";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -47,15 +48,15 @@ export class LinceiPreferences extends Context.Service<
   }
 >()("t3/lincei/LinceiPreferences") {}
 
-const applyToAgents = (preferences: Preferences) =>
-  Effect.sync(() =>
-    setRuntimeProductContext({
-      name: "Lincei",
-      instructions: linceiAgentInstructions({ techieMode: preferences.techieMode }),
-    }),
-  );
-
 const make = Effect.gen(function* () {
+  const platform = yield* HostProcessPlatform;
+  const applyToAgents = (preferences: Preferences) =>
+    Effect.sync(() =>
+      setRuntimeProductContext({
+        name: "Lincei",
+        instructions: linceiAgentInstructions({ techieMode: preferences.techieMode, platform }),
+      }),
+    );
   const config = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

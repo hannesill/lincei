@@ -1,13 +1,13 @@
 name: Lincei release
 
-# Builds the Lincei desktop app for macOS (Apple Silicon and Intel) and Linux
-# (x64 and arm64) and attaches every build to one draft GitHub release.
-# Upstream's release.yml targets T3 Code's runners and its signing, npm, and
-# hosting accounts, so Lincei ships through this workflow instead. Windows is
-# left out: Lincei cannot install the clinical tools there (UvInstallation.ts).
+# Builds the Lincei desktop app for macOS (Apple Silicon and Intel), Windows
+# (x64 and arm64), and Linux (x64 and arm64) and attaches every build to one
+# draft GitHub release. Upstream's release.yml targets T3 Code's runners and its
+# signing, npm, and hosting accounts, so Lincei ships through this workflow
+# instead.
 #
-# The builds are unsigned: macOS asks the user to confirm opening the app, and
-# auto-update stays off (see docs/lincei/README.md).
+# The builds are unsigned: macOS and Windows ask the user to confirm opening
+# the app, and auto-update stays off (see docs/lincei/README.md).
 
 on:
   workflow_dispatch:
@@ -21,10 +21,17 @@ permissions:
   contents: read
 
 jobs:
+  # The overlay's tests also run on Windows: Lincei is developed on a Mac, so
+  # this is where the Windows branches of the clinical layer meet real paths,
+  # junctions, and Windows' tar.
   check:
-    name: Check the Lincei overlay
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    name: Check the Lincei overlay (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -34,14 +41,17 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      # setup-vp's cache restores a Linux-shaped store on Windows, which is
+      # slower than none (upstream's windows-tests.yml).
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
-          cache: true
+          cache: ${{ runner.os != 'Windows' }}
           run-install: true
 
       - name: Check Lincei identity
+        if: runner.os == 'Linux'
         run: node scripts/lincei/identity.ts check
 
       - name: Test the Lincei overlay
@@ -51,11 +61,15 @@ jobs:
   # One build per platform and architecture, each on a GitHub-hosted runner.
   # The Intel DMG is cross-built on Apple Silicon, as upstream does. Linux
   # builds run on their own architecture: node-pty compiles from source there,
-  # and the browser secret helper links against the host's libsecret.
+  # and the browser secret helper links against the host's libsecret. Windows
+  # arm64 runs on windows-11-arm, which GitHub offers to public repositories.
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -74,6 +88,20 @@ jobs:
             arch: x64
             rust_target: x86_64-apple-darwin
             ext: dmg
+          - label: Windows x64 installer
+            runner: windows-2025
+            platform: win
+            target: nsis
+            arch: x64
+            rust_target: x86_64-pc-windows-msvc
+            ext: exe
+          - label: Windows arm64 installer
+            runner: windows-11-arm
+            platform: win
+            target: nsis
+            arch: arm64
+            rust_target: aarch64-pc-windows-msvc
+            ext: exe
           - label: Linux x64 AppImage
             runner: ubuntu-24.04
             platform: linux
@@ -107,7 +135,7 @@ jobs:
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version-file: package.json
-          cache: true
+          cache: ${{ matrix.platform != 'win' }}
           run-install: true
 
       - name: Setup Rust
@@ -124,9 +152,31 @@ jobs:
             sudo apt-get install -y imagemagick
           fi
 
+      # The resource monitor links against MSVC's Spectre-mitigated libraries,
+      # which the desktop build's preflight requires and the runner image may
+      # not have. Same step as upstream's release-desktop.yml.
+      - name: Install Spectre-mitigated MSVC libraries
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -products * -latest -property installationPath
+          $setupExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $proc = Start-Process -FilePath $setupExe `
+            -ArgumentList "modify", "--installPath", "`"$installPath`"", "--add", `
+            "Microsoft.VisualStudio.Component.VC.Runtimes.${{ matrix.arch == 'arm64' && 'ARM64' || 'x86.x64' }}.Spectre", "--quiet", "--norestart" `
+            -Wait -PassThru -NoNewWindow
+          if ($null -eq $proc -or $proc.ExitCode -ne 0) {
+            $code = if ($null -ne $proc) { $proc.ExitCode } else { 1 }
+            Write-Error "Visual Studio Installer failed with exit code $code"
+            exit $code
+          }
+
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
 
+      # Windows builds get no --wsl-runtime: Lincei runs natively on Windows,
+      # and its builds ship no WSL backend.
       - name: Build desktop artifact
         run: |
           vp run dist:desktop:artifact \
@@ -136,14 +186,17 @@ jobs:
 
       # electron-builder names files after the version; the release gets
       # names without one, so releases/latest/download/<name> is a stable link
-      # for the website and the README. The Linux build also writes a .deb,
-      # which still carries T3 Code's package metadata and is not shipped.
+      # for the website and the README. Matched by the artifactName prefix, so
+      # the NSIS uninstaller beside the installer is not picked up. The Linux
+      # build also writes a .deb, which still carries T3 Code's package
+      # metadata and is not shipped.
       - name: Name the release asset
         run: |
           shopt -s nullglob
-          built=(release/*.${{ matrix.ext }})
+          built=(release/Lincei-*.${{ matrix.ext }})
           if [[ ${#built[@]} -ne 1 ]]; then
-            echo "::error::Expected one .${{ matrix.ext }} in release/, found ${#built[@]}."
+            echo "::error::Expected one Lincei-*.${{ matrix.ext }} in release/, found ${#built[@]}."
+            ls -la release
             exit 1
           fi
           mkdir -p asset
@@ -187,10 +240,12 @@ jobs:
           | --- | --- |
           | `Lincei-mac-arm64.dmg` | Macs with Apple Silicon (M1 and later) |
           | `Lincei-mac-x64.dmg` | Macs with an Intel processor |
+          | `Lincei-win-x64.exe` | Windows 10 and 11 PCs (most PCs) |
+          | `Lincei-win-arm64.exe` | Windows 11 on ARM (Snapdragon and other ARM PCs) |
           | `Lincei-linux-x64.AppImage` | Linux on x86-64 PCs |
           | `Lincei-linux-arm64.AppImage` | Linux on ARM64 |
 
-          The Mac builds are not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update. On Linux, make the AppImage executable (`chmod +x`) and run it. `SHA256SUMS` lists each file's checksum.
+          The Mac builds are not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update. The Windows installers are not signed either, so Windows SmartScreen warns before the first run: choose More info, then Run anyway. On Linux, make the AppImage executable (`chmod +x`) and run it. `SHA256SUMS` lists each file's checksum.
           EOF
           gh release create "v$VERSION" assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \

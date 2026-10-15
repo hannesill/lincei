@@ -136,7 +136,10 @@ and macOS rebuilds `PATH` there with the system's directories in front, where `/
 unrelated macro processor and `python` is whatever the user's profile set up. Debian's
 `/etc/profile` replaces `PATH` altogether. Environment variables survive, so the agent
 instructions tell agents to begin clinical commands with `export PATH="$LINCEI_CLINICAL_BIN:$PATH";`.
-Anything else that needs the environment from a login shell has to do the same.
+Anything else that needs the environment from a login shell has to do the same. On Windows the
+venv keeps its programs in `Scripts`, and agents get the line in two shells' syntax: Codex runs
+PowerShell, and Claude Code runs Git Bash, where `PATH` holds POSIX paths and a drive letter's
+colon would split the Windows one in two (hence `cygpath -u`).
 
 Setup runs `uv`: create the environment, install the pinned requirements, materialize M4's
 skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. A machine without `uv` gets
@@ -166,8 +169,11 @@ of the bundle into the folders Claude and Codex read user skills from: `~/.claud
 theirs with the same name is left alone and wins, and Lincei's links are the ones that point into
 `<home>/clinical/skills`, which is how setup removes stale ones and how to remove them by hand.
 `LINCEI_CLINICAL_SKILL_DIRS` (paths separated like `PATH`) replaces the folders, and setting it
-empty keeps Lincei out of them. Providers that do not read those folders still get the skills
-through the agent instructions, which name `<home>/clinical/skills`.
+empty keeps Lincei out of them. On Windows the links are directory junctions, because a symlink
+there needs Developer Mode or an administrator, and the folders are under `USERPROFILE`, which is
+where Claude and Codex look even when something has set `HOME`. Providers that do not read those
+folders still get the skills through the agent instructions, which name
+`<home>/clinical/skills`.
 
 Settings, Clinical Data, What agents get shows the same thing read-only: the instructions for the
 current mode, and each skill with its description and whether a skill of the user's takes its
@@ -205,7 +211,9 @@ stores:
   payload.
 - The server holds it for that one download and gives it to M4 on standard input: not on a
   command line, in the environment, or in a file. The next download asks again; only the username
-  is remembered, in the client's local storage.
+  is remembered, in the client's local storage. The JSON it sends is pure ASCII, with escapes for
+  everything else: M4 reads standard input in the system's code page, which on Windows is not
+  UTF-8.
 - It is sent only when M4 says the dataset downloads from `https://physionet.org/`. A dataset
   definition in M4's data folder can replace a built-in one, address included, and agents can
   write that folder.
@@ -252,7 +260,11 @@ Three things follow from "the directory a script runs in", and each has bitten:
   before 0.1.2 the store showed up in the turn's changed files and went into the hidden
   checkpoint commits.
 - Vitrine's servers never stop by themselves and it has ten ports. The server stops the boards of
-  the folders it opened or watched when it shuts down (`ResearchBoard.ts`).
+  the folders it opened or watched when it shuts down (`ResearchBoard.ts`). On Windows it never
+  gets to: Windows has no SIGTERM, so the desktop app ends the server forcefully, no finalizer
+  runs, and the boards (detached by Vitrine) keep running until the user signs out. The next
+  `vitrine start` in a folder reuses its board, so this costs ports only across more than ten
+  folders.
 
 Vitrine opens the system browser when a script's first card starts its server. Lincei sets
 `VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2.
@@ -372,27 +384,38 @@ because Lincei ships no mobile app.
 ## Releasing
 
 Run the **Lincei release** workflow with a version. It builds DMGs for Apple Silicon and Intel
-Macs and AppImages for Linux x64 and arm64, and attaches them and a `SHA256SUMS` to one draft
-GitHub release. Windows is not built, because Lincei cannot install the clinical tools there.
-The assets carry no version (`Lincei-mac-arm64.dmg`, `Lincei-linux-x64.AppImage`), so the README
-and the website link to `releases/latest/download/<name>`. GitHub's `latest` skips drafts and
+Macs, NSIS installers for Windows x64 and arm64, and AppImages for Linux x64 and arm64, and
+attaches them and a `SHA256SUMS` to one draft GitHub release. The assets carry no version
+(`Lincei-mac-arm64.dmg`, `Lincei-win-x64.exe`, `Lincei-linux-x64.AppImage`), so the README and the
+website link to `releases/latest/download/<name>`. GitHub's `latest` skips drafts and
 pre-releases: publish the draft as a regular release, or those links break.
+
+The workflow runs the overlay's tests on Linux and on Windows before it releases anything. Lincei
+is developed on a Mac, so that job is the only place the Windows branches of the clinical layer
+(junctions, Windows' `tar.exe`, `Path`) meet a real Windows before a release; try a Windows
+build by hand on a PC before calling Windows supported. Lincei runs natively on Windows: the
+workflow passes no `--wsl-runtime`, so the installers ship without upstream's WSL backend, which
+is off by default anyway.
 
 Building locally needs Rust with the target (`rustup target add aarch64-apple-darwin
 x86_64-apple-darwin`). A Linux AppImage builds only on Linux, with the
-[AppImage prerequisites](../operations/development.md#linux-appimage-prerequisites).
+[AppImage prerequisites](../operations/development.md#linux-appimage-prerequisites), and a
+Windows installer only on Windows, with Visual Studio's C++ build tools and their
+Spectre-mitigated libraries.
 
 ```sh
 vp run dist:desktop:dmg:arm64   # or dist:desktop:dmg:x64
 vp run dist:desktop:artifact --platform linux --target AppImage --arch x64
+vp run dist:desktop:win:x64     # or dist:desktop:win:arm64
 ```
 
-Builds are unsigned until a Developer ID certificate and notarization credentials are added to
-the workflow, so macOS blocks them until the user allows the app in System Settings. An unsigned
-build also cannot install updates, which is why the workflow builds without an update feed
-(`T3CODE_DESKTOP_UPDATE_REPOSITORY: none`). Drop that line when signing is added. The Linux build
-also writes a `.deb`, which the workflow does not ship: its package metadata (maintainer,
-AppStream file) is still T3 Code's.
+Builds are unsigned until a Developer ID certificate and notarization credentials (and, for
+Windows, a code signing certificate) are added to the workflow, so macOS blocks them until the
+user allows the app in System Settings, and Windows SmartScreen warns until the user chooses Run
+anyway. An unsigned build also cannot install updates, which is why the workflow builds without
+an update feed (`T3CODE_DESKTOP_UPDATE_REPOSITORY: none`). Drop that line when signing is added.
+The Linux build also writes a `.deb`, which the workflow does not ship: its package metadata
+(maintainer, AppStream file) is still T3 Code's.
 
 Upstream's own workflows (`release.yml`, `ci.yml`, the mobile and relay ones) assume T3 Code's
 runners and accounts, and `release.yml` runs on a 30-minute schedule. The files stay in place so
