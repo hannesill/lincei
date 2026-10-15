@@ -13,10 +13,17 @@
  * apart. `LINCEI_CLINICAL_SKILL_DIRS` replaces the folders; empty keeps Lincei
  * out of them altogether.
  *
+ * On Windows the links are directory junctions: a symlink there needs
+ * Developer Mode or an administrator, a junction needs neither, and both
+ * providers follow it like a symlink. Windows compares paths without case.
+ *
  * @module ClinicalSkillLinks
  */
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- FileSystem.symlink takes no link type, and Windows needs a junction.
+import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -36,7 +43,10 @@ export const defaultSkillDirectories = (input: {
       .split(input.platform === "win32" ? ";" : ":")
       .filter((entry) => entry.trim().length > 0);
   }
-  const home = environment.HOME || environment.USERPROFILE || NodeOS.homedir();
+  // The home Claude and Codex resolve: on Windows the user profile, even
+  // where something has set HOME (Git for Windows, some managed PCs).
+  const home =
+    (input.platform === "win32" ? environment.USERPROFILE : environment.HOME) || NodeOS.homedir();
   const claudeConfigDir = environment.CLAUDE_CONFIG_DIR?.trim() || path.join(home, ".claude");
   return [path.join(claudeConfigDir, "skills"), path.join(home, ".agents", "skills")];
 };
@@ -64,16 +74,44 @@ const bundledSkills = Effect.fn("ClinicalSkillLinks.bundledSkills")(function* (b
   return skills;
 });
 
-/** Where a symlink in a skills folder points, when it points into `bundle` (a resolved path). */
+/**
+ * A path as this platform compares it. Windows ignores case, and reads a
+ * symlink's target back with the `\\?\` prefix Node wrote it with.
+ */
+const comparable = (platform: NodeJS.Platform, target: string) =>
+  platform === "win32" ? target.replace(/^\\\\\?\\/, "").toLowerCase() : target;
+
+/**
+ * Where a link in a skills folder points, in `comparable` form, when it points
+ * into `bundle` (a resolved path).
+ */
 const ownedTarget = (link: string, bundle: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const platform = yield* HostProcessPlatform;
+    const inBundle = comparable(platform, bundle + path.sep);
     return yield* fileSystem.readLink(link).pipe(
-      Effect.map((target) => path.resolve(path.dirname(link), target)),
-      Effect.map((target) => (target.startsWith(bundle + path.sep) ? target : undefined)),
+      Effect.map((target) => comparable(platform, path.resolve(path.dirname(link), target))),
+      Effect.map((target) => (target.startsWith(inBundle) ? target : undefined)),
       Effect.orElseSucceed(() => undefined),
     );
+  });
+
+/** Whether anything is at `link`, including a link that leads nowhere. */
+const occupied = (link: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    if (yield* fileSystem.exists(link).pipe(Effect.orElseSucceed(() => false))) return true;
+    return Option.isSome(yield* Effect.option(fileSystem.readLink(link)));
+  });
+
+/** Links `link` to the skill folder `source`: a junction on Windows, a symlink elsewhere. */
+const linkSkill = (source: string, link: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    if ((yield* HostProcessPlatform) !== "win32") return yield* fileSystem.symlink(source, link);
+    return yield* Effect.tryPromise(() => NodeFSP.symlink(source, link, "junction"));
   });
 
 /** Resolved, because links are compared by resolved path and macOS reaches a home through a symlink. */
@@ -94,11 +132,16 @@ export const sync = Effect.fn("ClinicalSkillLinks.sync")(function* (input: {
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const platform = yield* HostProcessPlatform;
   const bundle = yield* resolvedBundle(input.bundle);
   const skills = yield* bundledSkills(bundle);
   const shadowed = new Set<string>();
   if (skills.size === 0) return { shadowed: [] };
   const seen = new Set<string>();
+  const sourceOf = (name: string) => {
+    const source = skills.get(name);
+    return source === undefined ? undefined : comparable(platform, source);
+  };
 
   for (const requested of input.directories) {
     yield* fileSystem.makeDirectory(requested, { recursive: true });
@@ -110,15 +153,20 @@ export const sync = Effect.fn("ClinicalSkillLinks.sync")(function* (input: {
     for (const entry of yield* fileSystem.readDirectory(directory)) {
       const link = path.join(directory, entry);
       const target = yield* ownedTarget(link, bundle);
-      if (target !== undefined && skills.get(entry) !== target) yield* fileSystem.remove(link);
+      if (target !== undefined && sourceOf(entry) !== target) yield* fileSystem.remove(link);
     }
     for (const [name, source] of skills) {
       const link = path.join(directory, name);
-      if ((yield* ownedTarget(link, bundle)) === source) continue;
-      // Anything else by that name is the user's, including a link that leads nowhere.
-      yield* fileSystem
-        .symlink(source, link)
-        .pipe(Effect.orElseSucceed(() => void shadowed.add(name)));
+      if ((yield* ownedTarget(link, bundle)) === sourceOf(name)) continue;
+      yield* linkSkill(source, link).pipe(
+        Effect.catch((cause) =>
+          Effect.gen(function* () {
+            // Anything else by that name is the user's, including a link that leads nowhere.
+            if (yield* occupied(link)) return void shadowed.add(name);
+            return yield* cause;
+          }),
+        ),
+      );
     }
   }
   return { shadowed: [...shadowed].sort() };
@@ -162,6 +210,7 @@ export const describe = Effect.fn("ClinicalSkillLinks.describe")(function* (inpu
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const platform = yield* HostProcessPlatform;
   const bundle = yield* resolvedBundle(input.bundle);
   const skills = yield* bundledSkills(bundle);
   const described: Array<BundledSkill> = [];
@@ -169,10 +218,12 @@ export const describe = Effect.fn("ClinicalSkillLinks.describe")(function* (inpu
     let shadowed = false;
     for (const directory of input.directories) {
       const link = path.join(directory, name);
-      const present = yield* fileSystem.exists(link).pipe(Effect.orElseSucceed(() => false));
-      // A link that leads nowhere is the user's too, but `exists` follows links.
-      const dangling = !present && Option.isSome(yield* Effect.option(fileSystem.readLink(link)));
-      if ((present || dangling) && (yield* ownedTarget(link, bundle)) !== source) shadowed = true;
+      if (
+        (yield* occupied(link)) &&
+        (yield* ownedTarget(link, bundle)) !== comparable(platform, source)
+      ) {
+        shadowed = true;
+      }
     }
     const contents = yield* fileSystem
       .readFileString(path.join(source, "SKILL.md"))

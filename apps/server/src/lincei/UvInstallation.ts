@@ -7,7 +7,8 @@
  * terminal to install it defeats a setup that is meant to need no terminal. A
  * uv already on PATH is used as it is. Otherwise Lincei downloads the release
  * pinned below into its own home and checks it against the pinned digest
- * before running it.
+ * before running it. uv ships a `.tar.gz` for macOS and Linux and a `.zip`
+ * for Windows.
  *
  * To adopt a newer uv, replace UV_VERSION and each size and digest. The
  * release lists them next to every asset:
@@ -17,7 +18,11 @@
  *
  * @module UvInstallation
  */
-import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import {
+  HostProcessArchitecture,
+  HostProcessEnvironment,
+  HostProcessPlatform,
+} from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -37,7 +42,7 @@ export interface UvRelease {
 }
 
 const pinned = (target: string, archiveBytes: number, sha256: string): UvRelease => ({
-  url: `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${target}.tar.gz`,
+  url: `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${target}.${target.endsWith("-windows-msvc") ? "zip" : "tar.gz"}`,
   sha256,
   archiveBytes,
 });
@@ -63,6 +68,16 @@ const RELEASES: Readonly<Record<string, UvRelease>> = {
     17249236,
     "b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6",
   ),
+  "win32-arm64": pinned(
+    "aarch64-pc-windows-msvc",
+    16217146,
+    "4b783bda5cc44bbae0651a837223873a7acee31152381aef5fc86ef6bef25997",
+  ),
+  "win32-x64": pinned(
+    "x86_64-pc-windows-msvc",
+    15685515,
+    "7c38608c8a18ee137d748a1773053b07ec8f3a30fab49aebaa6f4e4efeceb019",
+  ),
 };
 
 /**
@@ -71,7 +86,7 @@ const RELEASES: Readonly<Record<string, UvRelease>> = {
  */
 const MESSAGES = {
   "unsupported-platform":
-    "Lincei cannot install the clinical research tools on this kind of computer yet. It can on a Mac and on most Linux computers.",
+    "Lincei cannot install the clinical research tools on this kind of computer yet. It can on a Mac, on a Windows PC, and on most Linux computers.",
   download:
     "Lincei could not download the installer for the clinical research tools. Check the internet connection, then try again. Some hospital and university networks block this download; if it keeps failing, try another network.",
   verification:
@@ -121,6 +136,8 @@ export const ensure = Effect.fn("UvInstallation.ensure")(function* (input: {
   const processRunner = yield* ProcessRunner.ProcessRunner;
   const platform = yield* HostProcessPlatform;
   const arch = yield* HostProcessArchitecture;
+  const environment = yield* HostProcessEnvironment;
+  const windows = platform === "win32";
 
   const runs = (command: string) =>
     processRunner
@@ -137,7 +154,7 @@ export const ensure = Effect.fn("UvInstallation.ensure")(function* (input: {
       );
 
   if (yield* runs("uv")) return "uv";
-  const managed = path.join(input.managedDirectory, platform === "win32" ? "uv.exe" : "uv");
+  const managed = path.join(input.managedDirectory, windows ? "uv.exe" : "uv");
   if (yield* runs(managed)) return managed;
 
   const release = input.release ?? RELEASES[`${platform}-${arch}`];
@@ -160,7 +177,7 @@ export const ensure = Effect.fn("UvInstallation.ensure")(function* (input: {
         ),
         failingAs("storage", "The folder for Lincei's own tools could not be written."),
       );
-    const archivePath = path.join(staging, "uv.tar.gz");
+    const archivePath = path.join(staging, windows ? "uv.zip" : "uv.tar.gz");
     const hash = NodeCrypto.createHash("sha256");
     let downloadedBytes = 0;
     yield* http.execute(HttpClientRequest.get(release.url)).pipe(
@@ -193,11 +210,26 @@ export const ensure = Effect.fn("UvInstallation.ensure")(function* (input: {
       });
     }
 
-    // The archive holds one directory with `uv` and `uvx` in it.
+    // The macOS and Linux archive holds one directory with `uv` and `uvx` in
+    // it. The Windows zip holds `uv.exe`, `uvx.exe`, and `uvw.exe` at its
+    // root, and Windows' own tar (bsdtar) reads zip. It is named by path,
+    // because the tar that Git for Windows can put first on PATH reads no zip.
+    const unpack = windows
+      ? {
+          command: path.join(
+            environment.SystemRoot || environment.SYSTEMROOT || "C:\\Windows",
+            "System32",
+            "tar.exe",
+          ),
+          args: ["-xf", archivePath, "-C", staging],
+        }
+      : {
+          command: "tar",
+          args: ["-xzf", archivePath, "-C", staging, "--strip-components=1"],
+        };
     const unpacked = yield* processRunner
       .run({
-        command: "tar",
-        args: ["-xzf", archivePath, "-C", staging, "--strip-components=1"],
+        ...unpack,
         timeout: "2 minutes",
         outputMode: "truncate",
         maxOutputBytes: 4096,

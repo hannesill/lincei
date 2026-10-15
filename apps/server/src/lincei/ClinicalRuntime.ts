@@ -40,7 +40,7 @@ import { HttpClient } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
-import { LINCEI_CLINICAL_INSTRUCTIONS } from "./agentInstructions.ts";
+import { linceiAgentInstructions } from "./agentInstructions.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import { clinicalPaths } from "./clinicalPaths.ts";
 import * as ClinicalSkillLinks from "./ClinicalSkillLinks.ts";
@@ -167,7 +167,10 @@ export const activate = Effect.fn("ClinicalRuntime.activate")(function* (baseDir
   // Lincei shows the research board beside the conversation. Without this, the
   // first card an agent publishes also opens the board in the system browser.
   env.VITRINE_OPEN_BROWSER = "0";
-  setRuntimeProductContext({ name: "Lincei", instructions: LINCEI_CLINICAL_INSTRUCTIONS });
+  setRuntimeProductContext({
+    name: "Lincei",
+    instructions: linceiAgentInstructions({ techieMode: false, platform }),
+  });
 });
 
 export class ClinicalRuntime extends Context.Service<

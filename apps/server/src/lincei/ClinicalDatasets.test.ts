@@ -195,7 +195,10 @@ const withDatasets = <A, E>(
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { baseDir } = yield* ServerConfig.ServerConfig;
-    const m4Program = path.join(baseDir, "clinical", "venv", "bin", "m4");
+    const m4Program =
+      options.platform === "win32"
+        ? path.join(baseDir, "clinical", "venv", "Scripts", "m4.exe")
+        : path.join(baseDir, "clinical", "venv", "bin", "m4");
     if (options.installed !== false) {
       yield* fileSystem.makeDirectory(path.dirname(m4Program), { recursive: true });
       yield* fileSystem.writeFileString(m4Program, "");
@@ -968,6 +971,33 @@ describe("ClinicalDatasets", () => {
           }),
         // `/dev/stdin` cannot be opened by a child of this server off macOS.
         { platform: "linux", capabilities: M4_WITH_STDIN_LOGIN },
+      );
+    });
+
+    it.effect("sends a login M4 reads the same whatever code page its Python decodes with", () => {
+      // Python on Windows decodes standard input with the ANSI code page, so
+      // UTF-8 bytes of "ü" would arrive as "Ã¼" and PhysioNet would refuse.
+      const password = "Grüße-€-🔑";
+      const runs: Array<Run> = [];
+      return withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            runs.push(run);
+            return finished(run);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            yield* Fiber.await(
+              yield* datasets.download({
+                name: "mimic-iv",
+                credentials: { username: "ada", password: Redacted.make(password) },
+              }),
+            );
+            const stdin = runs[0]?.stdin ?? "";
+            expect(stdin).toMatch(/^[\x20-\x7e]+$/);
+            expect(JSON.parse(stdin)).toEqual({ username: "ada", password });
+          }),
+        { platform: "win32", capabilities: M4_WITH_STDIN_LOGIN },
       );
     });
 

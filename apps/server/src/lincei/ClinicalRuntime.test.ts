@@ -1,3 +1,4 @@
+import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
@@ -44,7 +45,8 @@ const finished = (run: ProcessRunner.ProcessRunInput) => {
 
 /** The step a provisioning command belongs to, named the way the status reports it. */
 const stepOf = ({ command, args }: Invocation) => {
-  if (command === "uv" || command.endsWith("/uv")) {
+  // `uv` on PATH, or Lincei's own copy by its path on this host.
+  if (/(?:^|[\\/])uv$/.test(command)) {
     return args[0] === "--version" ? "uv" : args[0] === "venv" ? "python" : "packages";
   }
   // M4: its skills, a check that it still runs, or work on the demo dataset.
@@ -552,7 +554,7 @@ describe("ClinicalRuntime.activate", () => {
     ClinicalRuntime.activate("/home/ada/.lincei").pipe(
       Effect.provideService(HostProcessEnvironment, env),
       Effect.provideService(HostProcessPlatform, "linux"),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(NodePath.layerPosix),
       Effect.ensuring(
         Effect.sync(() => setRuntimeProductContext({ name: "T3 Code", instructions: "" })),
       ),
@@ -599,17 +601,45 @@ describe("ClinicalRuntime.activate", () => {
       yield* ClinicalRuntime.activate("/home/ada/.lincei").pipe(
         Effect.provideService(HostProcessEnvironment, { PATH: "/usr/bin" }),
         Effect.provideService(HostProcessPlatform, "linux"),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(NodePath.layerPosix),
       );
       const after = buildRuntimeInstructions({ harness: "Codex" });
       expect(after).toContain("you are running in Lincei through the Codex harness");
       expect(after).toContain("lincei_clinical_setup");
       expect(after).toContain('export PATH="$LINCEI_CLINICAL_BIN:$PATH";');
       expect(after).toContain("$LINCEI_CLINICAL_HOME/skills/");
+      // Researcher mode until the stored mode has been read.
+      expect(after).toContain("<lincei_researcher>");
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => setRuntimeProductContext({ name: "T3 Code", instructions: "" })),
       ),
     ),
   );
+
+  it.effect("on Windows, puts the venv's Scripts first under the key Windows spells Path", () => {
+    const env: NodeJS.ProcessEnv = {
+      Path: "C:\\Windows\\system32;C:\\Users\\ada\\AppData\\Local\\Microsoft\\WindowsApps",
+    };
+    return Effect.gen(function* () {
+      yield* ClinicalRuntime.activate("C:\\Users\\ada\\.lincei").pipe(
+        Effect.provideService(HostProcessEnvironment, env),
+        Effect.provideService(HostProcessPlatform, "win32"),
+        Effect.provide(NodePath.layerWin32),
+      );
+      // Ahead of the Microsoft Store's `python` stand-in in WindowsApps.
+      expect(env.Path).toBe(
+        "C:\\Users\\ada\\.lincei\\clinical\\venv\\Scripts;C:\\Users\\ada\\.lincei\\clinical\\bin;C:\\Windows\\system32;C:\\Users\\ada\\AppData\\Local\\Microsoft\\WindowsApps",
+      );
+      expect(env.PATH).toBeUndefined();
+      expect(env.LINCEI_CLINICAL_BIN).toBe("C:\\Users\\ada\\.lincei\\clinical\\venv\\Scripts");
+      expect(buildRuntimeInstructions({ harness: "Codex" })).toContain(
+        '$env:Path = "$env:LINCEI_CLINICAL_BIN;$env:Path";',
+      );
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => setRuntimeProductContext({ name: "T3 Code", instructions: "" })),
+      ),
+    );
+  });
 });
