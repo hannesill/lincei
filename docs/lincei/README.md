@@ -38,6 +38,7 @@ content. `git log --first-parent` leaves it out.
 | A researcher's wording for upstream's developer copy             | [`apps/web/vite/linceiCopy.ts`](../../apps/web/vite/linceiCopy.ts)                                                                                                                                                                 | None: applied by the brand plugin as it builds                                                                                                                                                                               |
 | Default look (colours, corners, borders, shadows)                | [`apps/web/src/lincei/theme.css`](../../apps/web/src/lincei/theme.css), [`apps/web/vite/linceiTheme.ts`](../../apps/web/vite/linceiTheme.ts)                                                                                       | None: compiled in by the brand plugin                                                                                                                                                                                        |
 | Release                                                          | [`.github/workflows/lincei-release.yml`](../../.github/workflows/lincei-release.yml)                                                                                                                                               | None                                                                                                                                                                                                                         |
+| Removing the `lincei://` handler when Windows uninstalls Lincei  | [`apps/desktop/resources/installer.nsh`](../../apps/desktop/resources/installer.nsh)                                                                                                                                               | None: electron-builder includes it by itself                                                                                                                                                                                 |
 
 To see every upstream file Lincei has touched:
 
@@ -81,6 +82,9 @@ Then, for each conflict:
   `git show HEAD -- <file>` shows what it was. Every hook is an import of something under
   `lincei/` and one line that uses it, so `git grep -n lincei -- <file>` on the old version lists
   them. `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its hook.
+- **`apps/desktop/resources/installer.nsh`** (only if upstream starts customizing its Windows
+  installer and adds the same file): keep both, with one `customUnInstall` macro that does
+  upstream's work and Lincei's.
 - **`apps/web/src/routeTree.gen.ts`:** take upstream's side and build the web app once
   (`vp run --filter @t3tools/web build`). The router plugin rewrites the file from the route
   files, which puts `/settings/clinical` back.
@@ -408,6 +412,33 @@ drawing, run `node scripts/lincei/icons.ts`. Development builds get the mark inv
 apart from an installed Lincei. Never run `vp run icons:export`: it renders upstream's Icon
 Composer projects and would put T3 Code's icons back. The iOS and Android icons stay upstream's,
 because Lincei ships no mobile app.
+
+## The `lincei://` scheme
+
+The identity script turns upstream's `t3code://` into `lincei://` (`lincei-dev://` for a
+development build), so Lincei and T3 Code each keep their own scheme on a computer that has both.
+Browsers use it to come back to the app, for example after signing in with ChatGPT. Each platform
+registers it in its own way:
+
+- **macOS:** the app's `Info.plist`, from electron-builder's `protocols`.
+- **Windows:** `app.setAsDefaultProtocolClient` at every launch, which writes
+  `HKCU\Software\Classes\lincei` for the current user. `@clerk/electron`'s bridge calls it when
+  `DesktopClerk.ts` creates the bridge, so links work once Lincei has run (the installer starts
+  it); electron-builder's NSIS installer ignores `protocols`. If upstream ever drops Clerk, Windows
+  loses the handler. The uninstaller removes the key
+  ([`installer.nsh`](../../apps/desktop/resources/installer.nsh)), but not during an update and not
+  when the key points at another copy of Lincei.
+- **Linux:** upstream's `DesktopLinuxUrlHandler.ts` at every launch writes a hidden
+  `studio.lincei.Lincei.desktop` to `~/.local/share/applications` and makes it the handler with
+  `xdg-mime`, so the AppImage needs no integration tool. The `MimeType` line in the AppImage's own
+  `.desktop` file counts only once a tool such as AppImageLauncher installs that file. An AppImage
+  has no uninstaller, so the entry outlives a deleted AppImage.
+
+A link reaches a running app as `open-url` on macOS and as `second-instance`, with the URL among
+the arguments, on Windows and Linux; `DesktopClerk.ts` handles both. When a link starts the app,
+only a ChatGPT handoff is followed, and a link back to Settings opens the app at its start page,
+on every platform. A development build registers `lincei-dev`, never `lincei`. On Windows
+it registers the bare `electron.exe`, so links do not reach a development build there.
 
 ## Releasing
 

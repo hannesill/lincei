@@ -59,6 +59,10 @@ jobs:
         working-directory: apps/server
         run: vp test run src/lincei
 
+      - name: Test the Lincei overlay (desktop)
+        working-directory: apps/desktop
+        run: vp test run src/lincei
+
   # One build per platform and architecture, each on a GitHub-hosted runner.
   # The Intel DMG is cross-built on Apple Silicon, as upstream does. Linux
   # builds run on their own architecture: node-pty compiles from source there,
