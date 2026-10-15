@@ -38,9 +38,10 @@ Lincei adds the clinical layer:
 
 Lincei is not signed with an Apple Developer ID yet, so macOS blocks the first launch and says it
 cannot verify the app. Open Lincei once and choose **Done**, then go to **System Settings →
-Privacy & Security**, scroll down to the message about Lincei, and choose **Open Anyway**. On
-macOS 14 or earlier, right-click the app and choose **Open** instead. You do this once per
-download.
+Privacy & Security**, scroll down to the message about Lincei, and choose **Open Anyway**. The
+button shows for about an hour after macOS blocked the app; if it is missing, open Lincei once
+more. On macOS 14 or earlier, right-click the app and choose **Open** instead. You do this once per
+download, and the installer window shows the same steps.
 
 Lincei does not update itself yet. To update, quit Lincei, download the new build from
 [Releases](https://github.com/hannesill/lincei/releases), and replace the app in Applications;
