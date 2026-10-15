@@ -2,9 +2,10 @@ name: Lincei release
 
 # Builds the Lincei desktop app for macOS (Apple Silicon and Intel), Windows
 # (x64 and arm64), and Linux (x64 and arm64) and attaches every build to one
-# draft GitHub release. Upstream's release.yml targets T3 Code's runners and its
-# signing, npm, and hosting accounts, so Lincei ships through this workflow
-# instead.
+# draft GitHub release, then has lincei-server.yml attach the server archives
+# for running Lincei in a browser. Upstream's release.yml targets T3 Code's
+# runners and its signing, npm, and hosting accounts, so Lincei ships through
+# this workflow instead.
 #
 # The builds are unsigned: macOS and Windows ask the user to confirm opening
 # the app, and auto-update stays off (see docs/lincei/README.md).
@@ -244,9 +245,21 @@ jobs:
           | `Lincei-win-arm64.exe` | Windows 11 on ARM (Snapdragon and other ARM PCs) |
           | `Lincei-linux-x64.AppImage` | Linux on x86-64 PCs |
           | `Lincei-linux-arm64.AppImage` | Linux on ARM64 |
+          | `t3-<version>-<platform>.tar.gz` | The `lincei` command for running Lincei in a browser (macOS Apple Silicon and Linux), installed by `scripts/install.sh` |
 
           The Mac builds are not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update. The Windows installers are not signed either, so Windows SmartScreen warns before the first run: choose More info, then Run anyway. On Linux, make the AppImage executable (`chmod +x`) and run it. `SHA256SUMS` lists each file's checksum.
           EOF
           gh release create "v$VERSION" assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --draft --title "Lincei $VERSION" --notes-file notes.md
+
+  # The server archives for running Lincei in a browser, attached to the same
+  # draft release once it exists.
+  server:
+    name: Server archives
+    needs: release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/lincei-server.yml
+    with:
+      version: ${{ inputs.version }}
