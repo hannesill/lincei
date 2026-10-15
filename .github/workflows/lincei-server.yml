@@ -1,0 +1,151 @@
+name: Lincei server archives
+
+# Builds Lincei's server for running Lincei in a browser: the `t3` single
+# executable with the web app beside it, one archive per platform, made by the
+# same scripts as upstream's CLI archives (scripts/build-cli-archive.ts).
+# scripts/install.sh installs them as the `lincei` command, `lincei update`
+# reads them, and the desktop app downloads them onto a remote host over SSH
+# (packages/shared/src/cliRelease.ts names the files).
+#
+# Run it after the Lincei release workflow, with the same version: it attaches
+# the archives and SHA256SUMS to that draft release. A workflow that calls it
+# must create the release first.
+#
+# There is no archive for Intel Macs or Windows: Node single executables do
+# not run on x64 macOS, and Lincei does not ship for Windows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, as given to the Lincei release workflow (for example 0.1.0)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    name: Server archive (${{ matrix.platform }} ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            platform: mac
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+            resource_key: darwin-arm64
+          - runner: ubuntu-24.04
+            platform: linux
+            arch: x64
+            rust_target: x86_64-unknown-linux-gnu
+            resource_key: linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            resource_key: linux-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Check Lincei identity
+        run: node scripts/lincei/identity.ts check
+
+      - name: Align package versions to release version
+        run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
+
+      # apps/server/dist with the web app in dist/client. The server build
+      # gives the web app the development icons; a release gets Lincei's own.
+      - name: Build web app and server bundle
+        run: |
+          vp run --filter t3 build
+          node scripts/apply-web-brand-assets.ts production apps/server/dist/client
+
+      - name: Build resource monitor
+        run: |
+          cargo build --locked --release \
+            --manifest-path native/resource-monitor/Cargo.toml \
+            --target "${{ matrix.rust_target }}"
+          target_dir="$RUNNER_TEMP/cli-resource-monitor/${{ matrix.resource_key }}"
+          mkdir -p "$target_dir"
+          cp "native/resource-monitor/target/${{ matrix.rust_target }}/release/t3-resource-monitor" "$target_dir/"
+
+      # --build-sea needs Node 25.7 or later; the repository stays on
+      # engines.node. Keep in step with SEA_NODE_VERSION in
+      # apps/server/vite.config.ts, as upstream's release-desktop.yml does.
+      - name: Build server single executable
+        env:
+          VP_NODE_VERSION: "26.8.2"
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      # Ad hoc signed on macOS until a Developer ID is added here; see
+      # signMacArchiveContents in scripts/build-cli-archive.ts. Gatekeeper does
+      # not check what scripts/install.sh downloads with curl.
+      - name: Build server archive
+        run: |
+          node scripts/build-cli-archive.ts \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --version "${{ inputs.version }}" \
+            --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
+            --output-dir release-cli
+
+      - name: Smoke-test server archive
+        run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ inputs.version }}"
+
+      - name: Upload server archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: lincei-server-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-cli/*
+          if-no-files-found: error
+
+  attach:
+    name: Attach to the draft release
+    needs: archive
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download server archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: lincei-server-*
+          merge-multiple: true
+          path: release-cli
+
+      # The installers verify every download against this file.
+      - name: Write checksums
+        working-directory: release-cli
+        run: sha256sum t3-* > SHA256SUMS
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ inputs.version }}" release-cli/* \
+            --repo "${{ github.repository }}" --clobber

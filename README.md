@@ -86,6 +86,26 @@ to Vitrine. When the first card arrives, Lincei opens the study beside the conve
 review. The flask button at the top right of a thread opens that study at any time; while Lincei
 is still setting up, it shows what it is working on.
 
+## Run Lincei in your browser
+
+Lincei also runs as a server on your computer that you open in a web browser, for example on
+Linux. Agents, the clinical environment, and your data stay on that computer, as with the app. It
+needs an Apple Silicon Mac, or Linux on x64 or arm64, and a provider as in step 1 of Install.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hannesill/lincei/main/scripts/install.sh | sh
+lincei
+```
+
+`lincei` starts Lincei and opens it in your browser. The first start sets up the clinical
+environment, as the app does. The server only accepts connections from the same computer.
+The research board opens in a new browser tab instead of beside the conversation. When the
+first card of a conversation arrives, Lincei asks before it opens that tab.
+
+`lincei update` moves to the newest release, and `lincei uninstall` removes Lincei but keeps your
+conversations and datasets. The app and `lincei` share those, so quit the app before you start
+`lincei`.
+
 ## Develop
 
 See [docs/lincei/README.md](./docs/lincei/README.md) for how the fork is organized, how to pull in

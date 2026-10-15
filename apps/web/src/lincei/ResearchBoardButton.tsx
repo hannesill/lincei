@@ -1,7 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ClinicalRuntimeStatus, ScopedThreadRef } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 import { FlaskConicalIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -11,14 +12,23 @@ import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useThreadShell } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
+import { usePreparedConnection } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import type { SessionPhase } from "~/types";
 
 import { clinicalToolsInstalled } from "./clinicalPresentation";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
-import { followAppAppearance, openResearchBoard, useBoardShowable } from "./openResearchBoard";
 import {
+  type BoardOpening,
+  type BoardTarget,
+  followAppAppearance,
+  openResearchBoard,
+  openResearchBoardInTab,
+  useBoardShowable,
+} from "./openResearchBoard";
+import {
+  boardPlace,
   createResearchBoardWatcher,
   createWatcherKeeper,
   describeBoardButton,
@@ -65,6 +75,35 @@ function useBoardShown(threadKey: string | null): boolean {
  */
 const watchers = createWatcherKeeper();
 
+/** Says why the board could not be shown, when there is something to say. */
+function reportUnavailable(opening: BoardOpening) {
+  if (opening._tag !== "Unavailable" || opening.message === null) return;
+  toastManager.add({
+    type: "error",
+    title: "Could not open the research board",
+    description: opening.message,
+  });
+}
+
+/**
+ * Tells the user that a card arrived, in a window that shows the board in a
+ * browser tab of its own. A browser opens a tab only from a click, so the
+ * board does not open by itself there; the toast's button opens it.
+ */
+function offerBoardTab(target: BoardTarget) {
+  const id = toastManager.add({
+    type: "info",
+    title: "A research card is ready",
+    actionProps: {
+      children: "Open research board",
+      onClick: () => {
+        toastManager.close(id);
+        void openResearchBoardInTab(target).then(reportUnavailable);
+      },
+    },
+  });
+}
+
 export interface ResearchBoardTarget {
   readonly threadRef: ScopedThreadRef | null;
   /** The folder the thread works in, where its study lives. */
@@ -79,7 +118,9 @@ export interface ResearchBoardTarget {
  * research tools' setup is going until there is a study to show. A click
  * brings back the board's tab when the thread already has one. The first time
  * an agent publishes a card while the thread is on screen, the board opens by
- * itself. Renders nothing against a server that is not Lincei.
+ * itself. A plain browser on the server's computer shows the board in a tab of
+ * its own instead, and offers it with a toast when the first card arrives.
+ * Renders nothing against a server that is not Lincei.
  */
 export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: ResearchBoardTarget) {
   const environmentId = threadRef?.environmentId ?? null;
@@ -87,8 +128,17 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const folder = cwd ?? null;
   const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
   // The board is a page in upstream's browser that has to run on the server's
-  // computer, where Vitrine listens.
-  const canShowBoard = useBoardShowable(environmentId);
+  // computer, where Vitrine listens. Without one, a browser on the server's
+  // computer shows the board in a tab of its own.
+  const connection = usePreparedConnection(environmentId);
+  const place = boardPlace({
+    panelReachesBoard: useBoardShowable(environmentId),
+    serverUrl: Option.match(connection, {
+      onNone: () => null,
+      onSome: ({ httpBaseUrl }) => httpBaseUrl,
+    }),
+  });
+  const canShowBoard = place !== null;
   const { view, refresh: refreshStatus } = useClinicalStatus(environmentId);
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
   const adjustPreview = useAtomCommand(previewEnvironment.adjust, { reportFailure: false });
@@ -138,7 +188,14 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   useEffect(() => {
     if (!watchable || environmentId === null || threadId === null || folder === null) return;
     const watched = scopeThreadRef(environmentId, threadId);
-    const held = watchers.hold(`${scopedThreadKey(watched)}\n${folder}`, () =>
+    const target = {
+      threadRef: watched,
+      cwd: folder,
+      request,
+      openPreview,
+      adjustPreview,
+    } satisfies BoardTarget;
+    const held = watchers.hold(`${scopedThreadKey(watched)}\n${folder}\n${place}`, () =>
       createResearchBoardWatcher({
         intervalMs: ACTIVITY_POLL_INTERVAL_MS,
         readActivity: async () => {
@@ -150,18 +207,19 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
             ? (answer.value.updatedAt ?? null)
             : undefined;
         },
-        // Nobody asked for the board, so failing to show it is not worth a
-        // message. The thread stays unmarked and the next card tries again.
-        onNews: () =>
-          void openResearchBoard({
-            threadRef: watched,
-            cwd: folder,
-            request,
-            openPreview,
-            adjustPreview,
-          }).then((opening) => {
+        onNews: () => {
+          // Offered once per thread, like the board that opens by itself.
+          if (place === "tab") {
+            offerBoardTab(target);
+            markBoardShown(scopedThreadKey(watched));
+            return;
+          }
+          // Nobody asked for the board, so failing to show it is not worth a
+          // message. The thread stays unmarked and the next card tries again.
+          void openResearchBoard(target).then((opening) => {
             if (opening._tag === "Shown") markBoardShown(scopedThreadKey(watched));
-          }),
+          });
+        },
       }),
     );
     watcher.current = held.watcher;
@@ -169,7 +227,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
       watcher.current = null;
       held.release();
     };
-  }, [watchable, environmentId, threadId, folder, request, openPreview, adjustPreview]);
+  }, [watchable, place, environmentId, threadId, folder, request, openPreview, adjustPreview]);
   useEffect(() => {
     if (running) watcher.current?.start(turnStartedAt);
     else watcher.current?.finish();
@@ -178,6 +236,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
     running,
     turnStartedAt,
     watchable,
+    place,
     environmentId,
     threadId,
     folder,
@@ -189,28 +248,31 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const button = describeBoardButton({
     view,
     hasFolder: folder !== null,
-    canShowBoard,
+    place,
     canOperate,
   });
   if (threadRef === null || button === null) return null;
   const inactive = busy || !button.enabled;
 
   /** What a click does once the status is known: show the board, or start what it waits for. */
-  const showOrSetUp = async () => {
-    // Without a folder or a browser there is no board to ask for, and the
-    // button is only enabled for what is left: starting setup.
-    if (folder === null || !canShowBoard) {
+  const showOrSetUp = async (status: ClinicalRuntimeStatus) => {
+    // Without a folder or anywhere to show a board there is no board to ask
+    // for, and the button is only enabled for what is left: starting setup.
+    if (folder === null || place === null) {
       await setUp();
       return;
     }
+    const target = { threadRef, cwd: folder, request, openPreview, adjustPreview };
     // The server answers from the tools' state now, not the one on screen.
-    const opening = await openResearchBoard({
-      threadRef,
-      cwd: folder,
-      request,
-      openPreview,
-      adjustPreview,
-    });
+    // Except for a board in a browser tab: that tab opens before the server
+    // answers, while the click is still being handled, so it is opened only
+    // when the tools on screen are there.
+    const opening: BoardOpening =
+      place === "panel"
+        ? await openResearchBoard(target)
+        : clinicalToolsInstalled(status)
+          ? await openResearchBoardInTab(target)
+          : { _tag: "SettingUp", status };
     switch (opening._tag) {
       case "Shown":
         markBoardShown(scopedThreadKey(threadRef));
@@ -227,13 +289,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
         await setUp();
         return;
       case "Unavailable":
-        if (opening.message !== null) {
-          toastManager.add({
-            type: "error",
-            title: "Could not open the research board",
-            description: opening.message,
-          });
-        }
+        reportUnavailable(opening);
     }
   };
 
@@ -244,7 +300,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
     if (view.phase !== "known") return;
     setBusy(true);
     // Not try/finally: the React Compiler leaves a component with one uncompiled.
-    void showOrSetUp().finally(() => setBusy(false));
+    void showOrSetUp(view.status).finally(() => setBusy(false));
   };
 
   return (
