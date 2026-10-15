@@ -49,10 +49,13 @@ import * as UvInstallation from "./UvInstallation.ts";
 /**
  * What a fresh environment installs. Bump the ranges here when M4 or Vitrine
  * ship a release Lincei should adopt; a changed list updates on next setup.
+ * Plotly is here because M4's skills draw figures with it and neither package
+ * depends on it.
  */
 const DEFAULT_CLINICAL_REQUIREMENTS = [
   "m4-infra[research]>=0.5.6,<0.6",
   "vitrine>=0.1.3,<0.2",
+  "plotly>=6,<8",
 ] as const;
 
 const CLINICAL_PYTHON_VERSION = "3.12";
