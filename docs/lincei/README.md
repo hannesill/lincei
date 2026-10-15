@@ -281,16 +281,17 @@ later than the start of the turn, once per thread. The server answers from the m
 few `stat` calls and no Python process. Both times are the server's clock, which is why the turn's
 start comes from the thread and not from when this window saw it begin.
 
-A plain browser has no built-in browser unless the server runs one (`t3 browser setup`), so there
-the board goes into a browser tab of its own (`boardPlace` in `researchBoardLogic.ts`). Vitrine
-listens only on the loopback address of the server's computer, so that works only in a browser on
-the same computer, which Lincei takes to be the case when the browser reaches the server at a
-loopback address. Anywhere else the button says where the board can be opened. Showing the board
-there would need a proxy through Lincei's server, with its authentication in front of Vitrine;
-upstream plans an authenticated preview gateway for exactly this, so Lincei waits for it. A
-browser opens a tab only while it handles a click, and starting Vitrine takes longer, so the
-click opens an empty tab first, and the first card brings a toast whose button opens the tab
-instead of opening the board by itself.
+A plain browser window puts the board into a browser tab of its own (`boardPlace` in
+`researchBoardLogic.ts`). Upstream's streamed server browser could show it in the panel only after
+`t3 browser setup` on the server, which a researcher has not run, and would wait on it forever.
+Vitrine listens only on the loopback address of the server's computer, so that works only in a
+browser on the same computer, which Lincei takes to be the case when the browser reaches the server
+at a loopback address. Anywhere else the button says where the board can be opened. Showing the
+board there would need a proxy through Lincei's server, with its authentication in front of Vitrine;
+upstream plans an authenticated preview gateway for exactly this, so Lincei waits for it. A browser
+opens a tab only while it handles a click, and starting Vitrine takes longer, so the click opens an
+empty tab first, and the first card brings a toast whose button opens the tab instead of opening the
+board by itself.
 
 ## Researcher mode and Techie mode
 

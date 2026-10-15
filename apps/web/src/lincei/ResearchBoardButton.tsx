@@ -10,6 +10,7 @@ import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { useThreadShell } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
 import { usePreparedConnection } from "~/state/session";
@@ -127,11 +128,12 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const threadId = threadRef?.threadId ?? null;
   const folder = cwd ?? null;
   const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
-  // The board is a page in upstream's browser that has to run on the server's
-  // computer, where Vitrine listens. Without one, a browser on the server's
-  // computer shows the board in a tab of its own.
+  // The board is a page in the desktop app's browser, in a tab that runs on the
+  // server's computer, where Vitrine listens. A plain browser on the server's
+  // computer shows it in a tab of its own instead.
   const connection = usePreparedConnection(environmentId);
   const place = boardPlace({
+    desktopBrowser: isPreviewSupportedInRuntime(),
     panelReachesBoard: useBoardShowable(environmentId),
     serverUrl: Option.match(connection, {
       onNone: () => null,
