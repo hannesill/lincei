@@ -1,4 +1,4 @@
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import type { ReactNode } from "react";
 
 import {
@@ -10,7 +10,6 @@ import { useSettingsScope } from "~/components/settings/SettingsScopeContext";
 import { Button } from "~/components/ui/button";
 import { environmentCatalog } from "~/connection/catalog";
 import { type EnvironmentPresentation, usePrimaryEnvironmentId } from "~/state/environments";
-import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { AgentBriefingSection } from "./AgentBriefingSection";
@@ -26,6 +25,7 @@ import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
 import { PhysioNetAccessSteps } from "./physioNet";
 import { ProviderDataNotice } from "./ProviderDataNotice";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
+import { linceiCommand } from "./linceiRequests";
 import { CLINICAL_SETTINGS } from "./settingsSearchItems";
 
 /**
@@ -52,7 +52,7 @@ function ClinicalDataPanel({
 }) {
   const { environmentId } = environment;
   const { view, refresh } = useClinicalStatus(environmentId);
-  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
   const setUp = useClinicalSetup(environmentId, refresh);
   // A page without a picker has to say whose tools it shows when that is not obvious.
   const elsewhere = onThisComputer ? null : (

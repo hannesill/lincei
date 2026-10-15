@@ -1,6 +1,15 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { type ClinicalRuntimeStatus, LinceiRequest } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
+  type ClinicalRuntimeStatus,
+  clientRpcRequiredScopes,
+  LINCEI_WS_METHODS,
+  LinceiRequest,
+  WS_METHODS,
+  WsRpcGroup,
+} from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,7 +17,9 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/process";
+import * as RpcTest from "effect/rpc/RpcTest";
 
+import * as RpcAuthorization from "../auth/RpcAuthorization.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
@@ -386,5 +397,68 @@ describe("LinceiRequests", () => {
       expect(printed).not.toContain("correct-horse");
     }
     expect(JSON.stringify(request)).toContain("<redacted>");
+  });
+});
+
+describe("who may ask", () => {
+  // Lincei's method beside one every connection may call, and nothing else.
+  const kept = [LINCEI_WS_METHODS.request, WS_METHODS.serverProbe] as const;
+  const group = WsRpcGroup.omit(
+    ...[...WsRpcGroup.requests.keys()].filter(
+      (
+        tag,
+      ): tag is Exclude<keyof typeof RpcAuthorization.RPC_REQUIRED_SCOPES, (typeof kept)[number]> =>
+        !(kept as ReadonlyArray<string>).includes(tag),
+    ),
+  );
+  const preferences = { _tag: "Preferences", preferences: { techieMode: false } } as const;
+
+  it.effect.each([
+    { scopes: [AuthOrchestrationReadScope], answered: false },
+    { scopes: [AuthOrchestrationReadScope, AuthOrchestrationOperateScope], answered: true },
+  ])("answers only a connection that may operate ($answered)", ({ scopes, answered }) =>
+    Effect.gen(function* () {
+      const handled: Array<string> = [];
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.serverProbe, () => Effect.succeed({})),
+            group.toLayerHandler(LINCEI_WS_METHODS.request, (request) =>
+              Effect.sync(() => {
+                handled.push(request._tag);
+                return preferences;
+              }),
+            ),
+            RpcAuthorization.layer(scopes),
+          ),
+        ),
+      );
+
+      expect(yield* client[WS_METHODS.serverProbe]({})).toEqual({});
+      const answer = yield* client[LINCEI_WS_METHODS.request]({ _tag: "Preferences" }).pipe(
+        Effect.result,
+      );
+      if (answered) {
+        expect(answer).toMatchObject({ _tag: "Success", success: preferences });
+        expect(handled).toEqual(["Preferences"]);
+      } else {
+        expect(answer).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            _tag: "EnvironmentAuthorizationError",
+            requiredPermission: AuthOrchestrationOperateScope,
+          },
+        });
+        expect(handled).toEqual([]);
+      }
+    }).pipe(Effect.scoped),
+  );
+
+  it("is the scope clients check before they send a command, so a control can say so first", () => {
+    for (const request of [{ _tag: "ClinicalSetup" }, { _tag: "Preferences" }] as const) {
+      expect(clientRpcRequiredScopes(LINCEI_WS_METHODS.request, request)).toEqual([
+        AuthOrchestrationOperateScope,
+      ]);
+    }
   });
 });

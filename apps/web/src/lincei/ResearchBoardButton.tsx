@@ -1,5 +1,6 @@
+import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { AuthOrchestrationOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { FlaskConicalIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -9,7 +10,6 @@ import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { previewEnvironment } from "~/state/preview";
-import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import type { SessionPhase } from "~/types";
 
@@ -84,7 +84,7 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const environmentId = threadRef?.environmentId ?? null;
   const threadId = threadRef?.threadId ?? null;
   const folder = cwd ?? null;
-  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
   // The board is a page in upstream's browser, which a plain browser window
   // only has when the server can run one.
   const canShowBoard = usePreviewAvailable(environmentId);

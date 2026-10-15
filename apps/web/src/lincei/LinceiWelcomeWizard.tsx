@@ -1,5 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
 import { type ComponentProps, type RefObject, useEffect, useRef, useState } from "react";
 
@@ -14,7 +14,6 @@ import { Switch } from "~/components/ui/switch";
 import { WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "~/components/ui/wizard";
 import { useUpdatePrimarySettings } from "~/hooks/useSettings";
 import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
-import { useEnvironmentScope } from "~/state/session";
 
 import { ClinicalDatasetList } from "./ClinicalDatasetList";
 import { ClinicalStatusNote } from "./ClinicalNote";
@@ -28,6 +27,7 @@ import {
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import type { ClinicalStatusView } from "./linceiAnswers";
+import { linceiCommand } from "./linceiRequests";
 import { useTechieModeSwitch } from "./mode/techieModeSwitch";
 import { PhysioNetAccessSteps } from "./physioNet";
 import { ProviderDataNotice } from "./ProviderDataNotice";
@@ -48,7 +48,7 @@ function ClinicalStep({
   readonly headingRef: RefObject<HTMLHeadingElement | null>;
   readonly onContinue: () => void;
 }) {
-  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
   const setUp = useClinicalSetup(environmentId, refresh);
   const connection = useEnvironment(environmentId)?.connection.phase;
   const [techie, setTechie] = useTechieModeSwitch();
