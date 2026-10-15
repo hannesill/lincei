@@ -133,10 +133,10 @@ startup the server puts its `bin` first on `PATH` and sets `LINCEI_CLINICAL_HOME
 
 Being first on the server's `PATH` is not enough for agents. They run commands in a login shell,
 and macOS rebuilds `PATH` there with the system's directories in front, where `/usr/bin/m4` is an
-unrelated macro processor and `python` is whatever the user's profile set up. Environment
-variables survive, so the agent instructions tell agents to begin clinical commands with
-`export PATH="$LINCEI_CLINICAL_BIN:$PATH";`. Anything else that needs the environment from a
-login shell has to do the same.
+unrelated macro processor and `python` is whatever the user's profile set up. Debian's
+`/etc/profile` replaces `PATH` altogether. Environment variables survive, so the agent
+instructions tell agents to begin clinical commands with `export PATH="$LINCEI_CLINICAL_BIN:$PATH";`.
+Anything else that needs the environment from a login shell has to do the same.
 
 Setup runs `uv`: create the environment, install the pinned requirements, materialize M4's
 skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. A machine without `uv` gets
@@ -371,18 +371,28 @@ because Lincei ships no mobile app.
 
 ## Releasing
 
-Run the **Lincei release** workflow with a version. It builds an Apple Silicon DMG and attaches
-it to a draft GitHub release. Building locally needs Rust (`rustup target add
-aarch64-apple-darwin`) and runs:
+Run the **Lincei release** workflow with a version. It builds DMGs for Apple Silicon and Intel
+Macs and AppImages for Linux x64 and arm64, and attaches them and a `SHA256SUMS` to one draft
+GitHub release. Windows is not built, because Lincei cannot install the clinical tools there.
+The assets carry no version (`Lincei-mac-arm64.dmg`, `Lincei-linux-x64.AppImage`), so the README
+and the website link to `releases/latest/download/<name>`. GitHub's `latest` skips drafts and
+pre-releases: publish the draft as a regular release, or those links break.
+
+Building locally needs Rust with the target (`rustup target add aarch64-apple-darwin
+x86_64-apple-darwin`). A Linux AppImage builds only on Linux, with the
+[AppImage prerequisites](../operations/development.md#linux-appimage-prerequisites).
 
 ```sh
-vp run dist:desktop:dmg:arm64
+vp run dist:desktop:dmg:arm64   # or dist:desktop:dmg:x64
+vp run dist:desktop:artifact --platform linux --target AppImage --arch x64
 ```
 
 Builds are unsigned until a Developer ID certificate and notarization credentials are added to
 the workflow, so macOS blocks them until the user allows the app in System Settings. An unsigned
 build also cannot install updates, which is why the workflow builds without an update feed
-(`T3CODE_DESKTOP_UPDATE_REPOSITORY: none`). Drop that line when signing is added.
+(`T3CODE_DESKTOP_UPDATE_REPOSITORY: none`). Drop that line when signing is added. The Linux build
+also writes a `.deb`, which the workflow does not ship: its package metadata (maintainer,
+AppStream file) is still T3 Code's.
 
 Upstream's own workflows (`release.yml`, `ci.yml`, the mobile and relay ones) assume T3 Code's
 runners and accounts, and `release.yml` runs on a 30-minute schedule. The files stay in place so
