@@ -9,10 +9,10 @@ import { FlaskConicalIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
-import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentScope, usePreparedConnection } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -128,12 +128,11 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const threadId = threadRef?.threadId ?? null;
   const folder = cwd ?? null;
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
-  // The board is a page in upstream's browser, which a plain browser window
-  // only has when the server can run one. Without it, a browser on the
-  // server's computer shows the board in a tab of its own.
+  // The board is a page in the desktop app's browser. A plain browser on the
+  // server's computer shows it in a tab of its own instead.
   const connection = usePreparedConnection(environmentId);
   const place = boardPlace({
-    previewAvailable: usePreviewAvailable(environmentId),
+    desktopBrowser: isPreviewSupportedInRuntime(),
     serverUrl: Option.match(connection, {
       onNone: () => null,
       onSome: ({ httpBaseUrl }) => httpBaseUrl,

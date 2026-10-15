@@ -285,7 +285,7 @@ describe("createWatcherKeeper", () => {
 describe("boardPlace", () => {
   it("shows the board in the panel wherever this window has a browser for it", () => {
     for (const serverUrl of ["http://localhost:3773", "http://192.168.1.20:3773", null]) {
-      expect(boardPlace({ previewAvailable: true, serverUrl })).toBe("panel");
+      expect(boardPlace({ desktopBrowser: true, serverUrl })).toBe("panel");
     }
   });
 
@@ -296,7 +296,7 @@ describe("boardPlace", () => {
       "http://[::1]:3773",
       "http://lincei.localhost:3773",
     ]) {
-      expect(boardPlace({ previewAvailable: false, serverUrl })).toBe("tab");
+      expect(boardPlace({ desktopBrowser: false, serverUrl })).toBe("tab");
     }
   });
 
@@ -308,7 +308,7 @@ describe("boardPlace", () => {
       "not a url",
       null,
     ]) {
-      expect(boardPlace({ previewAvailable: false, serverUrl })).toBeNull();
+      expect(boardPlace({ desktopBrowser: false, serverUrl })).toBeNull();
     }
   });
 });
