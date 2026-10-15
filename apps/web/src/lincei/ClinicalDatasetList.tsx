@@ -1,16 +1,11 @@
-import {
-  AuthOrchestrationOperateScope,
-  type ClinicalDataset,
-  type EnvironmentId,
-  type LinceiRequest,
-} from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import { type ClinicalDataset, type EnvironmentId, type LinceiRequest } from "@t3tools/contracts";
 import { type ReactNode, useId, useState } from "react";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
-import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { AddFromFolderDialog } from "./AddFromFolderDialog";
@@ -207,7 +202,7 @@ export function ClinicalDatasetList({
   readonly enabled: boolean;
 }) {
   const { view, takingLong, refresh, accept } = useClinicalDatasets(environmentId, enabled);
-  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
   const environment = useEnvironment(environmentId);
   // The server that serves this app is "this computer" to its user.
   const onThisComputer = usePrimaryEnvironmentId() === environmentId;
