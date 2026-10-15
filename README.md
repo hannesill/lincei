@@ -33,21 +33,31 @@ Lincei adds the clinical layer:
 1. Install and sign in to at least one provider, for example
    [Claude Code](https://claude.com/product/claude-code) (`claude auth login`) or
    [Codex CLI](https://developers.openai.com/codex/cli) (`codex login`).
-2. Download the latest Lincei build for Apple Silicon Macs from
-   [Releases](https://github.com/hannesill/lincei/releases) and drag it into Applications.
+2. Download Lincei from [Releases](https://github.com/hannesill/lincei/releases/latest):
+   - **Mac:** [`Lincei-mac-arm64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-arm64.dmg)
+     for Apple Silicon (M1 and later) or
+     [`Lincei-mac-x64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-x64.dmg)
+     for Intel. Open it and drag Lincei into Applications.
+   - **Linux:** [`Lincei-linux-x64.AppImage`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-linux-x64.AppImage),
+     or [`Lincei-linux-arm64.AppImage`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-linux-arm64.AppImage)
+     on ARM. Make it executable and run it: `chmod +x Lincei-linux-x64.AppImage`, then
+     `./Lincei-linux-x64.AppImage`.
 
-Lincei is not signed with an Apple Developer ID yet, so macOS blocks the first launch and says it
-cannot verify the app. Open Lincei once and choose **Done**, then go to **System Settings →
+There is no Windows build yet.
+
+On a Mac, Lincei is not signed with an Apple Developer ID yet, so macOS blocks the first launch and
+says it cannot verify the app. Open Lincei once and choose **Done**, then go to **System Settings →
 Privacy & Security**, scroll down to the message about Lincei, and choose **Open Anyway**. The
 button shows for about an hour after macOS blocked the app; if it is missing, open Lincei once
 more. On macOS 14 or earlier, right-click the app and choose **Open** instead. You do this once per
 download, and the installer window shows the same steps.
 
 Lincei does not update itself yet. To update, quit Lincei, download the new build from
-[Releases](https://github.com/hannesill/lincei/releases), and replace the app in Applications;
-your conversations and datasets stay. Allow it in Privacy & Security again, as above. On its first
-launch macOS asks whether Lincei may use "lincei Safe Storage" in your keychain, where Lincei keeps
-its sign-ins encrypted: enter your Mac password and choose **Always Allow**.
+[Releases](https://github.com/hannesill/lincei/releases), and replace the app in Applications, or
+the AppImage on Linux; your conversations and datasets stay. On a Mac, allow it in Privacy &
+Security again, as above. On its first launch macOS asks whether Lincei may use "lincei Safe
+Storage" in your keychain, where Lincei keeps its sign-ins encrypted: enter your Mac password and
+choose **Always Allow**.
 
 On first launch Lincei sets up the clinical environment in the background: Python, M4, Vitrine,
 the clinical skills, and the demo dataset. It takes a few minutes and needs a network connection,
