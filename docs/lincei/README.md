@@ -144,11 +144,12 @@ colon would split the Windows one in two (hence `cygpath -u`).
 Setup runs `uv`: create the environment, install the pinned requirements, materialize M4's
 skills into `<home>/clinical/skills`, and download the MIMIC-IV demo. A machine without `uv` gets
 Lincei's own copy in `<home>/clinical/bin`, downloaded from the release pinned (with its digest)
-in `UvInstallation.ts`. The desktop app runs it
-on launch; a dev server waits until an agent calls `lincei_clinical_setup`, because each worktree
-has its own home. An environment whose requirements have not changed is left alone, unless the
-request says `force`, which installs everything again to repair tools that are installed but
-broken. When an update of the requirements fails (offline, say) and the installed tools still
+in `UvInstallation.ts`. The desktop app runs it on launch, and so does a server that serves the
+built web app to a browser (it has a `staticDir`). A dev server waits until an agent calls
+`lincei_clinical_setup`, because each worktree has its own home, and so does a server without
+the web app, which is what tests build. An environment whose requirements have not changed is
+left alone, unless the request says `force`, which installs everything again to repair tools
+that are installed but broken. When an update of the requirements fails (offline, say) and the installed tools still
 run, they stay usable and the status says the update is pending.
 
 What setup and the dataset jobs report is read by someone who may never have opened a terminal.
@@ -280,6 +281,17 @@ later than the start of the turn, once per thread. The server answers from the m
 few `stat` calls and no Python process. Both times are the server's clock, which is why the turn's
 start comes from the thread and not from when this window saw it begin.
 
+A plain browser has no built-in browser unless the server runs one (`t3 browser setup`), so there
+the board goes into a browser tab of its own (`boardPlace` in `researchBoardLogic.ts`). Vitrine
+listens only on the loopback address of the server's computer, so that works only in a browser on
+the same computer, which Lincei takes to be the case when the browser reaches the server at a
+loopback address. Anywhere else the button says where the board can be opened. Showing the board
+there would need a proxy through Lincei's server, with its authentication in front of Vitrine;
+upstream plans an authenticated preview gateway for exactly this, so Lincei waits for it. A
+browser opens a tab only while it handles a click, and starting Vitrine takes longer, so the
+click opens an empty tab first, and the first card brings a toast whose button opens the tab
+instead of opening the board by itself.
+
 ## Researcher mode and Techie mode
 
 Lincei's user is a clinical researcher. Upstream's is a developer, and its interface says so on
@@ -338,6 +350,24 @@ Git stays underneath and out of sight. A project that is a git repository still 
 checkpoint after every turn, so rewinding a conversation works there. A plain folder gets none:
 Lincei does not turn a folder the researcher chose into a repository, because a checkpoint copies
 every file that is not ignored into `.git`, and a research folder holds data.
+
+## Lincei in a browser
+
+The server the desktop app bundles also runs on its own and serves the web app to a browser, as
+upstream's `t3` does. Lincei ships it as upstream's CLI archives (`t3-<version>-<platform>.tar.gz`
+and `SHA256SUMS`, made by `scripts/build-cli-archive.ts`), which the **Lincei server archives**
+workflow (`lincei-server.yml`) attaches to a release after **Lincei release** has created it.
+They are also what the desktop app installs on a remote host over SSH and what `t3 update` reads,
+all through `packages/shared/src/cliRelease.ts`, whose repository is an identity rule. There is
+none for Intel Macs, where Node single executables do not run, or for Windows.
+
+`scripts/install.sh`, rewritten by the identity script, installs an archive as the command
+`lincei`. It must never be `t3`, which would take the place of a T3 Code install's command.
+Upstream's `update` and `uninstall` act on the link the command was started through, whatever
+its name. The archive, the executable inside it, and the CLI's own messages keep upstream's `t3`.
+
+A server started this way listens on `127.0.0.1` unless it is given `--host`, and sets up the
+clinical tools on start, as the desktop app does.
 
 ## The default look
 
@@ -431,6 +461,7 @@ gh workflow disable <new-file>.yml
 
 - **T3 Connect, the hosted relay, and the mobile apps** stay off: they need upstream's accounts,
   and Lincei sets none of the build-time keys that enable them.
-- **Remote hosts over SSH** download a server binary from Lincei's GitHub releases, which do not
-  publish one yet.
+- **The `t3` npm package** (`npx t3`): upstream builds a launcher and one package per platform
+  from the same archives and publishes them under its npm names. Lincei publishes none;
+  `scripts/install.sh` installs the archives directly.
 - **Telemetry** is off, with no analytics key.

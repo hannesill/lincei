@@ -1,9 +1,11 @@
 /**
  * The decisions behind the research board button, kept free of React and the
- * app's stores so they can be tested: which browser tab already shows a board,
- * when a study's activity is news, and what the button says.
+ * app's stores so they can be tested: where a window shows a board, which
+ * browser tab already shows one, when a study's activity is news, and what the
+ * button says.
  */
 import type { PreviewRuntime, PreviewSessionSnapshot } from "@t3tools/contracts";
+import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import { isLoopbackHost } from "@t3tools/shared/preview";
 
 import { CLINICAL_ACCESS_REFUSED, type ClinicalStatusView } from "./linceiAnswers";
@@ -22,6 +24,31 @@ function servedFrom(rawUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Where a window shows a research board: in the right panel, which takes
+ * Lincei's built-in browser (the desktop app's, or one the server runs), or in
+ * a browser tab of its own. Null where it cannot be shown at all.
+ */
+export type BoardPlace = "panel" | "tab" | null;
+
+/**
+ * Where this window shows a board. Vitrine listens on the loopback address of
+ * the computer the server runs on, so a plain browser reaches it only on that
+ * computer, which it is when it reaches the server at a loopback address too.
+ * `serverUrl` is the address this window connects to the server at.
+ */
+export function boardPlace(input: {
+  /** Whether a tab in the right panel's browser reaches the board (`boardTabRuntime`). */
+  readonly panelReachesBoard: boolean;
+  readonly serverUrl: string | null;
+}): BoardPlace {
+  if (input.panelReachesBoard) return "panel";
+  if (input.serverUrl === null || !URL.canParse(input.serverUrl)) return null;
+  const { hostname } = new URL(input.serverUrl);
+  // Browsers resolve every `*.localhost` name to the loopback address.
+  return isLocalLoopbackHost(hostname) || hostname.endsWith(".localhost") ? "tab" : null;
 }
 
 /** Whether a page is one of Vitrine's boards, which it names `vitrine.localhost` (`_DISPLAY_HOST`). */
@@ -241,7 +268,10 @@ export function boardTabRuntime(input: {
 }
 
 export const BOARD_NEEDS_BROWSER =
-  "The research board needs a browser on the computer Lincei runs on, which this window cannot use. Open the thread in the Lincei app on that computer.";
+  "The research board opens only on the computer Lincei runs on. Open Lincei in a browser on that computer, or in the Lincei app.";
+
+export const BOARD_TAB_REFUSED =
+  "The browser did not open a tab for the research board. Allow pop-ups for Lincei and try again.";
 
 export type BoardButtonMarker = "none" | "working" | "failed";
 
@@ -260,12 +290,14 @@ export function describeBoardButton(input: {
   readonly view: ClinicalStatusView;
   /** Whether the thread works in a folder, which is where its study lives. */
   readonly hasFolder: boolean;
-  /** Whether this window has a browser to show a board in. */
-  readonly canShowBoard: boolean;
+  /** Where this window shows a board. */
+  readonly place: BoardPlace;
   /** Whether this connection may start anything on the server. */
   readonly canOperate: boolean;
 }): BoardButton | null {
-  const { view, hasFolder, canShowBoard, canOperate } = input;
+  const { view, hasFolder, place, canOperate } = input;
+  const canShowBoard = place !== null;
+  const open = place === "tab" ? "Open research board in a new tab" : "Open research board";
   switch (view.phase) {
     case "absent":
       return null;
@@ -290,7 +322,7 @@ export function describeBoardButton(input: {
       return {
         label:
           status.step === "dataset" && hasFolder && canShowBoard
-            ? `Open research board. ${status.message}`
+            ? `${open}. ${status.message}`
             : `Setting up the clinical research tools. ${status.message}`,
         marker: "working",
         // A click asks the server for the board, which takes a folder and somewhere to show it.
@@ -309,7 +341,7 @@ export function describeBoardButton(input: {
     case "ready":
       if (!canShowBoard) return { label: BOARD_NEEDS_BROWSER, marker: "none", enabled: false };
       return hasFolder
-        ? { label: "Open research board", marker: "none", enabled: true }
+        ? { label: open, marker: "none", enabled: true }
         : {
             label: "Open a project to see its research board",
             marker: "none",

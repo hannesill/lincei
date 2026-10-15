@@ -101,6 +101,8 @@ const withRuntime = <A, E>(
     readonly demoDownload?: (
       run: ProcessRunner.ProcessRunInput,
     ) => Effect.Effect<ProcessRunner.ProcessRunOutput>;
+    /** The built web app the server serves; none, like a test or dev server, unless given. */
+    readonly staticDir?: string;
   } = {},
 ) => {
   const steps: Array<string> = [];
@@ -157,8 +159,23 @@ const withRuntime = <A, E>(
       });
     }),
   );
+  const layerConfig = ServerConfig.layerTest(
+    process.cwd(),
+    options.baseDir ?? { prefix: "lincei-clinical-test-" },
+  );
   const layerDependencies = Layer.mergeAll(
-    ServerConfig.layerTest(process.cwd(), options.baseDir ?? { prefix: "lincei-clinical-test-" }),
+    options.staticDir === undefined
+      ? layerConfig
+      : Layer.effect(
+          ServerConfig.ServerConfig,
+          Effect.gen(function* () {
+            const config = yield* ServerConfig.ServerConfig;
+            return {
+              ...config,
+              staticDir: options.staticDir,
+            } satisfies ServerConfig.ServerConfig["Service"];
+          }),
+        ).pipe(Layer.provide(layerConfig)),
     Layer.succeed(HostProcessPlatform, "darwin"),
     // Never the real home: setup links skills into the user's agent folders.
     Layer.succeed(HostProcessEnvironment, {
@@ -218,6 +235,20 @@ describe("ClinicalRuntime", () => {
           expect((yield* runtime.provision).state).toBe("ready");
           expect(steps).toEqual([]);
         }),
+    ),
+  );
+
+  it.effect("sets itself up as it starts when it serves the web app to a browser", () =>
+    withRuntime(
+      () => exited(0),
+      ({ runtime, steps }) =>
+        Effect.gen(function* () {
+          // Nobody asked: the run began with the server.
+          expect((yield* runtime.status).state).toBe("installing");
+          expect((yield* runtime.provision).state).toBe("ready");
+          expect(steps).toEqual(["uv", "python", "packages", "skills", ...DEMO_STEPS]);
+        }),
+      { staticDir: "/lincei/client" },
     ),
   );
 

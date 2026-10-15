@@ -7,6 +7,10 @@
  * which one the panel shows. This asks the Lincei server where the board is,
  * looks for it among the thread's sessions, and uses upstream's own calls to
  * select or open it.
+ *
+ * A plain browser window has no such tabs unless the server runs a browser of
+ * its own. On the computer the server runs on, it opens the board in a browser
+ * tab instead (`openResearchBoardInTab`).
  */
 import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
@@ -44,6 +48,7 @@ import {
 } from "./linceiAnswers";
 import {
   BOARD_NEEDS_BROWSER,
+  BOARD_TAB_REFUSED,
   boardTabRuntime,
   findBoardTab,
   isBoardPage,
@@ -135,14 +140,14 @@ export function followAppAppearance(target: Pick<BoardTarget, "threadRef" | "adj
   }
 }
 
-async function showBoard(target: BoardTarget): Promise<BoardOpening> {
-  const { threadRef, cwd, request, openPreview } = target;
-  const runtime = boardRuntimeFor(threadRef.environmentId);
-  // The button does not offer the board in such a window. This is for a
-  // window that lost its browser between the button's render and the click.
-  if (runtime === null) {
-    return { _tag: "Unavailable", message: BOARD_NEEDS_BROWSER };
-  }
+/**
+ * Asks the server to start the thread's board, and says at which address a tab
+ * that runs in `runtime` reaches it.
+ */
+async function startBoard(
+  { threadRef, cwd, request }: BoardTarget,
+  runtime: PreviewRuntime | undefined,
+): Promise<BoardOpening | { readonly _tag: "Started"; readonly url: string }> {
   const started = await request({
     environmentId: threadRef.environmentId,
     input: { _tag: "ResearchBoardOpen", cwd },
@@ -162,11 +167,26 @@ async function showBoard(target: BoardTarget): Promise<BoardOpening> {
 
   const { board } = started.value;
   // A browser tab that runs on the server reaches Vitrine's own address. A
-  // tab in this window, which runs beside the server, gets a loopback URL.
+  // tab on this computer, in this window's browser or a browser tab of its
+  // own, gets a loopback URL the resolver can route.
   const url =
     runtime === "server"
       ? board.url
       : resolveDiscoveredServerUrl(threadRef.environmentId, `http://127.0.0.1:${board.port}/`);
+  return { _tag: "Started", url };
+}
+
+async function showBoard(target: BoardTarget): Promise<BoardOpening> {
+  const { threadRef, openPreview } = target;
+  const runtime = boardRuntimeFor(threadRef.environmentId);
+  // The button does not offer the board in such a window. This is for a
+  // window that lost its browser between the button's render and the click.
+  if (runtime === null) {
+    return { _tag: "Unavailable", message: BOARD_NEEDS_BROWSER };
+  }
+  const started = await startBoard(target, runtime);
+  if (started._tag !== "Started") return started;
+  const { url } = started;
 
   const tabId = findBoardTab(readThreadPreviewState(threadRef).sessions, url);
   if (tabId !== null) {
@@ -197,19 +217,66 @@ async function showBoard(target: BoardTarget): Promise<BoardOpening> {
   };
 }
 
+/** Whether a tab this window opened is still empty, rather than on a page of another site. */
+function isEmptyTab(tab: Window): boolean {
+  try {
+    return tab.location.href === "about:blank";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A new browser tab for a board, opened before the board is started: a
+ * browser lets a page open a tab only while it handles a click, and starting
+ * Vitrine takes longer than that. Null when the browser refused one.
+ */
+function openEmptyTab(): Window | null {
+  const tab = window.open("", "_blank");
+  if (tab === null) return null;
+  // As for a link that opens a new tab: the board's page gets no handle on this one.
+  tab.opener = null;
+  try {
+    tab.document.title = "Research board";
+    tab.document.documentElement.style.colorScheme = "light dark";
+    tab.document.body.textContent = "Opening the research board…";
+  } catch {
+    // Only the words in the waiting tab; the board is shown there either way.
+  }
+  return tab;
+}
+
+async function showBoardInTab(target: BoardTarget, tab: Window): Promise<BoardOpening> {
+  const started = await startBoard(target, previewRuntimeFor(target.threadRef.environmentId)).catch(
+    (): BoardOpening => ({
+      _tag: "Unavailable",
+      message: "The research board could not be opened.",
+    }),
+  );
+  if (started._tag !== "Started") {
+    if (isEmptyTab(tab)) tab.close();
+    return started;
+  }
+  // Closed while it waited: the user no longer wants it.
+  if (tab.closed) return { _tag: "Unavailable", message: null };
+  tab.location.href = started.url;
+  tab.focus();
+  return { _tag: "Shown" };
+}
+
 /** Boards being opened, by thread. */
 const opening = new Map<string, Promise<BoardOpening>>();
 
 /**
- * Shows the board for a thread. Asking again while an earlier request for the
- * same thread is still on its way joins that one: a click that lands while
- * the board is opening by itself must not open a second tab.
+ * Runs `show` for a thread, or joins the request already on its way for it: a
+ * click that lands while the board is opening by itself must not open a
+ * second tab.
  */
-export function openResearchBoard(target: BoardTarget): Promise<BoardOpening> {
+function joinOrShow(target: BoardTarget, show: () => Promise<BoardOpening>): Promise<BoardOpening> {
   const key = scopedThreadKey(target.threadRef);
   const pending = opening.get(key);
   if (pending !== undefined) return pending;
-  const next = showBoard(target)
+  const next = show()
     .catch(
       (): BoardOpening => ({
         _tag: "Unavailable",
@@ -219,4 +286,23 @@ export function openResearchBoard(target: BoardTarget): Promise<BoardOpening> {
     .finally(() => opening.delete(key));
   opening.set(key, next);
   return next;
+}
+
+/** Shows the board for a thread in the right panel. */
+export function openResearchBoard(target: BoardTarget): Promise<BoardOpening> {
+  return joinOrShow(target, () => showBoard(target));
+}
+
+/**
+ * Shows the board for a thread in a new browser tab, for a window that has no
+ * built-in browser and runs on the computer the server runs on (`boardPlace`).
+ * Call it while handling a click, which is when a browser lets a page open a
+ * tab.
+ */
+export function openResearchBoardInTab(target: BoardTarget): Promise<BoardOpening> {
+  const pending = opening.get(scopedThreadKey(target.threadRef));
+  if (pending !== undefined) return pending;
+  const tab = openEmptyTab();
+  if (tab === null) return Promise.resolve({ _tag: "Unavailable", message: BOARD_TAB_REFUSED });
+  return joinOrShow(target, () => showBoardInTab(target, tab));
 }
