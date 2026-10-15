@@ -3,7 +3,7 @@
  * app's stores so they can be tested: which browser tab already shows a board,
  * when a study's activity is news, and what the button says.
  */
-import type { PreviewSessionSnapshot } from "@t3tools/contracts";
+import type { PreviewRuntime, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { isLoopbackHost } from "@t3tools/shared/preview";
 
 import { CLINICAL_ACCESS_REFUSED, type ClinicalStatusView } from "./linceiAnswers";
@@ -218,8 +218,30 @@ export function createWatcherKeeper(
   };
 }
 
+/**
+ * Where a board's browser tab runs, or null when this window has no browser
+ * that reaches it. Vitrine answers on loopback only, so a tab reaches a board
+ * only when it runs on the server's computer: in the server's own browser, or
+ * in this window's browser when this window runs there too. Upstream opens
+ * the tabs of an environment elsewhere in this window's browser, which would
+ * look for the board on this computer; the board's tab runs on the server
+ * instead.
+ */
+export function boardTabRuntime(input: {
+  /** Where upstream runs a tab the user opens: on the server, or (undefined) in this window. */
+  readonly preferred: PreviewRuntime | undefined;
+  /** Whether this window has a browser of its own that runs on the server's computer. */
+  readonly ownBrowserBesideServer: boolean;
+  /** Whether the server can run browser tabs. */
+  readonly serverBrowser: boolean;
+}): PreviewRuntime | null {
+  if (input.preferred !== undefined) return input.preferred;
+  if (input.ownBrowserBesideServer) return "desktop";
+  return input.serverBrowser ? "server" : null;
+}
+
 export const BOARD_NEEDS_BROWSER =
-  "The research board needs Lincei's built-in browser, which this window does not have. Open the thread in the Lincei app.";
+  "The research board needs a browser on the computer Lincei runs on, which this window cannot use. Open the thread in the Lincei app on that computer.";
 
 export type BoardButtonMarker = "none" | "working" | "failed";
 

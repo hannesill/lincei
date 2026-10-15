@@ -6,7 +6,6 @@ import { FlaskConicalIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
-import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -18,7 +17,7 @@ import type { SessionPhase } from "~/types";
 import { clinicalToolsInstalled } from "./clinicalPresentation";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
-import { followAppAppearance, openResearchBoard } from "./openResearchBoard";
+import { followAppAppearance, openResearchBoard, useBoardShowable } from "./openResearchBoard";
 import {
   createResearchBoardWatcher,
   createWatcherKeeper,
@@ -87,9 +86,9 @@ export function ResearchBoardButton({ threadRef, cwd, openPreview, phase }: Rese
   const threadId = threadRef?.threadId ?? null;
   const folder = cwd ?? null;
   const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
-  // The board is a page in upstream's browser, which a plain browser window
-  // only has when the server can run one.
-  const canShowBoard = usePreviewAvailable(environmentId);
+  // The board is a page in upstream's browser that has to run on the server's
+  // computer, where Vitrine listens.
+  const canShowBoard = useBoardShowable(environmentId);
   const { view, refresh: refreshStatus } = useClinicalStatus(environmentId);
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
   const adjustPreview = useAtomCommand(previewEnvironment.adjust, { reportFailure: false });
