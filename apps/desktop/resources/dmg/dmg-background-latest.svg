@@ -1,26 +1,12 @@
 <?xml version="1.0"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="864" viewBox="0 0 640 432">
-  <defs>
-    <linearGradient id="veil" x1="0" y1="0" x2="0" y2="1">
-      <stop stop-color="#B7B7B7" stop-opacity="0"/>
-      <stop offset=".55" stop-color="#A5A5A5" stop-opacity=".24"/>
-      <stop offset="1" stop-color="#D1D1D1" stop-opacity=".4"/>
-    </linearGradient>
-    <linearGradient id="silk" x1="0" y1="0" x2="1" y2="0">
-      <stop stop-color="#C8C8C8"/>
-      <stop offset=".5" stop-color="#DBDBDB"/>
-      <stop offset="1" stop-color="#B5B5B5"/>
-    </linearGradient>
-  </defs>
-  <rect width="640" height="432" fill="#E9E9EB"/>
-  <path d="M-60 293C95 220 214 304 362 256S559 191 707 257" stroke="url(#veil)" stroke-width="146" fill="none" opacity="1" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M-60 306C113 252 223 298 367 272S553 242 707 280" stroke="url(#silk)" stroke-width="86" fill="none" opacity="1" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M-60 266C113 212 223 258 367 232S553 202 707 240" stroke="#F5F5F5" stroke-width="0.8" fill="none" opacity="0.42" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- Lincei monogram from apps/web/src/components/T3Wordmark.tsx. -->
-  <svg x="32" y="20" width="24" height="24" viewBox="0 0 24 24" fill="#303034">
-    <path fill-rule="evenodd" clip-rule="evenodd" d="M5 0h14a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H5a5 5 0 0 1-5-5V5a5 5 0 0 1 5-5Zm3.25 5.5v13h9v-2.6h-6.1V5.5h-2.9Z"/>
+  <rect width="640" height="432" fill="#FFFFFF"/>
+  <!-- Lincei's mark from apps/web/src/components/T3Wordmark.tsx. -->
+  <svg x="32" y="20" width="24" height="24" viewBox="0 0 16 16" fill="#1A1A1A">
+    <path fill-rule="evenodd" d="M0 0h14v14H0Zm1 1v12h12V1ZM14 2h2v14H2v-2h12ZM3.58 3v1.024h1.088v5.952H3.58V11h7.04V8.024h-.832q-.192 1.728-1.024 1.92H6.588V4.024h1.088V3Z"/>
   </svg>
-  <text x="320" y="104" fill="#303034" font-family="Helvetica" font-size="23" font-weight="700" text-anchor="middle">Drag Lincei into Applications.</text>
-  <path d="M270 204Q320 179 370 204M358 190L370 204L351 209" stroke="#505057" stroke-width="2.2" fill="none" opacity="1" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="320" y="367" fill="#626269" font-family="Helvetica" font-size="12" font-weight="400" text-anchor="middle">Once copied, open it from Applications.</text>
+  <text x="320" y="104" fill="#1A1A1A" font-family="Helvetica" font-size="23" font-weight="700" text-anchor="middle">Drag Lincei into Applications.</text>
+  <path d="M274 204H356" stroke="#1A1A1A" stroke-width="4"/>
+  <path d="M354 193L370 204L354 215Z" fill="#1A1A1A"/>
+  <text x="320" y="367" fill="#333333" font-family="Helvetica" font-size="12" font-weight="400" text-anchor="middle">Once copied, open it from Applications.</text>
 </svg>
