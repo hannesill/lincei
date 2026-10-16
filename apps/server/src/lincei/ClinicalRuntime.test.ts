@@ -623,6 +623,14 @@ describe("ClinicalRuntime.activate", () => {
     });
   });
 
+  it.effect("makes the server the owner of the boards Vitrine starts", () => {
+    const env: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
+    return Effect.gen(function* () {
+      yield* activateWith(env);
+      expect(env.VITRINE_OWNER_PID).toBe(String(process.pid));
+    });
+  });
+
   it.effect("leaves Vitrine's board name alone outside Windows", () => {
     const env: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
     return Effect.gen(function* () {
