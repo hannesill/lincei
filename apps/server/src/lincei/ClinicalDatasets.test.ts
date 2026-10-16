@@ -239,9 +239,15 @@ const diskM4 = Effect.fn(function* (input: {
   const rawRoot = (name: string) => path.join(dataDir, "raw_files", name);
   const parquetRoot = (name: string) => path.join(dataDir, "parquet", name);
   const database = (name: string) => path.join(dataDir, "databases", `${name}.duckdb`);
+  // With `/` between folders, as M4 names tables on every platform.
   const filesIn = (root: string, suffix: string) =>
     fileSystem.readDirectory(root, { recursive: true }).pipe(
-      Effect.map((entries) => entries.filter((entry) => entry.endsWith(suffix)).sort()),
+      Effect.map((entries) =>
+        entries
+          .filter((entry) => entry.endsWith(suffix))
+          .map((entry) => entry.split(path.sep).join("/"))
+          .sort(),
+      ),
       Effect.orElseSucceed((): Array<string> => []),
     );
 
@@ -598,6 +604,7 @@ describe("ClinicalDatasets", () => {
     it.effect("is converted again from the start by the next attempt", () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
         const { baseDir, dataDir } = yield* clinicalHome();
         const source = yield* rawFolder(...MIMIC_FILES);
         const twoConverted = yield* Deferred.make<void>();
@@ -629,9 +636,13 @@ describe("ClinicalDatasets", () => {
               // database without the third table.
               expect(yield* m4.tables("mimic-iv")).toEqual(MIMIC_TABLES);
               // What was removed is what M4 made, never what the user has.
-              expect((yield* fileSystem.readDirectory(source, { recursive: true })).sort()).toEqual(
-                ["hosp", ...MIMIC_FILES.slice(0, 2), "icu", ...MIMIC_FILES.slice(2)],
-              );
+              const left = yield* fileSystem.readDirectory(source, { recursive: true });
+              expect(left.map((entry) => entry.split(path.sep).join("/")).sort()).toEqual([
+                "hosp",
+                ...MIMIC_FILES.slice(0, 2),
+                "icu",
+                ...MIMIC_FILES.slice(2),
+              ]);
             }),
           { baseDir, listing: () => m4.listing("mimic-iv") },
         );

@@ -252,32 +252,39 @@ describe("ClinicalRuntime", () => {
     ),
   );
 
-  it.effect("offers M4's skills where agents look for skills, following a rebuilt bundle", () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const skillDirectory = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "lincei-agent-skills-",
-      });
-      let bundled = "sofa-score";
-      yield* withRuntime(
-        () => exited(0),
-        ({ runtime }) =>
-          Effect.gen(function* () {
-            const { python } = yield* runtime.provision;
-            expect(
-              yield* fileSystem.exists(path.join(skillDirectory, "sofa-score", "SKILL.md")),
-            ).toBe(true);
+  // The runtime here is a Mac's: it splits LINCEI_CLINICAL_SKILL_DIRS at `:`,
+  // which cuts a Windows path after its drive letter. ClinicalSkillLinks.test.ts
+  // covers Windows.
+  it.effect.skipIf(process.platform === "win32")(
+    "offers M4's skills where agents look for skills, following a rebuilt bundle",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const skillDirectory = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "lincei-agent-skills-",
+        });
+        let bundled = "sofa-score";
+        yield* withRuntime(
+          () => exited(0),
+          ({ runtime }) =>
+            Effect.gen(function* () {
+              const { python } = yield* runtime.provision;
+              expect(
+                yield* fileSystem.exists(path.join(skillDirectory, "sofa-score", "SKILL.md")),
+              ).toBe(true);
 
-            // A changed environment is rebuilt, and its M4 may bundle other skills.
-            yield* fileSystem.remove(python);
-            bundled = "kdigo-aki-staging";
-            expect((yield* runtime.provision).state).toBe("ready");
-            expect(yield* fileSystem.readDirectory(skillDirectory)).toEqual(["kdigo-aki-staging"]);
-          }),
-        { skillDirectory, bundledSkill: () => bundled },
-      );
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+              // A changed environment is rebuilt, and its M4 may bundle other skills.
+              yield* fileSystem.remove(python);
+              bundled = "kdigo-aki-staging";
+              expect((yield* runtime.provision).state).toBe("ready");
+              expect(yield* fileSystem.readDirectory(skillDirectory)).toEqual([
+                "kdigo-aki-staging",
+              ]);
+            }),
+          { skillDirectory, bundledSkill: () => bundled },
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("says what to do, without naming uv, when the installer cannot be downloaded", () =>
