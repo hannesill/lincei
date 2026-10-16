@@ -53,8 +53,8 @@ import * as UvInstallation from "./UvInstallation.ts";
  * depends on it.
  */
 const DEFAULT_CLINICAL_REQUIREMENTS = [
-  "m4-infra[research]>=0.5.6,<0.6",
-  "vitrine>=0.1.3,<0.2",
+  "m4-infra[research]>=0.5.7,<0.6",
+  "vitrine>=0.1.4,<0.2",
   "plotly>=6,<8",
 ] as const;
 
@@ -167,6 +167,9 @@ export const activate = Effect.fn("ClinicalRuntime.activate")(function* (baseDir
   // Lincei shows the research board beside the conversation. Without this, the
   // first card an agent publishes also opens the board in the system browser.
   env.VITRINE_OPEN_BROWSER = "0";
+  // Every board started from here, by the server or an agent, stops once this
+  // process exits, also when it is killed before ResearchBoard's finalizer runs.
+  env.VITRINE_OWNER_PID = String(process.pid);
   // On Windows Vitrine names its board 127.0.0.1, because some Windows browsers
   // do not resolve localhost subdomains. Lincei shows the board in Chromium,
   // which always does, and recognises a board by this name (isBoardPage).

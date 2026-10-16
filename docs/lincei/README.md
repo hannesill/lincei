@@ -202,8 +202,8 @@ removes it only when M4 reports completion. A marked dataset is never ready, and
 Download first removes the converted files and the database M4 reports for it, so everything is
 converted again; downloaded raw files are kept, so downloads still resume. Lincei removes those
 files only in its own store under `<home>`. With a store the user chose (`M4_DATA_DIR`) the job
-stops and says so. M4 0.5.6 fixes the cause and is now the minimum, so the mark can go once no
-environment set up with 0.5.5 is left (setup replaces M4 when the minimum changes).
+stops and says so. M4 0.5.6 fixes the cause and the minimum is later than that, so the mark can go
+once no environment set up with 0.5.5 is left (setup replaces M4 when the minimum changes).
 
 Credentialed datasets are downloaded with the user's own PhysioNet login, which Lincei never
 stores:
@@ -252,8 +252,8 @@ for AI services.
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
 study store in `.vitrine` under the directory a script runs in, and runs one server per store.
 A git worktree shares the store of its main checkout, so the threads of a project publish into
-one study wherever they run. Vitrine 0.1.3, the minimum, locks a study's index, so two agents
-publishing at once keep each other's cards.
+one study wherever they run. Since 0.1.3 Vitrine locks a study's index, so two agents publishing
+at once keep each other's cards.
 
 Three things follow from "the directory a script runs in", and each has bitten:
 
@@ -264,12 +264,12 @@ Three things follow from "the directory a script runs in", and each has bitten:
   the folder with `git add -A` after every turn. Vitrine writes a `.gitignore` into its store;
   before 0.1.2 the store showed up in the turn's changed files and went into the hidden
   checkpoint commits.
-- Vitrine's servers never stop by themselves and it has ten ports. The server stops the boards of
-  the folders it opened or watched when it shuts down (`ResearchBoard.ts`). On Windows it never
-  gets to: Windows has no SIGTERM, so the desktop app ends the server forcefully, no finalizer
-  runs, and the boards (detached by Vitrine) keep running until the user signs out. The next
-  `vitrine start` in a folder reuses its board, so this costs ports only across more than ten
-  folders.
+- Vitrine has ten ports, and its servers are detached from whoever started them. The server stops
+  the boards of the folders it opened or watched when it shuts down (`ResearchBoard.ts`), but a
+  server that is killed never gets to, which on Windows is every quit: Windows has no SIGTERM, so
+  the desktop app ends the server forcefully. So the server also sets `VITRINE_OWNER_PID` to its
+  own PID, and every board started in its environment, by the board button or an agent's script,
+  stops by itself once that process has exited (Vitrine 0.1.4).
 
 Vitrine opens the system browser when a script's first card starts its server. Lincei sets
 `VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2.
