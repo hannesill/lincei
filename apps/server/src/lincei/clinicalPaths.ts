@@ -23,6 +23,8 @@ export interface ClinicalPaths {
   readonly statePath: string;
   /** Holds one file per dataset whose preparation started and has not completed. */
   readonly preparingDir: string;
+  /** Histories of study folders whose history was turned off, kept to bring back. */
+  readonly studyHistoryDir: string;
 }
 
 export const clinicalPaths = (input: {
@@ -46,5 +48,6 @@ export const clinicalPaths = (input: {
     dataDir: input.environment.M4_DATA_DIR?.trim() || input.join(home, "m4_data"),
     statePath: input.join(home, "runtime.json"),
     preparingDir: input.join(home, "preparing"),
+    studyHistoryDir: input.join(home, "study-history"),
   };
 };

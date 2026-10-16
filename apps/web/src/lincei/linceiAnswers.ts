@@ -9,6 +9,7 @@ import type {
   ClinicalDatasetActions,
   ClinicalRuntimeStatus,
   LinceiResponse,
+  StudyHistory,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
@@ -266,4 +267,37 @@ export function datasetActionOutcome(result: LinceiCommandResult): DatasetAction
   return result.value._tag === "ClinicalDatasets"
     ? { accepted: true, datasets: result.value.datasets, actions: result.value.actions ?? null }
     : { accepted: false, message: TOOLS_NOT_READY };
+}
+
+/** The history a command answered with, and when, so it can outrank an older read. */
+export interface StudyHistoryAnswer {
+  readonly history: StudyHistory;
+  readonly at: number;
+}
+
+/**
+ * Reads the history query together with the newest answer a command gave.
+ * Turning the history on or off answers with the state afterwards, so the
+ * switch shows it at once instead of after the next read.
+ */
+export function studyHistoryView(
+  result: LinceiQueryResult | null,
+  answer: StudyHistoryAnswer | null,
+): AnswerView<StudyHistory> {
+  const read =
+    result?._tag === "Success"
+      ? result
+      : result?._tag === "Failure"
+        ? Option.getOrNull(result.previousSuccess)
+        : null;
+  const fromRead: StudyHistoryAnswer | null =
+    read?.value._tag === "StudyHistory"
+      ? { history: read.value.history, at: read.timestamp }
+      : null;
+  const newest =
+    fromRead === null || (answer !== null && answer.at > fromRead.at) ? answer : fromRead;
+  if (newest !== null) return { phase: "known", answer: newest.history };
+  if (result?._tag !== "Failure") return { phase: "loading" };
+  const problem = problemOf(result.cause);
+  return problem === null ? { phase: "loading" } : { phase: "failed", ...problem };
 }

@@ -184,6 +184,25 @@ export const ClinicalSkill = Schema.Struct({
 });
 export type ClinicalSkill = typeof ClinicalSkill.Type;
 
+/**
+ * Whether Lincei keeps a history of a project's folder, which is what lets a
+ * researcher undo the agent's changes to its files.
+ *
+ * - `on`: Lincei made the folder a git repository with data kept out of it.
+ * - `off`: a plain folder; it can be turned on.
+ * - `own`: the folder is, or is inside, a git repository Lincei did not make.
+ *   That keeps the history, and Lincei never changes it.
+ * - `unavailable`: Lincei keeps no history here; `message` says why.
+ */
+export const StudyHistory = Schema.Struct({
+  state: Schema.Literals(["on", "off", "own", "unavailable"]),
+  /** What the state means, or why the switch cannot be used, in words for the researcher. */
+  message: Schema.String,
+  /** Files kept out of the history for their size, relative to the folder. */
+  leftOut: Schema.Array(Schema.String),
+});
+export type StudyHistory = typeof StudyHistory.Type;
+
 export const LinceiRequest = Schema.Union([
   /** Reads the state of the clinical research tools. */
   Schema.TaggedStruct("ClinicalStatus", {}),
@@ -236,6 +255,13 @@ export const LinceiRequest = Schema.Union([
   Schema.TaggedStruct("AgentBriefing", {}),
   /** Reads the full text of one of M4's skills. */
   Schema.TaggedStruct("ClinicalSkillText", { name: Schema.String }),
+  /** Reads whether Lincei keeps a history of `folder`, a project folder on the server. */
+  Schema.TaggedStruct("StudyHistory", { folder: Schema.String }),
+  /**
+   * Starts or stops keeping that history. Stopping keeps what was recorded,
+   * and starting again brings it back.
+   */
+  Schema.TaggedStruct("StudyHistoryUpdate", { folder: Schema.String, on: Schema.Boolean }),
 ]);
 export type LinceiRequest = typeof LinceiRequest.Type;
 
@@ -263,6 +289,7 @@ export const LinceiResponse = Schema.Union([
     skills: Schema.Array(ClinicalSkill),
   }),
   Schema.TaggedStruct("ClinicalSkillText", { name: Schema.String, text: Schema.String }),
+  Schema.TaggedStruct("StudyHistory", { history: StudyHistory }),
 ]);
 export type LinceiResponse = typeof LinceiResponse.Type;
 

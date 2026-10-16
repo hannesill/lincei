@@ -398,7 +398,9 @@ const layerVcs = Layer.empty.pipe(
   ),
 );
 
-const layerCheckpointStore = CheckpointStore.layer.pipe(Layer.provide(layerVcsDriverRegistry));
+const layerCheckpointStore = LinceiServer.withStudyHistory(CheckpointStore.layer).pipe(
+  Layer.provide(layerVcsDriverRegistry),
+);
 
 const layerPortScanner = PortScanner.layer.pipe(Layer.provide(ProcessRunner.layer));
 

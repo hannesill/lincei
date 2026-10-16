@@ -28,6 +28,9 @@ describe("Clinical Data in settings search", () => {
     expect(firstResult("dataset location")?.anchor).toBe(CLINICAL_SETTINGS.location.id);
     expect(firstResult("research board")?.anchor).toBe(CLINICAL_SETTINGS.tools.id);
     expect(firstResult("vitrine")?.to).toBe("/settings/clinical");
+    for (const query of ["undo", "study history", "revert"]) {
+      expect(firstResult(query)?.anchor, query).toBe(CLINICAL_SETTINGS.history.id);
+    }
   });
 
   it("only points at anchors the page renders", () => {

@@ -5,9 +5,10 @@ import * as Option from "effect/Option";
 import type * as Path from "effect/Path";
 import type { ProjectionStoreV2 } from "./ProjectionStore.ts";
 import type * as ProjectStore from "./ProjectStore.ts";
+import * as StudyRestore from "../lincei/StudyRestore.ts";
 
 export const SHARED_WORKSPACE_RESTORE_MESSAGE =
-  "File restore requires an isolated worktree. This workspace may contain changes from another thread. Rewind the conversation without restoring files instead.";
+  "Another conversation may have changed files in this folder, so undoing files here could also undo its work. Choose “Keep file changes” instead; a conversation in an isolated worktree of its own can undo files.";
 
 // A checkpoint snapshots the whole checkout. Check at command admission and
 // again before provider rollback so a newly shared worktree is rejected too.
@@ -31,7 +32,7 @@ export const isCheckpointRestoreIsolated = Effect.fn("orchestrationV2.isCheckpoi
       );
     };
     const worktreePath = thread.worktreePath;
-    let shared = worktreePath == null;
+    let shared = worktreePath == null && !(yield* StudyRestore.allows(thread, scope, dependencies));
     if (!shared && worktreePath !== null) {
       // Storage cleanup may have removed the worktree; rollback recreates it.
       const resolve = (target: string) =>

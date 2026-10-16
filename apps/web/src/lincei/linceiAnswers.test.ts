@@ -5,6 +5,7 @@ import {
   type ClinicalDataset,
   type ClinicalRuntimeStatus,
   type LinceiResponse,
+  type StudyHistory,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -25,6 +26,7 @@ import {
   datasetActionOutcome,
   datasetListView,
   NO_ANSWER,
+  studyHistoryView,
 } from "./linceiAnswers";
 
 const status: ClinicalRuntimeStatus = {
@@ -236,6 +238,35 @@ describe("datasetListView", () => {
       phase: "failed",
       message: expect.stringContaining("not set up yet"),
     });
+  });
+});
+
+describe("studyHistoryView", () => {
+  const history = (state: StudyHistory["state"]): StudyHistory => ({
+    state,
+    message: state,
+    leftOut: [],
+  });
+  const read = (state: StudyHistory["state"], timestamp: number) =>
+    succeeded({ _tag: "StudyHistory", history: history(state) }, timestamp);
+
+  it("shows the switch as the newest answer has it, from a command or a read", () => {
+    // The researcher turned it on; an older read still says off.
+    const answer = { history: history("on"), at: 2_000 };
+    expect(studyHistoryView(read("off", 1_000), answer)).toEqual({
+      phase: "known",
+      answer: history("on"),
+    });
+    // The server started it by itself later on, or someone else turned it off.
+    expect(studyHistoryView(read("off", 3_000), answer)).toEqual({
+      phase: "known",
+      answer: history("off"),
+    });
+  });
+
+  it("says why a read failed, and waits through an interruption", () => {
+    expect(studyHistoryView(failed(broken), null)).toEqual({ phase: "failed", ...problem });
+    expect(studyHistoryView(failed(Cause.interrupt()), null)).toEqual({ phase: "loading" });
   });
 });
 

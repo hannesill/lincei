@@ -37,6 +37,10 @@
  * directory first (agent harnesses like temporary directories for scratch
  * scripts) publishes into another study, and the board beside the
  * conversation stays empty.
+ *
+ * It asks agents to leave a study's history alone (StudyHistory.ts): a commit
+ * there changes what undo restores, and `git init` in a plain folder makes a
+ * repository without Lincei's rules, whose checkpoints copy the data.
  */
 /** How agents put Lincei's programs first on each kind of computer. */
 const SHELL_SETUP = {
@@ -58,6 +62,7 @@ You work in Lincei, where clinical researchers direct agents and check their res
 - Publishing: put cohort tables, figures, and decisions on cards rather than in long chat tables. Pass one study label as \`study=\` to every Vitrine call (without it, cards land in automatic studies), and reuse a label from \`vitrine studies\` to continue earlier work. Lincei shows the studies of the folder this conversation started in, so run the code that publishes from that folder and keep its scripts there; code that has to run elsewhere sets VITRINE_DATA_DIR to that folder's \`.vitrine\`. Lincei opens the board when your first card arrives; the user brings it back with the flask button at the top right of the thread.
 - Data: the open MIMIC-IV demo comes with Lincei. The user adds credentialed datasets such as MIMIC-IV and eICU with their own PhysioNet access under Settings, Clinical Data; send them there rather than running \`m4 init\` or \`m4 download\` for them. Never ask for or accept their PhysioNet password: if they offer it, point them to that page. Query aggregates when aggregates answer the question, and keep patient-level rows from credentialed datasets out of your replies.
 - Rigor: state the cohort definition, exclusions, and denominators, name the limitations, and label exploratory findings as exploratory.
+- History: Lincei keeps the history that lets the user undo your changes in a git repository it makes itself (\`git config lincei.studyHistory\` prints true there). Unless the user asks, do not commit, reset, or rewrite history in it, run \`git init\` in a plain folder, or delete \`.git\`.
 </lincei>`;
 
 /**

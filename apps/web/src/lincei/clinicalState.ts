@@ -14,6 +14,7 @@ import type {
   EnvironmentId,
   LinceiRequest,
   LinceiResponse,
+  StudyHistory,
 } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -32,6 +33,8 @@ import {
   type DatasetListView,
   describeLinceiFailure,
   type LinceiQueryResult,
+  type StudyHistoryAnswer,
+  studyHistoryView,
 } from "./linceiAnswers";
 import { linceiCommand, linceiQuery } from "./linceiRequests";
 
@@ -217,4 +220,29 @@ export function useClinicalSkillText(
   const input = useMemo(() => ({ _tag: "ClinicalSkillText", name }) as const, [name]);
   const { result, refresh } = useLinceiRead(environmentId, wanted ? input : null);
   return { view: answerView(result, "ClinicalSkillText"), refresh };
+}
+
+/**
+ * Whether Lincei keeps a history of a project folder on an environment. The
+ * server can start one by itself at a conversation's first turn, so a
+ * surface that shows it asks again when the window regains focus.
+ */
+export function useStudyHistory(
+  environmentId: EnvironmentId | null,
+  folder: string,
+): {
+  readonly view: AnswerView<StudyHistory>;
+  readonly refresh: () => void;
+  /** Shows the history a command answered with, ahead of the next read. */
+  readonly accept: (history: StudyHistory) => void;
+} {
+  const input = useMemo(() => ({ _tag: "StudyHistory", folder }) as const, [folder]);
+  const { result, refresh } = useLinceiRead(environmentId, input);
+  const [answer, setAnswer] = useState<StudyHistoryAnswer | null>(null);
+  useRefreshWhileFocused(true, refresh);
+  return {
+    view: studyHistoryView(result, answer),
+    refresh,
+    accept: (history) => setAnswer({ history, at: Date.now() }),
+  };
 }
