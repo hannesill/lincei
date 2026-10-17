@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type Ref,
-} from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 
 const MAX_ZOOM = 8;
 
@@ -14,7 +6,6 @@ export interface ZoomableImageHandle {
   pan: (key: string) => boolean;
 }
 
-/** Zooms around the pointer and keeps the whole image accessible by dragging or scrolling. */
 export function ZoomableImage({
   src,
   name,
@@ -87,7 +78,7 @@ export function ZoomableImage({
     [],
   );
 
-  const changeZoom = useCallback((next: number, point?: { x: number; y: number }) => {
+  const changeZoom = (next: number, point?: { x: number; y: number }) => {
     const viewport = viewportRef.current;
     const previous = zoomRef.current;
     const clamped = Math.min(MAX_ZOOM, Math.max(1, next));
@@ -103,7 +94,7 @@ export function ZoomableImage({
     };
     zoomRef.current = clamped;
     setZoom(clamped);
-  }, []);
+  };
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -150,7 +141,7 @@ export function ZoomableImage({
         aria-label={`${name}, zoomable image`}
         aria-description="Click to zoom in or return to fit. Scroll to zoom, drag to pan. Use Enter to toggle zoom, plus or minus to zoom, and 0 to fit."
         tabIndex={0}
-        className="max-w-[var(--media-width)] overflow-auto overscroll-contain rounded-lg bg-background shadow-2xl ring-1 ring-border/70 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="max-w-[var(--media-width)] overflow-auto overscroll-contain rounded-lg bg-background shadow-2xl ring-1 ring-border/70 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring"
         style={{
           width: width || undefined,
           height: height || undefined,

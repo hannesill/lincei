@@ -22,7 +22,7 @@ import {
   type ClinicalRuntimeStatus,
 } from "@t3tools/contracts";
 import { setRuntimeProductContext } from "@t3tools/provider-core/server/runtimeInstructions";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -150,8 +150,8 @@ export const toolsInstalled = (status: ClinicalRuntimeStatus) =>
  */
 export const activate = Effect.fn("ClinicalRuntime.activate")(function* (baseDir: string) {
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
-  const env = yield* HostProcessEnvironment;
+  const platform = yield* HostProcess.Platform;
+  const env = yield* HostProcess.Environment;
   const paths = clinicalPaths({ baseDir, platform, environment: env, join: path.join });
   const delimiter = platform === "win32" ? ";" : ":";
   const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
@@ -232,8 +232,8 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
-  const hostEnvironment = yield* HostProcessEnvironment;
+  const platform = yield* HostProcess.Platform;
+  const hostEnvironment = yield* HostProcess.Environment;
   const processRunner = yield* ProcessRunner.ProcessRunner;
   const uvServices = yield* Effect.context<
     FileSystem.FileSystem | Path.Path | HttpClient.HttpClient | ProcessRunner.ProcessRunner
