@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 
 import { usePrimaryCloudLinkState } from "~/cloud/primaryCloudLinkState";
@@ -11,12 +10,12 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
 import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
-import { useLinceiSettingsSearchItems } from "../../lincei/mode/settings";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
 } from "./settingsSearch";
+import { useLinceiSettingsSearchItems } from "../../lincei/mode/settings";
 
 export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
   const { environments } = useEnvironments();
@@ -33,46 +32,63 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
     cloudLinkState?.linkRevoked !== true &&
     (cloudLinkState?.managedTunnelActive ?? cloudLinkState?.linked ?? false);
 
-  const available = useMemo(
-    () =>
-      filterAvailableSettingsSearchItems({
-        localEnvironmentDisabled,
-        hasCloudPublicConfig: hasCloudPublicConfig(),
-        hasEnvironment: environments.some((environment) => environment.serverConfig !== null),
-        hasProviderSettingsEnvironment: environments.some((environment) =>
-          isProviderSettingsEnvironmentAvailable({
-            connectionPhase: environment.connection.phase,
-            hasServerConfig: environment.serverConfig !== null,
-          }),
-        ),
-        hasMacProviderSettingsEnvironment: environments.some(
-          (environment) =>
-            (scopeSearch.machine === undefined ||
-              environment.environmentId === scopeSearch.machine) &&
-            environment.serverConfig?.environment.platform.os === "darwin" &&
-            isProviderSettingsEnvironmentAvailable({
-              connectionPhase: environment.connection.phase,
-              hasServerConfig: true,
-            }),
-        ),
-        canManageLocalBackend,
-        isWslSettingsRowVisible: isWslSettingsRowVisible({
-          state: desktopWsl.data,
-          error: desktopWsl.error,
-        }),
-        hasThreadAutoSettlement:
-          getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0,
-        managedTunnelActive,
+  const available = useFilteredSettingsSearchItems({
+    localEnvironmentDisabled,
+    hasCloudPublicConfig: hasCloudPublicConfig(),
+    hasEnvironment: environments.some((environment) => environment.serverConfig !== null),
+    hasProviderSettingsEnvironment: environments.some((environment) =>
+      isProviderSettingsEnvironmentAvailable({
+        connectionPhase: environment.connection.phase,
+        hasServerConfig: environment.serverConfig !== null,
       }),
-    [
-      managedTunnelActive,
-      canManageLocalBackend,
-      desktopWsl.data,
-      desktopWsl.error,
-      environments,
-      localEnvironmentDisabled,
-      scopeSearch.machine,
-    ],
-  );
+    ),
+    hasMacProviderSettingsEnvironment: environments.some(
+      (environment) =>
+        (scopeSearch.machine === undefined || environment.environmentId === scopeSearch.machine) &&
+        environment.serverConfig?.environment.platform.os === "darwin" &&
+        isProviderSettingsEnvironmentAvailable({
+          connectionPhase: environment.connection.phase,
+          hasServerConfig: true,
+        }),
+    ),
+    canManageLocalBackend,
+    isWslSettingsRowVisible: isWslSettingsRowVisible({
+      state: desktopWsl.data,
+      error: desktopWsl.error,
+    }),
+    hasThreadAutoSettlement:
+      getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0,
+    managedTunnelActive,
+  });
   return useLinceiSettingsSearchItems(available);
+}
+
+// The availability flags are primitives, so caching on them keeps the item list stable for the
+// search memo and the command palette while environments update.
+function useFilteredSettingsSearchItems(
+  availability: Required<Parameters<typeof filterAvailableSettingsSearchItems>[0]>,
+) {
+  "use memo";
+  const {
+    localEnvironmentDisabled,
+    hasCloudPublicConfig,
+    hasEnvironment,
+    hasProviderSettingsEnvironment,
+    hasMacProviderSettingsEnvironment,
+    canManageLocalBackend,
+    isWslSettingsRowVisible,
+    hasThreadAutoSettlement,
+    managedTunnelActive,
+  } = availability;
+  return filterAvailableSettingsSearchItems({
+    localEnvironmentDisabled,
+    hasCloudPublicConfig,
+    hasEnvironment,
+    hasProviderSettingsEnvironment,
+    hasMacProviderSettingsEnvironment,
+    canManageLocalBackend,
+    isWslSettingsRowVisible,
+    hasThreadAutoSettlement,
+    managedTunnelActive,
+  });
 }

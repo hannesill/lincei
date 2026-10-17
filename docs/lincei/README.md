@@ -81,10 +81,10 @@ Then, for each conflict:
   `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
   `useAvailableSettingsSearchItems.ts`, `SettingsPanels.tsx`, `CommandPalette.tsx`, `localApi.ts`,
   `state/server.ts`, `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
-  `git show HEAD -- <file>` shows what it was. Every hook is an import of something under
-  `lincei/` and one line that uses it, so `git grep -n lincei -- <file>` on the old version lists
-  them. `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its
-  hook. The hooks in `build-desktop-artifact.ts` and `electron-launcher.mjs` are identity rules,
+  `git diff "$(git merge-base HEAD MERGE_HEAD)" HEAD -- <file>` lists every Lincei line in it,
+  including ones without the word lincei (the Clinical page's icon in `SettingsSidebarNav.tsx`).
+  `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its hook. The
+  hooks in `build-desktop-artifact.ts` and `electron-launcher.mjs` are identity rules,
   so `apply` restores them. A hook that adds an entry to a list goes first in it: upstream appends
   at the end, and an entry there conflicts with every one it adds.
 - **`apps/desktop/resources/installer.nsh`** (only if upstream starts customizing its Windows
