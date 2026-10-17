@@ -28,6 +28,8 @@ const m4Dataset = (
     readonly parquet_root?: string;
     readonly db_path?: string;
     readonly prepared?: boolean;
+    readonly dua_url?: string;
+    readonly dataset_page_url?: string;
   },
 ) => ({
   name,
@@ -82,6 +84,7 @@ const M4_WITH_STDIN_LOGIN = capabilitiesWith(
 /** What `m4 download <name> --command-only --json` reports: a source, and its view of a raw folder. */
 const planOf = (fields: {
   readonly file_listing_url?: string;
+  readonly access_url?: string;
   readonly layout?: {
     readonly ok: boolean;
     readonly warnings?: ReadonlyArray<string>;
@@ -335,6 +338,39 @@ const rawFolder = Effect.fn(function* (...files: ReadonlyArray<string>) {
   return folder;
 });
 
+const ADA = { username: "ada", password: Redacted.make("not-shown") };
+
+/** How M4 lists a credentialed dataset no one has downloaded. */
+const LOCKED = { setup_state: "credentials_required", requires_authentication: true } as const;
+
+/** M4 when PhysioNet refuses the account (HTTP 403) while it downloads. */
+const refusedByPhysioNet = (run: Run) =>
+  Effect.sync(() => {
+    run.onStdoutChunk?.(
+      events({
+        event: "operation_failed",
+        command: "download",
+        error: {
+          code: "physionet_access_forbidden",
+          message: "PhysioNet access is forbidden for https://physionet.org/files/mimiciv/.",
+        },
+      }),
+    );
+    return exited(1);
+  });
+
+/** The datasets after PhysioNet refused a download of MIMIC-IV, on M4 as `options` describe it. */
+const refusedDownload = (options: Parameters<typeof withDatasets>[2]) =>
+  withDatasets(
+    refusedByPhysioNet,
+    ({ datasets }) =>
+      Effect.gen(function* () {
+        yield* Fiber.await(yield* datasets.download({ name: "mimic-iv", credentials: ADA }));
+        return yield* datasets.list;
+      }),
+    options,
+  );
+
 const MIMIC_FILES = ["hosp/admissions.csv.gz", "hosp/patients.csv.gz", "icu/chartevents.csv.gz"];
 const MIMIC_TABLES = [
   "hosp/admissions.parquet",
@@ -420,43 +456,73 @@ describe("ClinicalDatasets", () => {
   );
 
   it.effect("keeps why a job failed until it is dismissed", () =>
-    withDatasets(
-      (run) =>
-        Effect.sync(() => {
-          run.onStdoutChunk?.(
-            events({
-              event: "operation_failed",
-              command: "download",
-              error: {
-                code: "physionet_access_forbidden",
-                message: "PhysioNet access is forbidden for https://physionet.org/files/mimiciv/.",
-              },
-            }),
-          );
-          return exited(1);
-        }),
-      ({ datasets, commands }) =>
-        Effect.gen(function* () {
-          yield* Fiber.await(
-            yield* datasets.download({
-              name: "mimic-iv",
-              credentials: { username: "ada", password: Redacted.make("not-shown") },
-            }),
-          );
-          expect(jobOf(yield* datasets.list, "mimic-iv")).toMatchObject({
-            state: "failed",
-            message: expect.stringContaining(
-              "This PhysioNet account has no access to mimic-iv yet",
-            ),
-            detail: "PhysioNet access is forbidden for https://physionet.org/files/mimiciv/.",
-          });
-          // A failed download is not followed by an attempt to prepare nothing.
-          expect(commands.some((args) => args[0] === "init")).toBe(false);
+    withDatasets(refusedByPhysioNet, ({ datasets, commands }) =>
+      Effect.gen(function* () {
+        yield* Fiber.await(yield* datasets.download({ name: "mimic-iv", credentials: ADA }));
+        expect(jobOf(yield* datasets.list, "mimic-iv")).toMatchObject({
+          state: "failed",
+          // M4 names no page for the agreement here, so every step is named.
+          message:
+            "This PhysioNet account has no access to mimic-iv yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Download again.",
+          detail: "PhysioNet access is forbidden for https://physionet.org/files/mimiciv/.",
+        });
+        // A failed download is not followed by an attempt to prepare nothing.
+        expect(commands.some((args) => args[0] === "init")).toBe(false);
 
-          yield* datasets.cancel("mimic-iv");
-          expect(jobOf(yield* datasets.list, "mimic-iv")).toBeUndefined();
-        }),
+        yield* datasets.cancel("mimic-iv");
+        expect(jobOf(yield* datasets.list, "mimic-iv")).toBeUndefined();
+      }),
     ),
+  );
+
+  it.effect("sends an account PhysioNet refused to the page where it signs the agreement", () =>
+    Effect.gen(function* () {
+      const page = "https://physionet.org/content/mimiciv/";
+      for (const { options, listed } of [
+        // M4 0.5.7 names the page only in its download plan.
+        { options: { plan: () => planOf({ access_url: page }) }, listed: false },
+        // Later releases list it with the dataset, by one name or the other.
+        {
+          options: { listing: listingOf(m4Dataset("mimic-iv", { ...LOCKED, dua_url: page })) },
+          listed: true,
+        },
+        {
+          options: {
+            listing: listingOf(m4Dataset("mimic-iv", { ...LOCKED, dataset_page_url: page })),
+          },
+          listed: true,
+        },
+      ]) {
+        const datasets = yield* refusedDownload(options);
+        expect(datasetOf(datasets, "mimic-iv")?.agreementUrl).toBe(listed ? page : undefined);
+        // The agreement first: an account with access to other datasets most often lacks only it.
+        expect(jobOf(datasets, "mimic-iv")?.message).toBe(
+          "This PhysioNet account has no access to mimic-iv yet. Sign the data use agreement on https://physionet.org/content/mimiciv/, then choose Download again. If PhysioNet does not offer you the agreement there, the account first needs credentialing and the required training.",
+        );
+      }
+    }),
+  );
+
+  it.effect("names no agreement page that is not one on physionet.org", () =>
+    Effect.gen(function* () {
+      for (const options of [
+        // What M4 names for a dataset it knows no page of: the file listing.
+        { plan: () => planOf({ access_url: "https://physionet.org/files/mimiciv/3.1/" }) },
+        // What a file in M4's dataset store can make of a dataset's pages.
+        { plan: () => planOf({ access_url: "https://example.test/sign-here/" }) },
+        {
+          listing: listingOf(
+            m4Dataset("mimic-iv", { ...LOCKED, dua_url: "http://physionet.org/content/mimiciv/" }),
+          ),
+        },
+      ]) {
+        const datasets = yield* refusedDownload(options);
+        expect(datasetOf(datasets, "mimic-iv")?.agreementUrl).toBeUndefined();
+        expect(jobOf(datasets, "mimic-iv")?.message).toContain(
+          "It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org.",
+        );
+      }
+    }),
   );
 
   it.effect("says what to do next when M4 fails, and keeps what M4 printed as the detail", () =>

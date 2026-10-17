@@ -19,7 +19,7 @@ import {
 import { useClinicalDatasets } from "./clinicalState";
 import { datasetActionOutcome, type DatasetActionOutcome } from "./linceiAnswers";
 import { linceiCommand } from "./linceiRequests";
-import { PhysioNetLink, physioNetProjectPage } from "./physioNet";
+import { PhysioNetLink, PhysioNetLinkedText, physioNetProjectPage } from "./physioNet";
 import { PhysioNetDownloadDialog } from "./PhysioNetDownloadDialog";
 import { TechnicalDetails } from "./TechnicalDetails";
 
@@ -80,7 +80,7 @@ function DatasetRow({
   const progress = running ? describeJobProgress(job) : null;
   // Where the account gets access: the data use agreement is signed on the dataset's own page.
   const projectPage =
-    dataset.requiresCredentials && dataset.state !== "ready" ? physioNetProjectPage(name) : null;
+    dataset.requiresCredentials && dataset.state !== "ready" ? physioNetProjectPage(dataset) : null;
   return (
     <li className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:gap-6 sm:px-4">
       <div className="min-w-0 flex-1 space-y-1">
@@ -114,7 +114,9 @@ function DatasetRow({
         )}
         {job?.state === "failed" ? (
           <div className="space-y-1 text-xs">
-            <p className="text-destructive">{withDatasetName(job.message, name)}</p>
+            <p className="text-destructive">
+              <PhysioNetLinkedText text={withDatasetName(job.message, name)} />
+            </p>
             {job.detail === undefined || job.detail === job.message ? null : (
               <TechnicalDetails label="Show what M4 reported" text={job.detail} />
             )}
