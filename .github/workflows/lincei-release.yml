@@ -64,10 +64,12 @@ jobs:
         run: vp test run src/lincei
 
   # One build per platform and architecture, each on a GitHub-hosted runner.
-  # The Intel DMG is cross-built on Apple Silicon, as upstream does. Linux
-  # builds run on their own architecture: node-pty compiles from source there,
-  # and the browser secret helper links against the host's libsecret. Windows
-  # arm64 runs on windows-11-arm, which GitHub offers to public repositories.
+  # The Intel DMG is cross-built on Apple Silicon, as upstream does. The Macs
+  # run macos-26 for Xcode 26's actool, which compiles the macOS 26 app icon
+  # (scripts/lincei/macIcon.ts). Linux builds run on their own architecture:
+  # node-pty compiles from source there, and the browser secret helper links
+  # against the host's libsecret. Windows arm64 runs on windows-11-arm, which
+  # GitHub offers to public repositories.
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
@@ -80,14 +82,14 @@ jobs:
       matrix:
         include:
           - label: macOS arm64 DMG
-            runner: macos-15
+            runner: macos-26
             platform: mac
             target: dmg
             arch: arm64
             rust_target: aarch64-apple-darwin
             ext: dmg
           - label: macOS x64 DMG
-            runner: macos-15
+            runner: macos-26
             platform: mac
             target: dmg
             arch: x64

@@ -5,7 +5,8 @@
  * Upstream draws its icons in Icon Composer (`assets/<variant>/app-icon.icon`) and exports them
  * with `vp run icons:export`, which would write T3 Code's icons back: do not run it. Lincei's
  * icons are plain geometry instead, rendered with sharp to the files upstream's builds already
- * read (`BRAND_ASSET_PATHS`), so no build script changes:
+ * read (`BRAND_ASSET_PATHS`). The one file upstream has no counterpart for is Lincei's own Icon
+ * Composer project beside each macOS PNG, which `macIcon.ts` compiles for macOS 26:
  *
  *   node scripts/lincei/icons.ts
  *
@@ -22,6 +23,7 @@ import sharp from "sharp";
 
 import { BRAND_ASSET_PATHS, DEVELOPMENT_PUBLIC_ICON_OVERRIDES } from "../lib/brand-assets.ts";
 import { encodePngIco, WINDOWS_ICON_SIZES } from "../lib/icon-export.ts";
+import { linceiMacIconProject } from "./macIcon.ts";
 
 /**
  * The mark on a 16-unit grid: the card (0–14) with a one-unit outline and a two-unit hard shadow,
@@ -87,6 +89,40 @@ function macosIcon(palette: Palette): string {
   );
 }
 
+/** `#rrggbb` as Icon Composer writes a colour. */
+function iconComposerColor(hex: string): string {
+  const channels = [1, 3, 5].map((start) =>
+    (Number.parseInt(hex.slice(start, start + 2), 16) / 255).toFixed(5),
+  );
+  return `srgb:${channels.join(",")},1.00000`;
+}
+
+/**
+ * macOS 26: an Icon Composer project with the mark as its one layer on a solid tile. Glass,
+ * specular, shadow and translucency are off, so Tahoe draws the mark flat in its own ink. The
+ * layer is the full canvas, which Tahoe fills with its tile, so `TAHOE_MARK_SHARE` is the mark's
+ * width as a share of that tile.
+ */
+const TAHOE_MARK_SHARE = 0.55;
+function iconComposerProject(palette: Palette) {
+  const iconJson = {
+    fill: { solid: iconComposerColor(palette.paper) },
+    groups: [
+      {
+        layers: [{ "image-name": "mark.svg", name: "Mark", glass: false }],
+        shadow: { kind: "none", opacity: 0 },
+        translucency: { enabled: false, value: 0 },
+        specular: false,
+      },
+    ],
+    "supported-platforms": { squares: ["macOS"] },
+  };
+  return {
+    iconJson: `${JSON.stringify(iconJson, null, 2)}\n`,
+    markSvg: svg(1024, onTile(palette, 0, 1024, TAHOE_MARK_SHARE)),
+  };
+}
+
 /** Home-screen icon: opaque, square, the platform rounds it. Also the web app's splash image. */
 const touchIcon = (palette: Palette) =>
   svg(
@@ -122,8 +158,12 @@ async function variantFiles(
       })),
     ),
   );
+  const project = linceiMacIconProject(paths.macos);
+  const { iconJson, markSvg } = iconComposerProject(palette);
   return [
     [paths.macos, macos],
+    [NodePath.join(project, "icon.json"), Buffer.from(iconJson)],
+    [NodePath.join(project, "Assets", "mark.svg"), Buffer.from(markSvg)],
     [paths.universal, macos],
     [paths.windowsIco, ico],
     [paths.faviconIco, ico],
@@ -182,6 +222,7 @@ for (const [file, contents] of files) {
   const absolutePath = NodePath.join(repoRoot, file);
   const current = NodeFS.existsSync(absolutePath) ? NodeFS.readFileSync(absolutePath) : undefined;
   if (current?.equals(contents)) continue;
+  NodeFS.mkdirSync(NodePath.dirname(absolutePath), { recursive: true });
   NodeFS.writeFileSync(absolutePath, contents);
   changed += 1;
 }
