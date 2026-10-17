@@ -5,7 +5,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { ChildProcess } from "effect/process";
 
-import { LinceiMacIconCatalogError, stageLinceiMacIconCatalog } from "./macIcon.ts";
+import {
+  addLinceiMacIconToBuildConfig,
+  LINCEI_MAC_ASSET_CATALOG,
+  LinceiMacIconCatalogError,
+  stageLinceiMacIconCatalog,
+} from "./macIcon.ts";
 
 /** A variant directory with the macOS PNG's path and, unless `withProject` is false, the project. */
 const variant = (withProject = true) =>
@@ -85,4 +90,21 @@ it.layer(NodeServices.layer)("stageLinceiMacIconCatalog", (it) => {
       }),
     ),
   );
+});
+
+it("adds the catalog and CFBundleIconName to the mac config and keeps upstream's entries", () => {
+  const build: Record<string, unknown> = {
+    mac: {
+      icon: "icon.icns",
+      extendInfo: { NSScreenCaptureUsageDescription: "capture" },
+    },
+  };
+
+  addLinceiMacIconToBuildConfig(build);
+
+  assert.deepStrictEqual(build.mac, {
+    icon: "icon.icns",
+    extraResources: [LINCEI_MAC_ASSET_CATALOG],
+    extendInfo: { NSScreenCaptureUsageDescription: "capture", CFBundleIconName: "Lincei" },
+  });
 });
