@@ -431,7 +431,7 @@ glass, specular, shadow and translucency off. The desktop build compiles it with
 the release builds Macs on `macos-26`. The `.app` that
 `apps/desktop/scripts/electron-launcher.mjs` builds for a local run compiles the same project
 ([`lincei/macIconCatalog.mjs`](../../apps/desktop/scripts/lincei/macIconCatalog.mjs)) and keeps
-the gray icon where actool is older. Upstream's `app-icon.icon` projects stay T3 Code's, because
+the gray icon where actool is older, until a newer one is installed or selected. Upstream's `app-icon.icon` projects stay T3 Code's, because
 the iOS build reads them.
 
 ## The `lincei://` scheme
