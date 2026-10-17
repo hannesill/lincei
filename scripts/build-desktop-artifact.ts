@@ -2397,12 +2397,6 @@ function stageMacIcons(stageResourcesDir: string, sourcePng: string, verbose: bo
     });
 
     yield* generateMacIconSet(sourcePng, iconIcnsPath, tmpRoot, path, verbose);
-    yield* LinceiMacIcon.stageLinceiMacIconCatalog(
-      sourcePng,
-      stageResourcesDir,
-      tmpRoot,
-      (command) => runCommand(command, { label: "actool mac icon", verbose }),
-    );
   });
 }
 
@@ -2726,12 +2720,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
-      extraResources: [LinceiMacIcon.LINCEI_MAC_ASSET_CATALOG],
       category: "public.app-category.developer-tools",
       extendInfo: {
         NSScreenCaptureUsageDescription:
           "Lincei captures the active window when you use the window capture shortcut.",
-        CFBundleIconName: LinceiMacIcon.LINCEI_MAC_ICON_NAME,
       },
       protocols: [
         {
@@ -3751,6 +3743,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     },
   };
 
+  yield* LinceiMacIcon.addLinceiMacIcon(
+    options.platform,
+    stagePackageJson.build,
+    path.join(repoRoot, iconAssets.macIconPng),
+    stageProdResourcesDir,
+  );
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
   const stageWorkspaceConfig = createStageWorkspaceConfig({

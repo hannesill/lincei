@@ -11,9 +11,8 @@
  * puts in the catalog, and `icon.icns` stays for whatever reads `CFBundleIconFile`, such as the
  * DMG's volume icon.
  *
- * `scripts/build-desktop-artifact.ts` calls `stageLinceiMacIconCatalog` from `stageMacIcons` and
- * ships the catalog through `LINCEI_MAC_ASSET_CATALOG`. Compiling an `.icon` needs actool from
- * Xcode 26 or newer.
+ * `scripts/build-desktop-artifact.ts` calls `addLinceiMacIcon` once, its only hook for this.
+ * Compiling an `.icon` needs actool from Xcode 26 or newer.
  */
 import * as NodePath from "node:path";
 
@@ -21,7 +20,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /** The icon's name in the asset catalog and in `CFBundleIconName`, and the project's file name. */
 export const LINCEI_MAC_ICON_NAME = "Lincei";
@@ -57,7 +56,7 @@ export function stageLinceiMacIconCatalog<E, R>(
   macIconPng: string,
   stageResourcesDir: string,
   tmpRoot: string,
-  run: (command: ChildProcess.Command) => Effect.Effect<void, E, R>,
+  run: (command: ChildProcess.Command) => Effect.Effect<unknown, E, R>,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -72,7 +71,7 @@ export function stageLinceiMacIconCatalog<E, R>(
 
     const outputDir = path.join(tmpRoot, "lincei-icon-catalog");
     yield* fs.makeDirectory(outputDir, { recursive: true });
-    yield* run(
+    const output = yield* run(
       ChildProcess.make("xcrun", [
         "actool",
         project,
@@ -96,9 +95,60 @@ export function stageLinceiMacIconCatalog<E, R>(
     if (!(yield* fs.exists(catalog))) {
       return yield* new LinceiMacIconCatalogError({
         path: project,
-        reason: "actool wrote no Assets.car; compiling an .icon needs Xcode 26 or newer",
+        reason: [
+          "actool wrote no Assets.car; compiling an .icon needs Xcode 26 or newer",
+          typeof output === "string" ? output.trim() : "",
+        ]
+          .filter(Boolean)
+          .join(": "),
       });
     }
     yield* fs.copyFile(catalog, path.join(stageResourcesDir, "Assets.car"));
   });
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Adds the staged catalog and `CFBundleIconName` to electron-builder's `mac` config. */
+export function addLinceiMacIconToBuildConfig(build: Record<string, unknown>) {
+  const mac = isRecord(build.mac) ? build.mac : {};
+  build.mac = {
+    ...mac,
+    extraResources: [
+      ...(Array.isArray(mac.extraResources) ? mac.extraResources : []),
+      LINCEI_MAC_ASSET_CATALOG,
+    ],
+    extendInfo: {
+      ...(isRecord(mac.extendInfo) ? mac.extendInfo : {}),
+      CFBundleIconName: LINCEI_MAC_ICON_NAME,
+    },
+  };
+}
+
+/** Runs actool and returns what it printed; whether it wrote a catalog says more than its exit. */
+const runActool = (command: ChildProcess.Command) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    return yield* spawner.string(command, { includeStderr: true });
+  });
+
+/**
+ * The desktop build's hook, called after `createBuildConfig` once the stage's `prod-resources`
+ * exist. A Mac build gets the catalog staged there and named in its `mac` config, or fails;
+ * other platforms are left alone.
+ */
+export function addLinceiMacIcon(
+  platform: string,
+  build: Record<string, unknown>,
+  macIconPng: string,
+  stageProdResourcesDir: string,
+) {
+  return Effect.gen(function* () {
+    if (platform !== "mac") return;
+    const fs = yield* FileSystem.FileSystem;
+    const tmpRoot = yield* fs.makeTempDirectoryScoped({ prefix: "lincei-icon-catalog-" });
+    yield* stageLinceiMacIconCatalog(macIconPng, stageProdResourcesDir, tmpRoot, runActool);
+    addLinceiMacIconToBuildConfig(build);
+  }).pipe(Effect.scoped);
 }
