@@ -23,6 +23,7 @@ import gnomeCaptureBundle from "../apps/desktop/gnome-extension/bundle.json" wit
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
 import { applyWebBrandAssets } from "./apply-web-brand-assets.ts";
+import * as LinceiMacIcon from "./lincei/macIcon.ts";
 import {
   BRAND_ASSET_PATHS,
   resolveWebAssetBrandForChannel,
@@ -2396,6 +2397,12 @@ function stageMacIcons(stageResourcesDir: string, sourcePng: string, verbose: bo
     });
 
     yield* generateMacIconSet(sourcePng, iconIcnsPath, tmpRoot, path, verbose);
+    yield* LinceiMacIcon.stageLinceiMacIconCatalog(
+      sourcePng,
+      stageResourcesDir,
+      tmpRoot,
+      (command) => runCommand(command, { label: "actool mac icon", verbose }),
+    );
   });
 }
 
@@ -2719,10 +2726,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
+      extraResources: [LinceiMacIcon.LINCEI_MAC_ASSET_CATALOG],
       category: "public.app-category.developer-tools",
       extendInfo: {
         NSScreenCaptureUsageDescription:
           "Lincei captures the active window when you use the window capture shortcut.",
+        CFBundleIconName: LinceiMacIcon.LINCEI_MAC_ICON_NAME,
       },
       protocols: [
         {
