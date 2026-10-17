@@ -10,6 +10,7 @@
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type {
   ClinicalDataset,
+  ClinicalDatasetActions,
   EnvironmentId,
   LinceiRequest,
   LinceiResponse,
@@ -118,7 +119,10 @@ export function useClinicalDatasets(
   readonly takingLong: boolean;
   readonly refresh: () => void;
   /** Shows the list a dataset command answered with, ahead of the next read. */
-  readonly accept: (datasets: ReadonlyArray<ClinicalDataset>) => void;
+  readonly accept: (
+    datasets: ReadonlyArray<ClinicalDataset>,
+    actions: ClinicalDatasetActions | null,
+  ) => void;
 } {
   const { result, refresh } = useLinceiRead(environmentId, enabled ? CLINICAL_DATASETS : null);
   const [answer, setAnswer] = useState<DatasetAnswer | null>(null);
@@ -171,7 +175,7 @@ export function useClinicalDatasets(
       setAttempt((count) => count + 1);
       refresh();
     },
-    accept: (datasets) => setAnswer({ datasets, at: Date.now() }),
+    accept: (datasets, actions) => setAnswer({ datasets, actions, at: Date.now() }),
   };
 }
 

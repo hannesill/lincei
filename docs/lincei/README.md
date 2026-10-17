@@ -232,8 +232,8 @@ Where the installed M4 has `--physionet-credentials-stdin` (0.5.6 and later), Li
 every platform. An environment still on M4 0.5.5 gets the login through
 `--physionet-credentials-file /dev/stdin`, which works on macOS only: on Linux a child process's
 standard input is a socket that cannot be opened by path, and Windows has no such path. There the
-server reports credentialed datasets as not downloadable, so the clients offer "Add from folder"
-and never ask for a password.
+server reports credentialed datasets as not downloadable, so the clients only offer to add them
+from a folder and never ask for a password.
 
 PhysioNet reads a login only from clients whose user agent starts with `Wget/` or `libwfdb/`
 (`HTTP_AUTH_USER_AGENT` in physionet-build's `project/utility.py`) and answers everyone else 403, as

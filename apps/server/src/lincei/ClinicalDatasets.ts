@@ -27,7 +27,12 @@
  *
  * @module ClinicalDatasets
  */
-import type { ClinicalDataset, ClinicalDatasetJob, PhysioNetCredentials } from "@t3tools/contracts";
+import type {
+  ClinicalDataset,
+  ClinicalDatasetActions,
+  ClinicalDatasetJob,
+  PhysioNetCredentials,
+} from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -59,9 +64,13 @@ const LOGIN_ON_STDIN = "--physionet-credentials-stdin";
 /**
  * The one finding of M4's check of a raw folder that it passes although the
  * dataset would come out with no tables: files that belong at the top of the
- * folder lie deeper in it.
+ * folder lie deeper in it. M4 0.5.8 checks this for every dataset with files
+ * at the top, under a new name; before that it checked eICU alone.
  */
-const FILES_TOO_DEEP = "wrong_eicu_root_layout";
+const FILES_TOO_DEEP: ReadonlySet<string> = new Set([
+  "wrong_root_layout",
+  "wrong_eicu_root_layout",
+]);
 const MARK_NOTE =
   "Lincei started preparing this dataset, and M4 has not reported the preparation complete.\n" +
   "Until it does, Lincei shows the dataset as incomplete and converts it again on the next attempt.\n";
@@ -90,6 +99,13 @@ const M4Dataset = Schema.Struct({
   // Reported by an M4 that records when a dataset's preparation finished and
   // completes an unfinished one itself (after 0.5.5). Absent before that.
   prepared: Schema.optional(Schema.Boolean),
+  // What the dataset is, from its definition, reported from M4 0.5.8 on.
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+  summary: Schema.optional(Schema.NullOr(Schema.String)),
+  version: Schema.optional(Schema.NullOr(Schema.String)),
+  dataset_page_url: Schema.optional(Schema.NullOr(Schema.String)),
+  download_size_gb: Schema.optional(Schema.NullOr(Schema.Number)),
+  builtin: Schema.optional(Schema.Boolean),
 });
 type M4Dataset = typeof M4Dataset.Type;
 
@@ -120,6 +136,16 @@ const M4DownloadPlan = Schema.Struct({
 });
 const decodeM4DownloadPlan = Schema.decodeUnknownOption(Schema.fromJsonString(M4DownloadPlan));
 
+/**
+ * What Lincei reads from `m4 define-dataset --json` and `m4 remove-dataset
+ * --json`: whether M4 did it, and why not.
+ */
+const M4Outcome = Schema.Struct({
+  ok: Schema.Boolean,
+  error: Schema.optional(M4Failure),
+});
+const decodeM4Outcome = Schema.decodeUnknownOption(Schema.fromJsonString(M4Outcome));
+
 /** The fields Lincei reads from `m4 capabilities --json`. */
 const M4Capabilities = Schema.Struct({
   commands: Schema.Array(
@@ -137,6 +163,10 @@ const M4Event = Schema.Struct({
   bytes_downloaded: Schema.optional(Schema.NullOr(Schema.Number)),
   bytes_total: Schema.optional(Schema.NullOr(Schema.Number)),
   error: Schema.optional(M4Failure),
+  // A `conversion_warning`: how a file was read when it was not as expected.
+  code: Schema.optional(Schema.String),
+  file: Schema.optional(Schema.String),
+  columns: Schema.optional(Schema.Array(Schema.String)),
 });
 type M4Event = typeof M4Event.Type;
 const decodeM4Event = Schema.decodeUnknownOption(Schema.fromJsonString(M4Event));
@@ -176,6 +206,8 @@ export class ClinicalDatasets extends Context.Service<
   {
     /** M4's datasets with what this machine holds of each and any job on it. */
     readonly list: Effect.Effect<ReadonlyArray<ClinicalDataset>, ClinicalDatasetsError>;
+    /** What the installed M4 can do beyond listing, adding and downloading. */
+    readonly actions: Effect.Effect<ClinicalDatasetActions>;
     /**
      * Starts preparing a dataset from raw files already in `source`. Like
      * `download`, returns the job's fiber once it has started; the job belongs
@@ -191,8 +223,29 @@ export class ClinicalDatasets extends Context.Service<
       readonly name: string;
       readonly credentials?: PhysioNetCredentials | undefined;
     }) => Effect.Effect<Fiber.Fiber<boolean>, ClinicalDatasetsError>;
+    /**
+     * Defines a dataset of the user's own from the raw files in `source`, as
+     * M4 reads the folder, then starts preparing it like `add`. A folder M4
+     * cannot make tables of is refused before anything starts.
+     */
+    readonly define: (input: {
+      readonly name: string;
+      readonly title: string;
+      readonly source: string;
+    }) => Effect.Effect<Fiber.Fiber<boolean>, ClinicalDatasetsError>;
     /** Stops a dataset's running job, or clears its failed one. Setup's own job is left running. */
     readonly cancel: (name: string) => Effect.Effect<void>;
+    /**
+     * Opens a folder in the file manager of this machine: the one that holds
+     * the prepared datasets, or with `name` that dataset's prepared files.
+     */
+    readonly openFolder: (name?: string) => Effect.Effect<void, ClinicalDatasetsError>;
+    /**
+     * Deletes what M4 prepared of a dataset inside its dataset store, and the
+     * definition of one defined on this computer, with M4's own command.
+     * Raw files the user pointed at are never touched.
+     */
+    readonly remove: (name: string) => Effect.Effect<void, ClinicalDatasetsError>;
     /**
      * Downloads and prepares the demo dataset for clinical setup and waits for
      * it, joining a job that is already running on it. True when it ended
@@ -234,6 +287,49 @@ const enterPhase = (
 
 const baseName = (filePath: string) => filePath.replace(/^.*[\\/]/, "");
 
+/**
+ * What a dataset is, as M4's definition of it says. A definition can be a
+ * file that agents write, and a client shows the page as a link to follow,
+ * so only an https address is passed on.
+ */
+const aboutDataset = (dataset: M4Dataset): Partial<ClinicalDataset> => {
+  const text = (value: string | null | undefined) => value?.trim() || undefined;
+  const title = text(dataset.title);
+  const summary = text(dataset.summary);
+  const version = text(dataset.version);
+  const page = text(dataset.dataset_page_url);
+  const pageUrl = page !== undefined && URL.canParse(page) ? new URL(page) : undefined;
+  const size = dataset.download_size_gb;
+  return {
+    ...(title === undefined ? {} : { title }),
+    ...(summary === undefined ? {} : { summary }),
+    ...(version === undefined ? {} : { version }),
+    ...(pageUrl?.protocol === "https:" && pageUrl.username === "" && pageUrl.password === ""
+      ? { pageUrl: pageUrl.href }
+      : {}),
+    ...(typeof size === "number" && size > 0 ? { downloadSizeGb: size } : {}),
+    ...(dataset.builtin === false ? { custom: true } : {}),
+  };
+};
+
+/**
+ * What a `conversion_warning` means for whoever uses the dataset, or nothing
+ * for one that changes nothing they would notice.
+ */
+const describeConversionWarning = (event: M4Event): string | undefined => {
+  const file = event.file === undefined ? "A file" : baseName(event.file);
+  switch (event.code) {
+    case "decimal_comma_columns_kept_as_text": {
+      const columns = event.columns ?? [];
+      return `${file}: ${columns.length === 1 ? "column" : "columns"} ${columns.join(", ")} ${columns.length === 1 ? "uses" : "use"} decimal commas, so ${columns.length === 1 ? "it was" : "they were"} kept as text. Agents convert ${columns.length === 1 ? "it" : "them"} where they need numbers.`;
+    }
+    case "csv_read_as_latin1":
+      return `${file} is not saved as UTF-8 and was read as Latin-1. Check that its accented letters look right.`;
+    default:
+      return undefined;
+  }
+};
+
 /** The job after one of M4's progress events. Events it does not know change nothing. */
 const advanceJob = (job: ClinicalDatasetJob, event: M4Event): ClinicalDatasetJob => {
   const { file: _file, ...withoutFile } = job;
@@ -269,9 +365,8 @@ const advanceJob = (job: ClinicalDatasetJob, event: M4Event): ClinicalDatasetJob
   }
 };
 
-/** The action that repeats a job, as the client labels it. */
-const retryOf = (kind: JobKind) =>
-  kind === "add" ? "Choose Add from folder again to retry." : "Choose Download again to retry.";
+/** How to repeat a job that stopped: the client's button on the dataset's row, whichever way it was added. */
+const RETRY = "Choose Try again on its row to retry.";
 
 const NOT_INSTALLED =
   "The clinical research tools are not installed yet. Set them up under Settings, Clinical Data.";
@@ -284,10 +379,10 @@ const unknownDataset = (name: string) =>
   `Lincei does not know a dataset called "${name.slice(0, 60)}". Choose one from the list under Settings, Clinical Data.`;
 
 const loginRequired = (name: string) =>
-  `Downloading ${name} needs your PhysioNet login. Choose Download on its row and sign in.`;
+  `Downloading ${name} needs your PhysioNet login. Choose Add on its row and sign in.`;
 
 const loginNotPossible = (name: string) =>
-  `Lincei cannot download ${name} with a PhysioNet login on this computer yet. Download its files from physionet.org, then use Add from folder.`;
+  `Lincei cannot download ${name} with a PhysioNet login on this computer yet. Download its files from physionet.org, then add it and choose their folder.`;
 
 /** Why M4 stopped, in words for the person who started the job, with what to do next. */
 const describeFailure = (name: string, kind: JobKind, code: string | undefined): string => {
@@ -295,46 +390,44 @@ const describeFailure = (name: string, kind: JobKind, code: string | undefined):
     // M4 0.5.5 sent the login in a way PhysioNet ignores, so there every
     // login ended in "forbidden". Since 0.5.6 a wrong password is its own case.
     case "physionet_auth_failed":
-      return `PhysioNet did not accept this username and password. Check them by signing in on physionet.org, then choose Download again.`;
+      return `PhysioNet did not accept this username and password. Check them by signing in on physionet.org, then choose Try again on its row.`;
     case "physionet_access_forbidden":
-      return `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Download again.`;
+      return `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Try again on its row.`;
     case "missing_credentials":
-      return `The PhysioNet login did not reach the download of ${name}. Choose Download and sign in again.`;
+      return `The PhysioNet login did not reach the download of ${name}. Choose Try again on its row and sign in again.`;
     case "download_network_failed":
     case "download_interrupted":
-      return `The download of ${name} stopped because the connection failed or PhysioNet did not answer. Check the internet connection, then choose Download again; files already downloaded are kept.`;
+      return `The download of ${name} stopped because the connection failed or PhysioNet did not answer. Check the internet connection, then choose Try again on its row; files already downloaded are kept.`;
     case "download_filesystem_failed":
-      return `Lincei could not save the files of ${name}. Check that the disk has enough free space, then choose Download again; files already downloaded are kept.`;
+      return `Lincei could not save the files of ${name}. Check that the disk has enough free space, then choose Try again on its row; files already downloaded are kept.`;
     case "raw_files_missing":
       return kind === "add"
         ? `No raw files for ${name} were found in that folder. Choose the folder that holds its CSV.gz files.`
-        : `PhysioNet listed no files to download for ${name}. Try again later, or download the files from physionet.org and use Add from folder.`;
+        : `PhysioNet listed no files to download for ${name}. Try again later, or download the files from physionet.org and choose their folder instead.`;
     case "dataset_not_found":
       return unknownDataset(name);
     case "conversion_failed":
-      return `Lincei could not convert the files of ${name}. A file may be damaged or incomplete, or the disk may be full. Check both. ${retryOf(kind)}`;
+      return `Lincei could not convert the files of ${name}. A file may be damaged or incomplete, or the disk may be full. Check both. ${RETRY}`;
     case "duckdb_init_failed":
-      return `Lincei could not build the database for ${name}. If an agent or another program is using this dataset, let it finish. ${retryOf(kind)}`;
+      return `Lincei could not build the database for ${name}. If an agent or another program is using this dataset, let it finish. ${RETRY}`;
+    case "csv_encoding_unsupported":
+      return `A file of ${name} is not saved as UTF-8 text, and Lincei could not read it any other way. Save it again as "CSV UTF-8" (in Excel: File, Save As), then ${kind === "add" ? "choose Try again on its row" : "try again"}.`;
     case "verification_failed":
-      return `Lincei prepared ${name}, but its main table is missing or cannot be read, so it is not ready. Check that the raw files are complete. ${retryOf(kind)}`;
+      return `Lincei prepared ${name}, but its main table is missing or cannot be read, so it is not ready. Check that the raw files are complete. ${RETRY}`;
     default:
-      return `Preparing ${name} did not finish. ${retryOf(kind)}`;
+      return `Preparing ${name} did not finish. ${RETRY}`;
   }
 };
 
 /** Why M4 could not be run to its end, in the same words. */
-const describeRunFailure = (
-  name: string,
-  kind: JobKind,
-  cause: ProcessRunner.ProcessRunError,
-): string => {
+const describeRunFailure = (name: string, cause: ProcessRunner.ProcessRunError): string => {
   switch (cause._tag) {
     case "ProcessTimeoutError":
-      return `Preparing ${name} took more than two days and was stopped. ${retryOf(kind)}`;
+      return `Preparing ${name} took more than two days and was stopped. ${RETRY}`;
     case "ProcessSpawnError":
-      return `Lincei could not start M4, which prepares datasets. ${retryOf(kind)} ${ASK_FOR_REPAIR}`;
+      return `Lincei could not start M4, which prepares datasets. ${RETRY} ${ASK_FOR_REPAIR}`;
     default:
-      return `Lincei lost contact with M4 while it was preparing ${name}. ${retryOf(kind)}`;
+      return `Lincei lost contact with M4 while it was preparing ${name}. ${RETRY}`;
   }
 };
 
@@ -414,13 +507,22 @@ const make = Effect.gen(function* () {
   // M4's progress arrives through a synchronous stdout callback, so job state
   // is plain mutable state read by `list` rather than a Ref.
   const jobs = new Map<string, ClinicalDatasetJob>();
+  /** What the last preparation of each dataset noted about its files, for as long as this server runs. */
+  const notes = new Map<string, ReadonlyArray<string>>();
   const fibers = new Map<string, Fiber.Fiber<boolean>>();
   let listing: ReadonlyArray<ClinicalDataset> | undefined;
   /** Whether work was running when `listing` was read: its end makes the listing stale. */
   let listedWhileRunning = false;
   let demoIsReady = false;
   /** Whether M4 takes a login on standard input, for the M4 program file as it was when asked. */
-  let loginOnStdin: { readonly installedAt: number; readonly supported: boolean } | undefined;
+  let knownCommands:
+    | {
+        readonly installedAt: number;
+        readonly commands: ReadonlyMap<string, ReadonlyArray<string>>;
+      }
+    | undefined;
+  /** Datasets whose files M4 is deleting, which no job may start on meanwhile. */
+  const removing = new Set<string>();
 
   const requireM4 = fileSystem.exists(paths.m4).pipe(
     Effect.orElseSucceed(() => false),
@@ -463,33 +565,42 @@ const make = Effect.gen(function* () {
   });
 
   /**
-   * Whether the installed M4 reads a login from its standard input itself.
-   * Asked once per installed M4: its program file changes when M4 does.
+   * The commands the installed M4 has, with their flags. Asked once per
+   * installed M4: its program file changes when M4 does. Empty when M4 cannot
+   * say, which counts as an M4 that has none of the newer ones.
    */
-  const m4ReadsLoginFromStdin = Effect.gen(function* () {
+  const m4Commands = Effect.gen(function* () {
     const installedAt = yield* fileSystem.stat(paths.m4).pipe(
       Effect.map((info) => Option.getOrUndefined(info.mtime)?.getTime()),
       Effect.orElseSucceed(() => undefined),
     );
-    if (loginOnStdin !== undefined && loginOnStdin.installedAt === installedAt) {
-      return loginOnStdin.supported;
+    if (knownCommands !== undefined && knownCommands.installedAt === installedAt) {
+      return knownCommands.commands;
     }
-    const supported = yield* askM4(["capabilities", "--json"], "60 seconds").pipe(
+    const commands = yield* askM4(["capabilities", "--json"], "60 seconds").pipe(
       Effect.map((output) =>
         Option.match(decodeM4Capabilities(output.stdout.trim()), {
-          onNone: () => false,
+          onNone: () => new Map<string, ReadonlyArray<string>>(),
           onSome: (capabilities) =>
-            capabilities.commands.some(
-              (command) =>
-                command.name === "download" && command.flags?.includes(LOGIN_ON_STDIN) === true,
-            ),
+            new Map(capabilities.commands.map((command) => [command.name, command.flags ?? []])),
         }),
       ),
-      Effect.orElseSucceed(() => false),
+      Effect.orElseSucceed(() => new Map<string, ReadonlyArray<string>>()),
     );
-    if (installedAt !== undefined) loginOnStdin = { installedAt, supported };
-    return supported;
+    if (installedAt !== undefined) knownCommands = { installedAt, commands };
+    return commands;
   });
+
+  /** Whether the installed M4 reads a login from its standard input itself. */
+  const m4ReadsLoginFromStdin = Effect.map(
+    m4Commands,
+    (commands) => commands.get("download")?.includes(LOGIN_ON_STDIN) === true,
+  );
+
+  const actions: ClinicalDatasets["Service"]["actions"] = Effect.map(m4Commands, (commands) => ({
+    define: commands.has("define-dataset"),
+    remove: commands.has("remove-dataset"),
+  }));
 
   /** The arguments that make M4 read a login from its standard input, where there is a way. */
   const loginArguments = Effect.gen(function* () {
@@ -510,6 +621,7 @@ const make = Effect.gen(function* () {
     return reported.map(
       (dataset): ClinicalDataset => ({
         name: dataset.name,
+        ...aboutDataset(dataset),
         state:
           dataset.setup_state === "ready"
             ? "ready"
@@ -551,6 +663,9 @@ const make = Effect.gen(function* () {
           ? { state: "incomplete" as const }
           : {}),
         ...(job === undefined ? {} : { job }),
+        ...(notes.has(dataset.name) && dataset.state !== "missing"
+          ? { notes: notes.get(dataset.name) }
+          : {}),
       };
     });
     const demo = datasets.find((dataset) => dataset.name === DEMO_DATASET);
@@ -587,14 +702,17 @@ const make = Effect.gen(function* () {
           if (Option.isNone(event)) return;
           if (event.value.event === "operation_failed") failure = event.value.error;
           if (event.value.event === "operation_completed") completed = true;
+          if (event.value.event === "conversion_warning") {
+            const note = describeConversionWarning(event.value);
+            if (note !== undefined) notes.set(name, [...(notes.get(name) ?? []), note]);
+          }
           const job = jobs.get(name);
           if (job !== undefined) jobs.set(name, advanceJob(job, event.value));
         }),
       })
       .pipe(
         Effect.mapError(
-          (cause) =>
-            new ClinicalDatasetsError({ message: describeRunFailure(name, kind, cause), cause }),
+          (cause) => new ClinicalDatasetsError({ message: describeRunFailure(name, cause), cause }),
         ),
       );
     // Only M4 saying so counts as done: an exit without it prepared nothing for certain.
@@ -640,7 +758,6 @@ const make = Effect.gen(function* () {
    */
   const removePrepared = Effect.fn("ClinicalDatasets.removePrepared")(function* (
     name: string,
-    kind: JobKind,
     keep: ReadonlyArray<string>,
     reported: M4Dataset | undefined,
   ) {
@@ -648,7 +765,7 @@ const make = Effect.gen(function* () {
     const database = reported?.db_path ?? "";
     const notLinceisToRemove = () =>
       new ClinicalDatasetsError({
-        message: `Lincei cannot clear what an earlier attempt left of ${name}, because M4 keeps those files outside Lincei's dataset storage on this computer. Nothing was changed. Ask whoever set up M4 here to remove the prepared files of ${name}. ${retryOf(kind)}`,
+        message: `Lincei cannot clear what an earlier attempt left of ${name}, because M4 keeps those files outside Lincei's dataset storage on this computer. Nothing was changed. Ask whoever set up M4 here to remove the prepared files of ${name}. ${RETRY}`,
       });
     if (!path.isAbsolute(parquetRoot) || !path.isAbsolute(database)) {
       return yield* notLinceisToRemove();
@@ -691,7 +808,7 @@ const make = Effect.gen(function* () {
       Effect.mapError(
         (cause) =>
           new ClinicalDatasetsError({
-            message: `Lincei could not remove what an earlier attempt left of ${name}. If an agent or another program is using this dataset, let it finish. ${retryOf(kind)}`,
+            message: `Lincei could not remove what an earlier attempt left of ${name}. If an agent or another program is using this dataset, let it finish. ${RETRY}`,
             cause,
           }),
       ),
@@ -726,7 +843,7 @@ const make = Effect.gen(function* () {
       Effect.mapError(
         (cause) =>
           new ClinicalDatasetsError({
-            message: `Lincei could not get ready to prepare ${name}, so nothing was started. Check that the disk is not full. ${retryOf(kind)}`,
+            message: `Lincei could not get ready to prepare ${name}, so nothing was started. Check that the disk is not full. ${RETRY}`,
             cause,
           }),
       ),
@@ -734,14 +851,14 @@ const make = Effect.gen(function* () {
     // An M4 that reports `prepared` converts whatever is missing and never
     // leaves half a table under its final name, so there is nothing to clear.
     if (leftUnfinished && reported?.prepared === undefined) {
-      yield* removePrepared(name, kind, keep, reported);
+      yield* removePrepared(name, keep, reported);
     }
     yield* runM4(name, kind, args);
     yield* fileSystem.remove(markPath, { force: true }).pipe(
       Effect.mapError(
         (cause) =>
           new ClinicalDatasetsError({
-            message: `M4 prepared ${name}, but Lincei could not record that it finished, so it still shows as incomplete. ${retryOf(kind)}`,
+            message: `M4 prepared ${name}, but Lincei could not record that it finished, so it still shows as incomplete. ${RETRY}`,
             cause,
           }),
       ),
@@ -780,12 +897,12 @@ const make = Effect.gen(function* () {
     const url = address === undefined || !URL.canParse(address) ? undefined : new URL(address);
     if (url === undefined) {
       return yield* new ClinicalDatasetsError({
-        message: `Lincei could not confirm that ${name} downloads from physionet.org, so it did not send your PhysioNet login. Choose Download again; if it keeps failing, download the files from physionet.org and use Add from folder.`,
+        message: `Lincei could not confirm that ${name} downloads from physionet.org, so it did not send your PhysioNet login. Choose Download again; if it keeps failing, download the files from physionet.org and choose their folder instead.`,
       });
     }
     if (url.protocol !== "https:" || url.hostname !== PHYSIONET_HOST || url.username !== "") {
       return yield* new ClinicalDatasetsError({
-        message: `The download address of ${name} was changed on this computer, so Lincei did not send your PhysioNet login. Download the files from physionet.org yourself and use Add from folder, or ask whoever manages this computer to undo the change.`,
+        message: `The download address of ${name} was changed on this computer, so Lincei did not send your PhysioNet login. Download the files from physionet.org yourself and choose their folder instead, or ask whoever manages this computer to undo the change.`,
         detail: `M4 would download ${name} from ${url.protocol}//${url.host}.`,
       });
     }
@@ -833,11 +950,11 @@ const make = Effect.gen(function* () {
       (layout.empty_csv_gz ?? []).length > 0
     ) {
       return yield* new ClinicalDatasetsError({
-        message: `Some files of ${name} in that folder are empty, so its download is not complete. Download them from physionet.org again, then choose Add from folder.`,
+        message: `Some files of ${name} in that folder are empty, so its download is not complete. Download them from physionet.org again, then choose Add dataset again.`,
         detail: (layout.empty_csv_gz ?? []).map(baseName).slice(0, 20).join(", "),
       });
     }
-    if (!layout.ok || layout.warnings?.includes(FILES_TOO_DEEP) === true) {
+    if (!layout.ok || layout.warnings?.some((warning) => FILES_TOO_DEEP.has(warning)) === true) {
       return yield* new ClinicalDatasetsError({
         message: `That folder is not laid out the way ${name} is on PhysioNet. Choose the folder that directly holds the dataset's own folders and files; in a PhysioNet download it is the one named after the dataset's version number.`,
         ...(detail.length === 0 ? {} : { detail }),
@@ -861,6 +978,11 @@ const make = Effect.gen(function* () {
   ) {
     // Fail before there is a job, so the caller hears that nothing started.
     yield* requireM4;
+    if (removing.has(name)) {
+      return yield* new ClinicalDatasetsError({
+        message: `${name} is being removed. Wait for that to finish, then try again.`,
+      });
+    }
     const current = jobs.get(name);
     if (current?.state === "running") {
       return yield* new ClinicalDatasetsError({
@@ -878,6 +1000,8 @@ const make = Effect.gen(function* () {
       message: PHASE_MESSAGES.starting,
     };
     jobs.set(name, running);
+    // What an earlier preparation noted is about files this one replaces.
+    notes.delete(name);
     let self: Fiber.Fiber<boolean> | undefined;
     const fiber = yield* work.pipe(
       Effect.matchCauseEffect({
@@ -903,7 +1027,7 @@ const make = Effect.gen(function* () {
                   ...(jobs.get(name) ?? running),
                   state: "failed",
                   message: Option.match(error, {
-                    onNone: () => `Preparing ${name} stopped unexpectedly. ${retryOf(kind)}`,
+                    onNone: () => `Preparing ${name} stopped unexpectedly. ${RETRY}`,
                     onSome: (failure) => failure.message,
                   }),
                   ...Option.match(error, {
@@ -931,24 +1055,29 @@ const make = Effect.gen(function* () {
     return fiber;
   });
 
+  /** Fails unless `source` is a folder on this machine, named by its full path. */
+  const requireFolder = Effect.fn("ClinicalDatasets.requireFolder")(function* (source: string) {
+    const isDirectory =
+      path.isAbsolute(source) &&
+      (yield* fileSystem.stat(source).pipe(
+        Effect.map((info) => info.type === "Directory"),
+        Effect.orElseSucceed(() => false),
+      ));
+    if (!isDirectory) {
+      return yield* new ClinicalDatasetsError({
+        message:
+          "That folder does not exist on the computer Lincei runs on. Check the path, then choose the folder again.",
+        detail: source,
+      });
+    }
+  });
+
   const add: ClinicalDatasets["Service"]["add"] = (input) =>
     Effect.gen(function* () {
       const name = yield* datasetName(input.name);
       const { source } = input;
       yield* requireM4;
-      const isDirectory =
-        path.isAbsolute(source) &&
-        (yield* fileSystem.stat(source).pipe(
-          Effect.map((info) => info.type === "Directory"),
-          Effect.orElseSucceed(() => false),
-        ));
-      if (!isDirectory) {
-        return yield* new ClinicalDatasetsError({
-          message:
-            "That folder does not exist on the computer Lincei runs on. Check the path, then choose the folder again.",
-          detail: source,
-        });
-      }
+      yield* requireFolder(source);
       yield* requireRawLayout(name, source);
       return yield* start(
         name,
@@ -985,6 +1114,200 @@ const make = Effect.gen(function* () {
       );
     });
 
+  /** Why M4 would not define a dataset from a folder, in words for the person who chose it. */
+  const describeDefinitionFailure = (name: string, failure: M4Failure | undefined) => {
+    if (failure === undefined) {
+      return `Lincei could not read what M4 made of that folder, so nothing was added. Try again. ${ASK_FOR_REPAIR}`;
+    }
+    switch (failure.code) {
+      case "builtin_dataset":
+      case "dataset_exists":
+        return `There is already a dataset called "${name}". Choose another name.`;
+      case "raw_files_missing":
+        return "No CSV files (.csv or .csv.gz) were found in that folder or in the folders directly inside it. Choose the folder that holds them.";
+      case "dataset_prepared":
+        return `"${name}" still has prepared files on this computer. Remove it first, then add the folder again.`;
+      case "invalid_dataset_name":
+        return `"${name}" cannot be a dataset name. Use letters, digits and dashes.`;
+      default:
+        // M4 says what is wrong with the folder and how to fix it, such as a
+        // file whose name cannot become a table, or files nested too deep.
+        return [failure.message, failure.hint ?? undefined]
+          .filter((part) => part !== undefined)
+          .join(" ");
+    }
+  };
+
+  const define: ClinicalDatasets["Service"]["define"] = (input) =>
+    Effect.gen(function* () {
+      const name = yield* datasetName(input.name);
+      const { source } = input;
+      const title = input.title.trim().slice(0, 200);
+      yield* requireM4;
+      yield* requireFolder(source);
+      // Defining rewrites the definition, which must not change under a running job or a
+      // dataset that is already here.
+      const existing = (yield* list).find((dataset) => dataset.name === name);
+      if (
+        removing.has(name) ||
+        existing?.job?.state === "running" ||
+        (existing !== undefined && existing.state !== "missing")
+      ) {
+        return yield* new ClinicalDatasetsError({
+          message: `There is already a dataset called "${name}" on this computer. Choose another name.`,
+        });
+      }
+      const output = yield* askM4(
+        [
+          "define-dataset",
+          name,
+          "--src",
+          source,
+          // Joined, so a title that starts with a dash is not read as an option.
+          ...(title.length === 0 ? [] : [`--title=${title}`]),
+          "--json",
+        ],
+        "2 minutes",
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ClinicalDatasetsError({
+              message:
+                cause._tag === "ProcessTimeoutError"
+                  ? `That folder holds too much for Lincei to look through. Choose the folder that holds only the raw files of ${name}.`
+                  : describeDefinitionFailure(name, undefined),
+              cause,
+            }),
+        ),
+      );
+      const report = Option.getOrUndefined(decodeM4Outcome(output.stdout.trim()));
+      if (report?.ok !== true) {
+        const failure = report?.error;
+        return yield* new ClinicalDatasetsError({
+          message: describeDefinitionFailure(name, failure),
+          detail:
+            [failure?.message, failure?.hint ?? undefined]
+              .filter((part) => part !== undefined)
+              .join(" ") || output.stderr.trim().slice(-OUTPUT_TAIL_CHARACTERS),
+        });
+      }
+      listing = undefined;
+      return yield* start(
+        name,
+        "add",
+        prepare(name, "add", ["init", name, "--src", source, "--no-interactive"], [source]),
+      );
+    });
+
+  /** The program that shows a folder in this machine's file manager. */
+  const fileManager =
+    platform === "darwin" ? "open" : platform === "win32" ? "explorer" : "xdg-open";
+
+  /**
+   * The folder to show for a dataset: its prepared files where they are, as
+   * M4 reports them, if they lie in M4's dataset store.
+   */
+  const datasetFolder = (name: string) =>
+    Effect.gen(function* () {
+      const reported = (yield* readM4Datasets).find((dataset) => dataset.name === name);
+      const store = yield* resolved(paths.dataDir);
+      for (const candidate of [reported?.parquet_root, reported?.raw_root]) {
+        if (typeof candidate !== "string" || !path.isAbsolute(candidate)) continue;
+        const folder = yield* resolved(candidate);
+        const there = yield* fileSystem.exists(folder).pipe(Effect.orElseSucceed(() => false));
+        if (there && isWithin(store, folder)) return folder;
+      }
+      return paths.dataDir;
+    }).pipe(Effect.orElseSucceed(() => paths.dataDir));
+
+  const openFolder: ClinicalDatasets["Service"]["openFolder"] = (input) =>
+    Effect.gen(function* () {
+      const folder =
+        input === undefined ? paths.dataDir : yield* datasetFolder(yield* datasetName(input));
+      yield* fileSystem.makeDirectory(folder, { recursive: true }).pipe(Effect.ignore);
+      yield* processRunner
+        .run({ command: fileManager, args: [folder], timeout: "10 seconds" })
+        .pipe(
+          Effect.catchTags({
+            // Without the program there is no file manager to show the folder in.
+            ProcessSpawnError: (cause) =>
+              Effect.fail(
+                new ClinicalDatasetsError({
+                  message: `Lincei could not open the folder. It is ${folder}.`,
+                  cause,
+                }),
+              ),
+            // Explorer exits with a failure when it opened the folder, and a file
+            // manager that stays open past the timeout has shown it too.
+            ProcessTimeoutError: () => Effect.void,
+            ProcessStdinError: () => Effect.void,
+            ProcessReadError: () => Effect.void,
+            ProcessOutputLimitError: () => Effect.void,
+          }),
+        );
+    });
+
+  /** Why M4 did not remove a dataset, in words for the person who asked. */
+  const describeRemovalFailure = (name: string, failure: M4Failure | undefined) => {
+    if (failure === undefined) {
+      return `Lincei could not tell whether M4 removed ${name}. Look at the list again, and choose Remove again if it is still there. ${ASK_FOR_REPAIR}`;
+    }
+    switch (failure.code) {
+      case "dataset_in_use":
+        return `Lincei could not remove all of ${name}, because an agent or another program is using it. Let it finish, then choose Remove again.`;
+      case "dataset_not_found":
+        return unknownDataset(name);
+      default:
+        return [failure.message, failure.hint ?? undefined]
+          .filter((part) => part !== undefined)
+          .join(" ");
+    }
+  };
+
+  const remove: ClinicalDatasets["Service"]["remove"] = (input) =>
+    Effect.gen(function* () {
+      const name = yield* datasetName(input);
+      yield* requireM4;
+      const job = jobs.get(name);
+      if (job?.state === "running") {
+        return yield* new ClinicalDatasetsError({
+          message:
+            job.kind === "setup"
+              ? `${name} is being downloaded while the clinical research tools are set up. Wait for it to finish, then remove it.`
+              : `${name} is being prepared. Cancel that first, then remove it.`,
+        });
+      }
+      if (removing.has(name)) {
+        return yield* new ClinicalDatasetsError({ message: `${name} is already being removed.` });
+      }
+      // Held from here until M4 has finished, so no job starts on files it is deleting.
+      removing.add(name);
+      const output = yield* askM4(["remove-dataset", name, "--json"], "2 minutes").pipe(
+        Effect.mapError(
+          (cause) =>
+            new ClinicalDatasetsError({ message: describeRemovalFailure(name, undefined), cause }),
+        ),
+        Effect.ensuring(Effect.sync(() => removing.delete(name))),
+      );
+      // Whatever M4 managed to remove, the list has to be read again.
+      listing = undefined;
+      const report = Option.getOrUndefined(decodeM4Outcome(output.stdout.trim()));
+      if (report?.ok !== true) {
+        return yield* new ClinicalDatasetsError({
+          message: describeRemovalFailure(name, report?.error),
+          ...(output.stderr.trim().length === 0
+            ? {}
+            : { detail: output.stderr.trim().slice(-OUTPUT_TAIL_CHARACTERS) }),
+        });
+      }
+      // Nothing is left to be unfinished, and a failure it showed is about files that are gone.
+      jobs.delete(name);
+      notes.delete(name);
+      yield* fileSystem
+        .remove(path.join(paths.preparingDir, name), { force: true })
+        .pipe(Effect.ignore);
+    });
+
   const cancel: ClinicalDatasets["Service"]["cancel"] = (input) =>
     Effect.gen(function* () {
       const name = input.toLowerCase();
@@ -1014,9 +1337,13 @@ const make = Effect.gen(function* () {
 
   return ClinicalDatasets.of({
     list,
+    actions,
     add,
     download,
+    define,
     cancel,
+    openFolder,
+    remove,
     prepareDemo,
     demoReady: Effect.sync(() => demoIsReady),
   });

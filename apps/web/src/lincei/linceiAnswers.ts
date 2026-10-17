@@ -4,7 +4,12 @@
  * server that is not Lincei, and each has to look like what it is. Only the
  * last one hides Lincei's surfaces.
  */
-import type { ClinicalDataset, ClinicalRuntimeStatus, LinceiResponse } from "@t3tools/contracts";
+import type {
+  ClinicalDataset,
+  ClinicalDatasetActions,
+  ClinicalRuntimeStatus,
+  LinceiResponse,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import type { AsyncResult } from "effect/reactivity";
@@ -176,6 +181,8 @@ export function answerView<Tag extends LinceiResponse["_tag"]>(
 /** The dataset list a command answered with, and when, so it can outrank an older read. */
 export interface DatasetAnswer {
   readonly datasets: ReadonlyArray<ClinicalDataset>;
+  /** What the server can do with them beyond adding; null from a server that does not say. */
+  readonly actions: ClinicalDatasetActions | null;
   readonly at: number;
 }
 
@@ -185,6 +192,7 @@ export type DatasetListView =
   | {
       readonly phase: "listed";
       readonly datasets: ReadonlyArray<ClinicalDataset>;
+      readonly actions: ClinicalDatasetActions | null;
       /** Why the newest read failed, when the list on screen is an older one. */
       readonly refreshProblem: LinceiProblem | null;
     };
@@ -217,13 +225,18 @@ export function datasetListView(
         : null;
   const fromRead: DatasetAnswer | null =
     read?.value._tag === "ClinicalDatasets"
-      ? { datasets: read.value.datasets, at: read.timestamp }
+      ? { datasets: read.value.datasets, actions: read.value.actions ?? null, at: read.timestamp }
       : null;
   const newest =
     fromRead === null || (answer !== null && answer.at > fromRead.at) ? answer : fromRead;
   const problem = result?._tag === "Failure" ? problemOf(result.cause) : null;
   if (newest !== null) {
-    return { phase: "listed", datasets: newest.datasets, refreshProblem: problem };
+    return {
+      phase: "listed",
+      datasets: newest.datasets,
+      actions: newest.actions,
+      refreshProblem: problem,
+    };
   }
   if (problem !== null) return { phase: "failed", ...problem };
   // A server whose tools are not installed answers with how far setup is.
@@ -234,7 +247,11 @@ export function datasetListView(
 }
 
 export type DatasetActionOutcome =
-  | { readonly accepted: true; readonly datasets: ReadonlyArray<ClinicalDataset> }
+  | {
+      readonly accepted: true;
+      readonly datasets: ReadonlyArray<ClinicalDataset>;
+      readonly actions: ClinicalDatasetActions | null;
+    }
   /** `message` is null when there is nothing to tell the user: the request was dropped. */
   | { readonly accepted: false; readonly message: string | null };
 
@@ -247,6 +264,6 @@ export function datasetActionOutcome(result: LinceiCommandResult): DatasetAction
     };
   }
   return result.value._tag === "ClinicalDatasets"
-    ? { accepted: true, datasets: result.value.datasets }
+    ? { accepted: true, datasets: result.value.datasets, actions: result.value.actions ?? null }
     : { accepted: false, message: TOOLS_NOT_READY };
 }

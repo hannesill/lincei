@@ -53,7 +53,7 @@ import * as UvInstallation from "./UvInstallation.ts";
  * depends on it.
  */
 const DEFAULT_CLINICAL_REQUIREMENTS = [
-  "m4-infra[research]>=0.5.7,<0.6",
+  "m4-infra[research]>=0.5.8,<0.6",
   "vitrine>=0.1.4,<0.2",
   "plotly>=6,<8",
 ] as const;

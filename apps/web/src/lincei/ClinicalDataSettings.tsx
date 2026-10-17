@@ -22,8 +22,6 @@ import {
   describeLostConnection,
 } from "./clinicalPresentation";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
-import { PhysioNetAccessSteps } from "./physioNet";
-import { ProviderDataNotice } from "./ProviderDataNotice";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
 import { CLINICAL_SETTINGS } from "./settingsSearchItems";
@@ -102,26 +100,15 @@ function ClinicalDataPanel({
             </div>
           ) : null}
         </SettingsRow>
-        <SettingsRow
-          {...CLINICAL_SETTINGS.location}
-          // Not "Lincei's own folder": a user who set M4_DATA_DIR keeps their store.
-          description={`Prepared datasets are kept in one folder on ${
-            onThisComputer ? "this computer" : environment.label
-          }. Agents read them from there.`}
-        >
-          <p className="pb-2 font-mono text-xs break-all text-muted-foreground/70">
-            {status.dataDir}
-          </p>
-        </SettingsRow>
       </SettingsSection>
       <SettingsSection {...CLINICAL_SETTINGS.datasets}>
         {clinicalToolsInstalled(status) ? (
           <>
-            <ClinicalDatasetList environmentId={environmentId} enabled />
-            <div className="space-y-2 border-t border-border/60 px-3 py-3 sm:px-4">
-              <PhysioNetAccessSteps />
-              <ProviderDataNotice subject="these datasets" />
-            </div>
+            <ClinicalDatasetList
+              environmentId={environmentId}
+              enabled
+              storageDir={status.dataDir}
+            />
           </>
         ) : (
           <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
