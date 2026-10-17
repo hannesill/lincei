@@ -7,6 +7,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import { ensureElectronRuntime } from "./ensure-electron-runtime.mjs";
+import { installLinceiMacIconCatalog } from "./lincei/macIconCatalog.mjs";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
@@ -20,7 +21,7 @@ const APP_BUNDLE_ID = isDevelopment
   ? `studio.lincei.app.dev.${devBundleIdSuffix || "local"}`
   : "studio.lincei.app";
 const APP_PROTOCOL_SCHEMES = isDevelopment ? ["lincei-dev"] : ["lincei"];
-const LAUNCHER_VERSION = 19;
+const LAUNCHER_VERSION = 20;
 const developmentMacIconPngPath = NodePath.join(
   repoRoot,
   "assets",
@@ -399,6 +400,11 @@ function buildMacLauncher(electronBinaryPath) {
     isDevelopment ? developmentPaths.launcherExecutableName : "Electron",
   );
   patchHelperBundleInfoPlists(targetAppBundlePath);
+  installLinceiMacIconCatalog(
+    resolveMacLauncherIconPaths(runtimeDir).sourceIconPath,
+    targetAppBundlePath,
+    setPlistString,
+  );
   if (isDevelopment) {
     // Keep Electron's native executable inside the branded bundle. Launching the
     // node_modules copy makes macOS associate the process (and Dock label) with

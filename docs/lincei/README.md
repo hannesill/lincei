@@ -25,7 +25,7 @@ content. `git log --first-parent` leaves it out.
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                                                                                   | The files that script lists, rewritten by it, never by hand                                                                                                                                                                  |
 | Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                                                                               | One plugin entry in `apps/web/vite.config.ts`                                                                                                                                                                                |
-| Mark and icons                                                   | [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts) draws `assets/` and `apps/web/public/`; [`scripts/lincei/macIcon.ts`](../../scripts/lincei/macIcon.ts); `apps/web/src/components/T3Wordmark.tsx`                        | Same file names as upstream, Lincei content; in `build-desktop-artifact.ts`, one call in `stageMacIcons` and two lines in the mac config                                                                                     |
+| Mark and icons                                                   | [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts) draws `assets/` and `apps/web/public/`; [`scripts/lincei/macIcon.ts`](../../scripts/lincei/macIcon.ts); `apps/web/src/components/T3Wordmark.tsx`                        | Same file names as upstream, Lincei content; in `build-desktop-artifact.ts`, one call in `stageMacIcons` and two lines in the mac config; in `electron-launcher.mjs`, one call and `LAUNCHER_VERSION`                        |
 | Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                                                                                     | Two lines in `apps/server/src/server.ts`                                                                                                                                                                                     |
 | Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
 | What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                                                                                 | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                                                                                                                                       |
@@ -78,11 +78,13 @@ Then, for each conflict:
   `ChatView.tsx`, `SidebarChrome.tsx`,
   `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
   `useAvailableSettingsSearchItems.ts`, `SettingsPanels.tsx`, `CommandPalette.tsx`, `localApi.ts`,
-  `state/server.ts`, `apps/web/vite.config.ts`, `scripts/build-desktop-artifact.ts`): take
-  upstream's side and re-add the hook.
+  `state/server.ts`, `apps/web/vite.config.ts`, `scripts/build-desktop-artifact.ts`,
+  `electron-launcher.mjs`): take upstream's side and re-add the hook.
   `git show HEAD -- <file>` shows what it was. Every hook is an import of something under
   `lincei/` and one line that uses it, so `git grep -n lincei -- <file>` on the old version lists
-  them. `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its hook.
+  them. `SettingsPanels.tsx` and `electron-launcher.mjs` are also governed by `identity.ts`: reapply
+  first, then re-add the hook. In `electron-launcher.mjs` set `LAUNCHER_VERSION` one above the higher
+  side, so local bundles built by either get rebuilt.
 - **`apps/desktop/resources/installer.nsh`** (only if upstream starts customizing its Windows
   installer and adds the same file): keep both, with one `customUnInstall` macro that does
   upstream's work and Lincei's.
@@ -426,7 +428,10 @@ glass, specular, shadow and translucency off. The desktop build compiles it with
 `Assets.car` and names it in `CFBundleIconName`, and keeps `icon.icns` for whatever still reads
 `CFBundleIconFile`, such as the DMG's volume icon (see
 [`scripts/lincei/macIcon.ts`](../../scripts/lincei/macIcon.ts)). That needs Xcode 26 or newer, so
-the release builds Macs on `macos-26`. Upstream's `app-icon.icon` projects stay T3 Code's, because
+the release builds Macs on `macos-26`. The `.app` that
+`apps/desktop/scripts/electron-launcher.mjs` builds for a local run compiles the same project
+([`lincei/macIconCatalog.mjs`](../../apps/desktop/scripts/lincei/macIconCatalog.mjs)) and keeps
+the gray icon where actool is older. Upstream's `app-icon.icon` projects stay T3 Code's, because
 the iOS build reads them.
 
 ## The `lincei://` scheme
