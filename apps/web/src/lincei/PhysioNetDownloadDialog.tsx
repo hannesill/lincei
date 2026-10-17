@@ -86,7 +86,7 @@ function LoginForm({
   const ready =
     mayType && acknowledged && !starting && username.trim().length > 0 && password.length > 0;
   const name = datasetDisplayName(dataset.name);
-  const projectPage = physioNetProjectPage(dataset.name);
+  const projectPage = physioNetProjectPage(dataset);
 
   const submit = async () => {
     if (!ready) return;

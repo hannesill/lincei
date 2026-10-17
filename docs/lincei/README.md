@@ -248,7 +248,11 @@ comes in: both dataset dialogs, the first-run step, and Settings, Clinical Data.
 ahead only once the researcher ticks that they checked their account, every time, because the
 account an agent uses can change. `physioNet.tsx` links the pages a researcher needs on the way:
 credentialing, training, each dataset's page with its data use agreement, and PhysioNet's rules
-for AI services.
+for AI services. A dataset's page comes from M4 (`dua_url` or `dataset_page_url` in
+`list-datasets`, and `access_url` in the download plan, where 0.5.7 has it), and `physioNet.tsx`
+keeps its own only for the datasets of older servers. The server passes on a page only on
+`https://physionet.org`, since agents can write the dataset files that name it, and puts it into
+the failure of a download PhysioNet refused, which the client shows as a link.
 
 ### Research cards
 

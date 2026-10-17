@@ -108,6 +108,11 @@ export const ClinicalDataset = Schema.Struct({
    * client offers "Add from folder" there and never asks for a password.
    */
   downloadable: Schema.Boolean,
+  /**
+   * The page on physionet.org where an account signs this credentialed
+   * dataset's data use agreement. Absent when M4 names none.
+   */
+  agreementUrl: Schema.optional(Schema.String),
   sizeGb: Schema.optional(Schema.Number),
   job: Schema.optional(ClinicalDatasetJob),
 });
