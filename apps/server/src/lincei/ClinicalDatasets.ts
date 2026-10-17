@@ -1125,6 +1125,8 @@ const make = Effect.gen(function* () {
         return `There is already a dataset called "${name}". Choose another name.`;
       case "raw_files_missing":
         return "No CSV files (.csv or .csv.gz) were found in that folder or in the folders directly inside it. Choose the folder that holds them.";
+      case "dataset_prepared":
+        return `"${name}" still has prepared files on this computer. Remove it first, then add the folder again.`;
       case "invalid_dataset_name":
         return `"${name}" cannot be a dataset name. Use letters, digits and dashes.`;
       default:

@@ -679,6 +679,32 @@ describe("ClinicalDatasets", () => {
       ),
     );
 
+    it.effect("asks for a removal first where M4 still has prepared files of the name", () =>
+      withDatasets(
+        () =>
+          Effect.succeed(
+            exited(
+              1,
+              definitionReport({
+                ok: false,
+                error: { code: "dataset_prepared", message: "registry has Parquet files." },
+              }),
+            ),
+          ),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            const source = yield* rawFolder("visits.csv");
+            const failure = yield* datasets
+              .define({ name: "registry", title: "Registry", source })
+              .pipe(Effect.flip);
+            expect(failure.message).toBe(
+              '"registry" still has prepared files on this computer. Remove it first, then add the folder again.',
+            );
+            expect(workOf(commands)).toEqual([]);
+          }),
+      ),
+    );
+
     it.effect("does not redefine a dataset that is already here", () =>
       withDatasets(
         () => Effect.succeed(exited(0)),
