@@ -10,6 +10,43 @@ import * as NodePath from "node:path";
 
 const ICON_NAME = "Lincei";
 
+const projectPath = (macIconPng) =>
+  NodePath.join(NodePath.dirname(macIconPng), `${ICON_NAME}.icon`);
+
+function mtimeMs(path) {
+  try {
+    return NodeFS.statSync(path).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function selectedDeveloperDir() {
+  if (process.env.DEVELOPER_DIR) {
+    return process.env.DEVELOPER_DIR;
+  }
+  try {
+    return NodeFS.readlinkSync("/var/db/xcode_select_link");
+  } catch {
+    return "/Applications/Xcode.app/Contents/Developer";
+  }
+}
+
+/**
+ * For the launcher's bundle cache: changes when the project does or when the actool that xcrun
+ * would run is installed, updated or switched, so a bundle built without the catalog is rebuilt
+ * once actool can compile it. It only reads the file system, because it runs on every launch and
+ * xcrun can take seconds when its lookup cache is cold.
+ */
+export function linceiMacIconCatalogKey(macIconPng) {
+  const developerDir = selectedDeveloperDir();
+  return [
+    mtimeMs(NodePath.join(projectPath(macIconPng), "icon.json")),
+    developerDir,
+    mtimeMs(NodePath.join(developerDir, "usr", "bin", "actool")),
+  ].join(" ");
+}
+
 /** The major version of Xcode's actool, or 0 when there is none. */
 export function actoolMajorVersion() {
   const result = NodeChildProcess.spawnSync("xcrun", ["actool", "--version"], { encoding: "utf8" });
@@ -22,9 +59,11 @@ export function actoolMajorVersion() {
  * bundle's Assets.car and names it in CFBundleIconName with the launcher's `setPlistString`. Call
  * it before the bundle is signed. Returns whether it did: an actool older than Xcode 26 compiles no
  * .icon, and then the bundle keeps its icon.icns, because a dev launch must never fail over its icon.
+ * `linceiMacIconCatalogKey` in the launcher's cache metadata brings the bundle back here once a newer
+ * actool is installed or selected.
  */
 export function installLinceiMacIconCatalog(macIconPng, appBundlePath, setPlistString) {
-  const project = NodePath.join(NodePath.dirname(macIconPng), `${ICON_NAME}.icon`);
+  const project = projectPath(macIconPng);
   if (!NodeFS.existsSync(project) || actoolMajorVersion() < 26) {
     return false;
   }
@@ -61,7 +100,10 @@ export function installLinceiMacIconCatalog(macIconPng, appBundlePath, setPlistS
     setPlistString(NodePath.join(contentsDir, "Info.plist"), "CFBundleIconName", ICON_NAME);
     return true;
   } catch (error) {
-    console.warn(`[desktop-launcher] Kept the legacy app icon: ${String(error).trim()}`);
+    const runtimeDir = NodePath.dirname(appBundlePath);
+    console.warn(
+      `[desktop-launcher] Kept the legacy app icon; delete ${runtimeDir} to retry: ${String(error).trim()}`,
+    );
     return false;
   } finally {
     NodeFS.rmSync(outputDir, { recursive: true, force: true });

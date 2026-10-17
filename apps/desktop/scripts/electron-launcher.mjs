@@ -7,7 +7,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import { ensureElectronRuntime } from "./ensure-electron-runtime.mjs";
-import { installLinceiMacIconCatalog } from "./lincei/macIconCatalog.mjs";
+import { installLinceiMacIconCatalog, linceiMacIconCatalogKey } from "./lincei/macIconCatalog.mjs";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
@@ -363,6 +363,9 @@ function buildMacLauncher(electronBinaryPath) {
     iconMtimeMs: NodeFS.statSync(iconPath).mtimeMs,
     appBundleId: APP_BUNDLE_ID,
     appProtocolSchemes: APP_PROTOCOL_SCHEMES,
+    linceiIconCatalog: linceiMacIconCatalogKey(
+      resolveMacLauncherIconPaths(runtimeDir).sourceIconPath,
+    ),
   };
 
   const currentMetadata = readJson(metadataPath);
