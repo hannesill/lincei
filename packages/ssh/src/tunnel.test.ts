@@ -110,7 +110,7 @@ describe("ssh tunnel scripts", () => {
       script,
       "T3_RELEASE_BASE_URL='https://github.com/hannesill/lincei/releases/download'",
     );
-    assert.include(script, 'T3_RUNTIME_DIR="$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION"');
+    assert.include(script, 'T3_RUNTIME_DIR="$HOME/.lincei/runtime/versions/$T3_ARCHIVE_VERSION"');
     assert.include(script, 'T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"');
     assert.include(script, "SHA256SUMS");
     assert.include(script, 'exec "$T3_RUNTIME_DIR/t3" "$@"');
@@ -120,7 +120,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(script, 'exec t3 "$@"');
     assert.include(
       script,
-      'T3_LOCK="$HOME/.t3/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
+      'T3_LOCK="$HOME/.lincei/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"',
     );
     assert.include(script, 'while ! mkdir "$T3_LOCK" 2>/dev/null; do');
     assert.include(script, 'mv "$T3_LOCK/pid.tmp" "$T3_LOCK/pid"');
@@ -901,7 +901,7 @@ describe("archive runner script", () => {
           assert.equal(result.exitCode, 0, result.stderr);
           assert.include(result.stdout, `t3 v${archiveVersion}`);
         }
-        const versionsDir = `${home}/.t3/runtime/versions`;
+        const versionsDir = `${home}/.lincei/runtime/versions`;
         assert.deepEqual(yield* fs.readDirectory(versionsDir), [archiveVersion]);
         assert.equal(
           (yield* fs.readFileString(`${versionsDir}/${archiveVersion}/.install-complete`)).trim(),
@@ -991,7 +991,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-launch-script-" });
     const home = `${root}/home`;
-    const stateDir = `${home}/.t3/ssh-launch/test-state`;
+    const stateDir = `${home}/.lincei/ssh-launch/test-state`;
     const fakeServer = `${root}/fake-t3.cjs`;
     const launch = `${root}/launch.sh`;
     yield* fs.makeDirectory(stateDir, { recursive: true });
@@ -1040,7 +1040,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
     ) =>
       Effect.gen(function* () {
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const args = [fakeServer, "serve", "--port", "0", "--base-dir", `${home}/.t3`, ...flags];
+        const args = [fakeServer, "serve", "--port", "0", "--base-dir", `${home}/.lincei`, ...flags];
         const server = yield* spawner.spawn(
           options?.unreaped
             ? ChildProcess.make("sh", ["-c", 'node "$@" & exec sleep 600', "sh", ...args])
@@ -1186,7 +1186,7 @@ server.listen(Number(flag("--port")), "127.0.0.1", () => {
         assert.include((yield* runScript(home, ["-c", `ps -o stat= -p ${zombie}`])).stdout, "Z");
         yield* fs.writeFileString(`${stateDir}/pid`, `${zombie}\n`);
         yield* fs.writeFileString(
-          `${home}/.t3/userdata/server-runtime.json`,
+          `${home}/.lincei/userdata/server-runtime.json`,
           JSON.stringify({
             version: 1,
             pid: zombie,

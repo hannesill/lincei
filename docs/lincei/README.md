@@ -50,6 +50,22 @@ Internal names stay upstream's on purpose: `@t3tools/*` packages, `T3CODE_*` env
 variables, the `t3-code` MCP server, `t3.json`. Renaming them buys nothing and conflicts
 everywhere.
 
+What Lincei puts outside its own folders is another matter: each of those names is an identity
+rule, so it never takes the place of T3 Code's. On Linux that includes what SnapShots install
+into the desktop session: the GNOME Shell extension `snap-shot@lincei.studio` with its D-Bus name
+`org.gnome.Shell.Extensions.LinceiSnapShot`, the KDE desktop entry, and the KDE and Hyprland
+helpers in `~/.local/share/lincei`. The extension answers only the bus names listed in its
+`captureService.js`, and those have to be the ones the desktop asks as (`<desktop entry>.SnapShot`).
+Until October 2026 they were not, and every GNOME SnapShot failed;
+[`linuxSnapShotIdentity.test.ts`](../../apps/desktop/src/lincei/linuxSnapShotIdentity.test.ts)
+now fails when the two drift apart.
+
+One name is shared on purpose. On Linux, agents run in systemd scopes under
+`app-t3code-agents.slice`, whose memory limit leaves the machine room for the servers, sshd, and
+tailscaled. Agents of both apps belong under that one limit, since two slices would each allow
+nearly all of RAM, so the slug rule skips the name. Each server's own slice below it is named
+after a hash of its state directory, so neither server stops the other's agents.
+
 ## Pulling in upstream
 
 ```sh
@@ -397,7 +413,10 @@ and their lines in the release's `SHA256SUMS`, made by `scripts/build-cli-archiv
 **Lincei release** attaches by calling `lincei-server.yml`; run that workflow by hand only to
 rebuild the archives of an existing release.
 They are also what the desktop app installs on a remote host over SSH and what `t3 update` reads,
-all through `packages/shared/src/cliRelease.ts`, whose repository is an identity rule. There is
+all through `packages/shared/src/cliRelease.ts`, whose repository is an identity rule. Over SSH
+the archive goes to `~/.lincei/runtime` on that host, and the server it starts there has
+`~/.lincei` as its home, so it shares no database or lock with a T3 Code on the same host
+(`packages/ssh/src/tunnel.ts`, an identity rule as well). There is
 none for Intel Macs, where Node single executables do not run, or for Windows, where the
 identity rules do not yet cover upstream's `install.ps1`.
 

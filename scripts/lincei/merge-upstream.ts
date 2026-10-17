@@ -40,7 +40,7 @@ export function orchestrationProtocolVersion(source: string | null): number | nu
 
 /** Upstream spellings of identity. The `.t3` forms are T3 Code's home directory. */
 export const IDENTITY_LITERAL =
-  /t3code:\/\/|t3code-dev|"t3code"|t3code\.service|com\.t3tools|pingdotgg\/t3code|T3 Code \(|\.t3\/|"\.t3"/;
+  /t3code:\/\/|t3code-dev|"t3code"|t3code\.service|com\.t3tools|pingdotgg\/t3code|T3 Code \(|T3SnapShot|\.t3\/|"\.t3"/;
 
 export type ConflictKind = "governed" | "lincei-content" | "icon" | "route-tree" | "other";
 
