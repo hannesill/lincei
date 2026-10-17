@@ -25,7 +25,7 @@ content. `git log --first-parent` leaves it out.
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Identity (bundle id, URL scheme, data directory, release repo)   | [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                                                                                                                                   | The files that script lists, rewritten by it, never by hand                                                                                                                                                                  |
 | Display name in the UI                                           | [`apps/web/vite/linceiBrand.ts`](../../apps/web/vite/linceiBrand.ts)                                                                                                                                                               | One plugin entry in `apps/web/vite.config.ts`                                                                                                                                                                                |
-| Mark and icons                                                   | [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts) draws `assets/` and `apps/web/public/`; [`scripts/lincei/macIcon.ts`](../../scripts/lincei/macIcon.ts); `apps/web/src/components/T3Wordmark.tsx`                        | Same file names as upstream, Lincei content; in `build-desktop-artifact.ts`, one call before the stage's `package.json` is written; in `electron-launcher.mjs`, two calls and `LAUNCHER_VERSION`                             |
+| Mark and icons                                                   | [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts) draws `assets/` and `apps/web/public/`; [`scripts/lincei/macIcon.ts`](../../scripts/lincei/macIcon.ts); `apps/web/src/components/T3Wordmark.tsx`                        | Same file names as upstream, Lincei content; in `build-desktop-artifact.ts`, one call before the stage's `package.json` is written; in `electron-launcher.mjs`, two calls and a cache key; all written by `identity.ts`      |
 | Clinical runtime (M4, Vitrine, skills, demo dataset)             | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                                                                                     | Two lines in `apps/server/src/server.ts`                                                                                                                                                                                     |
 | Agent tools `lincei_clinical_status` and `lincei_clinical_setup` | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
 | What agents are told                                             | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                                                                                 | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                                                                                                                                       |
@@ -67,7 +67,9 @@ Then, for each conflict:
   ```
 
   If the script reports a rule that no longer matches, upstream changed that line; update the
-  rule to the new text.
+  rule to the new text. Taking upstream's side drops every Lincei line the script does not
+  write, so a hook in a governed file is an exact rule too (the macOS icon hooks in
+  `electron-launcher.mjs` and `build-desktop-artifact.ts` are).
 
 - **`README.md`, `T3Wordmark.tsx`, `apps/desktop/resources/dmg/dmg-background-latest.svg`:** keep
   Lincei's side.
@@ -78,13 +80,13 @@ Then, for each conflict:
   `ChatView.tsx`, `SidebarChrome.tsx`,
   `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
   `useAvailableSettingsSearchItems.ts`, `SettingsPanels.tsx`, `CommandPalette.tsx`, `localApi.ts`,
-  `state/server.ts`, `apps/web/vite.config.ts`, `scripts/build-desktop-artifact.ts`,
-  `electron-launcher.mjs`): take upstream's side and re-add the hook.
+  `state/server.ts`, `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
   `git show HEAD -- <file>` shows what it was. Every hook is an import of something under
   `lincei/` and one line that uses it, so `git grep -n lincei -- <file>` on the old version lists
-  them. `SettingsPanels.tsx` and `electron-launcher.mjs` are also governed by `identity.ts`: reapply
-  first, then re-add the hook. In `electron-launcher.mjs` set `LAUNCHER_VERSION` one above the higher
-  side, so local bundles built by either get rebuilt.
+  them. `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its
+  hook. The hooks in `build-desktop-artifact.ts` and `electron-launcher.mjs` are identity rules,
+  so `apply` restores them. A hook that adds an entry to a list goes first in it: upstream appends
+  at the end, and an entry there conflicts with every one it adds.
 - **`apps/desktop/resources/installer.nsh`** (only if upstream starts customizing its Windows
   installer and adds the same file): keep both, with one `customUnInstall` macro that does
   upstream's work and Lincei's.
@@ -123,7 +125,19 @@ The typecheck and the tests show what is left, because none of it conflicts in g
   other way round, where the test writes the literal differently, such as with escaped dots in a
   regular expression). Add an exact rule for that line and run `apply`. A desktop or server test
   that fails only because it asserts an upstream identity literal (`com.t3tools.t3code`,
-  `t3code://`, `~/.t3`) belongs in the identity script's list of tests.
+  `t3code://`, `~/.t3`) belongs in the identity script's list of tests. Nothing fails when
+  upstream moves a literal into a new file that no test covers (in October 2026 the desktop
+  renderer's `t3code://app` origin moved out of governed `http.ts` into `httpCors.ts`, where it
+  decides which pages cookie sessions trust), so list the literals the merge brought in:
+
+  ```sh
+  git diff "$(git merge-base HEAD t3code/main)" t3code/main -- apps packages scripts \
+    ':!apps/mobile' ':!apps/marketing' ':!*.md' |
+    grep -E '^\+.*(t3code://|t3code-dev|"t3code"|com\.t3tools|pingdotgg/t3code|T3 Code \(|\.t3/)'
+  ```
+
+  Run it before committing the merge, while the merge base is still the old one.
+
 - **An upstream test that builds a layer Lincei hooks into must pass without Lincei's services.**
   Hook code therefore reads Lincei's services as optional (`Effect.serviceOption`, as in
   [`mcp/handlers.ts`](../../apps/server/src/lincei/mcp/handlers.ts)). If such a test stops

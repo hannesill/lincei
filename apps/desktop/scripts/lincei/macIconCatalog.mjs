@@ -9,6 +9,9 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 const ICON_NAME = "Lincei";
+// Lincei's counterpart to upstream's LAUNCHER_VERSION, which Lincei leaves alone so that both
+// never bump it to the same number. Raise it when a Lincei change needs local bundles rebuilt.
+const LINCEI_LAUNCHER_REVISION = 1;
 
 const projectPath = (macIconPng) =>
   NodePath.join(NodePath.dirname(macIconPng), `${ICON_NAME}.icon`);
@@ -33,7 +36,8 @@ function selectedDeveloperDir() {
 }
 
 /**
- * For the launcher's bundle cache: changes when the project does or when the actool that xcrun
+ * Lincei's part of the launcher's bundle cache key: changes with LINCEI_LAUNCHER_REVISION, when
+ * the icon project does, or when the actool that xcrun
  * would run is installed, updated or switched, so a bundle built without the catalog is rebuilt
  * once actool can compile it. It only reads the file system, because it runs on every launch and
  * xcrun can take seconds when its lookup cache is cold.
@@ -41,6 +45,7 @@ function selectedDeveloperDir() {
 export function linceiMacIconCatalogKey(macIconPng) {
   const developerDir = selectedDeveloperDir();
   return [
+    LINCEI_LAUNCHER_REVISION,
     mtimeMs(NodePath.join(projectPath(macIconPng), "icon.json")),
     developerDir,
     mtimeMs(NodePath.join(developerDir, "usr", "bin", "actool")),
