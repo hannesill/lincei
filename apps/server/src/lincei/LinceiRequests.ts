@@ -108,6 +108,24 @@ const make = Effect.gen(function* () {
             .download(request)
             .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
         );
+      case "ClinicalDatasetDefine":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .define(request)
+            .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
+        );
+      case "ClinicalDataFolderOpen":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .openFolder(request.name)
+            .pipe(Effect.mapError(toRequestError), Effect.as<LinceiResponse>({ _tag: "Done" })),
+        );
+      case "ClinicalDatasetRemove":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .remove(request.name)
+            .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
+        );
       case "ClinicalDatasetCancel":
         return yield* whenInstalled(
           clinicalDatasets.cancel(request.name).pipe(Effect.andThen(datasets)),

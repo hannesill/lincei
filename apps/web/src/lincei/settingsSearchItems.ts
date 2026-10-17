@@ -36,7 +36,7 @@ export const LINCEI_SETTINGS_SEARCH_ITEMS = [
     ...CLINICAL_SETTINGS.datasets,
     to: "/settings/clinical",
     searchTerms: [
-      "clinical data dataset mimic mimic-iv mimic iv note eicu physionet demo download add folder credentialed login password access",
+      "clinical data dataset mimic mimic-iv mimic iv note ed emergency mimic-iii eicu physionet demo download add folder credentialed login password access catalog",
     ],
   },
   {

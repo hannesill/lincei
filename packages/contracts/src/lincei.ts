@@ -96,9 +96,30 @@ export const ClinicalDatasetJob = Schema.Struct({
 });
 export type ClinicalDatasetJob = typeof ClinicalDatasetJob.Type;
 
-/** A dataset M4 supports and what this machine holds of it. */
+/**
+ * A dataset M4 supports and what this machine holds of it. What it is
+ * (`title` through `downloadSizeGb`) comes from M4's definition of it, which
+ * an M4 before 0.5.8 does not report.
+ */
 export const ClinicalDataset = Schema.Struct({
+  /** M4's id for it, which agents use. */
   name: Schema.String,
+  title: Schema.optional(Schema.String),
+  /** What it holds, from where and when, in a sentence or two. */
+  summary: Schema.optional(Schema.String),
+  /** The release M4 downloads. */
+  version: Schema.optional(Schema.String),
+  /** Its page on the web, where a credentialed one's data use agreement is signed. Always https. */
+  pageUrl: Schema.optional(Schema.String),
+  /** About how much a download fetches. */
+  downloadSizeGb: Schema.optional(Schema.Number),
+  /** Defined on this computer, by the user or an agent, rather than shipped with M4. */
+  custom: Schema.optional(Schema.Boolean),
+  /**
+   * What the last preparation on this server noted about how it read the
+   * files, such as a column kept as text, in words for the user.
+   */
+  notes: Schema.optional(Schema.Array(Schema.String)),
   state: ClinicalDatasetState,
   /** Downloading it needs a PhysioNet account with access to this dataset. */
   requiresCredentials: Schema.Boolean,
@@ -161,6 +182,26 @@ export const LinceiRequest = Schema.Union([
   Schema.TaggedStruct("ClinicalDatasets", {}),
   /** Starts preparing a dataset from raw files already in `source`, a folder on the server. */
   Schema.TaggedStruct("ClinicalDatasetAdd", { name: Schema.String, source: Schema.String }),
+  /**
+   * Defines a dataset of the user's own from the files in `source`, a folder
+   * on the server, and starts preparing it. M4 works out its tables from the
+   * folder; `name` is the id agents use, `title` what people read.
+   */
+  Schema.TaggedStruct("ClinicalDatasetDefine", {
+    name: Schema.String,
+    title: Schema.String,
+    source: Schema.String,
+  }),
+  /**
+   * Opens a folder in the file manager on the server's own screen: the one
+   * that holds the prepared datasets, or with `name` that dataset's own.
+   */
+  Schema.TaggedStruct("ClinicalDataFolderOpen", { name: Schema.optional(Schema.String) }),
+  /**
+   * Deletes what was prepared of a dataset, and the definition of one defined
+   * on this computer. Raw files the user pointed at are never touched.
+   */
+  Schema.TaggedStruct("ClinicalDatasetRemove", { name: Schema.String }),
   /** Starts downloading and preparing a dataset. Credentialed datasets need the login. */
   Schema.TaggedStruct("ClinicalDatasetDownload", {
     name: Schema.String,
@@ -190,6 +231,8 @@ export const LinceiResponse = Schema.Union([
   /** `updatedAt` is in epoch milliseconds, and absent while the study has no cards. */
   Schema.TaggedStruct("ResearchBoardActivity", { updatedAt: Schema.optional(Schema.Number) }),
   Schema.TaggedStruct("ClinicalDatasets", { datasets: Schema.Array(ClinicalDataset) }),
+  /** A request that changed nothing a client shows went through. */
+  Schema.TaggedStruct("Done", {}),
   Schema.TaggedStruct("Preferences", { preferences: LinceiPreferences }),
   Schema.TaggedStruct("AgentBriefing", {
     /** What Lincei adds to every agent session's instructions, as of the next turn. */

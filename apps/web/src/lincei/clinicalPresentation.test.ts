@@ -15,6 +15,10 @@ import {
   clinicalToolsInstalled,
   connectionProtectsSecrets,
   datasetDisplayName,
+  datasetFacts,
+  datasetGroup,
+  datasetIdFromTitle,
+  describeRemoval,
   describeDataset,
   describeJobProgress,
   describeLostConnection,
@@ -183,49 +187,47 @@ describe("clinicalStepFooter", () => {
   });
 });
 
+const dataset = (fields: Partial<ClinicalDataset>): ClinicalDataset => ({
+  name: "mimic-iv",
+  state: "missing",
+  requiresCredentials: false,
+  downloadable: true,
+  ...fields,
+});
+
 describe("datasetDisplayName", () => {
-  it("names the datasets Lincei knows and falls back to M4's id", () => {
-    expect(datasetDisplayName("mimic-iv-demo")).toBe("MIMIC-IV demo");
-    expect(datasetDisplayName("mimic-iv")).toBe("MIMIC-IV");
-    expect(datasetDisplayName("mimic-iv-note")).toBe("MIMIC-IV Note");
-    expect(datasetDisplayName("eicu")).toBe("eICU");
-    expect(datasetDisplayName("my-registry")).toBe("my-registry");
-    expect(datasetDisplayName("constructor")).toBe("constructor");
+  it("uses M4's title, and M4's id where there is none", () => {
+    expect(datasetDisplayName({ name: "mimic-iv", title: "MIMIC-IV" })).toBe("MIMIC-IV");
+    expect(datasetDisplayName({ name: "my-registry" })).toBe("my-registry");
   });
 });
 
 describe("withDatasetName", () => {
+  const mimic = { name: "mimic-iv", title: "MIMIC-IV" };
+
   it("names the dataset in a sentence the server wrote with its id", () => {
-    expect(withDatasetName("This account has no access to mimic-iv yet.", "mimic-iv")).toBe(
+    expect(withDatasetName("This account has no access to mimic-iv yet.", mimic)).toBe(
       "This account has no access to MIMIC-IV yet.",
     );
-    expect(withDatasetName("eicu is already being prepared.", "eicu")).toBe(
-      "eICU is already being prepared.",
-    );
+    expect(
+      withDatasetName("eicu is already being prepared.", { name: "eicu", title: "eICU" }),
+    ).toBe("eICU is already being prepared.");
   });
 
-  it("leaves longer ids, paths, and unknown datasets as they are", () => {
-    expect(withDatasetName("Preparing mimic-iv-note did not finish.", "mimic-iv")).toBe(
+  it("leaves longer ids, paths, and datasets without a title as they are", () => {
+    expect(withDatasetName("Preparing mimic-iv-note did not finish.", mimic)).toBe(
       "Preparing mimic-iv-note did not finish.",
     );
-    expect(withDatasetName("Looked in /data/mimic-iv/hosp.", "mimic-iv")).toBe(
+    expect(withDatasetName("Looked in /data/mimic-iv/hosp.", mimic)).toBe(
       "Looked in /data/mimic-iv/hosp.",
     );
-    expect(withDatasetName("Preparing my-registry did not finish.", "my-registry")).toBe(
+    expect(withDatasetName("Preparing my-registry did not finish.", { name: "my-registry" })).toBe(
       "Preparing my-registry did not finish.",
     );
   });
 });
 
 describe("describeDataset", () => {
-  const dataset = (fields: Partial<ClinicalDataset>): ClinicalDataset => ({
-    name: "mimic-iv",
-    state: "missing",
-    requiresCredentials: false,
-    downloadable: true,
-    ...fields,
-  });
-
   it("says where a dataset is, or is not, in the reader's words", () => {
     expect(describeDataset(dataset({ state: "ready", sizeGb: 6.26 }))).toBe(
       "Ready to query. 6.3 GB on this computer.",
@@ -233,15 +235,82 @@ describe("describeDataset", () => {
     expect(describeDataset(dataset({ state: "ready", sizeGb: 6.26 }), "lab-server")).toBe(
       "Ready to query. 6.3 GB on lab-server.",
     );
-    expect(describeDataset(dataset({ requiresCredentials: true }))).toBe(
-      "Not on this computer. Needs a PhysioNet account with access to it.",
-    );
+    expect(describeDataset(dataset({}))).toBe("Not on this computer.");
   });
 
   it("says how to finish one that is partly there", () => {
     expect(describeDataset(dataset({ state: "incomplete" }))).toBe(
-      "Partly prepared. Download it or add it from a folder again to finish.",
+      "Partly prepared. Finish adding it to make it ready.",
     );
+  });
+});
+
+describe("datasetGroup", () => {
+  const job = (state: ClinicalDatasetJob["state"]): ClinicalDatasetJob => ({
+    kind: "download",
+    state,
+    phase: "downloading",
+    completed: 0,
+    message: "",
+  });
+
+  it("lists what a computer has or is getting apart from what can be added", () => {
+    expect(datasetGroup(dataset({ state: "ready" }))).toBe("present");
+    expect(datasetGroup(dataset({ state: "incomplete" }))).toBe("present");
+    expect(datasetGroup(dataset({ job: job("running") }))).toBe("present");
+    expect(datasetGroup(dataset({}))).toBe("available");
+  });
+
+  it("leaves a download that failed before anything arrived with what can be added", () => {
+    expect(datasetGroup(dataset({ job: job("failed") }))).toBe("available");
+    expect(datasetGroup(dataset({ state: "incomplete", job: job("failed") }))).toBe("present");
+  });
+});
+
+describe("datasetFacts", () => {
+  it("gives the download's size and the version where M4 knows them", () => {
+    expect(datasetFacts(dataset({ downloadSizeGb: 9.6, version: "3.1" }))).toEqual([
+      "About 9.6 GB to download",
+      "Version 3.1",
+    ]);
+    expect(datasetFacts(dataset({}))).toEqual([]);
+  });
+});
+
+describe("describeRemoval", () => {
+  it("says the folder a dataset of the user's own came from stays", () => {
+    const removal = describeRemoval(
+      dataset({ name: "registry", title: "ICU registry", custom: true, state: "ready", sizeGb: 2 }),
+    );
+    expect(removal.title).toBe("Remove ICU registry?");
+    expect(removal.description).toContain("ICU registry (2.0 GB) on this computer");
+    expect(removal.description).toContain("The folder you added it from stays as it is.");
+  });
+
+  it("says a dataset M4 ships can be added again", () => {
+    const removal = describeRemoval(dataset({ title: "MIMIC-IV", state: "ready" }), "lab-server");
+    expect(removal.description).toBe(
+      "Lincei deletes the files of MIMIC-IV from lab-server. Agents can no longer query it until you add it again.",
+    );
+  });
+});
+
+describe("datasetIdFromTitle", () => {
+  it("makes an id M4 accepts from what a person calls the dataset", () => {
+    expect(datasetIdFromTitle("ICU Registry 2024")).toBe("icu-registry-2024");
+    expect(datasetIdFromTitle("  Sepsis cohort (v2)! ")).toBe("sepsis-cohort-v2");
+    expect(datasetIdFromTitle("Kliniken Köln – Intensivstation")).toBe(
+      "kliniken-koln-intensivstation",
+    );
+  });
+
+  it("is empty when nothing in the name can become an id", () => {
+    expect(datasetIdFromTitle("集中治療")).toBe("");
+    expect(datasetIdFromTitle("---")).toBe("");
+  });
+
+  it("never ends in a dash where it is cut short", () => {
+    expect(datasetIdFromTitle(`${"a".repeat(59)} b`)).toBe("a".repeat(59));
   });
 });
 

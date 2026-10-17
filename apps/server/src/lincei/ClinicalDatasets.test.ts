@@ -42,8 +42,10 @@ const m4Dataset = (
   ...fields,
 });
 
-const listingOf = (...datasets: ReadonlyArray<ReturnType<typeof m4Dataset>>) =>
-  JSON.stringify({ version: 1, ok: true, command: "list-datasets", data: { datasets } });
+/** A listing of datasets, which may carry more of what M4 reports than `m4Dataset` writes. */
+const listingOf = (
+  ...datasets: ReadonlyArray<ReturnType<typeof m4Dataset> & Record<string, unknown>>
+) => JSON.stringify({ version: 1, ok: true, command: "list-datasets", data: { datasets } });
 
 const LISTING = listingOf(
   m4Dataset("mimic-iv-demo", {
@@ -363,6 +365,57 @@ describe("ClinicalDatasets", () => {
     ),
   );
 
+  it.effect("says what each dataset is as M4 describes it, with only an https page", () =>
+    withDatasets(
+      () => Effect.succeed(exited(0)),
+      ({ datasets }) =>
+        Effect.gen(function* () {
+          const listed = yield* datasets.list;
+          expect(datasetOf(listed, "mimic-iv")).toEqual({
+            name: "mimic-iv",
+            title: "MIMIC-IV",
+            summary: "Hospital and ICU records.",
+            version: "3.1",
+            pageUrl: "https://physionet.org/content/mimiciv/3.1/",
+            downloadSizeGb: 9.6,
+            state: "missing",
+            requiresCredentials: true,
+            downloadable: true,
+          });
+          expect(datasetOf(listed, "registry")).toEqual({
+            name: "registry",
+            title: "Registry",
+            state: "missing",
+            requiresCredentials: false,
+            downloadable: true,
+          });
+        }),
+      {
+        listing: listingOf(
+          {
+            ...m4Dataset("mimic-iv", {
+              setup_state: "credentials_required",
+              requires_authentication: true,
+            }),
+            title: "MIMIC-IV",
+            summary: " Hospital and ICU records. ",
+            version: "3.1",
+            dataset_page_url: "https://physionet.org/content/mimiciv/3.1/",
+            download_size_gb: 9.6,
+          },
+          {
+            ...m4Dataset("registry", { setup_state: "missing_raw_files" }),
+            title: "Registry",
+            summary: "",
+            version: null,
+            dataset_page_url: "http://example.org/sign-here",
+            download_size_gb: 0,
+          },
+        ),
+      },
+    ),
+  );
+
   it.effect("shows a download's progress while it runs, then prepares the dataset", () =>
     Effect.gen(function* () {
       const downloading = yield* Deferred.make<void>();
@@ -484,7 +537,7 @@ describe("ClinicalDatasets", () => {
             state: "failed",
             // In the user's words, with the way to retry. M4's own text is the detail.
             message:
-              "Lincei prepared mimic-iv-demo, but its main table is missing or cannot be read, so it is not ready. Check that the raw files are complete. Choose Download again to retry.",
+              "Lincei prepared mimic-iv-demo, but its main table is missing or cannot be read, so it is not ready. Check that the raw files are complete. Choose Try again on its row to retry.",
             detail: expect.stringContaining("Catalog Error"),
           });
         }),
@@ -499,7 +552,8 @@ describe("ClinicalDatasets", () => {
           yield* Fiber.await(yield* datasets.download({ name: "mimic-iv-demo" }));
           expect(jobOf(yield* datasets.list, "mimic-iv-demo")).toMatchObject({
             state: "failed",
-            message: "Preparing mimic-iv-demo did not finish. Choose Download again to retry.",
+            message:
+              "Preparing mimic-iv-demo did not finish. Choose Try again on its row to retry.",
             detail: "Traceback: disk full",
           });
         }),
@@ -553,6 +607,124 @@ describe("ClinicalDatasets", () => {
     ),
   );
 
+  describe("a dataset of the user's own", () => {
+    /** What `m4 define-dataset --json` prints, for the folder it was given. */
+    const definitionReport = (fields: Record<string, unknown>) =>
+      JSON.stringify({ version: 1, command: "define-dataset", ...fields });
+
+    it.effect("is defined by M4 from the folder, then prepared from it", () =>
+      withDatasets(
+        (run) =>
+          Effect.succeed(
+            run.args[0] === "define-dataset"
+              ? exited(0, definitionReport({ ok: true, data: { name: "registry" } }))
+              : finished(run),
+          ),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            const source = yield* rawFolder("visits/visits.csv.gz");
+            const job = yield* datasets.define({
+              name: "Registry",
+              title: " -ICU registry ",
+              source,
+            });
+            expect(yield* Fiber.join(job)).toBe(true);
+            expect(commands.filter((args) => args[0] === "define-dataset")).toEqual([
+              ["define-dataset", "registry", "--src", source, "--title=-ICU registry", "--json"],
+            ]);
+            expect(workOf(commands)).toEqual([
+              [
+                "init",
+                "registry",
+                "--src",
+                source,
+                "--no-interactive",
+                "--json",
+                "--events",
+                "ndjson",
+              ],
+            ]);
+          }),
+      ),
+    );
+
+    it.effect("starts nothing when M4 cannot make tables of the folder, and says why", () =>
+      withDatasets(
+        () =>
+          Effect.succeed(
+            exited(
+              1,
+              definitionReport({
+                ok: false,
+                error: {
+                  code: "invalid_table_name",
+                  message: "1 file name(s) cannot become a table name (lab results.csv).",
+                  hint: "Rename them to letters, digits and underscores.",
+                },
+              }),
+            ),
+          ),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            const source = yield* rawFolder("lab results.csv");
+            const failure = yield* datasets
+              .define({ name: "registry", title: "Registry", source })
+              .pipe(Effect.flip);
+            expect(failure.message).toBe(
+              "1 file name(s) cannot become a table name (lab results.csv). Rename them to letters, digits and underscores.",
+            );
+            expect(workOf(commands)).toEqual([]);
+            expect(jobOf(yield* datasets.list, "registry")).toBeUndefined();
+          }),
+      ),
+    );
+
+    it.effect("does not redefine a dataset that is already here", () =>
+      withDatasets(
+        () => Effect.succeed(exited(0)),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            const source = yield* rawFolder("visits.csv.gz");
+            const failure = yield* datasets
+              .define({ name: "mimic-iv-demo", title: "Mine", source })
+              .pipe(Effect.flip);
+            expect(failure.message).toContain('already a dataset called "mimic-iv-demo"');
+            expect(commands.some((args) => args[0] === "define-dataset")).toBe(false);
+          }),
+      ),
+    );
+  });
+
+  it.effect("keeps what a preparation noted about how it read the files", () =>
+    withDatasets(
+      (run) =>
+        Effect.sync(() => {
+          run.onStdoutChunk?.(
+            events(
+              {
+                event: "conversion_warning",
+                code: "decimal_comma_columns_kept_as_text",
+                file: "/data/export/labs/chemistry.csv",
+                columns: ["value", "reference"],
+              },
+              { event: "conversion_warning", code: "csv_read_as_latin1", file: "/data/wards.csv" },
+              { event: "conversion_warning", code: "something_new", file: "/data/x.csv" },
+            ),
+          );
+          return finished(run);
+        }),
+      ({ datasets }) =>
+        Effect.gen(function* () {
+          const source = yield* rawFolder("patient.csv.gz");
+          yield* Fiber.join(yield* datasets.add({ name: "eicu", source }));
+          expect(datasetOf(yield* datasets.list, "eicu")?.notes).toEqual([
+            "chemistry.csv: columns value, reference use decimal commas, so they were kept as text. Agents convert them where they need numbers.",
+            "wards.csv is not saved as UTF-8 and was read as Latin-1. Check that its accented letters look right.",
+          ]);
+        }),
+    ),
+  );
+
   it.effect("starts nothing for a folder that does not exist", () =>
     withDatasets(
       () => Effect.succeed(exited(0)),
@@ -599,6 +771,103 @@ describe("ClinicalDatasets", () => {
       );
     }),
   );
+
+  it.effect("shows a dataset's own folder only where it lies in the dataset store", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "lincei-home-" });
+      const inStore = path.join(baseDir, "clinical", "m4_data", "parquet", "eicu");
+      yield* fileSystem.makeDirectory(inStore, { recursive: true });
+      const elsewhere = yield* rawFolder("patient.parquet");
+      yield* withDatasets(
+        () => Effect.succeed(exited(0)),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            yield* datasets.openFolder("eicu");
+            yield* datasets.openFolder("mimic-iv");
+            const opened = commands.filter((args) => args.length === 1).map(([folder]) => folder);
+            expect(opened).toEqual([
+              yield* fileSystem.realPath(inStore),
+              path.join(baseDir, "clinical", "m4_data"),
+            ]);
+          }),
+        {
+          baseDir,
+          listing: listingOf(
+            m4Dataset("eicu", { setup_state: "ready", parquet_root: inStore }),
+            m4Dataset("mimic-iv", { setup_state: "ready", parquet_root: elsewhere }),
+          ),
+        },
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  describe("removing a dataset", () => {
+    /** What `m4 remove-dataset --json` prints. */
+    const removalReport = (fields: Record<string, unknown>) =>
+      JSON.stringify({ version: 1, command: "remove-dataset", ...fields });
+
+    it.effect("leaves the deleting to M4, and forgets why the last attempt failed", () =>
+      withDatasets(
+        (run) =>
+          Effect.succeed(
+            run.args[0] === "remove-dataset"
+              ? exited(0, removalReport({ ok: true, data: { name: "mimic-iv-demo" } }))
+              : exited(1, "", "No space left on device"),
+          ),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            yield* Fiber.await(yield* datasets.download({ name: "mimic-iv-demo" }));
+            expect(jobOf(yield* datasets.list, "mimic-iv-demo")?.state).toBe("failed");
+            yield* datasets.remove("MIMIC-IV-Demo");
+            expect(commands.filter((args) => args[0] === "remove-dataset")).toEqual([
+              ["remove-dataset", "mimic-iv-demo", "--json"],
+            ]);
+            expect(jobOf(yield* datasets.list, "mimic-iv-demo")).toBeUndefined();
+          }),
+      ),
+    );
+
+    it.effect("removes nothing while the dataset is being prepared", () =>
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        yield* withDatasets(
+          () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          ({ datasets, commands }) =>
+            Effect.gen(function* () {
+              yield* datasets.download({ name: "mimic-iv-demo" });
+              yield* Deferred.await(started);
+              const failure = yield* datasets.remove("mimic-iv-demo").pipe(Effect.flip);
+              expect(failure.message).toBe(
+                "mimic-iv-demo is being prepared. Cancel that first, then remove it.",
+              );
+              expect(commands.some((args) => args[0] === "remove-dataset")).toBe(false);
+            }),
+        );
+      }),
+    );
+
+    it.effect("says what to do when files are in use", () =>
+      withDatasets(
+        () =>
+          Effect.succeed(
+            exited(
+              1,
+              removalReport({
+                ok: false,
+                error: { code: "dataset_in_use", message: "mimic_iv_demo.duckdb is open." },
+              }),
+            ),
+          ),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            const failure = yield* datasets.remove("mimic-iv-demo").pipe(Effect.flip);
+            expect(failure.message).toContain("an agent or another program is using it");
+          }),
+      ),
+    );
+  });
 
   describe("a preparation that did not finish", () => {
     it.effect("is converted again from the start by the next attempt", () =>
@@ -733,7 +1002,7 @@ describe("ClinicalDatasets", () => {
               state: "incomplete",
               job: {
                 state: "failed",
-                message: "Preparing eicu did not finish. Choose Add from folder again to retry.",
+                message: "Preparing eicu did not finish. Choose Try again on its row to retry.",
               },
             });
           }),
@@ -907,7 +1176,7 @@ describe("ClinicalDatasets", () => {
         }),
       {
         plan: () =>
-          planOf({ layout: { ok: true, warnings: ["wrong_eicu_root_layout"], csv_gz_count: 31 } }),
+          planOf({ layout: { ok: true, warnings: ["wrong_root_layout"], csv_gz_count: 31 } }),
       },
     ),
   );
@@ -1034,7 +1303,7 @@ describe("ClinicalDatasets", () => {
               .download({ name: "mimic-iv", credentials })
               .pipe(Effect.flip);
             expect(failure.message).toBe(
-              "Lincei cannot download mimic-iv with a PhysioNet login on this computer yet. Download its files from physionet.org, then use Add from folder.",
+              "Lincei cannot download mimic-iv with a PhysioNet login on this computer yet. Download its files from physionet.org, then add it and choose their folder.",
             );
             expect(runs).toEqual([]);
           }),
@@ -1089,7 +1358,7 @@ describe("ClinicalDatasets", () => {
                   .download({ name: "mimic-iv", credentials })
                   .pipe(Effect.flip);
                 expect(failure.message).toBe(
-                  "The download address of mimic-iv was changed on this computer, so Lincei did not send your PhysioNet login. Download the files from physionet.org yourself and use Add from folder, or ask whoever manages this computer to undo the change.",
+                  "The download address of mimic-iv was changed on this computer, so Lincei did not send your PhysioNet login. Download the files from physionet.org yourself and choose their folder instead, or ask whoever manages this computer to undo the change.",
                 );
                 expect(runs).toEqual([]);
                 expect(commands.some((args) => JSON.stringify(args).includes("stdin"))).toBe(false);
@@ -1123,7 +1392,7 @@ describe("ClinicalDatasets", () => {
             expect(job).toMatchObject({
               state: "failed",
               // What M4 said is never the headline, so nothing it printed can be in it.
-              message: "Preparing mimic-iv did not finish. Choose Download again to retry.",
+              message: "Preparing mimic-iv did not finish. Choose Try again on its row to retry.",
               detail: "Tried ada:<redacted> and gave up.",
             });
             expect(JSON.stringify(job)).not.toContain(PASSWORD);
@@ -1166,7 +1435,7 @@ describe("ClinicalDatasets", () => {
           Effect.gen(function* () {
             const failure = yield* datasets.download({ name: "mimic-iv" }).pipe(Effect.flip);
             expect(failure.message).toBe(
-              "Downloading mimic-iv needs your PhysioNet login. Choose Download on its row and sign in.",
+              "Downloading mimic-iv needs your PhysioNet login. Choose Add on its row and sign in.",
             );
             expect(workOf(commands)).toEqual([]);
           }),
@@ -1266,7 +1535,7 @@ describe("ClinicalDatasets", () => {
               kind: "setup",
               state: "failed",
               message:
-                "The download of mimic-iv-demo stopped because the connection failed or PhysioNet did not answer. Check the internet connection, then choose Download again; files already downloaded are kept.",
+                "The download of mimic-iv-demo stopped because the connection failed or PhysioNet did not answer. Check the internet connection, then choose Try again on its row; files already downloaded are kept.",
             });
             expect(yield* datasets.demoReady).toBe(false);
           }),
