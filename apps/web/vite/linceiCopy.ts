@@ -67,12 +67,12 @@ export const COPY_RULES: ReadonlyArray<CopyRule> = [
   },
   {
     file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
-    from: 'title="Choose your projects"',
+    from: 'title="Import your projects"',
     to: 'title="Bring in earlier work"',
   },
   {
     file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
-    from: 'description="Import projects and conversations from your selected computers."',
+    from: 'description="Import projects and conversations from Claude Code and Codex on your selected computers."',
     to: 'description="If you have used Claude Code or Codex on this computer, you can bring those projects in. Otherwise continue."',
   },
   {
@@ -169,5 +169,17 @@ export const COPY_RULES: ReadonlyArray<CopyRule> = [
     file: "apps/web/src/components/onboarding/WelcomeWizard.tsx",
     from: "Looking for projects from Claude Code and Codex…",
     to: "Looking for earlier Claude Code and Codex projects…",
+  },
+  // Lincei's stage label, which a browser shows (the desktop app passes its own; see
+  // STAGE in scripts/lincei/identity.ts).
+  {
+    file: "apps/web/src/branding.ts",
+    from: '(import.meta.env.DEV ? "Dev" : "Beta")',
+    to: '(import.meta.env.DEV ? "Dev" : "Alpha")',
+  },
+  {
+    file: "apps/web/index.html",
+    from: "<title>T3 Code (Beta)</title>",
+    to: "<title>Lincei (Alpha)</title>",
   },
 ];

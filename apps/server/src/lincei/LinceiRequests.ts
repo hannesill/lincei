@@ -13,7 +13,7 @@ import {
   type LinceiRequest,
   type LinceiResponse,
 } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -49,7 +49,7 @@ const make = Effect.gen(function* () {
   const clinicalDatasets = yield* ClinicalDatasets.ClinicalDatasets;
   const researchBoard = yield* ResearchBoard.ResearchBoard;
   const linceiPreferences = yield* LinceiPreferences.LinceiPreferences;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
 
   const datasets = clinicalDatasets.list.pipe(
     Effect.map((list): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list })),

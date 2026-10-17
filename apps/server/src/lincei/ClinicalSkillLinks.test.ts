@@ -1,7 +1,7 @@
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -191,7 +191,7 @@ describe("ClinicalSkillLinks", () => {
           expect(
             yield* ClinicalSkillLinks.describe({ bundle, directories: [directory] }),
           ).toMatchObject([{ name: "sofa-score", shadowed: false }]);
-        }).pipe(Effect.provideService(HostProcessPlatform, "win32")),
+        }).pipe(Effect.provideService(HostProcess.Platform, "win32")),
     ),
   );
 
@@ -208,7 +208,7 @@ describe("ClinicalSkillLinks", () => {
           expect(yield* ClinicalSkillLinks.sync({ bundle, directories: [directory] })).toEqual({
             shadowed: [],
           });
-        }).pipe(Effect.provideService(HostProcessPlatform, "win32")),
+        }).pipe(Effect.provideService(HostProcess.Platform, "win32")),
       ),
   );
   it.effect("describes each skill and says which ones a skill of the user's replaces", () =>

@@ -23,7 +23,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -89,7 +89,7 @@ const ownedTarget = (link: string, bundle: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const platform = yield* HostProcessPlatform;
+    const platform = yield* HostProcess.Platform;
     const inBundle = comparable(platform, bundle + path.sep);
     return yield* fileSystem.readLink(link).pipe(
       Effect.map((target) => comparable(platform, path.resolve(path.dirname(link), target))),
@@ -110,7 +110,7 @@ const occupied = (link: string) =>
 const linkSkill = (source: string, link: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    if ((yield* HostProcessPlatform) !== "win32") return yield* fileSystem.symlink(source, link);
+    if ((yield* HostProcess.Platform) !== "win32") return yield* fileSystem.symlink(source, link);
     return yield* Effect.tryPromise(() => NodeFSP.symlink(source, link, "junction"));
   });
 
@@ -132,7 +132,7 @@ export const sync = Effect.fn("ClinicalSkillLinks.sync")(function* (input: {
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const bundle = yield* resolvedBundle(input.bundle);
   const skills = yield* bundledSkills(bundle);
   const shadowed = new Set<string>();
@@ -210,7 +210,7 @@ export const describe = Effect.fn("ClinicalSkillLinks.describe")(function* (inpu
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const bundle = yield* resolvedBundle(input.bundle);
   const skills = yield* bundledSkills(bundle);
   const described: Array<BundledSkill> = [];

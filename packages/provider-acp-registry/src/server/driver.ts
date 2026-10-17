@@ -8,7 +8,7 @@ import {
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import { AcpRegistrySettings } from "../settings.ts";
-import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
@@ -19,9 +19,9 @@ import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { ChildProcessSpawner } from "effect/process";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { ProviderHost } from "@t3tools/provider-core/server/ProviderHost";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { AcpRegistryAdapterV2Driver, type AcpRegistryAdapterV2DriverEnv } from "./adapter.ts";
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
@@ -83,6 +83,7 @@ const makeUnsupportedTextGeneration = (): ProviderTextGeneration => {
     generatePrContent: () => unsupported("generatePrContent"),
     generateBranchName: () => unsupported("generateBranchName"),
     generateThreadTitle: () => unsupported("generateThreadTitle"),
+    generateReviewGuide: () => unsupported("generateReviewGuide"),
   };
 };
 
@@ -93,8 +94,6 @@ function modelsFromDiscovery(
   customModels: ReadonlyArray<string>,
 ): ReadonlyArray<ServerProviderModel> {
   const discovered = discovery?.models ?? [];
-  // Discovered session config options and modes ride on every model so the
-  // composer's generic option controls can drive them per thread.
   const capabilities =
     discovery === undefined || discovery.configOptions.length === 0
       ? EMPTY_CAPABILITIES
@@ -422,7 +421,6 @@ export const checkAcpRegistryProviderStatus = Effect.fn("AcpRegistryDriver.check
   },
 );
 
-/** Publishes local executable readiness without starting an ACP process. */
 export const checkAcpRegistryProviderReadiness = Effect.fn(
   "AcpRegistryDriver.checkProviderReadiness",
 )(function* (
@@ -455,9 +453,8 @@ export const checkAcpRegistryProviderReadiness = Effect.fn(
     : snapshot;
 });
 
-export type AcpRegistryDriverEnv = AcpRegistryAdapterV2DriverEnv | ProviderHost;
+export type AcpRegistryDriverEnv = AcpRegistryAdapterV2DriverEnv | ProviderHost.ProviderHost;
 
-/** Canonical provider-instance wrapper for ACP Registry orchestration adapters. */
 export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryDriverEnv> = {
   driverKind: DRIVER_KIND,
   metadata: {
@@ -484,8 +481,8 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
       }
       const crypto = yield* Crypto.Crypto;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const hostEnvironment = yield* HostProcessEnvironment;
-      const host = yield* ProviderHost;
+      const hostEnvironment = yield* HostProcess.Environment;
+      const host = yield* ProviderHost.ProviderHost;
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
         instanceId,
@@ -497,7 +494,10 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         continuationKey: continuationIdentity.continuationKey,
       };
       const effectiveConfig = { ...config, enabled } satisfies AcpRegistrySettings;
-      const processEnvironment = mergeProviderInstanceEnvironment(environment, hostEnvironment);
+      const processEnvironment = yield* mergeProviderInstanceEnvironment(
+        environment,
+        hostEnvironment,
+      );
       const orchestrationAdapter = yield* AcpRegistryAdapterV2Driver.create({
         instanceId,
         displayName,
@@ -619,7 +619,7 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
           }
           return { provider: enriched, generation: cacheState.generation };
         });
-      const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, host.settings);
+      const snapshotSettings = yield* makeProviderSnapshotSettingsSource(effectiveConfig);
       const snapshot = yield* makeManagedServerProvider<
         ProviderSnapshotSettings<AcpRegistrySettings>
       >({
@@ -729,8 +729,6 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         ),
       );
 
-      // The management probes read the coordinator via serviceOption, so it is
-      // provided only when this driver instance actually has one.
       const provideAcpManagementServices = <A, E>(
         effect: Effect.Effect<
           A,

@@ -20,7 +20,7 @@
  * @module ResearchBoard
  */
 import type { ResearchBoard as ResearchBoardInfo } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -83,7 +83,7 @@ const make = Effect.gen(function* () {
   const clinicalRuntime = yield* ClinicalRuntime.ClinicalRuntime;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const processRunner = yield* ProcessRunner.ProcessRunner;
 
   /** Where each working directory's study store is, as Vitrine resolved it. */

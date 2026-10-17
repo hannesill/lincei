@@ -3,9 +3,15 @@ import {
   normalizeDevinToolCall,
   extractDevinSubagentUpdate,
 } from "./devinAcp.ts";
+import {
+  copilotClientCapabilitiesMeta,
+  extractCopilotSubagentUpdate,
+  makeCopilotSubagentRouting,
+} from "./copilotAcp.ts";
 import { defaultInstanceIdForDriver, ProviderDriverKind } from "@t3tools/contracts";
+import { readCustomModelEntries } from "@t3tools/shared/model";
 import { AcpRegistrySettings } from "../settings.ts";
-import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -15,9 +21,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import { ChildProcessSpawner } from "effect/process";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EffectAcpErrors from "effect-acp/errors";
 
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import {
   normalizeAcpRegistryCommands,
@@ -55,31 +62,17 @@ export interface AcpRegistryAdapterV2Options {
   readonly instanceId: Parameters<typeof makeAcpAdapterV2>[0]["instanceId"];
   readonly settings: AcpRegistrySettings;
   readonly environment: NodeJS.ProcessEnv;
-  readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly selfInvocation: SelfInvocation;
-  readonly resolver: Pick<AcpRegistrySupport.AcpRegistryCatalog["Service"], "resolve">;
-  readonly runtimeCoordinator?: AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator["Service"];
   readonly nativeLogging?: Parameters<typeof makeAcpAdapterV2>[0]["nativeLogging"];
   readonly makeRuntime?: (
     input: AcpAdapterV2RuntimeInput,
   ) => Effect.Effect<
     AcpSessionRuntime.AcpSessionRuntime["Service"],
     EffectAcpErrors.AcpError,
-    Crypto.Crypto | Scope.Scope
+    ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | Scope.Scope
   >;
   readonly assertComplete?: Effect.Effect<void, EffectAcpErrors.AcpError>;
 }
-
-// ─── Per-agent exceptions ────────────────────────────────────────────────────
-// This adapter serves every ACP registry agent through the plain ACP spec.
-// Agent-specific behavior does not belong here: an agent that needs it gets a
-// dedicated driver (as Grok and Antigravity have). The few exceptions below
-// predate that rule and are small presentation hooks, not permission or tool
-// behavior.
-//
-// Agents changing this file: do NOT add another `agentId === "..."` branch,
-// agent table, or agent-specific hook without explicit approval from the
-// maintainer in the conversation. Propose a dedicated driver instead.
 
 // Mistral Vibe: its application error code for rate limits (not an ACP code).
 const MISTRAL_VIBE_RATE_LIMITED = -31001;
@@ -111,7 +104,6 @@ export function registerMistralVibeAcpExtensions(context: AcpAdapterV2ExtensionC
       }),
   );
 }
-// ─── End per-agent exceptions (Devin's gates are marked in makeAcpRegistryAdapterV2) ───
 
 export function acpRegistryPromptFailure(agentId: string, cause: unknown) {
   return makeProviderFailure({
@@ -121,7 +113,6 @@ export function acpRegistryPromptFailure(agentId: string, cause: unknown) {
           message: cause.errorMessage,
           code: String(cause.code),
           class:
-            // Per-agent exception: see the note above registerMistralVibeAcpExtensions.
             agentId === "mistral-vibe" && cause.code === MISTRAL_VIBE_RATE_LIMITED
               ? ("usage_limit" as const)
               : ("provider_error" as const),
@@ -130,17 +121,20 @@ export function acpRegistryPromptFailure(agentId: string, cause: unknown) {
   });
 }
 
-function makeAcpRegistryRuntime(options: AcpRegistryAdapterV2Options) {
+function makeAcpRegistryRuntime(
+  options: AcpRegistryAdapterV2Options,
+  catalog: AcpRegistrySupport.AcpRegistryCatalog["Service"],
+) {
   return (
     input: AcpAdapterV2RuntimeInput,
   ): Effect.Effect<
     AcpSessionRuntime.AcpSessionRuntime["Service"],
     EffectAcpErrors.AcpError,
-    Crypto.Crypto | Scope.Scope
+    ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | Scope.Scope
   > =>
     Effect.gen(function* () {
       const { processEnvironment, ...runtimeInput } = input;
-      const resolved = yield* options.resolver
+      const resolved = yield* catalog
         .resolve(options.settings, input.cwd, options.environment)
         .pipe(
           Effect.mapError(
@@ -162,11 +156,10 @@ function makeAcpRegistryRuntime(options: AcpRegistryAdapterV2Options) {
                   env: { ...resolved.spawn.env, ...processEnvironment },
                 },
           ...(options.settings.authMethodId ? { authMethodId: options.settings.authMethodId } : {}),
-        }).pipe(
-          Layer.provide(
-            Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, options.childProcessSpawner),
+          customModels: readCustomModelEntries(options.settings.customModels).map(
+            (entry) => entry.slug,
           ),
-        ),
+        }),
       );
       return yield* Effect.service(AcpSessionRuntime.AcpSessionRuntime).pipe(
         Effect.provide(context),
@@ -177,17 +170,24 @@ function makeAcpRegistryRuntime(options: AcpRegistryAdapterV2Options) {
 export const makeAcpRegistryAdapterV2 = Effect.fn("makeAcpRegistryAdapterV2")(function* (
   options: AcpRegistryAdapterV2Options,
 ) {
-  const runtimeCoordinator = options.runtimeCoordinator;
+  const catalog = yield* AcpRegistrySupport.AcpRegistryCatalog;
+  const runtimeCoordinator = Option.getOrUndefined(
+    yield* Effect.serviceOption(AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator),
+  );
   const registryAgentId = options.settings.source === "local" ? "" : options.settings.agentId;
   const startupKey =
     options.settings.source === "local" ? `local:${options.instanceId}` : registryAgentId;
   const isDevin = registryAgentId === "devin";
+  // Local installs launch the `copilot` binary directly with no registry id.
+  const isCopilot =
+    registryAgentId === "github-copilot-cli" ||
+    (options.settings.source === "local" &&
+      /^copilot(\.exe|\.cmd)?$/i.test(options.settings.commandPath.split(/[\\/]/).pop() ?? ""));
+  const copilotRouting = isCopilot ? makeCopilotSubagentRouting() : undefined;
   const flavor: AcpAdapterV2Flavor = {
     driver: ACP_REGISTRY_PROVIDER,
     capabilities: AcpProviderCapabilitiesV2,
     promptFailure: (cause) => acpRegistryPromptFailure(registryAgentId, cause),
-    // Per-agent exceptions (Mistral Vibe, Devin): see the note above
-    // registerMistralVibeAcpExtensions before adding any more.
     ...(registryAgentId === "mistral-vibe"
       ? { registerExtensions: registerMistralVibeAcpExtensions }
       : {}),
@@ -202,7 +202,15 @@ export const makeAcpRegistryAdapterV2 = Effect.fn("makeAcpRegistryAdapterV2")(fu
           extractSubagentUpdate: extractDevinSubagentUpdate,
         }
       : {}),
-    makeRuntime: options.makeRuntime ?? makeAcpRegistryRuntime(options),
+    ...(copilotRouting === undefined
+      ? {}
+      : {
+          clientCapabilitiesMeta: copilotClientCapabilitiesMeta,
+          registerExtensions: copilotRouting.registerExtensions,
+          normalizeSessionUpdate: copilotRouting.normalizeSessionUpdate,
+          extractSubagentUpdate: extractCopilotSubagentUpdate,
+        }),
+    makeRuntime: options.makeRuntime ?? makeAcpRegistryRuntime(options, catalog),
     ...(runtimeCoordinator === undefined
       ? {}
       : {
@@ -236,13 +244,10 @@ export const makeAcpRegistryAdapterV2 = Effect.fn("makeAcpRegistryAdapterV2")(fu
     instanceId: options.instanceId,
     flavor,
     selfInvocation: options.selfInvocation,
-    // Per-agent exception (see the note above registerMistralVibeAcpExtensions):
-    // Devin runs commands through client terminals and has no ask mode over
-    // ACP to fall back on. Every other registry agent runs its own.
+    // Devin runs commands through client terminals and has no ask mode over ACP to fall back on.
     ...(isDevin
       ? {
           clientTerminals: {
-            childProcessSpawner: options.childProcessSpawner,
             environment: options.environment,
             shellCommands: true,
           },
@@ -259,6 +264,7 @@ export type AcpRegistryAdapterV2DriverEnv =
   | AcpRegistrySupport.AcpRegistryCatalog
   | IdAllocator.IdAllocatorV2
   | Path.Path
+  | McpProviderSessions.McpProviderSessions
   | ProviderEventLoggers.ProviderEventLoggers
   | ProviderHost.ProviderHost;
 
@@ -271,24 +277,14 @@ export const AcpRegistryAdapterV2Driver: ProviderAdapterDriver<
   defaultConfig: (): AcpRegistrySettings => DEFAULT_ACP_REGISTRY_SETTINGS,
   create: Effect.fn("AcpRegistryAdapterV2Driver.create")(
     function* (input: ProviderAdapterDriverCreateInput<AcpRegistrySettings>) {
-      const hostEnvironment = yield* HostProcessEnvironment;
+      const hostEnvironment = yield* HostProcess.Environment;
       const selfInvocation = yield* resolveSelfInvocation();
-      const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const providerEventLoggers = yield* ProviderEventLoggers.ProviderEventLoggers;
       const makeNativeLogger = yield* makeAcpNativeLoggerFactory();
-      const resolver = yield* AcpRegistrySupport.AcpRegistryCatalog;
-      const runtimeCoordinator = yield* Effect.serviceOption(
-        AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator,
-      );
       return yield* makeAcpRegistryAdapterV2({
         instanceId: input.instanceId,
         settings: { ...input.config, enabled: input.enabled },
-        environment: mergeProviderInstanceEnvironment(input.environment, hostEnvironment),
-        childProcessSpawner,
-        resolver,
-        ...(Option.isSome(runtimeCoordinator)
-          ? { runtimeCoordinator: runtimeCoordinator.value }
-          : {}),
+        environment: yield* mergeProviderInstanceEnvironment(input.environment, hostEnvironment),
         selfInvocation,
         nativeLogging: (threadId) =>
           makeNativeLogger({

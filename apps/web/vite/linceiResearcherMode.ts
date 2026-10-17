@@ -339,8 +339,8 @@ export const HIDDEN_UNLESS_TECHIE: ReadonlyArray<HiddenControl> = [
     selector: '[data-testid^="sidebar-terminal-status-"]',
     anchors: [
       {
-        file: "apps/web/src/components/Sidebar.tsx",
-        text: "data-testid={`sidebar-terminal-status-${thread.id}`}",
+        file: "apps/web/src/components/ThreadStatusIndicators.tsx",
+        text: "data-testid={`sidebar-terminal-status-${threadRef.threadId}`}",
       },
     ],
   },

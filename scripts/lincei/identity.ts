@@ -43,10 +43,12 @@ const BUNDLE_ID: ReadonlyArray<Replacement> = [
   ["com.t3tools.t3code", "studio.lincei.app"],
 ];
 const REPOSITORY: ReadonlyArray<Replacement> = [["pingdotgg/t3code", "hannesill/lincei"]];
-const NAME: ReadonlyArray<Replacement> = [
-  ["T3-Code-", "Lincei-"],
-  ["T3 Code", "Lincei"],
+// Lincei's stage label is its own: upstream calls T3 Code "Beta", Lincei is still "Alpha".
+const STAGE: ReadonlyArray<Replacement> = [
+  ["T3 Code (Beta)", "Lincei (Alpha)"],
+  ["T3 Code Beta", "Lincei Alpha"],
 ];
+const NAME: ReadonlyArray<Replacement> = [...STAGE, ["T3-Code-", "Lincei-"], ["T3 Code", "Lincei"]];
 const SCHEME: ReadonlyArray<Replacement> = [
   ["t3code-dev://", "lincei-dev://"],
   ["t3code://", "lincei://"],
@@ -72,7 +74,10 @@ interface Rules {
 const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   // Files that only spell identity: every token in them is rewritten.
   "apps/desktop/src/app/DesktopEarlyElectronStartup.ts": { tokens: EVERY_TOKEN },
-  "apps/desktop/src/app/DesktopEnvironment.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopEnvironment.ts": {
+    tokens: EVERY_TOKEN,
+    exact: [['? "Nightly" : "Beta";', '? "Nightly" : "Alpha";']],
+  },
   "apps/desktop/src/app/DesktopLegacyLocalStorage.ts": { tokens: EVERY_TOKEN },
   "apps/desktop/src/app/DesktopStatePaths.ts": { tokens: EVERY_TOKEN },
   "apps/desktop/src/app/DesktopUserData.ts": { tokens: EVERY_TOKEN },
@@ -80,18 +85,53 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "apps/server/src/cli/browser.ts": { tokens: EVERY_TOKEN },
   "apps/server/src/cloud/bootService.ts": { tokens: EVERY_TOKEN },
   "apps/server/src/http.ts": { tokens: EVERY_TOKEN },
+  "apps/server/src/httpCors.ts": { tokens: EVERY_TOKEN },
   "apps/server/src/os-jank.ts": { tokens: EVERY_TOKEN },
 
   // Files that mix identity with names other code depends on.
   "apps/desktop/package.json": {
-    exact: [['"productName": "T3 Code (Alpha)"', '"productName": "Lincei (Alpha)"']],
+    exact: [['"productName": "T3 Code (Beta)"', '"productName": "Lincei (Alpha)"']],
   },
   "apps/desktop/scripts/electron-launcher.mjs": {
     exact: [
-      ['"T3 Code (Dev)" : "T3 Code (Alpha)"', '"Lincei (Dev)" : "Lincei (Alpha)"'],
+      ['"T3 Code (Dev)" : "T3 Code (Beta)"', '"Lincei (Dev)" : "Lincei (Alpha)"'],
       ["`com.t3tools.t3code.dev.${", "`studio.lincei.app.dev.${"],
       [': "com.t3tools.t3code";', ': "studio.lincei.app";'],
       ['? ["t3code-dev"] : ["t3code"]', '? ["lincei-dev"] : ["lincei"]'],
+      // Lincei's macOS icon for local desktop runs (lincei/macIconCatalog.mjs). These are
+      // hooks rather than identity, but a governed file loses anything not written here
+      // when a merge takes upstream's side.
+      [
+        'from "./ensure-electron-runtime.mjs";\n\n',
+        [
+          'from "./ensure-electron-runtime.mjs";',
+          'import { installLinceiMacIconCatalog, linceiMacIconCatalogKey } from "./lincei/macIconCatalog.mjs";',
+          "",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "    appProtocolSchemes: APP_PROTOCOL_SCHEMES,\n  };",
+        [
+          "    appProtocolSchemes: APP_PROTOCOL_SCHEMES,",
+          "    linceiIconCatalog: linceiMacIconCatalogKey(",
+          "      resolveMacLauncherIconPaths(runtimeDir).sourceIconPath,",
+          "    ),",
+          "  };",
+        ].join("\n"),
+      ],
+      [
+        "  patchHelperBundleInfoPlists(targetAppBundlePath);\n  if (isDevelopment) {",
+        [
+          "  patchHelperBundleInfoPlists(targetAppBundlePath);",
+          "  installLinceiMacIconCatalog(",
+          "    resolveMacLauncherIconPaths(runtimeDir).sourceIconPath,",
+          "    targetAppBundlePath,",
+          "    setPlistString,",
+          "  );",
+          "  if (isDevelopment) {",
+        ].join("\n"),
+      ],
     ],
   },
   // Telemetry stays off unless a Lincei analytics project is configured, and
@@ -110,6 +150,15 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   },
   "packages/shared/src/codexAuthHandoff.ts": { tokens: [...SCHEME, ...SLUG] },
   "packages/shared/src/providerAuthReturnUrl.ts": { tokens: SCHEME },
+  "packages/shared/src/promptLinks.ts": {
+    exact: [
+      [
+        "const APP_SCHEME = /^t3code(?:-[a-z]+)?:$/;",
+        "const APP_SCHEME = /^lincei(?:-[a-z]+)?:$/;",
+      ],
+      ['scheme = "t3code"): string {', 'scheme = "lincei"): string {'],
+    ],
+  },
   "packages/shared/src/cliRelease.ts": {
     exact: [
       [
@@ -128,6 +177,10 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
       ],
       ['artifactName: "T3-Code-${version}', 'artifactName: "Lincei-${version}'],
       ['"T3 Code captures the active window', '"Lincei captures the active window'],
+      [
+        '"T3 Code connects to devices on your local network',
+        '"Lincei connects to devices on your local network',
+      ],
       ['name: "T3 Code",', 'name: "Lincei",'],
       ['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]'],
       ['executableName: "t3code"', 'executableName: "lincei"'],
@@ -154,6 +207,30 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
           "...(signed",
           '        ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") }',
           '        : { identity: "-", hardenedRuntime: false }),',
+        ].join("\n"),
+      ],
+      // The release build's macOS icon (lincei/macIcon.ts), a hook kept here for the same
+      // reason as the launcher's.
+      [
+        'from "./apply-web-brand-assets.ts";\nimport {',
+        [
+          'from "./apply-web-brand-assets.ts";',
+          'import * as LinceiMacIcon from "./lincei/macIcon.ts";',
+          "import {",
+        ].join("\n"),
+      ],
+      [
+        "  };\n\n  const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);",
+        [
+          "  };",
+          "",
+          "  yield* LinceiMacIcon.addLinceiMacIcon(",
+          "    options.platform,",
+          "    stagePackageJson.build,",
+          "    path.join(repoRoot, iconAssets.macIconPng),",
+          "    stageProdResourcesDir,",
+          "  );",
+          "  const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);",
         ].join("\n"),
       ],
     ],
@@ -276,7 +353,10 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
 
   // Upstream tests that assert the values above. When an upstream merge brings
   // a test that fails only on an identity literal, add it with the tokens it pins.
-  "apps/desktop/src/app/DesktopAppIdentity.test.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/app/DesktopAppIdentity.test.ts": {
+    tokens: EVERY_TOKEN,
+    exact: [['{ stage: "Beta", environment: {} }', '{ stage: "Alpha", environment: {} }']],
+  },
   "apps/desktop/src/app/DesktopCliShim.test.ts": { tokens: NAME },
   "apps/desktop/src/permissions/MacPermissionHelper.test.ts": { tokens: NAME },
   "apps/server/src/provider/ProviderRegistry.test.ts": {
@@ -305,6 +385,8 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "packages/shared/src/cliRelease.test.ts": { tokens: REPOSITORY },
   "packages/shared/src/codexAuthHandoff.test.ts": { tokens: SCHEME },
   "packages/shared/src/providerAuthReturnUrl.test.ts": { tokens: [...SCHEME, ...SLUG] },
+  "packages/shared/src/promptLinks.test.ts": { tokens: SCHEME },
+  "apps/server/src/auth/EnvironmentAuth.test.ts": { tokens: SCHEME },
   "packages/ssh/src/tunnel.test.ts": { tokens: REPOSITORY },
   "scripts/install.test.ts": {
     tokens: NAME,
@@ -312,7 +394,14 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   },
   "scripts/build-desktop-artifact.test.ts": {
     tokens: [...BUNDLE_ID, ...NAME],
-    exact: [['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]']],
+    exact: [
+      ['schemes: ["t3code", "t3code-dev"]', 'schemes: ["lincei", "lincei-dev"]'],
+      // A regular expression, where the bundle id's dots are escaped.
+      [
+        "ABC1234567\\.com\\.t3tools\\.t3code\\.webauthn",
+        "ABC1234567\\.studio\\.lincei\\.app\\.webauthn",
+      ],
+    ],
   },
 };
 
