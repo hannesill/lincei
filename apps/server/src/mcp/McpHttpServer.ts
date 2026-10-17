@@ -835,6 +835,7 @@ export const layerMcpTransport = McpServer.layerHttp({
 }).pipe(Layer.provide(layerMcpAuthMiddleware));
 
 export const layer = Layer.mergeAll(
+  toolkitRegistration(ClinicalToolkit, ClinicalHandlers.layer),
   layerPreviewToolkit,
   layerOrchestratorToolkit,
   layerThreadToolkit,
@@ -846,5 +847,4 @@ export const layer = Layer.mergeAll(
   layerPullRequestsToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
-  toolkitRegistration(ClinicalToolkit, ClinicalHandlers.layer),
 ).pipe(Layer.provideMerge(layerMcpTransport));

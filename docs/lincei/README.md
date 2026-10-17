@@ -85,8 +85,8 @@ Then, for each conflict:
   including ones without the word lincei (the Clinical page's icon in `SettingsSidebarNav.tsx`).
   `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its hook. The
   hooks in `build-desktop-artifact.ts` and `electron-launcher.mjs` are identity rules,
-  so `apply` restores them. A hook that adds an entry to a list goes first in it: upstream appends
-  at the end, and an entry there conflicts with every one it adds.
+  so `apply` restores them. Where order does not matter, a hook that adds an entry to a list goes
+  first in it: upstream appends at the end, and an entry there conflicts with every one it adds.
 - **`apps/desktop/resources/installer.nsh`** (only if upstream starts customizing its Windows
   installer and adds the same file): keep both, with one `customUnInstall` macro that does
   upstream's work and Lincei's.
@@ -99,11 +99,21 @@ Finish with:
 ```sh
 vp i
 node scripts/lincei/identity.ts check
-vp run --filter t3 --filter @t3tools/desktop --filter @t3tools/web typecheck
-(cd apps/server && vp test run src/lincei)
+vp run --filter t3 --filter @t3tools/desktop --filter @t3tools/web \
+  --filter @t3tools/contracts --filter @t3tools/shared typecheck
+(cd apps/server && vp test run src/lincei src/auth/EnvironmentAuth.test.ts src/cli/app.test.ts \
+  src/cloud/bootService.test.ts src/provider/ProviderRegistry.test.ts src/provider/providerStatusCache.test.ts)
 (cd apps/web && vp test run src/lincei)
 (cd apps/desktop && vp test run)
+(cd scripts && vp test run lincei build-desktop-artifact.test.ts install.test.ts)
+(cd packages/shared && vp test run src/cliRelease.test.ts src/codexAuthHandoff.test.ts \
+  src/promptLinks.test.ts src/providerAuthReturnUrl.test.ts)
+(cd packages/ssh && vp test run src/tunnel.test.ts)
 ```
+
+The test files outside `lincei/` are the governed tests, the ones `identity.ts` lists. Format only
+the files you changed (`vp fmt <paths>`): a whole-tree `vp fmt` has reformatted upstream files that
+upstream's own check accepts, and every such line conflicts on the next merge.
 
 `identity.ts check` reads four things. A governed file that is stale: run `apply`. A string in
 `apps/web/vite/linceiCopy.ts` or a colour in `apps/web/vite/linceiTheme.ts` that upstream reworded
@@ -133,7 +143,7 @@ The typecheck and the tests show what is left, because none of it conflicts in g
   ```sh
   git diff "$(git merge-base HEAD t3code/main)" t3code/main -- apps packages scripts \
     ':!apps/mobile' ':!apps/marketing' ':!*.md' |
-    grep -E '^\+.*(t3code://|t3code-dev|"t3code"|com\.t3tools|pingdotgg/t3code|T3 Code \(|\.t3/)'
+    grep -E '^\+.*(t3code://|t3code-dev|"t3code"|t3code\.service|com\.t3tools|pingdotgg/t3code|T3 Code \(|\.t3/|"\.t3")'
   ```
 
   Run it before committing the merge, while the merge base is still the old one.
