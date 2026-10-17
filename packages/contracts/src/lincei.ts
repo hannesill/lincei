@@ -135,6 +135,20 @@ export const ClinicalDataset = Schema.Struct({
 export type ClinicalDataset = typeof ClinicalDataset.Type;
 
 /**
+ * What a server can do with its datasets beyond listing, adding and
+ * downloading them, which needs a Lincei and an M4 newer than those. A server
+ * that sends no such description can do none of it, and also cannot open a
+ * dataset's folder.
+ */
+export const ClinicalDatasetActions = Schema.Struct({
+  /** M4 can define a dataset of the user's own files (`m4 define-dataset`). */
+  define: Schema.Boolean,
+  /** M4 can delete what it prepared of a dataset (`m4 remove-dataset`). */
+  remove: Schema.Boolean,
+});
+export type ClinicalDatasetActions = typeof ClinicalDatasetActions.Type;
+
+/**
  * A PhysioNet login for one download. The server passes it to M4 and keeps
  * nothing. The password decodes to a redacted value, so a request that is
  * logged, traced, or printed shows `<redacted>` in its place.
@@ -230,7 +244,10 @@ export const LinceiResponse = Schema.Union([
   Schema.TaggedStruct("ResearchBoard", { board: ResearchBoard }),
   /** `updatedAt` is in epoch milliseconds, and absent while the study has no cards. */
   Schema.TaggedStruct("ResearchBoardActivity", { updatedAt: Schema.optional(Schema.Number) }),
-  Schema.TaggedStruct("ClinicalDatasets", { datasets: Schema.Array(ClinicalDataset) }),
+  Schema.TaggedStruct("ClinicalDatasets", {
+    datasets: Schema.Array(ClinicalDataset),
+    actions: Schema.optional(ClinicalDatasetActions),
+  }),
   /** A request that changed nothing a client shows went through. */
   Schema.TaggedStruct("Done", {}),
   Schema.TaggedStruct("Preferences", { preferences: LinceiPreferences }),

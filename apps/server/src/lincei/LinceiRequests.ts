@@ -51,8 +51,12 @@ const make = Effect.gen(function* () {
   const linceiPreferences = yield* LinceiPreferences.LinceiPreferences;
   const platform = yield* HostProcessPlatform;
 
-  const datasets = clinicalDatasets.list.pipe(
-    Effect.map((list): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list })),
+  const datasets = Effect.all([clinicalDatasets.list, clinicalDatasets.actions], {
+    concurrency: 2,
+  }).pipe(
+    Effect.map(
+      ([list, actions]): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list, actions }),
+    ),
     Effect.mapError(toRequestError),
   );
 

@@ -1,16 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId } from "@t3tools/contracts";
 import type { ReactNode } from "react";
 
 import {
   SettingsPageContainer,
   SettingsRow,
-  SettingsSearchTarget,
   SettingsSection,
 } from "~/components/settings/settingsLayout";
 import { useSettingsScope } from "~/components/settings/SettingsScopeContext";
 import { Button } from "~/components/ui/button";
-import { toastManager } from "~/components/ui/toast";
 import { environmentCatalog } from "~/connection/catalog";
 import { type EnvironmentPresentation, usePrimaryEnvironmentId } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -24,7 +21,6 @@ import {
   clinicalToolsInstalled,
   describeLostConnection,
 } from "./clinicalPresentation";
-import { classifyLinceiFailure, describeLinceiFailure } from "./linceiAnswers";
 import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
@@ -108,12 +104,10 @@ function ClinicalDataPanel({
       <SettingsSection {...CLINICAL_SETTINGS.datasets}>
         {clinicalToolsInstalled(status) ? (
           <>
-            <ClinicalDatasetList environmentId={environmentId} enabled />
-            <DatasetStorage
+            <ClinicalDatasetList
               environmentId={environmentId}
-              dataDir={status.dataDir}
-              onThisComputer={onThisComputer}
-              canOperate={canOperate}
+              enabled
+              storageDir={status.dataDir}
             />
           </>
         ) : (
@@ -124,55 +118,6 @@ function ClinicalDataPanel({
       </SettingsSection>
       <AgentBriefingSection environmentId={environmentId} />
     </ClinicalPage>
-  );
-}
-
-/**
- * Where the prepared datasets are kept, which is where sensitive data sits on
- * disk. The folder is the server's, so it opens there, on that computer's own
- * screen, and is offered only when that is this computer.
- */
-function DatasetStorage({
-  environmentId,
-  dataDir,
-  onThisComputer,
-  canOperate,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly dataDir: string;
-  readonly onThisComputer: boolean;
-  readonly canOperate: boolean;
-}) {
-  const request = useAtomCommand(linceiCommand, { reportFailure: false });
-  const openFolder = async () => {
-    const result = await request({ environmentId, input: { _tag: "ClinicalDataFolderOpen" } });
-    if (result._tag !== "Failure") return;
-    toastManager.add({
-      type: "error",
-      title: "Could not open the folder",
-      description: describeLinceiFailure(classifyLinceiFailure(result.cause)) ?? undefined,
-    });
-  };
-  return (
-    <SettingsSearchTarget
-      id={CLINICAL_SETTINGS.location.id}
-      className="flex items-center gap-3 border-t border-border/60 px-3 py-3 sm:px-4"
-    >
-      {/* Not "Lincei's folder": a user who set M4_DATA_DIR keeps their own. */}
-      <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-        Stored in <span className="font-mono break-all text-muted-foreground/80">{dataDir}</span>
-      </p>
-      {onThisComputer ? (
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={!canOperate}
-          onClick={() => void openFolder()}
-        >
-          Open folder
-        </Button>
-      ) : null}
-    </SettingsSearchTarget>
   );
 }
 

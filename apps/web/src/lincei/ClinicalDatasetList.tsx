@@ -4,11 +4,12 @@ import { type ReactNode, useId, useState } from "react";
 
 import { EllipsisIcon } from "lucide-react";
 
+import { SettingsSearchTarget } from "~/components/settings/settingsLayout";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { toastManager } from "~/components/ui/toast";
-import { useEnvironment, usePrimaryEnvironmentId } from "~/state/environments";
+import { useEnvironment, useEnvironmentHttpBaseUrl } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { AddDatasetDialog, type AddDatasetMode, type AddDatasetRequest } from "./AddDatasetDialog";
@@ -20,6 +21,7 @@ import {
   datasetGroup,
   describeDataset,
   describeJobProgress,
+  serverOnThisComputer,
   withDatasetName,
 } from "./clinicalPresentation";
 import { useClinicalDatasets } from "./clinicalState";
@@ -33,6 +35,7 @@ import { linceiCommand } from "./linceiRequests";
 import { ExternalLink, hostOf } from "./physioNet";
 import { ProviderDataNotice } from "./ProviderDataNotice";
 import { RemoveDatasetDialog } from "./RemoveDatasetDialog";
+import { CLINICAL_SETTINGS } from "./settingsSearchItems";
 import { TechnicalDetails } from "./TechnicalDetails";
 
 type DatasetAction = Extract<
@@ -122,7 +125,8 @@ function PresentRow({
   readonly onOpen: (mode: AddDatasetMode) => void;
   /** Shows its files, where they are on this computer. */
   readonly onShowFiles: (() => void) | null;
-  readonly onRemove: () => void;
+  /** Null where the server cannot remove datasets. */
+  readonly onRemove: (() => void) | null;
 }) {
   const progressId = useId();
   const { job, name } = dataset;
@@ -193,32 +197,55 @@ function PresentRow({
                 </Button>
               </>
             )}
-            <Menu>
-              <MenuTrigger
-                disabled={disabled}
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="outline"
-                    aria-label={`More for ${datasetDisplayName(dataset)}`}
-                  />
-                }
-              >
-                <EllipsisIcon />
-              </MenuTrigger>
-              <MenuPopup align="end">
-                {onShowFiles === null ? null : (
-                  <MenuItem onClick={onShowFiles}>Show files</MenuItem>
-                )}
-                <MenuItem variant="destructive" onClick={onRemove}>
-                  Remove…
-                </MenuItem>
-              </MenuPopup>
-            </Menu>
+            <DatasetMenu
+              dataset={dataset}
+              disabled={disabled}
+              onShowFiles={onShowFiles}
+              onRemove={onRemove}
+            />
           </>
         )}
       </div>
     </li>
+  );
+}
+
+/** What else can be done with a dataset; nothing at all where there is nothing to offer. */
+function DatasetMenu({
+  dataset,
+  disabled,
+  onShowFiles,
+  onRemove,
+}: {
+  readonly dataset: ClinicalDataset;
+  readonly disabled: boolean;
+  readonly onShowFiles: (() => void) | null;
+  readonly onRemove: (() => void) | null;
+}) {
+  if (onShowFiles === null && onRemove === null) return null;
+  return (
+    <Menu>
+      <MenuTrigger
+        disabled={disabled}
+        render={
+          <Button
+            size="icon-xs"
+            variant="outline"
+            aria-label={`More for ${datasetDisplayName(dataset)}`}
+          />
+        }
+      >
+        <EllipsisIcon />
+      </MenuTrigger>
+      <MenuPopup align="end">
+        {onShowFiles === null ? null : <MenuItem onClick={onShowFiles}>Show files</MenuItem>}
+        {onRemove === null ? null : (
+          <MenuItem variant="destructive" onClick={onRemove}>
+            Remove…
+          </MenuItem>
+        )}
+      </MenuPopup>
+    </Menu>
   );
 }
 
@@ -228,11 +255,17 @@ function AvailableRow({
   disabled,
   onAction,
   onOpen,
+  onRemove,
 }: {
   readonly dataset: ClinicalDataset;
   readonly disabled: boolean;
   readonly onAction: (action: DatasetAction) => void;
   readonly onOpen: (mode: AddDatasetMode) => void;
+  /**
+   * Forgets a dataset defined here whose files are gone. Null for one M4
+   * ships, which stays in the list, and where the server cannot remove.
+   */
+  readonly onRemove: (() => void) | null;
 }) {
   const failed = dataset.job?.state === "failed";
   const facts = datasetFacts(dataset);
@@ -278,6 +311,7 @@ function AvailableRow({
         >
           {failed ? "Try again…" : "Add…"}
         </Button>
+        <DatasetMenu dataset={dataset} disabled={disabled} onShowFiles={null} onRemove={onRemove} />
       </div>
     </li>
   );
@@ -350,16 +384,19 @@ function ListNote({
 export function ClinicalDatasetList({
   environmentId,
   enabled,
+  storageDir,
 }: {
   readonly environmentId: EnvironmentId;
   /** Whether M4 is installed, so there is something to ask. */
   readonly enabled: boolean;
+  /** Where the prepared datasets are kept, to name under the list. */
+  readonly storageDir?: string;
 }) {
   const { view, takingLong, refresh, accept } = useClinicalDatasets(environmentId, enabled);
   const canOperate = useAtomValue(linceiCommand.permissionAtom(environmentId));
   const environment = useEnvironment(environmentId);
-  // The server that serves this app is "this computer" to its user.
-  const onThisComputer = usePrimaryEnvironmentId() === environmentId;
+  // Not "the primary environment": a browser reaches that one over the network too.
+  const onThisComputer = serverOnThisComputer(useEnvironmentHttpBaseUrl(environmentId));
   const request = useAtomCommand(linceiCommand, { reportFailure: false });
   const [adding, setAdding] = useState<AddDatasetRequest | null>(null);
   const [addingOwn, setAddingOwn] = useState(false);
@@ -378,7 +415,7 @@ export function ClinicalDatasetList({
   const run = async (action: DatasetAction): Promise<DatasetActionOutcome> => {
     setActing((names) => new Set(names).add(action.name));
     const outcome = datasetActionOutcome(await request({ environmentId, input: action }));
-    if (outcome.accepted) accept(outcome.datasets);
+    if (outcome.accepted) accept(outcome.datasets, outcome.actions);
     refresh();
     setActing((names) => {
       const next = new Set(names);
@@ -400,15 +437,21 @@ export function ClinicalDatasetList({
   };
 
   /** Opens the dataset's folder on this computer's screen, where the server runs too. */
-  const showFiles = async (dataset: ClinicalDataset) => {
+  const showFiles = async (dataset: ClinicalDataset | null) => {
     const result = await request({
       environmentId,
-      input: { _tag: "ClinicalDataFolderOpen", name: dataset.name },
+      input:
+        dataset === null
+          ? { _tag: "ClinicalDataFolderOpen" }
+          : { _tag: "ClinicalDataFolderOpen", name: dataset.name },
     });
     if (result._tag !== "Failure") return;
     toastManager.add({
       type: "error",
-      title: `Could not show the files of ${datasetDisplayName(dataset)}`,
+      title:
+        dataset === null
+          ? "Could not open the folder"
+          : `Could not show the files of ${datasetDisplayName(dataset)}`,
       description: describeLinceiFailure(classifyLinceiFailure(result.cause)) ?? undefined,
     });
   };
@@ -431,6 +474,9 @@ export function ClinicalDatasetList({
     );
   }
   const place = onThisComputer ? "this computer" : (environment?.label ?? "that computer");
+  const { actions } = view;
+  // A server that describes its actions also opens folders; one elsewhere would open them on its own screen.
+  const canOpenFolder = actions !== null && onThisComputer;
   const present = view.datasets.filter((dataset) => datasetGroup(dataset) === "present");
   const available = view.datasets.filter((dataset) => datasetGroup(dataset) === "available");
   const rowProps = (dataset: ClinicalDataset) => ({
@@ -447,8 +493,8 @@ export function ClinicalDatasetList({
             <PresentRow
               key={dataset.name}
               place={place}
-              onShowFiles={onThisComputer ? () => void showFiles(dataset) : null}
-              onRemove={() => setRemoving(dataset)}
+              onShowFiles={canOpenFolder ? () => void showFiles(dataset) : null}
+              onRemove={actions?.remove === true ? () => setRemoving(dataset) : null}
               {...rowProps(dataset)}
             />
           ))}
@@ -459,14 +505,48 @@ export function ClinicalDatasetList({
           <ProviderDataNotice subject="these datasets" />
         </div>
       ) : null}
-      <div className={present.length === 0 ? undefined : "border-t border-border/60"}>
-        <DatasetGroup title="Available to add">
-          {available.map((dataset) => (
-            <AvailableRow key={dataset.name} {...rowProps(dataset)} />
-          ))}
-          <OwnDatasetRow disabled={!canOperate} onOpen={() => setAddingOwn(true)} />
-        </DatasetGroup>
-      </div>
+      {available.length === 0 && actions?.define !== true ? null : (
+        <div className={present.length === 0 ? undefined : "border-t border-border/60"}>
+          <DatasetGroup title="Available to add">
+            {available.map((dataset) => (
+              <AvailableRow
+                key={dataset.name}
+                onRemove={
+                  dataset.custom === true && actions?.remove === true
+                    ? () => setRemoving(dataset)
+                    : null
+                }
+                {...rowProps(dataset)}
+              />
+            ))}
+            {actions?.define === true ? (
+              <OwnDatasetRow disabled={!canOperate} onOpen={() => setAddingOwn(true)} />
+            ) : null}
+          </DatasetGroup>
+        </div>
+      )}
+      {storageDir === undefined ? null : (
+        <SettingsSearchTarget
+          id={CLINICAL_SETTINGS.location.id}
+          className="flex items-center gap-3 border-t border-border/60 px-3 py-3 sm:px-4"
+        >
+          {/* Not "Lincei's folder": a user who set M4_DATA_DIR keeps their own. */}
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+            Stored in{" "}
+            <span className="font-mono break-all text-muted-foreground/80">{storageDir}</span>
+          </p>
+          {canOpenFolder ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={!canOperate}
+              onClick={() => void showFiles(null)}
+            >
+              Open folder
+            </Button>
+          ) : null}
+        </SettingsSearchTarget>
+      )}
       {view.refreshProblem === null ? null : (
         <div className="border-t border-border/60">
           <ListNote detail={view.refreshProblem.detail} onRetry={refresh}>

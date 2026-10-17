@@ -19,6 +19,7 @@ import {
   datasetGroup,
   datasetIdFromTitle,
   describeRemoval,
+  serverOnThisComputer,
   describeDataset,
   describeJobProgress,
   describeLostConnection,
@@ -292,6 +293,20 @@ describe("describeRemoval", () => {
     expect(removal.description).toBe(
       "Lincei deletes the files of MIMIC-IV from lab-server. Agents can no longer query it until you add it again.",
     );
+  });
+});
+
+describe("serverOnThisComputer", () => {
+  it("counts a server this window reaches at a loopback address", () => {
+    expect(serverOnThisComputer("http://127.0.0.1:3773/")).toBe(true);
+    expect(serverOnThisComputer("http://localhost:5780")).toBe(true);
+    expect(serverOnThisComputer("http://lincei.localhost:5780")).toBe(true);
+  });
+
+  it("does not count one reached over the network, even when it is the primary one", () => {
+    expect(serverOnThisComputer("http://192.168.1.20:3773")).toBe(false);
+    expect(serverOnThisComputer("https://lab-server.tailnet.ts.net")).toBe(false);
+    expect(serverOnThisComputer(null)).toBe(false);
   });
 });
 

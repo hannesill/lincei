@@ -27,7 +27,12 @@
  *
  * @module ClinicalDatasets
  */
-import type { ClinicalDataset, ClinicalDatasetJob, PhysioNetCredentials } from "@t3tools/contracts";
+import type {
+  ClinicalDataset,
+  ClinicalDatasetActions,
+  ClinicalDatasetJob,
+  PhysioNetCredentials,
+} from "@t3tools/contracts";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -201,6 +206,8 @@ export class ClinicalDatasets extends Context.Service<
   {
     /** M4's datasets with what this machine holds of each and any job on it. */
     readonly list: Effect.Effect<ReadonlyArray<ClinicalDataset>, ClinicalDatasetsError>;
+    /** What the installed M4 can do beyond listing, adding and downloading. */
+    readonly actions: Effect.Effect<ClinicalDatasetActions>;
     /**
      * Starts preparing a dataset from raw files already in `source`. Like
      * `download`, returns the job's fiber once it has started; the job belongs
@@ -508,7 +515,14 @@ const make = Effect.gen(function* () {
   let listedWhileRunning = false;
   let demoIsReady = false;
   /** Whether M4 takes a login on standard input, for the M4 program file as it was when asked. */
-  let loginOnStdin: { readonly installedAt: number; readonly supported: boolean } | undefined;
+  let knownCommands:
+    | {
+        readonly installedAt: number;
+        readonly commands: ReadonlyMap<string, ReadonlyArray<string>>;
+      }
+    | undefined;
+  /** Datasets whose files M4 is deleting, which no job may start on meanwhile. */
+  const removing = new Set<string>();
 
   const requireM4 = fileSystem.exists(paths.m4).pipe(
     Effect.orElseSucceed(() => false),
@@ -551,33 +565,42 @@ const make = Effect.gen(function* () {
   });
 
   /**
-   * Whether the installed M4 reads a login from its standard input itself.
-   * Asked once per installed M4: its program file changes when M4 does.
+   * The commands the installed M4 has, with their flags. Asked once per
+   * installed M4: its program file changes when M4 does. Empty when M4 cannot
+   * say, which counts as an M4 that has none of the newer ones.
    */
-  const m4ReadsLoginFromStdin = Effect.gen(function* () {
+  const m4Commands = Effect.gen(function* () {
     const installedAt = yield* fileSystem.stat(paths.m4).pipe(
       Effect.map((info) => Option.getOrUndefined(info.mtime)?.getTime()),
       Effect.orElseSucceed(() => undefined),
     );
-    if (loginOnStdin !== undefined && loginOnStdin.installedAt === installedAt) {
-      return loginOnStdin.supported;
+    if (knownCommands !== undefined && knownCommands.installedAt === installedAt) {
+      return knownCommands.commands;
     }
-    const supported = yield* askM4(["capabilities", "--json"], "60 seconds").pipe(
+    const commands = yield* askM4(["capabilities", "--json"], "60 seconds").pipe(
       Effect.map((output) =>
         Option.match(decodeM4Capabilities(output.stdout.trim()), {
-          onNone: () => false,
+          onNone: () => new Map<string, ReadonlyArray<string>>(),
           onSome: (capabilities) =>
-            capabilities.commands.some(
-              (command) =>
-                command.name === "download" && command.flags?.includes(LOGIN_ON_STDIN) === true,
-            ),
+            new Map(capabilities.commands.map((command) => [command.name, command.flags ?? []])),
         }),
       ),
-      Effect.orElseSucceed(() => false),
+      Effect.orElseSucceed(() => new Map<string, ReadonlyArray<string>>()),
     );
-    if (installedAt !== undefined) loginOnStdin = { installedAt, supported };
-    return supported;
+    if (installedAt !== undefined) knownCommands = { installedAt, commands };
+    return commands;
   });
+
+  /** Whether the installed M4 reads a login from its standard input itself. */
+  const m4ReadsLoginFromStdin = Effect.map(
+    m4Commands,
+    (commands) => commands.get("download")?.includes(LOGIN_ON_STDIN) === true,
+  );
+
+  const actions: ClinicalDatasets["Service"]["actions"] = Effect.map(m4Commands, (commands) => ({
+    define: commands.has("define-dataset"),
+    remove: commands.has("remove-dataset"),
+  }));
 
   /** The arguments that make M4 read a login from its standard input, where there is a way. */
   const loginArguments = Effect.gen(function* () {
@@ -955,6 +978,11 @@ const make = Effect.gen(function* () {
   ) {
     // Fail before there is a job, so the caller hears that nothing started.
     yield* requireM4;
+    if (removing.has(name)) {
+      return yield* new ClinicalDatasetsError({
+        message: `${name} is being removed. Wait for that to finish, then try again.`,
+      });
+    }
     const current = jobs.get(name);
     if (current?.state === "running") {
       return yield* new ClinicalDatasetsError({
@@ -1119,6 +1147,7 @@ const make = Effect.gen(function* () {
       // dataset that is already here.
       const existing = (yield* list).find((dataset) => dataset.name === name);
       if (
+        removing.has(name) ||
         existing?.job?.state === "running" ||
         (existing !== undefined && existing.state !== "missing")
       ) {
@@ -1197,8 +1226,8 @@ const make = Effect.gen(function* () {
       yield* processRunner
         .run({ command: fileManager, args: [folder], timeout: "10 seconds" })
         .pipe(
-          // Explorer reports failure on success, so only a program that did not start counts.
           Effect.catchTags({
+            // Without the program there is no file manager to show the folder in.
             ProcessSpawnError: (cause) =>
               Effect.fail(
                 new ClinicalDatasetsError({
@@ -1206,8 +1235,13 @@ const make = Effect.gen(function* () {
                   cause,
                 }),
               ),
+            // Explorer exits with a failure when it opened the folder, and a file
+            // manager that stays open past the timeout has shown it too.
+            ProcessTimeoutError: () => Effect.void,
+            ProcessStdinError: () => Effect.void,
+            ProcessReadError: () => Effect.void,
+            ProcessOutputLimitError: () => Effect.void,
           }),
-          Effect.catch(() => Effect.void),
         );
     });
 
@@ -1241,11 +1275,17 @@ const make = Effect.gen(function* () {
               : `${name} is being prepared. Cancel that first, then remove it.`,
         });
       }
+      if (removing.has(name)) {
+        return yield* new ClinicalDatasetsError({ message: `${name} is already being removed.` });
+      }
+      // Held from here until M4 has finished, so no job starts on files it is deleting.
+      removing.add(name);
       const output = yield* askM4(["remove-dataset", name, "--json"], "2 minutes").pipe(
         Effect.mapError(
           (cause) =>
             new ClinicalDatasetsError({ message: describeRemovalFailure(name, undefined), cause }),
         ),
+        Effect.ensuring(Effect.sync(() => removing.delete(name))),
       );
       // Whatever M4 managed to remove, the list has to be read again.
       listing = undefined;
@@ -1295,6 +1335,7 @@ const make = Effect.gen(function* () {
 
   return ClinicalDatasets.of({
     list,
+    actions,
     add,
     download,
     define,

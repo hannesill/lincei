@@ -145,7 +145,7 @@ interface Machine {
  * the home of an earlier run.
  */
 const withDatasets = <A, E>(
-  m4: (run: Run) => Effect.Effect<ProcessRunner.ProcessRunOutput>,
+  m4: (run: Run) => Effect.Effect<ProcessRunner.ProcessRunOutput, ProcessRunner.ProcessRunError>,
   use: (machine: Machine) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>,
   options: {
     readonly baseDir?: string;
@@ -767,6 +767,74 @@ describe("ClinicalDatasets", () => {
             expect(failure.message).toBe(
               "mimic-iv-demo is already being prepared. Wait for it to finish, or cancel it first.",
             );
+          }),
+      );
+    }),
+  );
+
+  it.effect("says when there is no file manager to show a folder in", () =>
+    withDatasets(
+      (run) =>
+        Effect.fail(
+          new ProcessRunner.ProcessSpawnError({
+            command: run.command,
+            argumentCount: run.args.length,
+            cause: new Error("ENOENT"),
+          }),
+        ),
+      ({ datasets }) =>
+        Effect.gen(function* () {
+          const failure = yield* datasets.openFolder().pipe(Effect.flip);
+          expect(failure.message).toContain("Lincei could not open the folder.");
+        }),
+    ),
+  );
+
+  it.effect("tells clients which of the newer dataset actions the installed M4 has", () =>
+    Effect.gen(function* () {
+      const actionsOf = (capabilities: string) =>
+        withDatasets(
+          () => Effect.succeed(exited(0)),
+          ({ datasets }) => datasets.actions,
+          {
+            capabilities,
+          },
+        );
+      expect(yield* actionsOf(M4_0_5_5)).toEqual({ define: false, remove: false });
+      expect(
+        yield* actionsOf(
+          JSON.stringify({
+            schema_version: 1,
+            commands: [
+              { name: "define-dataset", flags: ["--src", "--json"], mutates: true },
+              { name: "remove-dataset", flags: ["--json"], mutates: true },
+            ],
+          }),
+        ),
+      ).toEqual({ define: true, remove: true });
+      expect(yield* actionsOf("not json")).toEqual({ define: false, remove: false });
+    }),
+  );
+
+  it.effect("starts no job on a dataset while M4 removes it", () =>
+    Effect.gen(function* () {
+      const removing = yield* Deferred.make<void>();
+      yield* withDatasets(
+        (run) =>
+          run.args[0] === "remove-dataset"
+            ? Deferred.succeed(removing, undefined).pipe(Effect.andThen(Effect.never))
+            : Effect.succeed(exited(0)),
+        ({ datasets, commands }) =>
+          Effect.gen(function* () {
+            yield* Effect.forkChild(datasets.remove("mimic-iv-demo"));
+            yield* Deferred.await(removing);
+            const failure = yield* datasets.download({ name: "mimic-iv-demo" }).pipe(Effect.flip);
+            expect(failure.message).toBe(
+              "mimic-iv-demo is being removed. Wait for that to finish, then try again.",
+            );
+            const again = yield* datasets.remove("mimic-iv-demo").pipe(Effect.flip);
+            expect(again.message).toBe("mimic-iv-demo is already being removed.");
+            expect(commands.filter((args) => args[0] === "download")).toEqual([]);
           }),
       );
     }),

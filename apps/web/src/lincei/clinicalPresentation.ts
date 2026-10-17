@@ -9,6 +9,7 @@ import type {
   ClinicalProvisionStep,
   ClinicalRuntimeStatus,
 } from "@t3tools/contracts";
+import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import { isLoopbackHost } from "@t3tools/shared/preview";
 
 import type { ClinicalStatusView } from "./linceiAnswers";
@@ -294,6 +295,19 @@ export function describeLostConnection(input: {
       ? `Lincei is reconnecting, and this page comes back by itself. If it stays like this, check that ${otherComputer} is on and that Lincei is running there.`
       : `Check that ${otherComputer} is on and that Lincei is running there, then reconnect below.`,
   };
+}
+
+/**
+ * Whether the server at `httpBaseUrl` runs on the computer in front of the
+ * reader, so a folder it opens opens on this screen: the case when this window
+ * reaches it at a loopback address. Which environment is the primary one does
+ * not say: a browser reaches a primary server elsewhere over the network.
+ */
+export function serverOnThisComputer(httpBaseUrl: string | null): boolean {
+  if (httpBaseUrl === null || !URL.canParse(httpBaseUrl)) return false;
+  const { hostname } = new URL(httpBaseUrl);
+  // Browsers resolve every `*.localhost` name to the loopback address.
+  return isLocalLoopbackHost(hostname) || hostname.endsWith(".localhost");
 }
 
 /**
