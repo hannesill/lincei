@@ -53,46 +53,45 @@ everywhere.
 ## Pulling in upstream
 
 ```sh
-git fetch t3code main
-git merge t3code/main
+node scripts/lincei/merge-upstream.ts
 ```
 
-Then, for each conflict:
+On a clean branch, the script fetches `t3code/main`, merges it without committing, and resolves
+every conflict that follows from Lincei's identity:
 
-- **A file governed by `scripts/lincei/identity.ts`:** take upstream's side and reapply.
+- **Governed files** (`scripts/lincei/identity.ts`): upstream's side, rules reapplied.
+- **Lincei's own content** (`README.md`, `T3Wordmark.tsx`, `dmg-background-latest.svg`): kept.
+- **Icons:** redrawn by `scripts/lincei/icons.ts`.
+- **The route tree:** taken from upstream.
+- **Hunks where both sides only added lines at the same place:** upstream's lines, then Lincei's.
 
-  ```sh
-  git checkout --theirs <file>
-  node scripts/lincei/identity.ts apply
-  ```
+It prints what it left for you, the identity literals upstream added outside the governed files,
+and the result of `identity.ts check`. Run it again after a manual step; during a merge it only
+resolves. What it leaves:
 
-  If the script reports a rule that no longer matches, upstream changed that line; update the
-  rule to the new text. Taking upstream's side drops every Lincei line the script does not
-  write, so a hook in a governed file is an exact rule too (the macOS icon hooks in
-  `electron-launcher.mjs` and `build-desktop-artifact.ts` are).
-
-- **`README.md`, `T3Wordmark.tsx`, `apps/desktop/resources/dmg/dmg-background-latest.svg`:** keep
-  Lincei's side.
-- **An icon under `assets/` or `apps/web/public/`:** take either side, then run
-  `node scripts/lincei/icons.ts`.
-- **A hook line** (`server.ts`, `ws.ts`, `McpHttpServer.ts`, `clientRpcPermissions.ts`,
-  `RpcInstrumentation.ts`, `rpc.ts`, `packages/contracts/src/index.ts`, `runtimeInstructions.ts`,
-  `ChatView.tsx`, `SidebarChrome.tsx`,
+- **A hook line where both sides changed the same lines** (`server.ts`, `ws.ts`,
+  `McpHttpServer.ts`, `clientRpcPermissions.ts`, `RpcInstrumentation.ts`, `rpc.ts`,
+  `packages/contracts/src/index.ts`, `runtimeInstructions.ts`, `ChatView.tsx`, `SidebarChrome.tsx`,
   `routes/welcome.tsx`, `settingsSearch.ts`, `SettingsSidebarNav.tsx`,
-  `useAvailableSettingsSearchItems.ts`, `SettingsPanels.tsx`, `CommandPalette.tsx`, `localApi.ts`,
-  `state/server.ts`, `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
+  `useAvailableSettingsSearchItems.ts`, `CommandPalette.tsx`, `localApi.ts`, `state/server.ts`,
+  `apps/web/vite.config.ts`): take upstream's side and re-add the hook.
   `git diff "$(git merge-base HEAD MERGE_HEAD)" HEAD -- <file>` lists every Lincei line in it,
   including ones without the word lincei (the Clinical page's icon in `SettingsSidebarNav.tsx`).
-  `SettingsPanels.tsx` is also governed by `identity.ts`: reapply first, then re-add its hook. The
-  hooks in `build-desktop-artifact.ts` and `electron-launcher.mjs` are identity rules,
-  so `apply` restores them. Where order does not matter, a hook that adds an entry to a list goes
-  first in it: upstream appends at the end, and an entry there conflicts with every one it adds.
+  Where order does not matter, a hook that adds an entry to a list goes first in it: upstream
+  appends at the end, and an entry there conflicts with every one it adds.
+- **A governed file whose Lincei version is not what the rules make of upstream's:** an edit by
+  hand, which taking upstream's side would drop. Turn it into an exact rule, as the hooks in
+  `SettingsPanels.tsx`, `electron-launcher.mjs` and `build-desktop-artifact.ts` are, then run the
+  script again.
+- **A rule that no longer matches** (`identity.ts` reports it): upstream changed that line; update
+  the rule to the new text.
 - **`apps/desktop/resources/installer.nsh`** (only if upstream starts customizing its Windows
   installer and adds the same file): keep both, with one `customUnInstall` macro that does
   upstream's work and Lincei's.
-- **`apps/web/src/routeTree.gen.ts`:** take upstream's side and build the web app once
-  (`vp run --filter @t3tools/web build`). The router plugin rewrites the file from the route
-  files, which puts `/settings/clinical` back.
+
+When the route tree came from upstream, build the web app once
+(`vp run --filter @t3tools/web build`); the router plugin rewrites it from the route files, which
+puts `/settings/clinical` back.
 
 Finish with:
 
@@ -138,15 +137,8 @@ The typecheck and the tests show what is left, because none of it conflicts in g
   `t3code://`, `~/.t3`) belongs in the identity script's list of tests. Nothing fails when
   upstream moves a literal into a new file that no test covers (in October 2026 the desktop
   renderer's `t3code://app` origin moved out of governed `http.ts` into `httpCors.ts`, where it
-  decides which pages cookie sessions trust), so list the literals the merge brought in:
-
-  ```sh
-  git diff "$(git merge-base HEAD t3code/main)" t3code/main -- apps packages scripts \
-    ':!apps/mobile' ':!apps/marketing' ':!*.md' |
-    grep -E '^\+.*(t3code://|t3code-dev|"t3code"|t3code\.service|com\.t3tools|pingdotgg/t3code|T3 Code \(|\.t3/|"\.t3")'
-  ```
-
-  Run it before committing the merge, while the merge base is still the old one.
+  decides which pages cookie sessions trust), so go through the literals the merge script lists
+  and give each one that is identity a rule.
 
 - **An upstream test that builds a layer Lincei hooks into must pass without Lincei's services.**
   Hook code therefore reads Lincei's services as optional (`Effect.serviceOption`, as in

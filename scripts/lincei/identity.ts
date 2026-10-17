@@ -64,14 +64,14 @@ const HOME: ReadonlyArray<Replacement> = [[/(?<![\w-])\.t3(?![\w.-])/g, ".lincei
 /** Most specific first, so a longer spelling is not broken up by a shorter one. */
 const EVERY_TOKEN = [...BUNDLE_ID, ...REPOSITORY, ...NAME, ...SLUG, ...HOME];
 
-interface Rules {
+export interface Rules {
   /** Rewritten wherever they occur. */
   readonly tokens?: ReadonlyArray<Replacement>;
   /** Exact text that must be present until it has been replaced. */
   readonly exact?: ReadonlyArray<readonly [from: string, to: string]>;
 }
 
-const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
+export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   // Files that only spell identity: every token in them is rewritten.
   "apps/desktop/src/app/DesktopEarlyElectronStartup.ts": { tokens: EVERY_TOKEN },
   "apps/desktop/src/app/DesktopEnvironment.ts": {
@@ -139,8 +139,12 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "apps/server/src/telemetry/AnalyticsService.ts": {
     exact: [
       [
-        'Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m")',
-        'Config.withDefault("")',
+        [
+          '  posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(',
+          '    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),',
+          "  ),",
+        ].join("\n"),
+        '  posthogKey: Config.String("T3CODE_POSTHOG_KEY").pipe(Config.withDefault("")),',
       ],
       [
         'Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true))',
@@ -344,6 +348,24 @@ const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   },
   "apps/web/src/components/settings/SettingsPanels.tsx": {
     exact: [
+      // The Techie mode switch, first in Settings, General: a hook, written here because this
+      // file is governed and taking upstream's side in a merge drops anything that is not a rule.
+      [
+        'import { Switch } from "../ui/switch";\nimport { ScopedSwitch }',
+        [
+          'import { Switch } from "../ui/switch";',
+          'import { TechieModeSetting } from "../../lincei/mode/TechieModeSetting";',
+          "import { ScopedSwitch }",
+        ].join("\n"),
+      ],
+      [
+        '    <SettingsPageContainer>\n      <ProjectDefaultsSettings category="general" />',
+        [
+          "    <SettingsPageContainer>",
+          "      <TechieModeSetting />",
+          '      <ProjectDefaultsSettings category="general" />',
+        ].join("\n"),
+      ],
       [
         'description="How we handle your data, including the anonymous usage data T3 Code collects."',
         'description="Lincei collects no usage data. Agents send what they read to your model provider."',
@@ -410,7 +432,7 @@ const repoRoot = NodePath.resolve(
   "../..",
 );
 
-function rewrite(file: string, rules: Rules, text: string, problems: Array<string>): string {
+export function rewrite(file: string, rules: Rules, text: string, problems: Array<string>): string {
   let next = text;
   for (const [from, to] of rules.tokens ?? []) next = next.replaceAll(from, to);
   for (const [from, to] of rules.exact ?? []) {
@@ -507,6 +529,10 @@ function run(mode: "apply" | "check"): number {
       continue;
     }
     const current = NodeFS.readFileSync(absolutePath, "utf8");
+    if (/^<{7} /m.test(current)) {
+      problems.push(`${file}: has merge conflict markers; resolve them, then run apply again.`);
+      continue;
+    }
     const next = rewrite(file, rules, current, problems);
     if (next === current) continue;
     stale.push(file);
@@ -524,9 +550,12 @@ function run(mode: "apply" | "check"): number {
   return 0;
 }
 
-const mode = process.argv[2];
-if (mode !== "apply" && mode !== "check") {
-  console.error("Usage: node scripts/lincei/identity.ts <apply|check>");
-  process.exit(2);
+// The rules are also read by merge-upstream.ts, which imports this file without running it.
+if (process.argv[1] && NodeURL.pathToFileURL(process.argv[1]).href === import.meta.url) {
+  const mode = process.argv[2];
+  if (mode !== "apply" && mode !== "check") {
+    console.error("Usage: node scripts/lincei/identity.ts <apply|check>");
+    process.exit(2);
+  }
+  process.exit(run(mode));
 }
-process.exit(run(mode));
