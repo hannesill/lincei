@@ -16,6 +16,9 @@ const BRAND_REPLACEMENTS = [
 ] as const;
 
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)(?:\?|$)/;
+// Lincei's own client code already says what it means, and where it names
+// T3 Code it is crediting it (Settings, About), so the name has to survive.
+const LINCEI_SOURCE = "/apps/web/src/lincei/";
 
 /** Returns the rebranded text, or null when nothing in it names upstream. */
 function rebrand(text: string): string | null {
@@ -43,7 +46,8 @@ const reworded = (rule: CopyRule) =>
 /**
  * Builds Lincei's web client out of upstream's source, in dev and production:
  *
- * - names Lincei wherever upstream names itself;
+ * - names Lincei wherever upstream names itself, but not in Lincei's own
+ *   files, which credit T3 Code by name;
  * - replaces the developer copy listed in linceiCopy.ts with a researcher's
  *   words, and fails the build when upstream has reworded one of those
  *   strings, so the old text cannot ship unnoticed;
@@ -79,7 +83,7 @@ export function linceiBrandPlugin(): Plugin {
         if (!next.includes(rule.from)) this.error(reworded(rule));
         next = next.replace(rule.from, rule.to);
       }
-      next = rebrand(next) ?? next;
+      if (!id.includes(LINCEI_SOURCE)) next = rebrand(next) ?? next;
       return next === code ? null : { code: next, map: null };
     },
     transformIndexHtml: {

@@ -112,4 +112,12 @@ See [docs/lincei/README.md](./docs/lincei/README.md) for how the fork is organiz
 upstream changes, and how to cut a release. Everything else in [docs/](./docs/README.md) is
 upstream's documentation and applies unchanged, with "T3 Code" read as "Lincei".
 
-Lincei is MIT licensed, as is T3 Code.
+## Credits
+
+Lincei is built on [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools Inc. Almost all of
+the app is their work: Lincei adds a clinical layer and follows their releases. Thank you to T3
+Code's maintainers and contributors for building it in the open. If you want an agent app for
+software work rather than clinical research, use T3 Code itself.
+
+Lincei is MIT licensed, as is T3 Code. [LICENSE](./LICENSE) is T3 Code's, and the app shows it
+under **Settings → Open source licenses**.

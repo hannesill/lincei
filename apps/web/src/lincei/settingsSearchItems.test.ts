@@ -6,6 +6,7 @@ import { withoutTechieSettings } from "./mode/researcherFilters";
 import {
   CLINICAL_SETTINGS,
   LINCEI_SETTINGS_SEARCH_ITEMS,
+  T3_CODE_CREDIT_SETTING,
   TECHIE_MODE_SETTING,
 } from "./settingsSearchItems";
 
@@ -33,6 +34,7 @@ describe("Clinical Data in settings search", () => {
     const anchors = new Set<string>([
       ...Object.values(CLINICAL_SETTINGS).map(({ id }) => id),
       TECHIE_MODE_SETTING.id,
+      T3_CODE_CREDIT_SETTING.id,
     ]);
     for (const item of LINCEI_SETTINGS_SEARCH_ITEMS) {
       expect(anchors.has("targetId" in item ? item.targetId : item.id), item.id).toBe(true);

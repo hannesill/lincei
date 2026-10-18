@@ -254,6 +254,8 @@ jobs:
           | `t3-<version>-<platform>.tar.gz` | The `lincei` command for running Lincei in a browser (macOS Apple Silicon and Linux), installed by `scripts/install.sh` |
 
           The Mac builds are not signed with an Apple Developer ID, so macOS blocks the first launch: see Install in the README for Open Anyway, and for the keychain prompt after an update. The Windows installers are not signed either, so Windows SmartScreen warns before the first run: choose More info, then Run anyway. On Linux, make the AppImage executable (`chmod +x`) and run it. `SHA256SUMS` lists each file's checksum.
+
+          Lincei is built on [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools Inc. Thank you to its maintainers and contributors.
           EOF
           gh release create "v$VERSION" assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \

@@ -101,6 +101,8 @@ export const make = Effect.gen(function* () {
       applicationName: environment.displayName,
       applicationVersion: environment.appVersion,
       version: Option.getOrElse(commitHash, () => "unknown"),
+      copyright: "Copyright © 2026 T3 Tools Inc. and Lincei contributors",
+      credits: "Built on T3 Code by T3 Tools Inc.",
     });
 
     if (environment.platform === "win32") {
