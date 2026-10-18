@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import type { ClinicalDataset } from "@t3tools/contracts";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -186,9 +186,9 @@ const withDatasets = <A, E>(
         },
       }),
     ),
-    Layer.succeed(HostProcessPlatform, options.platform ?? "darwin"),
+    Layer.succeed(HostProcess.Platform, options.platform ?? "darwin"),
     // Never the developer's own dataset store.
-    Layer.succeed(HostProcessEnvironment, options.environment ?? {}),
+    Layer.succeed(HostProcess.Environment, options.environment ?? {}),
   ).pipe(Layer.provideMerge(NodeServices.layer));
 
   return Effect.gen(function* () {

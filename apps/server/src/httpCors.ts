@@ -9,3 +9,5 @@ export const browserApiCorsAllowedHeaders = [
   "dpop",
   ORCHESTRATION_PROTOCOL_HEADER,
 ] as const;
+
+export const DESKTOP_RENDERER_ORIGINS = ["lincei://app", "lincei-dev://app"] as const;
