@@ -55,12 +55,19 @@ const SCHEME: ReadonlyArray<Replacement> = [
   ['"t3code-dev:"', '"lincei-dev:"'],
   ['"t3code:"', '"lincei:"'],
 ];
-// Profile directories, schemes, and service names; not the `t3code/<rule>` lint directives.
+// Profile directories, schemes, and service names; not the `t3code/<rule>` lint directives, and
+// not the systemd slice that holds both apps' agents under one memory limit (README).
 const SLUG: ReadonlyArray<Replacement> = [
-  [/t3code(?!\/(?:no|prefer|require|namespace)-)/g, "lincei"],
+  [/t3code(?!\/(?:no|prefer|require|namespace)-|-agents)/g, "lincei"],
 ];
 // The `.t3` home directory, but not `.t3Home`, `t3.json`, or `app.t3.codes`.
 const HOME: ReadonlyArray<Replacement> = [[/(?<![\w-])\.t3(?![\w.-])/g, ".lincei"]];
+// The GNOME Shell extension that takes Linux SnapShots: its uuid, which is the folder GNOME
+// installs it in, and the D-Bus name it owns. The uuid mirrors the bundle id.
+const GNOME_EXTENSION: ReadonlyArray<Replacement> = [
+  ["snap-shot@t3.codes", "snap-shot@lincei.studio"],
+  ["T3SnapShot", "LinceiSnapShot"],
+];
 /** Most specific first, so a longer spelling is not broken up by a shorter one. */
 const EVERY_TOKEN = [...BUNDLE_ID, ...REPOSITORY, ...NAME, ...SLUG, ...HOME];
 /** Who holds the copyright on what a Lincei build ships: T3 Tools Inc. on upstream's code (LICENSE). */
@@ -89,6 +96,23 @@ export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "apps/server/src/http.ts": { tokens: EVERY_TOKEN },
   "apps/server/src/httpCors.ts": { tokens: EVERY_TOKEN },
   "apps/server/src/os-jank.ts": { tokens: EVERY_TOKEN },
+  // Linux SnapShots install helpers into the user's desktop session. Each takes Lincei's
+  // name, so a T3 Code install keeps its own copy: the GNOME extension's folder and D-Bus
+  // name, the bus names it answers (the desktop asks as `${appId}.SnapShot`), and the KDE
+  // and Hyprland helpers under `~/.local/share`.
+  "apps/desktop/gnome-extension/bundle.json": { tokens: GNOME_EXTENSION },
+  "apps/desktop/gnome-extension/metadata.json": {
+    tokens: [...GNOME_EXTENSION, ...REPOSITORY, ...NAME],
+  },
+  "apps/desktop/gnome-extension/extension.js": { tokens: GNOME_EXTENSION },
+  "apps/desktop/gnome-extension/captureService.js": { tokens: [...BUNDLE_ID, ...NAME] },
+  "apps/desktop/gnome-extension/captureFeedback.js": { tokens: NAME },
+  "apps/desktop/src/snapShot/LinuxSnapShot.ts": { tokens: [...GNOME_EXTENSION, ...NAME] },
+  "apps/desktop/src/snapShot/GnomeCaptureSetup.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/snapShot/KdeSnapShot.ts": { tokens: EVERY_TOKEN },
+  "apps/desktop/src/snapShot/HyprlandSnapShot.ts": { tokens: EVERY_TOKEN },
+  // What the desktop installs on an SSH host and the server it starts there.
+  "packages/ssh/src/tunnel.ts": { tokens: HOME },
 
   // Files that mix identity with names other code depends on.
   "apps/desktop/package.json": {
@@ -152,6 +176,13 @@ export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
         'Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true))',
         'Config.Boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(false))',
       ],
+    ],
+  },
+  // How `t3 update` tells a server the boot service runs from one started by hand. The unit
+  // is named in bootService.ts.
+  "apps/server/src/cli/update.ts": {
+    exact: [
+      ['cgroup.value.includes("/t3code.service")', 'cgroup.value.includes("/lincei.service")'],
     ],
   },
   "packages/shared/src/codexAuthHandoff.ts": { tokens: [...SCHEME, ...SLUG] },
@@ -472,7 +503,10 @@ export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "packages/shared/src/providerAuthReturnUrl.test.ts": { tokens: [...SCHEME, ...SLUG] },
   "packages/shared/src/promptLinks.test.ts": { tokens: SCHEME },
   "apps/server/src/auth/EnvironmentAuth.test.ts": { tokens: SCHEME },
-  "packages/ssh/src/tunnel.test.ts": { tokens: REPOSITORY },
+  "packages/ssh/src/tunnel.test.ts": { tokens: [...REPOSITORY, ...HOME] },
+  "apps/desktop/gnome-extension/captureService.test.js": { tokens: NAME },
+  "apps/desktop/src/snapShot/GnomeCaptureSetup.test.ts": { tokens: SLUG },
+  "apps/desktop/src/snapShot/LinuxSnapShot.dbus.test.ts": { tokens: GNOME_EXTENSION },
   "scripts/install.test.ts": {
     tokens: NAME,
     exact: [['NodePath.join(root, "bin/t3")', 'NodePath.join(root, "bin/lincei")']],

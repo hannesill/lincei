@@ -63,6 +63,9 @@ describe("addedIdentityLiterals", () => {
       '+const home = config.t3Home ?? path.join(homedir(), ".t3");',
       "+const settings = readT3Json();",
       " const unchanged = 't3code://context';",
+      "diff --git a/apps/desktop/gnome-extension/install.json b/apps/desktop/gnome-extension/install.json",
+      "+++ b/apps/desktop/gnome-extension/install.json",
+      '+  "extension": "snap-shot@t3.codes",',
       "diff --git a/apps/desktop/package.json b/apps/desktop/package.json",
       "+++ b/apps/desktop/package.json",
       '+  "productName": "T3 Code (Beta)"',
@@ -76,6 +79,10 @@ describe("addedIdentityLiterals", () => {
       {
         file: "apps/server/src/rendererOrigins.ts",
         line: 'const home = config.t3Home ?? path.join(homedir(), ".t3");',
+      },
+      {
+        file: "apps/desktop/gnome-extension/install.json",
+        line: '"extension": "snap-shot@t3.codes",',
       },
     ]);
   });
