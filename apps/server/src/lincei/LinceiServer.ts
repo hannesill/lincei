@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
+import * as ClinicalImageRequests from "./ClinicalImageRequests.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
@@ -21,6 +22,7 @@ export const activate = ClinicalRuntime.activate;
 // Clinical setup ends by asking the datasets service for the demo dataset, so
 // that service sits below the one that installs the tools.
 export const layer = LinceiRequests.layer.pipe(
+  Layer.provideMerge(ClinicalImageRequests.layer),
   Layer.provideMerge(ResearchBoard.layer),
   Layer.provideMerge(LinceiPreferences.layer),
   Layer.provideMerge(ClinicalRuntime.layer),

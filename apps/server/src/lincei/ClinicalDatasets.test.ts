@@ -1720,4 +1720,166 @@ describe("ClinicalDatasets", () => {
       { installed: false },
     ),
   );
+
+  describe("fetching a cohort's images", () => {
+    const PASSWORD = "correct-horse-battery-staple";
+    const credentials = { username: "ada", password: Redacted.make(PASSWORD) };
+    const CXR_LISTING = listingOf(
+      m4Dataset("mimic-cxr-jpg", {
+        setup_state: "ready",
+        raw_present: true,
+        parquet_present: true,
+        requires_authentication: true,
+        dua_url: "https://physionet.org/content/mimic-cxr-jpg/",
+      }),
+    );
+    const WITH_FETCH = JSON.stringify({
+      schema_version: 1,
+      commands: [
+        { name: "capabilities", flags: ["--json"], mutates: false },
+        {
+          name: "fetch-images",
+          flags: ["--from-csv", "--json", "--events", "--physionet-credentials-stdin"],
+          mutates: true,
+        },
+      ],
+    });
+
+    it.effect("runs m4 fetch-images with the login on standard input, reporting progress", () => {
+      const runs: Array<Run> = [];
+      const progress: Array<{ readonly completed: number; readonly total?: number }> = [];
+      return withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            runs.push(run);
+            run.onStdoutChunk?.(
+              events(
+                { event: "download_started", file_count: 2 },
+                { event: "download_file_completed", path: "files/p10/a.jpg" },
+                { event: "download_file_skipped", path: "files/p10/b.jpg" },
+              ),
+            );
+            return finished(run);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            yield* datasets.fetchImages({
+              name: "mimic-cxr-jpg",
+              list: "/studies/cxr/cohort.csv",
+              credentials,
+              onProgress: (job) =>
+                progress.push({
+                  completed: job.completed,
+                  ...(job.total === undefined ? {} : { total: job.total }),
+                }),
+            });
+            expect(runs[0]?.args).toEqual([
+              "fetch-images",
+              "mimic-cxr-jpg",
+              "--from-csv",
+              "/studies/cxr/cohort.csv",
+              "--physionet-credentials-stdin",
+              "--json",
+              "--events",
+              "ndjson",
+            ]);
+            expect(JSON.parse(runs[0]?.stdin ?? "")).toEqual({
+              username: "ada",
+              password: PASSWORD,
+            });
+            expect(JSON.stringify([runs[0]?.args, runs[0]?.env])).not.toContain(PASSWORD);
+            expect(progress.at(-1)).toEqual({ completed: 2, total: 2 });
+            // Not a job on the dataset: its row shows nothing of the fetch.
+            expect(jobOf(yield* datasets.list, "mimic-cxr-jpg")).toBeUndefined();
+          }),
+        { listing: CXR_LISTING, capabilities: WITH_FETCH },
+      );
+    });
+
+    it.effect("tells the agent's user where to sign the agreement when PhysioNet refuses", () =>
+      withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            run.onStdoutChunk?.(
+              events({
+                event: "operation_failed",
+                command: "fetch-images",
+                error: { code: "physionet_access_forbidden", message: "forbidden" },
+              }),
+            );
+            return exited(1);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            const error = yield* datasets
+              .fetchImages({ name: "mimic-cxr-jpg", list: "/studies/cxr/cohort.csv", credentials })
+              .pipe(Effect.flip);
+            expect(error.message).toBe(
+              "This PhysioNet account has no access to mimic-cxr-jpg yet. Sign the data use agreement on https://physionet.org/content/mimic-cxr-jpg/, then ask the agent in the conversation to fetch the images again. If PhysioNet does not offer you the agreement there, the account first needs credentialing and the required training.",
+            );
+          }),
+        { listing: CXR_LISTING, capabilities: WITH_FETCH },
+      ),
+    );
+
+    it.effect("does not send the login when the dataset would not fetch from PhysioNet", () =>
+      withDatasets(
+        () => Effect.die("M4 must not fetch"),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            const error = yield* datasets
+              .fetchImages({ name: "mimic-cxr-jpg", list: "/studies/cxr/cohort.csv", credentials })
+              .pipe(Effect.flip);
+            expect(error.message).toContain("did not send your PhysioNet login");
+          }),
+        {
+          listing: CXR_LISTING,
+          capabilities: WITH_FETCH,
+          plan: () => planOf({ file_listing_url: "https://example.org/mimic-cxr-jpg/" }),
+        },
+      ),
+    );
+
+    it.effect("asks M4 without a login, which says when the login is needed", () => {
+      const runs: Array<Run> = [];
+      return withDatasets(
+        (run) =>
+          Effect.sync(() => {
+            runs.push(run);
+            run.onStdoutChunk?.(
+              events({
+                event: "operation_failed",
+                command: "fetch-images",
+                error: { code: "missing_credentials", message: "2 of 3 images are not on disk" },
+              }),
+            );
+            return exited(1);
+          }),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            const error = yield* datasets
+              .fetchImages({ name: "mimic-cxr-jpg", list: "/studies/cxr/cohort.csv" })
+              .pipe(Effect.flip);
+            expect(error.code).toBe("missing_credentials");
+            expect(runs[0]?.args).not.toContain("--physionet-credentials-stdin");
+            expect(runs[0]?.stdin).toBeUndefined();
+          }),
+        { listing: CXR_LISTING, capabilities: WITH_FETCH },
+      );
+    });
+
+    it.effect("refuses before running M4 with an M4 that cannot fetch", () =>
+      withDatasets(
+        () => Effect.die("M4 must not run"),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            const old = yield* datasets
+              .fetchImages({ name: "mimic-cxr-jpg", list: "/studies/cxr/cohort.csv", credentials })
+              .pipe(Effect.flip);
+            expect(old.message).toContain("cannot fetch images yet");
+          }),
+        { listing: CXR_LISTING },
+      ),
+    );
+  });
 });

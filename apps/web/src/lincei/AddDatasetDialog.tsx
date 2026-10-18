@@ -27,27 +27,9 @@ import {
 import { FolderField } from "./FolderField";
 import { type DatasetActionOutcome, NO_ANSWER } from "./linceiAnswers";
 import { PhysioNetAccessChecklist, physioNetProjectPage } from "./physioNet";
+import { readRememberedUsername, rememberUsername } from "./physioNetUsername";
 import { ProviderDataAcknowledgement, ProviderDataNotice } from "./ProviderDataNotice";
 import { useLastPresent } from "./useLastPresent";
-
-/** The username is remembered on this device so only the password is typed again. */
-const USERNAME_STORAGE_KEY = "lincei:physionet-username";
-
-function readRememberedUsername(): string {
-  try {
-    return window.localStorage.getItem(USERNAME_STORAGE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function rememberUsername(username: string) {
-  try {
-    window.localStorage.setItem(USERNAME_STORAGE_KEY, username);
-  } catch {
-    // Storage is a convenience; the download does not depend on it.
-  }
-}
 
 /** The two ways in: Lincei downloads the files, or prepares ones already on the server. */
 export type AddDatasetMode = "download" | "folder";
