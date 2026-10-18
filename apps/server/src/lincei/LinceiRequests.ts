@@ -51,8 +51,12 @@ const make = Effect.gen(function* () {
   const linceiPreferences = yield* LinceiPreferences.LinceiPreferences;
   const platform = yield* HostProcess.Platform;
 
-  const datasets = clinicalDatasets.list.pipe(
-    Effect.map((list): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list })),
+  const datasets = Effect.all([clinicalDatasets.list, clinicalDatasets.actions], {
+    concurrency: 2,
+  }).pipe(
+    Effect.map(
+      ([list, actions]): LinceiResponse => ({ _tag: "ClinicalDatasets", datasets: list, actions }),
+    ),
     Effect.mapError(toRequestError),
   );
 
@@ -106,6 +110,24 @@ const make = Effect.gen(function* () {
         return yield* whenInstalled(
           clinicalDatasets
             .download(request)
+            .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
+        );
+      case "ClinicalDatasetDefine":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .define(request)
+            .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
+        );
+      case "ClinicalDataFolderOpen":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .openFolder(request.name)
+            .pipe(Effect.mapError(toRequestError), Effect.as<LinceiResponse>({ _tag: "Done" })),
+        );
+      case "ClinicalDatasetRemove":
+        return yield* whenInstalled(
+          clinicalDatasets
+            .remove(request.name)
             .pipe(Effect.mapError(toRequestError), Effect.andThen(datasets)),
         );
       case "ClinicalDatasetCancel":

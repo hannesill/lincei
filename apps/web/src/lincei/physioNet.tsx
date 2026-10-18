@@ -35,8 +35,8 @@ const PHYSIONET_ADDRESS = /(https:\/\/physionet\.org\/\S*?)(?=[.,;:!?)]*(?:\s|$)
 export const splitPhysioNetAddresses = (text: string): ReadonlyArray<string> =>
   text.split(PHYSIONET_ADDRESS);
 
-/** A link to physionet.org. A new window is how the desktop app hands a link to the system browser. */
-export function PhysioNetLink({
+/** A link out of Lincei. A new window is how the desktop app hands a link to the system browser. */
+export function ExternalLink({
   href,
   children,
 }: {
@@ -64,26 +64,52 @@ export function PhysioNetLinkedText({ text }: { readonly text: string }) {
           part
         ) : (
           // oxlint-disable-next-line react/no-array-index-key -- the parts never move
-          <PhysioNetLink key={index} href={part}>
+          <ExternalLink key={index} href={part}>
             {part.replace(/^https:\/\//, "")}
-          </PhysioNetLink>
+          </ExternalLink>
         ),
       )}
     </>
   );
 }
 
-/** How a PhysioNet account gets access to credentialed datasets, with the page for each step. */
-export function PhysioNetAccessSteps() {
+/** The host a link goes to, which a link to a page from a dataset's definition names. */
+export function hostOf(href: string): string {
+  return URL.canParse(href) ? new URL(href).host : href;
+}
+
+/**
+ * What a PhysioNet account needs before it can download a credentialed
+ * dataset, with the page for each step. The last step is the dataset's own:
+ * its data use agreement is signed on its page.
+ */
+export function PhysioNetAccessChecklist({
+  name,
+  agreementUrl,
+}: {
+  readonly name: string;
+  /** Where the agreement is signed, from `physioNetProjectPage`. */
+  readonly agreementUrl: string | null;
+}) {
   return (
-    <p className="text-xs leading-relaxed text-muted-foreground">
-      MIMIC-IV, eICU and the other credentialed datasets need your own PhysioNet access.{" "}
-      <PhysioNetLink href={PHYSIONET_PAGES.credentialing}>
-        Apply to be a credentialed user
-      </PhysioNetLink>
-      , complete the{" "}
-      <PhysioNetLink href={PHYSIONET_PAGES.training}>required training</PhysioNetLink>, then sign
-      the data use agreement on each dataset&apos;s page on physionet.org.
-    </p>
+    <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+      <p>Your PhysioNet account needs access to {name}:</p>
+      <ol className="list-decimal space-y-0.5 pl-5">
+        <li>
+          <ExternalLink href={PHYSIONET_PAGES.credentialing}>Credentialed user status</ExternalLink>
+        </li>
+        <li>
+          The <ExternalLink href={PHYSIONET_PAGES.training}>required training</ExternalLink>
+        </li>
+        <li>
+          The data use agreement, signed on{" "}
+          {agreementUrl === null ? (
+            "the dataset's page on physionet.org"
+          ) : (
+            <ExternalLink href={agreementUrl}>the dataset&apos;s page</ExternalLink>
+          )}
+        </li>
+      </ol>
+    </div>
   );
 }

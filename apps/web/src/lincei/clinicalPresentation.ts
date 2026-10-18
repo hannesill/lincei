@@ -9,6 +9,7 @@ import type {
   ClinicalProvisionStep,
   ClinicalRuntimeStatus,
 } from "@t3tools/contracts";
+import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import { isLoopbackHost } from "@t3tools/shared/preview";
 
 import type { ClinicalStatusView } from "./linceiAnswers";
@@ -120,28 +121,39 @@ export function clinicalStepFooter(view: ClinicalStatusView): string {
   }
 }
 
-const DATASET_NAMES: ReadonlyMap<string, string> = new Map([
-  ["mimic-iv-demo", "MIMIC-IV demo"],
-  ["mimic-iv", "MIMIC-IV"],
-  ["mimic-iv-note", "MIMIC-IV Note"],
-  ["eicu", "eICU"],
-]);
+type DatasetNaming = Pick<ClinicalDataset, "name" | "title">;
 
-/** What to call a dataset. M4's own id, which agents use, stands in for one without a name here. */
-export function datasetDisplayName(id: string): string {
-  return DATASET_NAMES.get(id) ?? id;
+/** What to call a dataset: M4's title for it, or M4's id, which agents use, where it has none. */
+export function datasetDisplayName(dataset: DatasetNaming): string {
+  return dataset.title ?? dataset.name;
 }
 
 /**
  * A sentence the server wrote about one dataset, with the dataset's id
  * replaced by its name. The server names datasets the way M4 does.
  */
-export function withDatasetName(text: string, id: string): string {
-  const name = datasetDisplayName(id);
-  if (name === id) return text;
-  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function withDatasetName(text: string, dataset: DatasetNaming): string {
+  const name = datasetDisplayName(dataset);
+  if (name === dataset.name) return text;
+  const escaped = dataset.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Not inside a longer id or a path: `mimic-iv` must not match in `mimic-iv-note`.
   return text.replace(new RegExp(`(?<![\\w/-])${escaped}(?![\\w/-])`, "g"), name);
+}
+
+/**
+ * The id agents will use for a dataset someone names `title`: lower case,
+ * with dashes between words, as M4 takes ids. Empty when the title has no
+ * letters or digits M4 accepts.
+ */
+export function datasetIdFromTitle(title: string): string {
+  return title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
 }
 
 const UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
@@ -168,12 +180,48 @@ export function describeDataset(dataset: ClinicalDataset, place = "this computer
         ? "Ready to query."
         : `Ready to query. ${formatBytes(dataset.sizeGb * 1024 ** 3)} on ${place}.`;
     case "incomplete":
-      return "Partly prepared. Download it or add it from a folder again to finish.";
+      return "Partly prepared. Finish adding it to make it ready.";
     case "missing":
-      return dataset.requiresCredentials
-        ? `Not on ${place}. Needs a PhysioNet account with access to it.`
-        : `Not on ${place}.`;
+      return `Not on ${place}.`;
   }
+}
+
+/**
+ * Which list a dataset belongs in: what a computer has or is getting, or
+ * what can still be added to it. A download that failed before anything
+ * arrived stays with what can be added, where it is tried again.
+ */
+export function datasetGroup(dataset: ClinicalDataset): "present" | "available" {
+  return dataset.state !== "missing" || dataset.job?.state === "running" ? "present" : "available";
+}
+
+/**
+ * What the question before removing a dataset says: what is deleted, and that
+ * the folder a dataset of the user's own came from is not.
+ */
+export function describeRemoval(
+  dataset: ClinicalDataset,
+  place = "this computer",
+): { readonly title: string; readonly description: string } {
+  const name = datasetDisplayName(dataset);
+  const size = dataset.sizeGb === undefined ? "" : ` (${formatBytes(dataset.sizeGb * 1024 ** 3)})`;
+  return {
+    title: `Remove ${name}?`,
+    description:
+      dataset.custom === true
+        ? `Lincei deletes what it prepared of ${name}${size} on ${place} and forgets the dataset. The folder you added it from stays as it is. Agents can no longer query it; to use it again, add the folder again.`
+        : `Lincei deletes the files of ${name}${size} from ${place}. Agents can no longer query it until you add it again.`,
+  };
+}
+
+/** What helps decide whether to add a dataset, beyond what it is: short enough for one line. */
+export function datasetFacts(dataset: ClinicalDataset): ReadonlyArray<string> {
+  return [
+    ...(dataset.downloadSizeGb === undefined
+      ? []
+      : [`About ${formatBytes(dataset.downloadSizeGb * 1024 ** 3)} to download`]),
+    ...(dataset.version === undefined ? [] : [`Version ${dataset.version}`]),
+  ];
 }
 
 /** How far a running job is: a sentence, and the share of its current phase that is done. */
@@ -247,6 +295,19 @@ export function describeLostConnection(input: {
       ? `Lincei is reconnecting, and this page comes back by itself. If it stays like this, check that ${otherComputer} is on and that Lincei is running there.`
       : `Check that ${otherComputer} is on and that Lincei is running there, then reconnect below.`,
   };
+}
+
+/**
+ * Whether the server at `httpBaseUrl` runs on the computer in front of the
+ * reader, so a folder it opens opens on this screen: the case when this window
+ * reaches it at a loopback address. Which environment is the primary one does
+ * not say: a browser reaches a primary server elsewhere over the network.
+ */
+export function serverOnThisComputer(httpBaseUrl: string | null): boolean {
+  if (httpBaseUrl === null || !URL.canParse(httpBaseUrl)) return false;
+  const { hostname } = new URL(httpBaseUrl);
+  // Browsers resolve every `*.localhost` name to the loopback address.
+  return isLocalLoopbackHost(hostname) || hostname.endsWith(".localhost");
 }
 
 /**

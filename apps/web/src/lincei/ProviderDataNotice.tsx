@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/checkbox";
 
-import { PHYSIONET_PAGES, PhysioNetLink } from "./physioNet";
+import { PHYSIONET_PAGES, ExternalLink } from "./physioNet";
 
 /**
  * What a researcher has to know before credentialed data comes into reach of
@@ -19,9 +19,9 @@ export function ProviderDataNotice({
       Agents send what they read from {subject}, including query results, to your AI provider.
       PhysioNet allows this only with a service that keeps none of the data, does not train on it,
       and has no human review. Checking that for your account is your responsibility.{" "}
-      <PhysioNetLink href={PHYSIONET_PAGES.aiUse}>
+      <ExternalLink href={PHYSIONET_PAGES.aiUse}>
         PhysioNet&apos;s rules for AI services
-      </PhysioNetLink>
+      </ExternalLink>
     </p>
   );
 }
@@ -35,9 +35,11 @@ export function ProviderDataNotice({
 export function ProviderDataAcknowledgement({
   checked,
   onCheckedChange,
+  label = "I have checked that my AI provider account meets these rules.",
 }: {
   readonly checked: boolean;
   readonly onCheckedChange: (checked: boolean) => void;
+  readonly label?: string;
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-foreground">
@@ -45,7 +47,21 @@ export function ProviderDataAcknowledgement({
       <span className="flex h-lh shrink-0 items-center">
         <Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
       </span>
-      I have checked that my AI provider account meets these rules.
+      {label}
     </label>
+  );
+}
+
+/**
+ * The same point for a dataset of the user's own, which comes with whatever
+ * rules their institution set rather than PhysioNet's.
+ */
+export function OwnDataNotice() {
+  return (
+    <p className="text-xs leading-relaxed text-muted-foreground">
+      Agents send what they read from this dataset, including query results, to your AI provider.
+      Check that the rules this data comes with, such as an ethics approval or a data use agreement,
+      allow that.
+    </p>
   );
 }

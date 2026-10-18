@@ -29,8 +29,6 @@ import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import type { ClinicalStatusView } from "./linceiAnswers";
 import { linceiCommand } from "./linceiRequests";
 import { useTechieModeSwitch } from "./mode/techieModeSwitch";
-import { PhysioNetAccessSteps } from "./physioNet";
-import { ProviderDataNotice } from "./ProviderDataNotice";
 import { seedResearcherDefaults } from "./researcherDefaults";
 import { TECHIE_MODE_SETTING } from "./settingsSearchItems";
 
@@ -124,11 +122,10 @@ function ClinicalStep({
               </CollapsibleTrigger>
               <CollapsiblePanel>
                 <div className="space-y-3 pt-3">
-                  <PhysioNetAccessSteps />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    You can add them now or later, under Settings, Clinical Data.
+                    You can add them now or later, under Settings, Clinical Data. Credentialed
+                    datasets need your own PhysioNet access; adding one shows what it takes.
                   </p>
-                  <ProviderDataNotice subject="these datasets" />
                   <div className="rounded-xl bg-card ring-1 ring-black/5 dark:ring-white/5">
                     <ClinicalDatasetList environmentId={environmentId} enabled />
                   </div>

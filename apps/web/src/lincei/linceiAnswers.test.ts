@@ -190,8 +190,17 @@ describe("datasetListView", () => {
     expect(datasetListView(succeeded(listed("eicu")), null)).toEqual({
       phase: "listed",
       datasets: [dataset("eicu")],
+      actions: null,
       refreshProblem: null,
     });
+  });
+
+  it("passes on what the server can do, and nothing from a server that does not say", () => {
+    const actions = { define: true, remove: false };
+    const withActions: LinceiResponse = { _tag: "ClinicalDatasets", datasets: [], actions };
+    expect(datasetListView(succeeded(withActions), null)).toMatchObject({ actions });
+    expect(datasetListView(succeeded(listed()), null)).toMatchObject({ actions: null });
+    expect(datasetActionOutcome(succeeded(withActions))).toMatchObject({ actions });
   });
 
   it("gives a failed first read its reason, so there is something to retry", () => {
@@ -207,12 +216,13 @@ describe("datasetListView", () => {
     expect(datasetListView(failed(broken, succeeded(listed("eicu"))), null)).toEqual({
       phase: "listed",
       datasets: [dataset("eicu")],
+      actions: null,
       refreshProblem: problem,
     });
   });
 
   it("prefers the list a command returned until a later read arrives", () => {
-    const answer = { datasets: [dataset("mimic-iv")], at: 2_000 };
+    const answer = { datasets: [dataset("mimic-iv")], actions: null, at: 2_000 };
     expect(datasetListView(succeeded(listed("eicu"), 1_000), answer)).toMatchObject({
       datasets: [dataset("mimic-iv")],
     });
@@ -234,6 +244,7 @@ describe("datasetActionOutcome", () => {
     expect(datasetActionOutcome(succeeded(listed("eicu")))).toEqual({
       accepted: true,
       datasets: [dataset("eicu")],
+      actions: null,
     });
   });
 
