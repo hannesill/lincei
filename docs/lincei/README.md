@@ -60,6 +60,11 @@ Until October 2026 they were not, and every GNOME SnapShot failed;
 [`linuxSnapShotIdentity.test.ts`](../../apps/desktop/src/lincei/linuxSnapShotIdentity.test.ts)
 now fails when the two drift apart.
 
+Lincei 0.1.0 still used T3 Code's names for these helpers and for its SSH runtime (`~/.t3` on the
+host). A later Lincei never removes or stops what 0.1.0 left there: T3 Code writes the same files
+and records under the same names, from a server of the same version, so Lincei cannot tell its
+own leftovers from a working T3 Code install.
+
 One name is shared on purpose. On Linux, agents run in systemd scopes under
 `app-t3code-agents.slice`, whose memory limit leaves the machine room for the servers, sshd, and
 tailscaled. Agents of both apps belong under that one limit, since two slices would each allow
