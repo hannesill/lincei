@@ -2,7 +2,8 @@
 
 Lincei is an agentic clinical research environment. You direct coding agents (Claude Code,
 Codex, Cursor, OpenCode, and others) at clinical datasets, stay in the loop while they work, and
-review what they produce as visual research cards instead of walls of chat.
+review what they produce as visual research cards instead of walls of chat. See
+[www.linceilabs.com](https://www.linceilabs.com).
 
 Lincei is built on [T3 Code](https://github.com/pingdotgg/t3code) and tracks it closely: threads,
 terminals, diffs, the built-in browser, remote access, and provider support all come from upstream.
@@ -33,7 +34,8 @@ Lincei adds the clinical layer:
 1. Install and sign in to at least one provider, for example
    [Claude Code](https://claude.com/product/claude-code) (`claude auth login`) or
    [Codex CLI](https://developers.openai.com/codex/cli) (`codex login`).
-2. Download Lincei from [Releases](https://github.com/hannesill/lincei/releases/latest):
+2. Download Lincei from [www.linceilabs.com](https://www.linceilabs.com), which offers the build
+   for your computer, or from [Releases](https://github.com/hannesill/lincei/releases/latest):
    - **Mac:** [`Lincei-mac-arm64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-arm64.dmg)
      for Apple Silicon (M1 and later) or
      [`Lincei-mac-x64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-x64.dmg)
