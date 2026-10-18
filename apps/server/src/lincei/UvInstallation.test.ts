@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - The test needs the digest of the archive it serves.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -120,8 +120,8 @@ const ensureOn = (input: {
     Effect.scoped,
     Effect.provide(
       Layer.mergeAll(
-        Layer.succeed(HostProcessPlatform, input.platform ?? "darwin"),
-        Layer.succeed(HostProcessArchitecture, input.arch ?? "arm64"),
+        Layer.succeed(HostProcess.Platform, input.platform ?? "darwin"),
+        Layer.succeed(HostProcess.Architecture, input.arch ?? "arm64"),
       ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),
   );

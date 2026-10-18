@@ -13,7 +13,7 @@
  */
 import { setRuntimeProductContext } from "@t3tools/provider-core/server/runtimeInstructions";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -49,7 +49,7 @@ export class LinceiPreferences extends Context.Service<
 >()("t3/lincei/LinceiPreferences") {}
 
 const make = Effect.gen(function* () {
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   const applyToAgents = (preferences: Preferences) =>
     Effect.sync(() =>
       setRuntimeProductContext({

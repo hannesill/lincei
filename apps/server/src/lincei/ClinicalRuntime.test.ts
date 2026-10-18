@@ -5,7 +5,7 @@ import {
   buildRuntimeInstructions,
   setRuntimeProductContext,
 } from "@t3tools/provider-core/server/runtimeInstructions";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -176,9 +176,9 @@ const withRuntime = <A, E>(
             } satisfies ServerConfig.ServerConfig["Service"];
           }),
         ).pipe(Layer.provide(layerConfig)),
-    Layer.succeed(HostProcessPlatform, "darwin"),
+    Layer.succeed(HostProcess.Platform, "darwin"),
     // Never the real home: setup links skills into the user's agent folders.
-    Layer.succeed(HostProcessEnvironment, {
+    Layer.succeed(HostProcess.Environment, {
       LINCEI_CLINICAL_SKILL_DIRS: options.skillDirectory ?? "",
     }),
     ConfigProvider.layer(
@@ -590,8 +590,8 @@ describe("ClinicalRuntime", () => {
 describe("ClinicalRuntime.activate", () => {
   const activateWith = (env: NodeJS.ProcessEnv) =>
     ClinicalRuntime.activate("/home/ada/.lincei").pipe(
-      Effect.provideService(HostProcessEnvironment, env),
-      Effect.provideService(HostProcessPlatform, "linux"),
+      Effect.provideService(HostProcess.Environment, env),
+      Effect.provideService(HostProcess.Platform, "linux"),
       Effect.provide(NodePath.layerPosix),
       Effect.ensuring(
         Effect.sync(() => setRuntimeProductContext({ name: "T3 Code", instructions: "" })),
@@ -653,8 +653,8 @@ describe("ClinicalRuntime.activate", () => {
       expect(before).not.toContain("<lincei>");
 
       yield* ClinicalRuntime.activate("/home/ada/.lincei").pipe(
-        Effect.provideService(HostProcessEnvironment, { PATH: "/usr/bin" }),
-        Effect.provideService(HostProcessPlatform, "linux"),
+        Effect.provideService(HostProcess.Environment, { PATH: "/usr/bin" }),
+        Effect.provideService(HostProcess.Platform, "linux"),
         Effect.provide(NodePath.layerPosix),
       );
       const after = buildRuntimeInstructions({ harness: "Codex" });
@@ -677,8 +677,8 @@ describe("ClinicalRuntime.activate", () => {
     };
     return Effect.gen(function* () {
       yield* ClinicalRuntime.activate("C:\\Users\\ada\\.lincei").pipe(
-        Effect.provideService(HostProcessEnvironment, env),
-        Effect.provideService(HostProcessPlatform, "win32"),
+        Effect.provideService(HostProcess.Environment, env),
+        Effect.provideService(HostProcess.Platform, "win32"),
         Effect.provide(NodePath.layerWin32),
       );
       // Ahead of the Microsoft Store's `python` stand-in in WindowsApps.

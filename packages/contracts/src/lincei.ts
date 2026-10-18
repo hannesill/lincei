@@ -109,7 +109,7 @@ export const ClinicalDataset = Schema.Struct({
   summary: Schema.optional(Schema.String),
   /** The release M4 downloads. */
   version: Schema.optional(Schema.String),
-  /** Its page on the web, where a credentialed one's data use agreement is signed. Always https. */
+  /** Its page on the web, to read more about it. Always https; `agreementUrl` is where to sign. */
   pageUrl: Schema.optional(Schema.String),
   /** About how much a download fetches. */
   downloadSizeGb: Schema.optional(Schema.Number),
@@ -126,9 +126,14 @@ export const ClinicalDataset = Schema.Struct({
   /**
    * Whether this server can download it. False for a dataset that needs a
    * PhysioNet login on a server that has no safe way to hand M4 one, so a
-   * client offers "Add from folder" there and never asks for a password.
+   * client offers only adding it from a folder there and never asks for a password.
    */
   downloadable: Schema.Boolean,
+  /**
+   * The page on physionet.org where an account signs this credentialed
+   * dataset's data use agreement. Absent when M4 names none.
+   */
+  agreementUrl: Schema.optional(Schema.String),
   sizeGb: Schema.optional(Schema.Number),
   job: Schema.optional(ClinicalDatasetJob),
 });

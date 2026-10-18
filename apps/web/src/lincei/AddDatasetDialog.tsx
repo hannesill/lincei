@@ -26,7 +26,7 @@ import {
 } from "./clinicalPresentation";
 import { FolderField } from "./FolderField";
 import { type DatasetActionOutcome, NO_ANSWER } from "./linceiAnswers";
-import { PhysioNetAccessChecklist } from "./physioNet";
+import { PhysioNetAccessChecklist, physioNetProjectPage } from "./physioNet";
 import { ProviderDataAcknowledgement, ProviderDataNotice } from "./ProviderDataNotice";
 import { useLastPresent } from "./useLastPresent";
 
@@ -205,7 +205,7 @@ function AddDatasetForm({
         >
           {signIn ? (
             <>
-              <PhysioNetAccessChecklist name={name} pageUrl={dataset.pageUrl} />
+              <PhysioNetAccessChecklist name={name} agreementUrl={physioNetProjectPage(dataset)} />
               {mayType ? null : (
                 <Alert variant="warning">
                   <AlertDescription>

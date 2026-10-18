@@ -11,7 +11,7 @@ import {
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -117,10 +117,10 @@ const withRequests = <A, E>(
           }),
       }),
     ),
-    Layer.succeed(HostProcessPlatform, "darwin"),
+    Layer.succeed(HostProcess.Platform, "darwin"),
     ServerConfig.layerTest(process.cwd(), { prefix: "lincei-requests-test-" }),
     // Never the developer's own dataset store.
-    Layer.succeed(HostProcessEnvironment, {}),
+    Layer.succeed(HostProcess.Environment, {}),
     // The paths above are a Mac's, whatever this host is.
   ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodePath.layerPosix)));
 

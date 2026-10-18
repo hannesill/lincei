@@ -33,7 +33,7 @@ import type {
   ClinicalDatasetJob,
   PhysioNetCredentials,
 } from "@t3tools/contracts";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -103,9 +103,12 @@ const M4Dataset = Schema.Struct({
   title: Schema.optional(Schema.NullOr(Schema.String)),
   summary: Schema.optional(Schema.NullOr(Schema.String)),
   version: Schema.optional(Schema.NullOr(Schema.String)),
-  dataset_page_url: Schema.optional(Schema.NullOr(Schema.String)),
   download_size_gb: Schema.optional(Schema.NullOr(Schema.Number)),
   builtin: Schema.optional(Schema.Boolean),
+  // Where the dataset's data use agreement is signed, and its page, from M4
+  // releases after 0.5.7. PhysioNet has the agreement on the dataset's page.
+  dua_url: Schema.optional(Schema.NullOr(Schema.String)),
+  dataset_page_url: Schema.optional(Schema.NullOr(Schema.String)),
 });
 type M4Dataset = typeof M4Dataset.Type;
 
@@ -123,6 +126,8 @@ const decodeM4DatasetList = Schema.decodeUnknownEffect(Schema.fromJsonString(M4D
  */
 const M4DownloadPlan = Schema.Struct({
   file_listing_url: Schema.optional(Schema.NullOr(Schema.String)),
+  /** The agreement's page, else the dataset's page, else `file_listing_url`. */
+  access_url: Schema.optional(Schema.NullOr(Schema.String)),
   layout: Schema.optional(
     Schema.Struct({
       ok: Schema.Boolean,
@@ -170,6 +175,22 @@ const M4Event = Schema.Struct({
 });
 type M4Event = typeof M4Event.Type;
 const decodeM4Event = Schema.decodeUnknownOption(Schema.fromJsonString(M4Event));
+
+/** Whether a login may go to this address, or a researcher be sent to it to sign in. */
+const isPhysioNet = (url: URL) =>
+  url.protocol === "https:" &&
+  url.hostname === PHYSIONET_HOST &&
+  url.username === "" &&
+  url.password === "";
+
+/**
+ * A page M4 names, if it is on physionet.org. A file in M4's dataset store
+ * can define a dataset, its pages included, and agents can write there.
+ */
+const physioNetPage = (address: string | null | undefined) => {
+  const url = typeof address !== "string" || !URL.canParse(address) ? undefined : new URL(address);
+  return url !== undefined && isPhysioNet(url) ? url.href : undefined;
+};
 
 /**
  * JSON with every character outside ASCII written as an escape. M4 decodes
@@ -263,6 +284,8 @@ type JobKind = ClinicalDatasetJob["kind"];
 interface Login {
   readonly credentials: PhysioNetCredentials;
   readonly arguments: ReadonlyArray<string>;
+  /** Where the account signs the dataset's data use agreement, for when PhysioNet refuses it. */
+  readonly agreementUrl: string | undefined;
 }
 
 const PHASE_MESSAGES: Record<ClinicalDatasetJob["phase"], string> = {
@@ -385,14 +408,23 @@ const loginNotPossible = (name: string) =>
   `Lincei cannot download ${name} with a PhysioNet login on this computer yet. Download its files from physionet.org, then add it and choose their folder.`;
 
 /** Why M4 stopped, in words for the person who started the job, with what to do next. */
-const describeFailure = (name: string, kind: JobKind, code: string | undefined): string => {
+const describeFailure = (
+  name: string,
+  kind: JobKind,
+  code: string | undefined,
+  agreementUrl?: string,
+): string => {
   switch (code) {
     // M4 0.5.5 sent the login in a way PhysioNet ignores, so there every
     // login ended in "forbidden". Since 0.5.6 a wrong password is its own case.
     case "physionet_auth_failed":
       return `PhysioNet did not accept this username and password. Check them by signing in on physionet.org, then choose Try again on its row.`;
+    // An account that already reaches other credentialed datasets most often
+    // lacks only this one's agreement, so that step comes first.
     case "physionet_access_forbidden":
-      return `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Try again on its row.`;
+      return agreementUrl === undefined
+        ? `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Try again on its row.`
+        : `This PhysioNet account has no access to ${name} yet. Sign the data use agreement on ${agreementUrl}, then choose Try again on its row. If PhysioNet does not offer you the agreement there, the account first needs credentialing and the required training.`;
     case "missing_credentials":
       return `The PhysioNet login did not reach the download of ${name}. Choose Try again on its row and sign in again.`;
     case "download_network_failed":
@@ -486,8 +518,8 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const platform = yield* HostProcessPlatform;
-  const hostEnvironment = yield* HostProcessEnvironment;
+  const platform = yield* HostProcess.Platform;
+  const hostEnvironment = yield* HostProcess.Environment;
   const processRunner = yield* ProcessRunner.ProcessRunner;
   const scope = yield* Effect.scope;
 
@@ -618,8 +650,11 @@ const make = Effect.gen(function* () {
       [readM4Datasets, platform === "darwin" ? Effect.succeed(true) : m4ReadsLoginFromStdin],
       { concurrency: 2 },
     );
-    return reported.map(
-      (dataset): ClinicalDataset => ({
+    return reported.map((dataset): ClinicalDataset => {
+      const agreementUrl = dataset.requires_authentication
+        ? physioNetPage(dataset.dua_url ?? dataset.dataset_page_url)
+        : undefined;
+      return {
         name: dataset.name,
         ...aboutDataset(dataset),
         state:
@@ -631,11 +666,12 @@ const make = Effect.gen(function* () {
         requiresCredentials: dataset.requires_authentication,
         downloadable:
           dataset.download_available && (!dataset.requires_authentication || canSendLogin),
+        ...(agreementUrl === undefined ? {} : { agreementUrl }),
         ...(typeof dataset.parquet_size_gb === "number" && dataset.parquet_size_gb > 0
           ? { sizeGb: dataset.parquet_size_gb }
           : {}),
-      }),
-    );
+      };
+    });
   });
 
   /** The datasets whose preparation started here and has not completed. */
@@ -724,7 +760,7 @@ const make = Effect.gen(function* () {
       .join(" ");
     const detail = secret.hide(reported) || secret.tail(output.stderr, output.stderrTruncated);
     return yield* new ClinicalDatasetsError({
-      message: secret.hide(describeFailure(name, kind, failure?.code)),
+      message: secret.hide(describeFailure(name, kind, failure?.code, login?.agreementUrl)),
       ...(detail.length === 0 ? {} : { detail }),
     });
   });
@@ -887,25 +923,30 @@ const make = Effect.gen(function* () {
   /**
    * Fails unless M4 would send a login for this dataset to PhysioNet. A file
    * in M4's dataset store can replace a dataset's definition, its download
-   * address included, and agents can write there.
+   * address included, and agents can write there. Answers the page where the
+   * dataset's agreement is signed, which M4 0.5.7 names only here.
    */
   const requirePhysioNetSource = Effect.fn("ClinicalDatasets.requirePhysioNetSource")(function* (
     name: string,
   ) {
-    const plan = yield* downloadPlan(name).pipe(Effect.orElseSucceed(() => Option.none()));
-    const address = Option.getOrUndefined(plan)?.file_listing_url ?? undefined;
+    const plan = Option.getOrUndefined(
+      yield* downloadPlan(name).pipe(Effect.orElseSucceed(() => Option.none())),
+    );
+    const address = plan?.file_listing_url ?? undefined;
     const url = address === undefined || !URL.canParse(address) ? undefined : new URL(address);
     if (url === undefined) {
       return yield* new ClinicalDatasetsError({
         message: `Lincei could not confirm that ${name} downloads from physionet.org, so it did not send your PhysioNet login. Choose Download again; if it keeps failing, download the files from physionet.org and choose their folder instead.`,
       });
     }
-    if (url.protocol !== "https:" || url.hostname !== PHYSIONET_HOST || url.username !== "") {
+    if (!isPhysioNet(url)) {
       return yield* new ClinicalDatasetsError({
         message: `The download address of ${name} was changed on this computer, so Lincei did not send your PhysioNet login. Download the files from physionet.org yourself and choose their folder instead, or ask whoever manages this computer to undo the change.`,
         detail: `M4 would download ${name} from ${url.protocol}//${url.host}.`,
       });
     }
+    // M4 falls back to the file listing, which is no page to sign anything on.
+    return plan?.access_url === address ? undefined : physioNetPage(plan?.access_url);
   });
 
   /**
@@ -1106,11 +1147,15 @@ const make = Effect.gen(function* () {
       if (Option.isNone(how)) {
         return yield* new ClinicalDatasetsError({ message: loginNotPossible(name) });
       }
-      yield* requirePhysioNetSource(name);
+      const plannedAgreementUrl = yield* requirePhysioNetSource(name);
       return yield* start(
         name,
         "download",
-        downloadAndPrepare(name, "download", { credentials, arguments: how.value }),
+        downloadAndPrepare(name, "download", {
+          credentials,
+          arguments: how.value,
+          agreementUrl: dataset.agreementUrl ?? plannedAgreementUrl,
+        }),
       );
     });
 

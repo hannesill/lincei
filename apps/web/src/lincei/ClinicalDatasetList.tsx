@@ -32,7 +32,7 @@ import {
   describeLinceiFailure,
 } from "./linceiAnswers";
 import { linceiCommand } from "./linceiRequests";
-import { ExternalLink, hostOf } from "./physioNet";
+import { ExternalLink, hostOf, PhysioNetLinkedText } from "./physioNet";
 import { ProviderDataNotice } from "./ProviderDataNotice";
 import { RemoveDatasetDialog } from "./RemoveDatasetDialog";
 import { CLINICAL_SETTINGS } from "./settingsSearchItems";
@@ -88,7 +88,9 @@ function JobFailure({ dataset }: { readonly dataset: ClinicalDataset }) {
   if (job?.state !== "failed") return null;
   return (
     <div className="space-y-1 text-xs">
-      <p className="text-destructive">{withDatasetName(job.message, dataset)}</p>
+      <p className="text-destructive">
+        <PhysioNetLinkedText text={withDatasetName(job.message, dataset)} />
+      </p>
       {job.detail === undefined || job.detail === job.message ? null : (
         <TechnicalDetails label="Show what M4 reported" text={job.detail} />
       )}

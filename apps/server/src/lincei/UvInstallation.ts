@@ -18,11 +18,7 @@
  *
  * @module UvInstallation
  */
-import {
-  HostProcessArchitecture,
-  HostProcessEnvironment,
-  HostProcessPlatform,
-} from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -134,9 +130,9 @@ export const ensure = Effect.fn("UvInstallation.ensure")(function* (input: {
   const path = yield* Path.Path;
   const http = yield* HttpClient.HttpClient;
   const processRunner = yield* ProcessRunner.ProcessRunner;
-  const platform = yield* HostProcessPlatform;
-  const arch = yield* HostProcessArchitecture;
-  const environment = yield* HostProcessEnvironment;
+  const platform = yield* HostProcess.Platform;
+  const arch = yield* HostProcess.Architecture;
+  const environment = yield* HostProcess.Environment;
   const windows = platform === "win32";
 
   const runs = (command: string) =>
