@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { addedIdentityLiterals, classifyConflict, joinAddedLines } from "./merge-upstream.ts";
+import {
+  addedIdentityLiterals,
+  classifyConflict,
+  joinAddedLines,
+  orchestrationProtocolVersion,
+} from "./merge-upstream.ts";
 
 const hunk = (ours: string, base: string, theirs: string) =>
   `<<<<<<< ours\n${ours}||||||| base\n${base}=======\n${theirs}>>>>>>> theirs\n`;
@@ -73,5 +78,17 @@ describe("addedIdentityLiterals", () => {
         line: 'const home = config.t3Home ?? path.join(homedir(), ".t3");',
       },
     ]);
+  });
+});
+
+describe("orchestrationProtocolVersion", () => {
+  it("reads the version upstream's contracts declare", () => {
+    expect(
+      orchestrationProtocolVersion(
+        'export const ORCHESTRATION_PROTOCOL_VERSION = 2;\nexport const ORCHESTRATION_PROTOCOL_VERSION_TEXT = "2";\n',
+      ),
+    ).toBe(2);
+    expect(orchestrationProtocolVersion("export const SOMETHING_ELSE = 3;\n")).toBeNull();
+    expect(orchestrationProtocolVersion(null)).toBeNull();
   });
 });
