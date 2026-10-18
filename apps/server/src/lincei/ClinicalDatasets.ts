@@ -25,6 +25,11 @@
  * file, or a log. Nothing keeps it afterwards, so the next download asks again.
  * It is sent only when M4 would download from physionet.org.
  *
+ * Fetching a cohort's images from an imaging dataset (`fetchImages`) runs M4
+ * the same way, with the same handling of a login, but is not a job on the
+ * dataset: it belongs to the agent's request that asked for it
+ * (ClinicalImageRequests.ts), which shows its progress in that thread.
+ *
  * @module ClinicalDatasets
  */
 import type {
@@ -218,6 +223,8 @@ export class ClinicalDatasetsError extends Schema.TaggedError<ClinicalDatasetsEr
     message: Schema.String,
     /** What M4 reported, for whoever helps them. */
     detail: Schema.optional(Schema.String),
+    /** M4's code for why it stopped, when it said. */
+    code: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}
@@ -275,10 +282,26 @@ export class ClinicalDatasets extends Context.Service<
     readonly prepareDemo: Effect.Effect<boolean>;
     /** Whether the demo dataset was ready the last time this server looked or prepared it. */
     readonly demoReady: Effect.Effect<boolean>;
+    /**
+     * Fetches the images a cohort lists from an imaging dataset, with
+     * `m4 fetch-images`. `list` is a CSV file on this machine naming the
+     * images. Runs to its end in the caller's fiber, reporting progress to
+     * `onProgress`. Without a login, M4 fetches from a credentialed dataset
+     * only when every image is already here, and otherwise fails with the
+     * code `missing_credentials`, having fetched nothing.
+     */
+    readonly fetchImages: (input: {
+      readonly name: string;
+      readonly list: string;
+      readonly credentials?: PhysioNetCredentials | undefined;
+      readonly onProgress?: ((progress: ClinicalDatasetJob) => void) | undefined;
+    }) => Effect.Effect<void, ClinicalDatasetsError>;
   }
 >()("t3/lincei/ClinicalDatasets") {}
 
 type JobKind = ClinicalDatasetJob["kind"];
+/** What M4 was doing when it stopped: a dataset's job, or fetching images for an agent. */
+type WorkKind = JobKind | "fetch";
 
 /** A PhysioNet login for one run of M4, with the arguments that make M4 read it from standard input. */
 interface Login {
@@ -410,28 +433,35 @@ const loginNotPossible = (name: string) =>
 /** Why M4 stopped, in words for the person who started the job, with what to do next. */
 const describeFailure = (
   name: string,
-  kind: JobKind,
+  kind: WorkKind,
   code: string | undefined,
   agreementUrl?: string,
 ): string => {
+  // A fetch was asked for by an agent, and is repeated by asking it again.
+  const again =
+    kind === "fetch"
+      ? "ask the agent in the conversation to fetch the images again"
+      : "choose Try again on its row";
   switch (code) {
     // M4 0.5.5 sent the login in a way PhysioNet ignores, so there every
     // login ended in "forbidden". Since 0.5.6 a wrong password is its own case.
     case "physionet_auth_failed":
-      return `PhysioNet did not accept this username and password. Check them by signing in on physionet.org, then choose Try again on its row.`;
+      return `PhysioNet did not accept this username and password. Check them by signing in on physionet.org, then ${again}.`;
     // An account that already reaches other credentialed datasets most often
     // lacks only this one's agreement, so that step comes first.
     case "physionet_access_forbidden":
       return agreementUrl === undefined
-        ? `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then choose Try again on its row.`
-        : `This PhysioNet account has no access to ${name} yet. Sign the data use agreement on ${agreementUrl}, then choose Try again on its row. If PhysioNet does not offer you the agreement there, the account first needs credentialing and the required training.`;
+        ? `This PhysioNet account has no access to ${name} yet. It needs credentialing, the required training, and the data use agreement signed on the dataset's page on physionet.org. Then ${again}.`
+        : `This PhysioNet account has no access to ${name} yet. Sign the data use agreement on ${agreementUrl}, then ${again}. If PhysioNet does not offer you the agreement there, the account first needs credentialing and the required training.`;
     case "missing_credentials":
-      return `The PhysioNet login did not reach the download of ${name}. Choose Try again on its row and sign in again.`;
+      return kind === "fetch"
+        ? `The PhysioNet login did not reach the fetch from ${name}. Sign in again when the agent asks.`
+        : `The PhysioNet login did not reach the download of ${name}. Choose Try again on its row and sign in again.`;
     case "download_network_failed":
     case "download_interrupted":
-      return `The download of ${name} stopped because the connection failed or PhysioNet did not answer. Check the internet connection, then choose Try again on its row; files already downloaded are kept.`;
+      return `The download of ${name} stopped because the connection failed or PhysioNet did not answer. Check the internet connection, then ${again}; files already downloaded are kept.`;
     case "download_filesystem_failed":
-      return `Lincei could not save the files of ${name}. Check that the disk has enough free space, then choose Try again on its row; files already downloaded are kept.`;
+      return `Lincei could not save the files of ${name}. Check that the disk has enough free space, then ${again}; files already downloaded are kept.`;
     case "raw_files_missing":
       return kind === "add"
         ? `No raw files for ${name} were found in that folder. Choose the folder that holds its CSV.gz files.`
@@ -447,7 +477,9 @@ const describeFailure = (
     case "verification_failed":
       return `Lincei prepared ${name}, but its main table is missing or cannot be read, so it is not ready. Check that the raw files are complete. ${RETRY}`;
     default:
-      return `Preparing ${name} did not finish. ${RETRY}`;
+      return kind === "fetch"
+        ? `Fetching images from ${name} did not finish. Ask the agent in the conversation to try again.`
+        : `Preparing ${name} did not finish. ${RETRY}`;
   }
 };
 
@@ -712,9 +744,11 @@ const make = Effect.gen(function* () {
   /** Runs one M4 command to its end, feeding its progress events into the dataset's job. */
   const runM4 = Effect.fn("ClinicalDatasets.runM4")(function* (
     name: string,
-    kind: JobKind,
+    kind: WorkKind,
     args: ReadonlyArray<string>,
     login?: Login,
+    /** Where progress goes instead of the dataset's job. */
+    track?: (event: M4Event) => void,
   ) {
     let failure: M4Failure | undefined;
     let completed = false;
@@ -742,6 +776,10 @@ const make = Effect.gen(function* () {
             const note = describeConversionWarning(event.value);
             if (note !== undefined) notes.set(name, [...(notes.get(name) ?? []), note]);
           }
+          if (track !== undefined) {
+            track(event.value);
+            return;
+          }
           const job = jobs.get(name);
           if (job !== undefined) jobs.set(name, advanceJob(job, event.value));
         }),
@@ -762,6 +800,7 @@ const make = Effect.gen(function* () {
     return yield* new ClinicalDatasetsError({
       message: secret.hide(describeFailure(name, kind, failure?.code, login?.agreementUrl)),
       ...(detail.length === 0 ? {} : { detail }),
+      ...(failure?.code === undefined ? {} : { code: failure.code }),
     });
   });
 
@@ -1159,6 +1198,58 @@ const make = Effect.gen(function* () {
       );
     });
 
+  const fetchImages: ClinicalDatasets["Service"]["fetchImages"] = (input) =>
+    Effect.gen(function* () {
+      const name = yield* datasetName(input.name);
+      yield* requireM4;
+      const fetchFlags = (yield* m4Commands).get("fetch-images");
+      if (fetchFlags === undefined) {
+        return yield* new ClinicalDatasetsError({
+          message:
+            "The installed clinical research tools cannot fetch images yet. Update them under Settings, Clinical Data, then ask the agent again.",
+        });
+      }
+      if (removing.has(name)) {
+        return yield* new ClinicalDatasetsError({
+          message: `${name} is being removed, so no images are fetched from it.`,
+        });
+      }
+      const dataset = (yield* list).find((candidate) => candidate.name === name);
+      if (dataset === undefined) {
+        return yield* new ClinicalDatasetsError({ message: unknownDataset(input.name) });
+      }
+      const credentials = dataset.requiresCredentials ? input.credentials : undefined;
+      if (credentials !== undefined && !fetchFlags.includes(LOGIN_ON_STDIN)) {
+        return yield* new ClinicalDatasetsError({ message: loginNotPossible(name) });
+      }
+      // As for a download: a definition an agent rewrote must not take the login elsewhere.
+      const plannedAgreementUrl =
+        credentials === undefined ? undefined : yield* requirePhysioNetSource(name);
+      let progress: ClinicalDatasetJob = {
+        kind: "download",
+        state: "running",
+        phase: "starting",
+        completed: 0,
+        message: "Fetching images.",
+      };
+      yield* runM4(
+        name,
+        "fetch",
+        ["fetch-images", name, "--from-csv", input.list],
+        credentials === undefined
+          ? undefined
+          : {
+              credentials,
+              arguments: [LOGIN_ON_STDIN],
+              agreementUrl: dataset.agreementUrl ?? plannedAgreementUrl,
+            },
+        (event) => {
+          progress = advanceJob(progress, event);
+          input.onProgress?.(progress);
+        },
+      );
+    });
+
   /** Why M4 would not define a dataset from a folder, in words for the person who chose it. */
   const describeDefinitionFailure = (name: string, failure: M4Failure | undefined) => {
     if (failure === undefined) {
@@ -1391,6 +1482,7 @@ const make = Effect.gen(function* () {
     remove,
     prepareDemo,
     demoReady: Effect.sync(() => demoIsReady),
+    fetchImages,
   });
 });
 

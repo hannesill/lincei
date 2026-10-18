@@ -24,6 +24,7 @@ import * as RpcAuthorization from "../auth/RpcAuthorization.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
+import * as ClinicalImageRequests from "./ClinicalImageRequests.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
@@ -135,6 +136,7 @@ const withRequests = <A, E>(
     Effect.scoped,
     Effect.provide(
       LinceiRequests.layer.pipe(
+        Layer.provideMerge(ClinicalImageRequests.layer),
         Layer.provideMerge(ResearchBoard.layer),
         Layer.provideMerge(LinceiPreferences.layer),
         Layer.provideMerge(ClinicalDatasets.layer),

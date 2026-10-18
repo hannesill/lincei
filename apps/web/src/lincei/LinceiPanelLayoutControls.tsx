@@ -5,12 +5,14 @@ import {
 
 import { usePrimaryEnvironmentId } from "~/state/environments";
 
+import { ImageRequestPrompt } from "./ImageRequestPrompt";
 import { useTechieModeSync } from "./mode/techieModeSwitch";
 import { ResearchBoardButton, type ResearchBoardTarget } from "./ResearchBoardButton";
 
 /**
  * T3 Code's panel toggles with Lincei's research board button in front of
- * them. `ChatView` renders this in place of `PanelLayoutControls`, which keeps
+ * them, and before that, while an agent waits for images, the button to sign
+ * in for them. `ChatView` renders this in place of `PanelLayoutControls`, which keeps
  * the change to that upstream file to the tag name and one prop.
  *
  * Being in every thread's header, it is also where a window that has just
@@ -23,6 +25,7 @@ export function LinceiPanelLayoutControls({
   useTechieModeSync(usePrimaryEnvironmentId());
   return (
     <>
+      <ImageRequestPrompt threadRef={research.threadRef} phase={research.phase} />
       <ResearchBoardButton {...research} />
       <PanelLayoutControls {...controls} />
     </>

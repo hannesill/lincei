@@ -165,6 +165,40 @@ export const PhysioNetCredentials = Schema.Struct({
 export type PhysioNetCredentials = typeof PhysioNetCredentials.Type;
 
 /**
+ * An agent's request for the images of a cohort, from an imaging dataset such
+ * as MIMIC-CXR-JPG. Lincei shows it in the agent's thread; for a credentialed
+ * dataset it waits there for the researcher's PhysioNet login, which the
+ * server passes to M4 for this one fetch and keeps nothing of.
+ */
+export const ClinicalImageRequest = Schema.Struct({
+  id: Schema.String,
+  /** The thread whose agent asked, where the request is shown. */
+  threadId: Schema.String,
+  dataset: Schema.String,
+  /** What people call the dataset, when M4 says. */
+  datasetTitle: Schema.optional(Schema.String),
+  /** How many images the cohort lists. */
+  images: Schema.Number,
+  /**
+   * `waiting-for-login` until the researcher signs in or declines; a `failed`
+   * request can be signed in to again, for a mistyped password.
+   */
+  state: Schema.Literals(["waiting-for-login", "fetching", "done", "declined", "failed"]),
+  /** Images fetched or found on disk so far, while fetching. */
+  completed: Schema.Number,
+  total: Schema.optional(Schema.Number),
+  /** Where things stand, or what went wrong and what to do next, in words for the user. */
+  message: Schema.String,
+  /** What M4 reported when the fetch failed, for whoever helps the user. */
+  detail: Schema.optional(Schema.String),
+  /** Where the account signs the dataset's data use agreement, for a credentialed dataset. */
+  agreementUrl: Schema.optional(Schema.String),
+  /** Epoch milliseconds, on the server's clock. */
+  requestedAt: Schema.Number,
+});
+export type ClinicalImageRequest = typeof ClinicalImageRequest.Type;
+
+/**
  * What a Lincei user has chosen that the server acts on. With Techie mode off,
  * the default, agents are told they work with a researcher and the clients
  * hide developer surfaces; with it on, Lincei is upstream's full feature set.
@@ -228,6 +262,15 @@ export const LinceiRequest = Schema.Union([
   }),
   /** Stops a dataset's running job, or clears its failed one. Finished files are kept. */
   Schema.TaggedStruct("ClinicalDatasetCancel", { name: Schema.String }),
+  /** Lists the image requests of agents in one thread, recent finished ones included. */
+  Schema.TaggedStruct("ClinicalImageRequests", { threadId: Schema.String }),
+  /** Signs in to fetch a requested cohort's images. The login is used for this fetch only. */
+  Schema.TaggedStruct("ClinicalImageRequestAnswer", {
+    id: Schema.String,
+    credentials: PhysioNetCredentials,
+  }),
+  /** Turns down an agent's image request; the agent is told. */
+  Schema.TaggedStruct("ClinicalImageRequestDecline", { id: Schema.String }),
   /** Reads the user's preferences. */
   Schema.TaggedStruct("Preferences", {}),
   /** Changes them. Agents are told from their next turn; other clients see it when they next ask. */
@@ -252,6 +295,9 @@ export const LinceiResponse = Schema.Union([
   Schema.TaggedStruct("ClinicalDatasets", {
     datasets: Schema.Array(ClinicalDataset),
     actions: Schema.optional(ClinicalDatasetActions),
+  }),
+  Schema.TaggedStruct("ClinicalImageRequests", {
+    requests: Schema.Array(ClinicalImageRequest),
   }),
   /** A request that changed nothing a client shows went through. */
   Schema.TaggedStruct("Done", {}),

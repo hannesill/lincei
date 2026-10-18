@@ -28,7 +28,7 @@ content. `git log --first-parent` leaves it out.
 | Credit to T3 Code (Settings, About; Open source licenses; macOS About window; copyright) | [`apps/web/src/lincei/T3CodeCredit.tsx`](../../apps/web/src/lincei/T3CodeCredit.tsx); `COPYRIGHT` in [`scripts/lincei/identity.ts`](../../scripts/lincei/identity.ts)                                                              | Two lines in `SettingsPanels.tsx`, two in `DesktopAppIdentity.ts`, one in `build-desktop-artifact.ts`, and the first custom notice in `third-party-licenses.config.json`; all written by `identity.ts`                       |
 | Mark and icons                                                                           | [`scripts/lincei/icons.ts`](../../scripts/lincei/icons.ts) draws `assets/` and `apps/web/public/`; [`scripts/lincei/macIcon.ts`](../../scripts/lincei/macIcon.ts); `apps/web/src/components/T3Wordmark.tsx`                        | Same file names as upstream, Lincei content; in `build-desktop-artifact.ts`, one call before the stage's `package.json` is written; in `electron-launcher.mjs`, two calls and a cache key; all written by `identity.ts`      |
 | Clinical runtime (M4, Vitrine, skills, demo dataset)                                     | [`apps/server/src/lincei/ClinicalRuntime.ts`](../../apps/server/src/lincei/ClinicalRuntime.ts)                                                                                                                                     | Two lines in `apps/server/src/server.ts`                                                                                                                                                                                     |
-| Agent tools `lincei_clinical_status` and `lincei_clinical_setup`                         | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
+| Agent tools `lincei_clinical_status`, `_setup`, `_fetch_images`, `_image_request`        | [`apps/server/src/lincei/mcp/`](../../apps/server/src/lincei/mcp)                                                                                                                                                                  | One registration in `apps/server/src/mcp/McpHttpServer.ts`                                                                                                                                                                   |
 | What agents are told                                                                     | [`apps/server/src/lincei/agentInstructions.ts`](../../apps/server/src/lincei/agentInstructions.ts)                                                                                                                                 | `setRuntimeProductContext` in provider-core's `runtimeInstructions.ts`                                                                                                                                                       |
 | Requests from the clients (`lincei.request`)                                             | [`packages/contracts/src/lincei.ts`](../../packages/contracts/src/lincei.ts), [`apps/server/src/lincei/LinceiRequests.ts`](../../apps/server/src/lincei/LinceiRequests.ts)                                                         | One line each in `rpc.ts`, `ws.ts`, `RpcInstrumentation.ts`, and `clientRpcPermissions.ts` (its scope, which the server also reads), and the export in `packages/contracts/src/index.ts`                                     |
 | Datasets and M4's skills for agents                                                      | [`ClinicalDatasets.ts`](../../apps/server/src/lincei/ClinicalDatasets.ts), [`ClinicalSkillLinks.ts`](../../apps/server/src/lincei/ClinicalSkillLinks.ts)                                                                           | None                                                                                                                                                                                                                         |
@@ -243,7 +243,7 @@ Settings, Clinical Data lists M4's datasets (`m4 list-datasets --json`) and adds
 of raw files (`m4 init <name> --src`) or by download (`m4 download`, then `m4 init`). M4 prints its
 progress as NDJSON events, which `ClinicalDatasets.ts` folds into one job per dataset. Setup's
 demo download is such a job too, so every M4 run that writes a dataset has one owner. Agents do
-not go through this service. They have the `m4` CLI.
+not go through this service, except to fetch images (below). They have the `m4` CLI.
 
 Jobs live in memory; what a job left unfinished does not. M4 (0.5.5) calls a dataset ready as soon
 as some converted files and a database exist, and converts nothing once any converted file exists,
@@ -259,8 +259,9 @@ once no environment set up with 0.5.5 is left (setup replaces M4 when the minimu
 Credentialed datasets are downloaded with the user's own PhysioNet login, which Lincei never
 stores:
 
-- It is typed into a password field on that page, never into a conversation, where an agent and
-  its model provider would read it. The agent instructions say so too.
+- It is typed into a password field on that page or in the thread's image sign-in, never into a
+  conversation, where an agent and its model provider would read it. The agent instructions say
+  so too.
 - The dialog only sends it to this machine or over HTTPS (`connectionProtectsSecrets`).
 - In the contract the password is `Schema.RedactedFromValue`, so a request that is logged, traced,
   or printed shows `<redacted>`. Upstream's RPC instrumentation records the method, not the
@@ -302,6 +303,18 @@ keeps its own only for the datasets of older servers. The server passes on a pag
 `https://physionet.org`, since agents can write the dataset files that name it, and puts it into
 the failure of a download PhysioNet refused, which the client shows as a link.
 
+An imaging dataset such as MIMIC-CXR-JPG is too large to download whole (about half a terabyte),
+so M4 prepares its tables and fetches images per cohort (`m4 fetch-images`). The cohort is the
+agent's, mid-analysis, but the login is the researcher's and must stay out of the conversation. So
+an agent asks (MCP tool `lincei_clinical_fetch_images`, with a CSV of the images) and
+`ClinicalImageRequests.ts` keeps the request against the agent's thread. That thread's header
+(`ImageRequestPrompt.tsx`) asks the server about its requests every few seconds while an agent
+works or a request is open, shows a sign-in button, and opens the sign-in once. The login goes
+with the answer to `ClinicalDatasets.fetchImages`, under the same rules as a download's. The agent
+follows the request with `lincei_clinical_image_request`. A fetch is not a job on the dataset:
+it belongs to the thread that asked, and one dataset fetches for one request at a time, since two
+fetches would write the same partial files. Requests live in memory, finished ones for an hour.
+
 ### Research cards
 
 Research cards are shown by upstream's built-in browser, in the right panel. Vitrine keeps its
@@ -328,6 +341,12 @@ Three things follow from "the directory a script runs in", and each has bitten:
 
 Vitrine opens the system browser when a script's first card starts its server. Lincei sets
 `VITRINE_OPEN_BROWSER=0`, which Vitrine honours from 0.1.2.
+
+Imaging results go on the board as Vitrine's image cards (0.1.5), and the agent instructions tell
+agents never to open images from credentialed datasets: a file an agent reads goes to its model
+provider, while a card, or a markdown image in the conversation, is drawn on the researcher's
+machine. The instructions name `vitrine.Picture` and M4's vitrine-api skill (0.5.9) describes it,
+so `DEFAULT_CLINICAL_REQUIREMENTS` must not fall below those releases.
 
 The research board button asks the server to start Vitrine in the thread's directory
 (`ResearchBoard.ts`) and opens the URL it reports. Vitrine listens on loopback only, so the board's

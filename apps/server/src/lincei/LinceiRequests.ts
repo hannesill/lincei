@@ -21,6 +21,7 @@ import * as Option from "effect/Option";
 
 import { linceiAgentInstructions } from "./agentInstructions.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
+import * as ClinicalImageRequests from "./ClinicalImageRequests.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
@@ -47,6 +48,7 @@ const toRequestError = (error: {
 const make = Effect.gen(function* () {
   const clinicalRuntime = yield* ClinicalRuntime.ClinicalRuntime;
   const clinicalDatasets = yield* ClinicalDatasets.ClinicalDatasets;
+  const imageRequests = yield* ClinicalImageRequests.ClinicalImageRequests;
   const researchBoard = yield* ResearchBoard.ResearchBoard;
   const linceiPreferences = yield* LinceiPreferences.LinceiPreferences;
   const platform = yield* HostProcess.Platform;
@@ -59,6 +61,13 @@ const make = Effect.gen(function* () {
     ),
     Effect.mapError(toRequestError),
   );
+
+  /** After an answer, the requests of the thread it was in, as the client then shows them. */
+  const threadRequests = (answered: { readonly threadId: string }) =>
+    Effect.map(
+      imageRequests.forThread(answered.threadId),
+      (requests): LinceiResponse => ({ _tag: "ClinicalImageRequests", requests }),
+    );
 
   /**
    * A request that needs M4 or Vitrine before they are installed is answered
@@ -134,6 +143,19 @@ const make = Effect.gen(function* () {
         return yield* whenInstalled(
           clinicalDatasets.cancel(request.name).pipe(Effect.andThen(datasets)),
         );
+      case "ClinicalImageRequests":
+        return {
+          _tag: "ClinicalImageRequests",
+          requests: yield* imageRequests.forThread(request.threadId),
+        };
+      case "ClinicalImageRequestAnswer":
+        return yield* imageRequests
+          .answer(request.id, request.credentials)
+          .pipe(Effect.mapError(toRequestError), Effect.andThen(threadRequests));
+      case "ClinicalImageRequestDecline":
+        return yield* imageRequests
+          .decline(request.id)
+          .pipe(Effect.mapError(toRequestError), Effect.andThen(threadRequests));
       case "Preferences":
         return { _tag: "Preferences", preferences: yield* linceiPreferences.get };
       case "PreferencesUpdate":

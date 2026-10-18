@@ -31,6 +31,20 @@ describe("linceiAgentInstructions", () => {
     }
   });
 
+  it("sends imaging results to the board and keeps credentialed images away from the model", () => {
+    // Pixels an agent reads go to its model provider; Lincei shows a markdown
+    // image or a card on the user's machine without the agent seeing it.
+    for (const techieMode of [false, true]) {
+      const instructions = linceiAgentInstructions({ techieMode, platform: "darwin" });
+      expect(instructions).toContain("put imaging results on the board");
+      expect(instructions).toContain("vitrine.Picture(");
+      expect(instructions).toContain("Never open or view images from credentialed datasets");
+      // Images of a credentialed dataset come through the researcher's sign-in, never the agent's.
+      expect(instructions).toContain("call lincei_clinical_fetch_images");
+      expect(instructions).toContain("`m4 fetch-images` for them");
+    }
+  });
+
   it("puts Lincei's programs first in a POSIX shell on macOS and Linux", () => {
     for (const platform of ["darwin", "linux"] as const) {
       const instructions = linceiAgentInstructions({ techieMode: true, platform });
