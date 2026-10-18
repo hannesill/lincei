@@ -147,6 +147,16 @@ The typecheck and the tests show what is left, because none of it conflicts in g
 
 Merge often. A weekly merge is a handful of mechanical conflicts; a quarterly one is a project.
 
+Land a pull request that contains an upstream merge with a merge commit (GitHub's "Create a merge
+commit"), never a squash or a rebase. Both keep the content and drop upstream as a parent, and
+the next merge then replays every upstream commit since the last real one. The script prints the
+last merged upstream commit and its date; if that is older than a merge that landed, record the
+upstream commit that merge brought in, which changes no file:
+
+```sh
+git merge -s ours <upstream commit>
+```
+
 ## The clinical runtime
 
 Lincei owns one Python environment at `<home>/clinical/venv`, where `<home>` is `~/.lincei`. At
@@ -399,6 +409,29 @@ its name. The archive, the executable inside it, and the CLI's own messages keep
 A server started this way listens on `127.0.0.1` unless it is given `--host`, and sets up the
 clinical tools on start, as the desktop app does.
 
+## Lincei and the T3 Code app
+
+Lincei has no mobile app, and no way to distribute one. Upstream's T3 Code app for iOS and Android
+pairs with a Lincei server as with any T3 server, over the local network or Tailscale and with no
+account. The pairing link or QR code comes from Settings, Connections (which needs Techie mode),
+or from `lincei pair` where the server is installed as the `lincei` command. The app shows
+conversations under T3 Code's name and none of Lincei's own surfaces: no research board button, no
+researcher mode, no Clinical Data. Agents still get Lincei's instructions and tools, because the
+server gives them those.
+
+Lincei cannot change that app, so the server has to stay one the app can talk to:
+
+- The app connects only to a server with exactly its own orchestration protocol version
+  (`ORCHESTRATION_PROTOCOL_VERSION` in `packages/contracts/src/environment.ts`, checked in
+  `packages/client-runtime/src/connection/compatibility.ts`). Lincei takes it from upstream and
+  never changes it. When a merge changes it, `merge-upstream.ts` says so. Release Lincei once
+  T3 Code's app update with the new version is out: released before, today's app stops
+  connecting; released long after, the updated app cannot connect until then.
+- Lincei never changes the shape of upstream's requests or events. Its own requests go through
+  `lincei.request`, which the app never makes.
+- Whatever Lincei wants the app to show has to come from the server: what agents are told, files,
+  or browser tabs the server opens, which the app streams.
+
 ## The default look
 
 Lincei's look is a quiet version of the neobrutalism of its research cards: ink on white paper
@@ -532,8 +565,9 @@ gh workflow disable <new-file>.yml
 
 ## Not carried over from upstream
 
-- **T3 Connect, the hosted relay, and the mobile apps** stay off: they need upstream's accounts,
-  and Lincei sets none of the build-time keys that enable them.
+- **T3 Connect and the hosted relay** stay off: they need upstream's accounts, and Lincei sets
+  none of the build-time keys that enable them.
+- **A mobile app.** Lincei publishes none; see [Lincei and the T3 Code app](#lincei-and-the-t3-code-app).
 - **The `t3` npm package** (`npx t3`): upstream builds a launcher and one package per platform
   from the same archives and publishes them under its npm names. Lincei publishes none;
   `scripts/install.sh` installs the archives directly.

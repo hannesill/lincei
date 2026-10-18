@@ -27,6 +27,17 @@ export const LINCEI_CONTENT = new Set([
 const ICON_FILE = /^(?:assets\/|apps\/web\/public\/).*\.(?:png|ico|icns|svg)$/;
 const ROUTE_TREE = "apps/web/src/routeTree.gen.ts";
 
+const PROTOCOL_FILE = "packages/contracts/src/environment.ts";
+
+/**
+ * The orchestration protocol version a contracts source declares. Upstream's
+ * mobile app connects only to a server with exactly its own version.
+ */
+export function orchestrationProtocolVersion(source: string | null): number | null {
+  const match = source?.match(/ORCHESTRATION_PROTOCOL_VERSION = (\d+);/);
+  return match?.[1] === undefined ? null : Number(match[1]);
+}
+
 /** Upstream spellings of identity. The `.t3` forms are T3 Code's home directory. */
 export const IDENTITY_LITERAL =
   /t3code:\/\/|t3code-dev|"t3code"|t3code\.service|com\.t3tools|pingdotgg\/t3code|T3 Code \(|\.t3\/|"\.t3"/;
@@ -151,7 +162,11 @@ function main(argv: ReadonlyArray<string>): number {
   }
   const base = git(["merge-base", "HEAD", "MERGE_HEAD"]).stdout.trim();
   const upstream = git(["rev-parse", "--short", "MERGE_HEAD"]).stdout.trim();
-  console.log(`Merging upstream ${upstream} (old base ${base.slice(0, 10)}).\n`);
+  const baseDate = git(["log", "-1", "--format=%cs", base]).stdout.trim();
+  console.log(
+    `Merging upstream ${upstream}; the last merged upstream commit is ${base.slice(0, 10)} (${baseDate}).`,
+  );
+  console.log("If a later upstream merge landed as a squash, stop: see docs/lincei/README.md.\n");
 
   const handEdited = Object.keys(GOVERNED_FILES).filter(
     (file) => !governedFileIsRuleOnly(file, base),
@@ -240,6 +255,20 @@ function main(argv: ReadonlyArray<string>): number {
   if (sourceLiterals.length > 0) {
     console.log("\nIdentity literals upstream added outside the governed files (tests left out):");
     for (const { file, line } of sourceLiterals) console.log(`  ${file}: ${line.slice(0, 140)}`);
+  }
+
+  const protocolBefore = orchestrationProtocolVersion(show(base, PROTOCOL_FILE));
+  const protocolAfter = orchestrationProtocolVersion(show("MERGE_HEAD", PROTOCOL_FILE));
+  if (protocolBefore !== protocolAfter) {
+    console.log(
+      [
+        "",
+        `!! The orchestration protocol changes from ${protocolBefore} to ${protocolAfter}.`,
+        "!! T3 Code's mobile app connects only to servers with its own version. Release Lincei once",
+        "!! T3 Code's app update with this version is out: before, today's app stops connecting;",
+        "!! long after, the updated app cannot connect. See docs/lincei/README.md.",
+      ].join("\n"),
+    );
   }
 
   const check = runNode("scripts/lincei/identity.ts", ["check"]);
