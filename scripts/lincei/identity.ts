@@ -70,6 +70,8 @@ const GNOME_EXTENSION: ReadonlyArray<Replacement> = [
 ];
 /** Most specific first, so a longer spelling is not broken up by a shorter one. */
 const EVERY_TOKEN = [...BUNDLE_ID, ...REPOSITORY, ...NAME, ...SLUG, ...HOME];
+/** Who holds the copyright on what a Lincei build ships: T3 Tools Inc. on upstream's code (LICENSE). */
+const COPYRIGHT = "Copyright © 2026 T3 Tools Inc. and Lincei contributors";
 
 export interface Rules {
   /** Rewritten wherever they occur. */
@@ -233,6 +235,16 @@ export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
       ],
       ['homepage: "https://t3.codes",', 'homepage: "https://github.com/hannesill/lincei",'],
       ['author: "T3 Tools",', 'author: "Lincei",'],
+      // electron-builder's default copyright is "Copyright © <year> <author>", which would
+      // put Lincei's name on T3 Tools' code in Finder and in Windows' file properties.
+      [
+        "    appId: DESKTOP_APP_ID,\n    productName: resolveDesktopProductName(version),",
+        [
+          "    appId: DESKTOP_APP_ID,",
+          `    copyright: "${COPYRIGHT}",`,
+          "    productName: resolveDesktopProductName(version),",
+        ].join("\n"),
+      ],
       // Upstream only ships signed builds. A build without a Developer ID is
       // signed ad hoc instead of not at all: Apple Silicon reports a bundle
       // with no valid signature as "damaged", which the user cannot override.
@@ -400,6 +412,57 @@ export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
       [
         'description="How we handle your data, including the anonymous usage data T3 Code collects."',
         'description="Lincei collects no usage data. Agents send what they read to your model provider."',
+      ],
+      // The credit to T3 Code in Settings, About (lincei/T3CodeCredit.tsx), after the version.
+      [
+        'import { MobileAppSettingsRow } from "./MobileAppSettingsRow";\nimport {\n  canCheckForUpdate,',
+        [
+          'import { MobileAppSettingsRow } from "./MobileAppSettingsRow";',
+          'import { T3CodeCredit } from "../../lincei/T3CodeCredit";',
+          "import {",
+          "  canCheckForUpdate,",
+        ].join("\n"),
+      ],
+      [
+        "        )}\n        <MobileAppSettingsRow />",
+        ["        )}", "        <T3CodeCredit />", "        <MobileAppSettingsRow />"].join("\n"),
+      ],
+    ],
+  },
+  // The macOS About window, which also shows in development, where the bundle's own
+  // copyright is Electron's.
+  "apps/desktop/src/app/DesktopAppIdentity.ts": {
+    exact: [
+      [
+        '      version: Option.getOrElse(commitHash, () => "unknown"),\n    });',
+        [
+          '      version: Option.getOrElse(commitHash, () => "unknown"),',
+          `      copyright: "${COPYRIGHT}",`,
+          '      credits: "Built on T3 Code by T3 Tools Inc.",',
+          "    });",
+        ].join("\n"),
+      ],
+    ],
+  },
+  // T3 Code's own MIT notice in Settings, Open source licenses. Upstream leaves itself out as
+  // first-party; to Lincei it is the largest third party, and its license asks every copy to
+  // carry the notice.
+  "third-party-licenses.config.json": {
+    exact: [
+      [
+        '  "customNotices": [\n    {\n      "bundles"',
+        [
+          '  "customNotices": [',
+          "    {",
+          '      "name": "T3 Code",',
+          '      "license": "MIT",',
+          '      "sourceUrl": "https://github.com/pingdotgg/t3code",',
+          '      "noticeFiles": ["LICENSE"],',
+          '      "bundles": ["desktop", "server", "web"]',
+          "    },",
+          "    {",
+          '      "bundles"',
+        ].join("\n"),
       ],
     ],
   },

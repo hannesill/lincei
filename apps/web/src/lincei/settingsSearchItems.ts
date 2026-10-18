@@ -1,6 +1,7 @@
 /**
  * What Settings search, and the command palette that searches the same list,
- * find for Lincei's own settings: Clinical Data and the Techie mode switch.
+ * find for Lincei's own settings: Clinical Data, the Techie mode switch, and
+ * the credit to T3 Code.
  * `settingsSearch.ts` spreads these into upstream's catalog, which is the one
  * change that file needs.
  */
@@ -16,6 +17,9 @@ export const CLINICAL_SETTINGS = {
 
 /** The row on Settings, General that switches between researcher mode and upstream's full feature set. */
 export const TECHIE_MODE_SETTING = { id: "techie-mode", title: "Techie mode" } as const;
+
+/** The row on Settings, General, About that credits the app Lincei is built on. */
+export const T3_CODE_CREDIT_SETTING = { id: "t3-code-credit", title: "Built on T3 Code" } as const;
 
 export const LINCEI_SETTINGS_SEARCH_ITEMS = [
   {
@@ -58,5 +62,10 @@ export const LINCEI_SETTINGS_SEARCH_ITEMS = [
     to: "/settings/clinical",
     targetId: CLINICAL_SETTINGS.tools.id,
     searchTerms: ["clinical research board vitrine cards results figures tables flask panel"],
+  },
+  {
+    ...T3_CODE_CREDIT_SETTING,
+    to: "/settings/general",
+    searchTerms: ["t3 code t3code t3 tools credits about upstream open source built on thanks"],
   },
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;

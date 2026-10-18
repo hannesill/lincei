@@ -57,6 +57,7 @@ import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
+import { T3CodeCredit } from "../../lincei/T3CodeCredit";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -3233,6 +3234,7 @@ export function GeneralSettingsPanel() {
             />
           </>
         )}
+        <T3CodeCredit />
         <MobileAppSettingsRow />
         <SettingsRow
           {...searchableSetting("privacy-policy")}

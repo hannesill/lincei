@@ -2694,6 +2694,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
+    copyright: "Copyright © 2026 T3 Tools Inc. and Lincei contributors",
     productName: resolveDesktopProductName(version),
     artifactName: "Lincei-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
