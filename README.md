@@ -34,8 +34,9 @@ Lincei adds the clinical layer:
 1. Install and sign in to at least one provider, for example
    [Claude Code](https://claude.com/product/claude-code) (`claude auth login`) or
    [Codex CLI](https://developers.openai.com/codex/cli) (`codex login`).
-2. Download Lincei from [www.linceilabs.com](https://www.linceilabs.com), which offers the build
-   for your computer, or from [Releases](https://github.com/hannesill/lincei/releases/latest):
+2. Download Lincei from [www.linceilabs.com](https://www.linceilabs.com) or from
+   [Releases](https://github.com/hannesill/lincei/releases/latest), choosing the build for your
+   computer:
    - **Mac:** [`Lincei-mac-arm64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-arm64.dmg)
      for Apple Silicon (M1 and later) or
      [`Lincei-mac-x64.dmg`](https://github.com/hannesill/lincei/releases/latest/download/Lincei-mac-x64.dmg)
