@@ -33,6 +33,7 @@ import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 
+import { findRevertCheckpoint } from "../lincei/revertCheckpoint.ts";
 import { getInitialServerConfig, request } from "../rpc/client.ts";
 
 interface CommandMetadata {
@@ -890,12 +891,7 @@ export const revertThreadCheckpoint = Effect.fn("EnvironmentCommands.revertThrea
     const checkpoint =
       projection.checkpoints.find(
         (candidate) => candidate.id === input.checkpointId && candidate.scopeId === input.scopeId,
-      ) ??
-      projection.checkpoints.findLast((candidate) =>
-        input.turnCount === 0
-          ? candidate.ordinalWithinScope === 0 && candidate.appRunOrdinal === null
-          : candidate.appRunOrdinal === input.turnCount,
-      );
+      ) ?? findRevertCheckpoint(projection, input.turnCount);
     if (checkpoint === undefined || checkpoint.status !== "ready") {
       const target =
         input.checkpointId === undefined
