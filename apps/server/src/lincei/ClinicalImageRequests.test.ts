@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import type { ClinicalDataset, ClinicalDatasetJob, PhysioNetCredentials } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -58,6 +59,14 @@ interface Bench {
   readonly onDisk: (answer: "missing" | "present") => void;
   /** Writes a cohort list into a folder of its own and returns its path. */
   readonly cohort: (text: string) => Effect.Effect<string>;
+  /**
+   * From now on, M4 asked without a login answers only once the test lets
+   * it, through the deferred `nextCheck` gives for each such call.
+   */
+  readonly holdChecks: () => void;
+  readonly nextCheck: Effect.Effect<Deferred.Deferred<void>>;
+  /** How many fetches were stopped before they ended. */
+  readonly stopCount: () => number;
 }
 
 const withRequests = <A, E>(
@@ -65,8 +74,11 @@ const withRequests = <A, E>(
 ) =>
   Effect.gen(function* () {
     const started = yield* Queue.unbounded<Fetch>();
+    const checks = yield* Queue.unbounded<Deferred.Deferred<void>>();
     let fetchCount = 0;
+    let stopCount = 0;
     let onDisk: "missing" | "present" = "missing";
+    let holdChecks = false;
     type Service = ClinicalDatasets.ClinicalDatasets["Service"];
     // Only what the requests use; the rest of the service is never called.
     const fake: Pick<Service, "list" | "fetchImages"> = {
@@ -75,6 +87,11 @@ const withRequests = <A, E>(
         Effect.gen(function* () {
           // Without a login, M4 only reads the disk.
           if (input.name === CXR.name && input.credentials === undefined) {
+            if (holdChecks) {
+              const answered = yield* Deferred.make<void>();
+              yield* Queue.offer(checks, answered);
+              yield* Deferred.await(answered);
+            }
             if (onDisk === "present") return;
             return yield* new ClinicalDatasets.ClinicalDatasetsError({
               message: "The PhysioNet login did not reach the fetch.",
@@ -90,7 +107,13 @@ const withRequests = <A, E>(
             report: (progress) => input.onProgress?.(progress),
             end,
           });
-          yield* Deferred.await(end);
+          yield* Deferred.await(end).pipe(
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                stopCount += 1;
+              }),
+            ),
+          );
         }),
     };
     const datasets = Layer.succeed(
@@ -118,6 +141,11 @@ const withRequests = <A, E>(
           onDisk = answer;
         },
         cohort,
+        holdChecks: () => {
+          holdChecks = true;
+        },
+        nextCheck: Queue.take(checks),
+        stopCount: () => stopCount,
       });
     }).pipe(Effect.provide(ClinicalImageRequests.layer.pipe(Layer.provide(datasets))));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
@@ -163,7 +191,8 @@ describe("ClinicalImageRequests", () => {
         const answered = yield* requests.answer(id, LOGIN);
         expect(answered.state).toBe("fetching");
         const fetch = yield* nextFetch;
-        expect(fetch).toMatchObject({ name: "mimic-cxr-jpg", list, credentials: LOGIN });
+        expect(fetch).toMatchObject({ name: "mimic-cxr-jpg", credentials: LOGIN });
+        expect(yield* (yield* FileSystem.FileSystem).readFileString(fetch.list)).toBe(COHORT);
 
         fetch.report({
           kind: "download",
@@ -325,6 +354,71 @@ describe("ClinicalImageRequests", () => {
         const refused = yield* requests.answer(second.id, LOGIN).pipe(Effect.flip);
         expect(refused.message).toContain("being fetched for another request");
         expect(Option.getOrThrow(yield* requests.get(second.id)).state).toBe("waiting-for-login");
+      }),
+    ),
+  );
+
+  it.effect("fetches the cohort it was asked about, though the agent's file changes", () =>
+    withRequests(({ requests, nextFetch, cohort }) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const list = yield* cohort(COHORT);
+        const { id } = yield* requests.request({
+          threadId: "thread-1",
+          dataset: "mimic-cxr-jpg",
+          list,
+        });
+        const rewritten = `dicom_id\n${Array.from({ length: 5000 }, (_, i) => `d${i}`).join("\n")}\n`;
+        yield* fileSystem.writeFileString(list, rewritten).pipe(Effect.orDie);
+
+        yield* requests.answer(id, LOGIN);
+        const fetch = yield* nextFetch;
+        expect(fetch.list).not.toBe(list);
+        expect(yield* fileSystem.readFileString(fetch.list)).toBe(COHORT);
+        expect(Option.getOrThrow(yield* requests.get(id)).images).toBe(3);
+      }),
+    ),
+  );
+
+  it.effect("shows a request only once M4 has said which images are missing", () =>
+    withRequests(({ requests, cohort, holdChecks, nextCheck }) =>
+      Effect.gen(function* () {
+        holdChecks();
+        const filing = yield* Effect.forkChild(
+          requests.request({
+            threadId: "thread-1",
+            dataset: "mimic-cxr-jpg",
+            list: yield* cohort(COHORT),
+          }),
+        );
+        const check = yield* nextCheck;
+        // Nothing to sign in to while M4 reads the disk.
+        expect(yield* requests.forThread("thread-1")).toEqual([]);
+        yield* Deferred.succeed(check, undefined);
+        const request = yield* Fiber.join(filing);
+        expect(request.state).toBe("waiting-for-login");
+        expect(yield* requests.forThread("thread-1")).toEqual([request]);
+      }),
+    ),
+  );
+
+  it.effect("stops a fetch when the researcher says so", () =>
+    withRequests(({ requests, nextFetch, cohort, stopCount }) =>
+      Effect.gen(function* () {
+        const { id } = yield* requests.request({
+          threadId: "thread-1",
+          dataset: "mimic-cxr-jpg",
+          list: yield* cohort(COHORT),
+        });
+        yield* requests.answer(id, LOGIN);
+        yield* nextFetch;
+
+        const stopped = yield* requests.decline(id);
+        expect(stopped).toMatchObject({ state: "declined" });
+        expect(stopped.message).toContain("stopped fetching");
+        expect(stopCount()).toBe(1);
+        // A stopped request takes no login, and another one may fetch now.
+        expect((yield* requests.answer(id, LOGIN).pipe(Effect.flip)).message).toContain("closed");
       }),
     ),
   );

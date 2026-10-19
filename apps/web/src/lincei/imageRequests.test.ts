@@ -36,6 +36,18 @@ describe("describeImageRequestButton", () => {
     ).toBe("Fetching images from MIMIC-CXR-JPG: 30 of 180");
     expect(describeImageRequestButton([request("a", "done"), request("b", "declined")])).toBeNull();
   });
+
+  it("keeps a failed fetch reachable for signing in again, after anything still running", () => {
+    const failed = request("a", "failed");
+    expect(describeImageRequestButton([failed, request("b", "done")])).toMatchObject({
+      waiting: true,
+      request: { id: "a" },
+      label: "Fetching images from MIMIC-CXR-JPG stopped. Sign in again to retry",
+    });
+    expect(
+      describeImageRequestButton([failed, request("b", "fetching", { completed: 1, total: 9 })]),
+    ).toMatchObject({ request: { id: "b" } });
+  });
 });
 
 describe("imageRequestNews", () => {

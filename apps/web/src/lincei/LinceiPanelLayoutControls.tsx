@@ -1,3 +1,5 @@
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+
 import {
   PanelLayoutControls,
   type PanelLayoutControlsProps,
@@ -25,7 +27,12 @@ export function LinceiPanelLayoutControls({
   useTechieModeSync(usePrimaryEnvironmentId());
   return (
     <>
-      <ImageRequestPrompt threadRef={research.threadRef} phase={research.phase} />
+      <ImageRequestPrompt
+        // A thread's requests and its open sign-in stay with that thread.
+        key={research.threadRef === null ? "" : scopedThreadKey(research.threadRef)}
+        threadRef={research.threadRef}
+        phase={research.phase}
+      />
       <ResearchBoardButton {...research} />
       <PanelLayoutControls {...controls} />
     </>

@@ -28,7 +28,9 @@
  * Fetching a cohort's images from an imaging dataset (`fetchImages`) runs M4
  * the same way, with the same handling of a login, but is not a job on the
  * dataset: it belongs to the agent's request that asked for it
- * (ClinicalImageRequests.ts), which shows its progress in that thread.
+ * (ClinicalImageRequests.ts), which shows its progress in that thread. While
+ * one runs, the dataset is neither prepared nor removed, and the other way
+ * round, since both write where the fetch saves images.
  *
  * @module ClinicalDatasets
  */
@@ -413,6 +415,8 @@ const advanceJob = (job: ClinicalDatasetJob, event: M4Event): ClinicalDatasetJob
 
 /** How to repeat a job that stopped: the client's button on the dataset's row, whichever way it was added. */
 const RETRY = "Choose Try again on its row to retry.";
+/** An image fetch has no row of its own: it was asked for in a conversation. */
+const FETCH_AGAIN = "Ask the agent in the conversation to fetch the images again.";
 
 const NOT_INSTALLED =
   "The clinical research tools are not installed yet. Set them up under Settings, Clinical Data.";
@@ -484,14 +488,20 @@ const describeFailure = (
 };
 
 /** Why M4 could not be run to its end, in the same words. */
-const describeRunFailure = (name: string, cause: ProcessRunner.ProcessRunError): string => {
+const describeRunFailure = (
+  name: string,
+  kind: WorkKind,
+  cause: ProcessRunner.ProcessRunError,
+): string => {
+  const fetch = kind === "fetch";
+  const retry = fetch ? FETCH_AGAIN : RETRY;
   switch (cause._tag) {
     case "ProcessTimeoutError":
-      return `Preparing ${name} took more than two days and was stopped. ${RETRY}`;
+      return `${fetch ? `Fetching images from ${name}` : `Preparing ${name}`} took more than two days and was stopped. ${retry}`;
     case "ProcessSpawnError":
-      return `Lincei could not start M4, which prepares datasets. ${RETRY} ${ASK_FOR_REPAIR}`;
+      return `Lincei could not start M4, which ${fetch ? "fetches images" : "prepares datasets"}. ${retry} ${ASK_FOR_REPAIR}`;
     default:
-      return `Lincei lost contact with M4 while it was preparing ${name}. ${RETRY}`;
+      return `Lincei lost contact with M4 while it was ${fetch ? `fetching images from ${name}` : `preparing ${name}`}. ${retry}`;
   }
 };
 
@@ -587,6 +597,12 @@ const make = Effect.gen(function* () {
     | undefined;
   /** Datasets whose files M4 is deleting, which no job may start on meanwhile. */
   const removing = new Set<string>();
+  /** How many image fetches run for each dataset, which it may not be prepared or removed under. */
+  const fetching = new Map<string, number>();
+  const fetchingImages = (name: string) =>
+    new ClinicalDatasetsError({
+      message: `Images from ${name} are being fetched for a conversation. Wait for that to finish, or stop it there, then try again.`,
+    });
 
   const requireM4 = fileSystem.exists(paths.m4).pipe(
     Effect.orElseSucceed(() => false),
@@ -786,7 +802,8 @@ const make = Effect.gen(function* () {
       })
       .pipe(
         Effect.mapError(
-          (cause) => new ClinicalDatasetsError({ message: describeRunFailure(name, cause), cause }),
+          (cause) =>
+            new ClinicalDatasetsError({ message: describeRunFailure(name, kind, cause), cause }),
         ),
       );
     // Only M4 saying so counts as done: an exit without it prepared nothing for certain.
@@ -1063,6 +1080,7 @@ const make = Effect.gen(function* () {
         message: `${name} is being removed. Wait for that to finish, then try again.`,
       });
     }
+    if (fetching.has(name)) return yield* fetchingImages(name);
     const current = jobs.get(name);
     if (current?.state === "running") {
       return yield* new ClinicalDatasetsError({
@@ -1209,11 +1227,6 @@ const make = Effect.gen(function* () {
             "The installed clinical research tools cannot fetch images yet. Update them under Settings, Clinical Data, then ask the agent again.",
         });
       }
-      if (removing.has(name)) {
-        return yield* new ClinicalDatasetsError({
-          message: `${name} is being removed, so no images are fetched from it.`,
-        });
-      }
       const dataset = (yield* list).find((candidate) => candidate.name === name);
       if (dataset === undefined) {
         return yield* new ClinicalDatasetsError({ message: unknownDataset(input.name) });
@@ -1232,21 +1245,43 @@ const make = Effect.gen(function* () {
         completed: 0,
         message: "Fetching images.",
       };
-      yield* runM4(
-        name,
-        "fetch",
-        ["fetch-images", name, "--from-csv", input.list],
-        credentials === undefined
-          ? undefined
-          : {
-              credentials,
-              arguments: [LOGIN_ON_STDIN],
-              agreementUrl: dataset.agreementUrl ?? plannedAgreementUrl,
+      // Checked and registered with nothing in between, so no job starts on the
+      // dataset's files until the fetch is over, and none is running now.
+      if (removing.has(name)) {
+        return yield* new ClinicalDatasetsError({
+          message: `${name} is being removed, so no images are fetched from it.`,
+        });
+      }
+      if (jobs.get(name)?.state === "running") {
+        return yield* new ClinicalDatasetsError({
+          message: `${name} is being prepared. Wait for that to finish, then ask the agent in the conversation to fetch the images again.`,
+        });
+      }
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => fetching.set(name, (fetching.get(name) ?? 0) + 1)),
+        () =>
+          runM4(
+            name,
+            "fetch",
+            ["fetch-images", name, "--from-csv", input.list],
+            credentials === undefined
+              ? undefined
+              : {
+                  credentials,
+                  arguments: [LOGIN_ON_STDIN],
+                  agreementUrl: dataset.agreementUrl ?? plannedAgreementUrl,
+                },
+            (event) => {
+              progress = advanceJob(progress, event);
+              input.onProgress?.(progress);
             },
-        (event) => {
-          progress = advanceJob(progress, event);
-          input.onProgress?.(progress);
-        },
+          ),
+        () =>
+          Effect.sync(() => {
+            const others = (fetching.get(name) ?? 1) - 1;
+            if (others > 0) fetching.set(name, others);
+            else fetching.delete(name);
+          }),
       );
     });
 
@@ -1416,6 +1451,7 @@ const make = Effect.gen(function* () {
       if (removing.has(name)) {
         return yield* new ClinicalDatasetsError({ message: `${name} is already being removed.` });
       }
+      if (fetching.has(name)) return yield* fetchingImages(name);
       // Held from here until M4 has finished, so no job starts on files it is deleting.
       removing.add(name);
       const output = yield* askM4(["remove-dataset", name, "--json"], "2 minutes").pipe(
