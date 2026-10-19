@@ -99,12 +99,6 @@ function JobFailure({ dataset }: { readonly dataset: ClinicalDataset }) {
 }
 
 /** What sets a dataset apart in its row: that it needs PhysioNet access, or was defined here. */
-function DatasetBadge({ dataset }: { readonly dataset: ClinicalDataset }) {
-  if (dataset.custom === true) return <Badge variant="outline">Custom</Badge>;
-  if (dataset.requiresCredentials) return <Badge variant="outline">Needs PhysioNet access</Badge>;
-  return null;
-}
-
 /** The way back into the dialog after an attempt: the way that attempt went. */
 const retryMode = (dataset: ClinicalDataset): AddDatasetMode =>
   dataset.job?.kind === "add" || !dataset.downloadable ? "folder" : "download";
@@ -139,7 +133,7 @@ function PresentRow({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="text-sm font-medium text-foreground">{datasetDisplayName(dataset)}</h4>
-          {dataset.custom === true ? <DatasetBadge dataset={dataset} /> : null}
+          {dataset.custom === true ? <Badge variant="outline">Custom</Badge> : null}
         </div>
         {progress === null ? (
           <p className="text-xs text-muted-foreground">{describeDataset(dataset, place)}</p>
@@ -274,10 +268,7 @@ function AvailableRow({
   return (
     <li className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:gap-6 sm:px-4">
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className="text-sm font-medium text-foreground">{datasetDisplayName(dataset)}</h4>
-          <DatasetBadge dataset={dataset} />
-        </div>
+        <h4 className="text-sm font-medium text-foreground">{datasetDisplayName(dataset)}</h4>
         {dataset.summary === undefined ? null : (
           <p className="text-xs leading-relaxed text-muted-foreground">{dataset.summary}</p>
         )}
@@ -344,7 +335,7 @@ function OwnDatasetRow({
   );
 }
 
-/** One of the list's two groups, under a heading of its own. */
+/** One of the list's groups, under a heading of its own. */
 function DatasetGroup({
   title,
   children,
@@ -479,14 +470,27 @@ export function ClinicalDatasetList({
   const { actions } = view;
   // A server that describes its actions also opens folders; one elsewhere would open them on its own screen.
   const canOpenFolder = actions !== null && onThisComputer;
-  const present = view.datasets.filter((dataset) => datasetGroup(dataset) === "present");
-  const available = view.datasets.filter((dataset) => datasetGroup(dataset) === "available");
+  const grouped = (group: ReturnType<typeof datasetGroup>) =>
+    view.datasets.filter((dataset) => datasetGroup(dataset) === group);
+  const present = grouped("present");
+  const open = grouped("open");
+  const credentialed = grouped("credentialed");
+  const own = grouped("own");
   const rowProps = (dataset: ClinicalDataset) => ({
     dataset,
     disabled: !canOperate || acting.has(dataset.name),
     onAction: (action: DatasetAction) => void runFromRow(dataset, action),
     onOpen: (mode: AddDatasetMode) => setAdding({ dataset, mode }),
   });
+  const availableRow = (dataset: ClinicalDataset) => (
+    <AvailableRow
+      key={dataset.name}
+      onRemove={
+        dataset.custom === true && actions?.remove === true ? () => setRemoving(dataset) : null
+      }
+      {...rowProps(dataset)}
+    />
+  );
   return (
     <>
       {present.length === 0 ? null : (
@@ -507,24 +511,30 @@ export function ClinicalDatasetList({
           <ProviderDataNotice subject="these datasets" />
         </div>
       ) : null}
-      {available.length === 0 && actions?.define !== true ? null : (
-        <div className={present.length === 0 ? undefined : "border-t border-border/60"}>
-          <DatasetGroup title="Available to add">
-            {available.map((dataset) => (
-              <AvailableRow
-                key={dataset.name}
-                onRemove={
-                  dataset.custom === true && actions?.remove === true
-                    ? () => setRemoving(dataset)
-                    : null
-                }
-                {...rowProps(dataset)}
-              />
-            ))}
-            {actions?.define === true ? (
-              <OwnDatasetRow disabled={!canOperate} onOpen={() => setAddingOwn(true)} />
-            ) : null}
-          </DatasetGroup>
+      {open.length + credentialed.length + own.length === 0 && actions?.define !== true ? null : (
+        <div
+          className={
+            present.length === 0
+              ? "divide-y divide-border/60"
+              : "divide-y divide-border/60 border-t border-border/60"
+          }
+        >
+          {open.length === 0 ? null : (
+            <DatasetGroup title="Open, no login needed">{open.map(availableRow)}</DatasetGroup>
+          )}
+          {credentialed.length === 0 ? null : (
+            <DatasetGroup title="Needs PhysioNet access">
+              {credentialed.map(availableRow)}
+            </DatasetGroup>
+          )}
+          {own.length === 0 && actions?.define !== true ? null : (
+            <DatasetGroup title="Your own data">
+              {own.map(availableRow)}
+              {actions?.define === true ? (
+                <OwnDatasetRow disabled={!canOperate} onOpen={() => setAddingOwn(true)} />
+              ) : null}
+            </DatasetGroup>
+          )}
         </div>
       )}
       {storageDir === undefined ? null : (

@@ -259,11 +259,21 @@ describe("datasetGroup", () => {
     expect(datasetGroup(dataset({ state: "ready" }))).toBe("present");
     expect(datasetGroup(dataset({ state: "incomplete" }))).toBe("present");
     expect(datasetGroup(dataset({ job: job("running") }))).toBe("present");
-    expect(datasetGroup(dataset({}))).toBe("available");
+    expect(datasetGroup(dataset({}))).toBe("open");
+  });
+
+  it("sorts what can be added by what adding it takes", () => {
+    expect(datasetGroup(dataset({ name: "eicu-demo" }))).toBe("open");
+    expect(datasetGroup(dataset({ requiresCredentials: true }))).toBe("credentialed");
+    expect(datasetGroup(dataset({ name: "my-registry", custom: true }))).toBe("own");
+    // An installed credentialed dataset is with the others on the computer.
+    expect(datasetGroup(dataset({ requiresCredentials: true, state: "ready" }))).toBe("present");
   });
 
   it("leaves a download that failed before anything arrived with what can be added", () => {
-    expect(datasetGroup(dataset({ job: job("failed") }))).toBe("available");
+    expect(datasetGroup(dataset({ requiresCredentials: true, job: job("failed") }))).toBe(
+      "credentialed",
+    );
     expect(datasetGroup(dataset({ state: "incomplete", job: job("failed") }))).toBe("present");
   });
 });
