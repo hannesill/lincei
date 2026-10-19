@@ -13,6 +13,7 @@ export const CLINICAL_SETTINGS = {
   location: { id: "clinical-dataset-location", title: "Dataset location" },
   datasets: { id: "clinical-datasets", title: "Datasets" },
   agents: { id: "clinical-agents", title: "What agents get" },
+  history: { id: "clinical-study-history", title: "Study history" },
 } as const;
 
 /** The row on Settings, General that switches between researcher mode and upstream's full feature set. */
@@ -53,6 +54,13 @@ export const LINCEI_SETTINGS_SEARCH_ITEMS = [
     to: "/settings/clinical",
     searchTerms: [
       "what agents get agent instructions system prompt told skills clinical skills sofa sepsis kdigo cohort m4 skill text",
+    ],
+  },
+  {
+    ...CLINICAL_SETTINGS.history,
+    to: "/settings/clinical",
+    searchTerms: [
+      "study history undo revert rewind restore edit from here changes version backup checkpoint git project folder",
     ],
   },
   {

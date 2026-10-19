@@ -19,11 +19,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import { linceiAgentInstructions } from "./agentInstructions.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
+import * as StudyHistory from "./StudyHistory.ts";
 
 /** The RPC method this service answers, for the transport's handler table. */
 export const method = LINCEI_WS_METHODS.request;
@@ -31,7 +33,13 @@ export const method = LINCEI_WS_METHODS.request;
 export class LinceiRequests extends Context.Service<
   LinceiRequests,
   {
-    readonly handle: (request: LinceiRequest) => Effect.Effect<LinceiResponse, LinceiRequestError>;
+    /**
+     * Study histories are kept only for the server's projects. Their read
+     * model is built above Lincei's layer, and the transport's context has it.
+     */
+    readonly handle: (
+      request: LinceiRequest,
+    ) => Effect.Effect<LinceiResponse, LinceiRequestError, ProjectStore.ProjectStoreV2>;
   }
 >()("t3/lincei/LinceiRequests") {}
 
@@ -50,6 +58,7 @@ const make = Effect.gen(function* () {
   const researchBoard = yield* ResearchBoard.ResearchBoard;
   const linceiPreferences = yield* LinceiPreferences.LinceiPreferences;
   const platform = yield* HostProcess.Platform;
+  const studyHistory = yield* StudyHistory.StudyHistory;
 
   const datasets = Effect.all([clinicalDatasets.list, clinicalDatasets.actions], {
     concurrency: 2,
@@ -73,7 +82,7 @@ const make = Effect.gen(function* () {
 
   const handle = Effect.fn("LinceiRequests.handle")(function* (
     request: LinceiRequest,
-  ): Effect.fn.Return<LinceiResponse, LinceiRequestError> {
+  ): Effect.fn.Return<LinceiResponse, LinceiRequestError, ProjectStore.ProjectStoreV2> {
     switch (request._tag) {
       case "ClinicalStatus":
         return { _tag: "Clinical", status: yield* clinicalRuntime.status };
@@ -159,6 +168,16 @@ const make = Effect.gen(function* () {
         }
         return { _tag: "ClinicalSkillText", name: request.name, text: text.value };
       }
+      case "StudyHistory":
+      case "StudyHistoryUpdate":
+        return {
+          _tag: "StudyHistory",
+          history: yield* (
+            request._tag === "StudyHistory"
+              ? studyHistory.status(request.folder)
+              : studyHistory.update(request.folder, request.on)
+          ).pipe(Effect.mapError(toRequestError)),
+        };
     }
   });
 

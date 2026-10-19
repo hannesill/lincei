@@ -182,4 +182,16 @@ export const COPY_RULES: ReadonlyArray<CopyRule> = [
     from: "<title>T3 Code (Beta)</title>",
     to: "<title>Lincei (Alpha)</title>",
   },
+  // "Edit from here" rewinds the conversation; with a study's history the
+  // researcher also chooses what happens to the assistant's file changes.
+  {
+    file: "apps/web/src/components/ChatView.tsx",
+    from: "Revert files too",
+    to: "Undo file changes too",
+  },
+  {
+    file: "apps/web/src/components/ChatView.tsx",
+    from: "Revert and keep changes",
+    to: "Keep file changes",
+  },
 ];

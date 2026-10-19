@@ -360,6 +360,32 @@ export const GOVERNED_FILES: Readonly<Record<string, Rules>> = {
   "apps/server/src/project/ManagedProjectFolders.ts": {
     exact: [['"Created in [T3 Code](https://t3.codes)."', '"Created in Lincei."']],
   },
+  // Undoing files in a study folder (lincei/StudyRestore.ts): a hook, written here
+  // because this file is governed and taking upstream's side in a merge drops
+  // anything that is not a rule. Then why "Undo file changes too" was refused, for
+  // a researcher, who has never heard of worktrees. "isolated worktree" stays: an
+  // upstream test matches it, and in Techie mode it is the way to undo files.
+  "apps/server/src/orchestration-v2/CheckpointRestoreSafety.ts": {
+    exact: [
+      [
+        'import type * as ProjectStore from "./ProjectStore.ts";\n\nexport const',
+        [
+          'import type * as ProjectStore from "./ProjectStore.ts";',
+          'import * as StudyRestore from "../lincei/StudyRestore.ts";',
+          "",
+          "export const",
+        ].join("\n"),
+      ],
+      [
+        "    let shared = worktreePath == null;",
+        "    let shared = worktreePath == null && !(yield* StudyRestore.allows(thread, scope, dependencies));",
+      ],
+      [
+        '"File restore requires an isolated worktree. This workspace may contain changes from another thread. Rewind the conversation without restoring files instead."',
+        '"Another conversation may have changed files in this folder, so undoing files here could also undo its work. Choose “Keep file changes” instead; a conversation in an isolated worktree of its own can undo files."',
+      ],
+    ],
+  },
 
   // What upstream tells users about itself that is false for Lincei: it
   // collects no usage data and has no hosted privacy policy. These are checked

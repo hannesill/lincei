@@ -15,12 +15,21 @@ import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
+import * as StudyHistory from "./StudyHistory.ts";
 
 export const activate = ClinicalRuntime.activate;
+
+/**
+ * Wraps upstream's checkpoint store in study histories. `server.ts` passes
+ * its store through this; the result needs the history service, which `layer`
+ * provides to the whole runtime.
+ */
+export const withStudyHistory = StudyHistory.withStudyHistory;
 
 // Clinical setup ends by asking the datasets service for the demo dataset, so
 // that service sits below the one that installs the tools.
 export const layer = LinceiRequests.layer.pipe(
+  Layer.provideMerge(StudyHistory.layer),
   Layer.provideMerge(ResearchBoard.layer),
   Layer.provideMerge(LinceiPreferences.layer),
   Layer.provideMerge(ClinicalRuntime.layer),

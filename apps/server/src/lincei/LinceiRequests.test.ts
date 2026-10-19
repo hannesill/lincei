@@ -22,12 +22,14 @@ import * as RpcTest from "effect/rpc/RpcTest";
 
 import * as RpcAuthorization from "../auth/RpcAuthorization.ts";
 import * as ServerConfig from "../config.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ClinicalDatasets from "./ClinicalDatasets.ts";
 import * as ClinicalRuntime from "./ClinicalRuntime.ts";
 import * as LinceiPreferences from "./LinceiPreferences.ts";
 import * as LinceiRequests from "./LinceiRequests.ts";
 import * as ResearchBoard from "./ResearchBoard.ts";
+import * as StudyHistory from "./StudyHistory.ts";
 
 const statusOf = (
   state: ClinicalRuntimeStatus["state"],
@@ -77,7 +79,7 @@ const withRequests = <A, E>(
     readonly requests: LinceiRequests.LinceiRequests["Service"];
     readonly spawned: Array<Spawned>;
     readonly existingDirectory: string;
-  }) => Effect.Effect<A, E, FileSystem.FileSystem>,
+  }) => Effect.Effect<A, E, FileSystem.FileSystem | ProjectStore.ProjectStoreV2>,
 ) => {
   const spawned: Array<Spawned> = [];
   const status = statusOf(input.state, input.step);
@@ -135,6 +137,31 @@ const withRequests = <A, E>(
     Effect.scoped,
     Effect.provide(
       LinceiRequests.layer.pipe(
+        // Its own tests run it, and the project read model, on real folders.
+        Layer.provideMerge(
+          Layer.mergeAll(
+            Layer.succeed(
+              StudyHistory.StudyHistory,
+              StudyHistory.StudyHistory.of({
+                status: () => Effect.die("unused"),
+                update: () => Effect.die("unused"),
+                adopt: () => Effect.succeed(false),
+                prepareCapture: () => Effect.void,
+              }),
+            ),
+            Layer.succeed(
+              ProjectStore.ProjectStoreV2,
+              ProjectStore.ProjectStoreV2.of({
+                apply: () => Effect.die("unused"),
+                get: () => Effect.die("unused"),
+                list: () => Effect.die("unused"),
+                findActiveByWorkspaceRoot: () => Effect.die("unused"),
+                getShell: () => Effect.die("unused"),
+                listShells: () => Effect.die("unused"),
+              }),
+            ),
+          ),
+        ),
         Layer.provideMerge(ResearchBoard.layer),
         Layer.provideMerge(LinceiPreferences.layer),
         Layer.provideMerge(ClinicalDatasets.layer),

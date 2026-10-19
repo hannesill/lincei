@@ -25,6 +25,7 @@ import { ClinicalSetupProgress } from "./ClinicalSetupProgress";
 import { useClinicalSetup, useClinicalStatus } from "./clinicalState";
 import { linceiCommand } from "./linceiRequests";
 import { CLINICAL_SETTINGS } from "./settingsSearchItems";
+import { StudyHistorySection } from "./StudyHistorySection";
 
 /**
  * The settings page frame without upstream's "Applying settings for <project>
@@ -116,6 +117,7 @@ function ClinicalDataPanel({
           </p>
         )}
       </SettingsSection>
+      <StudyHistorySection environmentId={environmentId} />
       <AgentBriefingSection environmentId={environmentId} />
     </ClinicalPage>
   );
