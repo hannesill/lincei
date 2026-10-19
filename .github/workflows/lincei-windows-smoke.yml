@@ -1,0 +1,200 @@
+name: Lincei Windows launch smoke test
+
+# Installs a published Lincei Windows build on GitHub's Windows runners, starts
+# it, and records whether it stays up, which windows it opens, and its logs.
+# The release workflow only builds the installers; nothing launches them.
+
+on:
+  push:
+    paths:
+      - .github/workflows/lincei-windows-smoke.yml
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to test (for example v0.1.0)"
+        required: true
+        default: v0.1.0
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64 (Server 2025)
+            runner: windows-2025
+            asset: Lincei-win-x64.exe
+          - label: Windows arm64 (Windows 11)
+            runner: windows-11-arm
+            asset: Lincei-win-arm64.exe
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      TAG: ${{ inputs.tag || 'v0.1.0' }}
+      ASSET: ${{ matrix.asset }}
+      OUT: ${{ github.workspace }}\smoke
+      GH_TOKEN: ${{ github.token }}
+      # The CDP port lets the job list the app's windows and screenshot them
+      # even where the runner's desktop session cannot be captured.
+      CDP_PORT: "9339"
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Download and verify the installer
+        run: |
+          New-Item -ItemType Directory -Force $env:OUT, dl | Out-Null
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --pattern $env:ASSET --pattern SHA256SUMS --dir dl
+          $expected = (Select-String -Path dl\SHA256SUMS -Pattern ([regex]::Escape($env:ASSET))).Line.Split(" ")[0]
+          $actual = (Get-FileHash "dl\$env:ASSET" -Algorithm SHA256).Hash.ToLower()
+          "sha256 expected $expected actual $actual"
+          if ($expected -ne $actual) { throw "checksum mismatch" }
+
+      - name: Record the machine
+        run: |
+          $info = "$env:OUT\machine.txt"
+          "windows: $([Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE" | Tee-Object -FilePath $info
+          "smart app control: $((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState)" | Tee-Object -FilePath $info -Append
+          Get-MpComputerStatus -ErrorAction SilentlyContinue | Select-Object AMRunningMode, RealTimeProtectionEnabled | Out-String | Tee-Object -FilePath $info -Append
+          "session: $([Environment]::UserInteractive) user: $env:USERNAME" | Tee-Object -FilePath $info -Append
+
+      - name: Install silently
+        run: |
+          $installer = Start-Process "dl\$env:ASSET" -ArgumentList "/S" -Wait -PassThru
+          "installer exit code: $($installer.ExitCode)"
+          Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Depth 1 -Filter *.exe | Select-Object FullName, Length | Out-String | Tee-Object -FilePath "$env:OUT\installed.txt"
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Depth 1 -Filter *.exe | Where-Object Name -notlike "Uninstall*" | Select-Object -First 1
+          if (-not $exe) { throw "no Lincei executable under $env:LOCALAPPDATA\Programs" }
+          "LINCEI_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+
+      - name: Launch and watch for 90 seconds
+        run: |
+          $log = "$env:OUT\launch.txt"
+          $app = Start-Process $env:LINCEI_EXE -ArgumentList "--enable-logging", "--log-file=$env:OUT\electron.log", "--remote-debugging-port=$env:CDP_PORT" -PassThru
+          "LINCEI_PID=$($app.Id)" >> $env:GITHUB_ENV
+          "started pid $($app.Id) at $(Get-Date -Format o)" | Tee-Object -FilePath $log
+          for ($t = 10; $t -le 90; $t += 10) {
+            Start-Sleep 10
+            $procs = @(Get-Process | Where-Object { $_.Path -eq $env:LINCEI_EXE })
+            $pages = try { (Invoke-RestMethod "http://127.0.0.1:$env:CDP_PORT/json/list" -TimeoutSec 5 | Where-Object type -eq "page" | ForEach-Object { "$($_.title) | $($_.url.Substring(0, [Math]::Min(100, $_.url.Length)))" }) -join " ;; " } catch { "cdp unreachable: $($_.Exception.Message)" }
+            # ExitCode throws while the process is still running.
+            $exit = if ($app.HasExited) { $app.ExitCode } else { "-" }
+            "t=${t}s main alive: $(-not $app.HasExited) exit: $exit lincei processes: $($procs.Count) pages: $pages" | Tee-Object -FilePath $log -Append
+          }
+          Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:LINCEI_EXE -or $_.ParentProcessId -in @(Get-Process | Where-Object { $_.Path -eq $env:LINCEI_EXE }).Id } | Select-Object ProcessId, ParentProcessId, Name, CommandLine | Format-List | Out-File "$env:OUT\processes.txt"
+
+      - name: Capture the app's windows
+        if: always()
+        shell: node {0}
+        run: |
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const out = process.env.OUT;
+          const port = process.env.CDP_PORT;
+          const withTimeout = (promise, ms) =>
+            Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), ms))]);
+          (async () => {
+            let targets;
+            try {
+              targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+            } catch (error) {
+              console.log(`CDP unreachable: ${error.message}`);
+              return;
+            }
+            fs.writeFileSync(path.join(out, "cdp-targets.json"), JSON.stringify(targets, null, 2));
+            for (const [index, target] of targets.entries()) {
+              if (target.type !== "page" || !target.webSocketDebuggerUrl) continue;
+              const ws = new WebSocket(target.webSocketDebuggerUrl);
+              const opened = await withTimeout(new Promise((resolve) => (ws.onopen = () => resolve({}))), 5000);
+              if (opened.timedOut) continue;
+              const pending = new Map();
+              ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                pending.get(message.id)?.(message);
+              };
+              const send = (id, method, params = {}) =>
+                withTimeout(
+                  new Promise((resolve) => {
+                    pending.set(id, resolve);
+                    ws.send(JSON.stringify({ id, method, params }));
+                  }),
+                  10000,
+                );
+              const shot = await send(1, "Page.captureScreenshot", { format: "png" });
+              if (shot.result?.data) {
+                fs.writeFileSync(path.join(out, `window-${index}.png`), Buffer.from(shot.result.data, "base64"));
+              }
+              const text = await send(2, "Runtime.evaluate", {
+                expression: "document.body ? document.body.innerText.slice(0, 3000) : ''",
+                returnByValue: true,
+              });
+              const body = text.result?.result?.value ?? "";
+              fs.writeFileSync(path.join(out, `window-${index}.txt`), body);
+              console.log(`--- window ${index}: ${target.title} | ${target.url.slice(0, 120)} | screenshot: ${Boolean(shot.result?.data)}`);
+              console.log(body.slice(0, 1500));
+              ws.close();
+            }
+          })();
+
+      - name: Capture the desktop
+        if: always()
+        run: |
+          try {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            $bitmap.Save("$env:OUT\desktop.png")
+            "desktop captured $($bounds.Width)x$($bounds.Height)"
+          } catch { "desktop capture failed: $($_.Exception.Message)" }
+
+      - name: Collect logs
+        if: always()
+        run: |
+          Copy-Item "$env:USERPROFILE\.lincei\userdata\logs" "$env:OUT\lincei-logs" -Recurse -ErrorAction SilentlyContinue
+          if (Test-Path "$env:USERPROFILE\.lincei") {
+            Get-ChildItem "$env:USERPROFILE\.lincei" -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object FullName, Length | Out-File "$env:OUT\lincei-home.txt"
+          }
+          Get-WinEvent -FilterHashtable @{ LogName = "Application"; Level = 1, 2, 3; StartTime = (Get-Date).AddHours(-1) } -ErrorAction SilentlyContinue | Format-List TimeCreated, ProviderName, Id, Message | Out-File "$env:OUT\application-events.txt"
+          Get-WinEvent -LogName "Microsoft-Windows-Windows Defender/Operational" -MaxEvents 50 -ErrorAction SilentlyContinue | Where-Object { $_.TimeCreated -gt (Get-Date).AddHours(-1) } | Format-List TimeCreated, Id, Message | Out-File "$env:OUT\defender-events.txt"
+
+      - name: Summarize
+        if: always()
+        run: |
+          function Show($title, $file, $lines = 80) {
+            "::group::$title"
+            if (Test-Path $file) { Get-Content $file -Tail $lines } else { "(missing: $file)" }
+            "::endgroup::"
+          }
+          Show "launch" "$env:OUT\launch.txt"
+          Show "processes" "$env:OUT\processes.txt" 120
+          Show "server-child.log" "$env:OUT\lincei-logs\server-child.log" 120
+          Show "electron.log (errors)" "$env:OUT\electron.log" 0
+          if (Test-Path "$env:OUT\electron.log") { Select-String -Path "$env:OUT\electron.log" -Pattern "ERROR|FATAL" | Select-Object -Last 60 | ForEach-Object Line }
+          Show "application events" "$env:OUT\application-events.txt" 120
+          Show "defender events" "$env:OUT\defender-events.txt" 60
+          Get-ChildItem "$env:OUT\lincei-logs" -ErrorAction SilentlyContinue | Select-Object Name, Length | Out-String
+
+      - name: Stop the app
+        if: always()
+        run: |
+          if ($env:LINCEI_PID) { Stop-Process -Id $env:LINCEI_PID -Force -ErrorAction SilentlyContinue }
+          Get-Process | Where-Object { $_.Path -eq $env:LINCEI_EXE } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lincei-smoke-${{ matrix.asset }}
+          path: smoke
+          if-no-files-found: warn
+
+      - name: Fail if the app did not stay up with a window
+        run: |
+          $last = Get-Content "$env:OUT\launch.txt" -Tail 1
+          if ($last -notmatch "main alive: True" -or $last -notmatch "pages: [^c]") { throw "Lincei did not stay up with a window: $last" }
