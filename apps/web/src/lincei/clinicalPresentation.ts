@@ -188,11 +188,17 @@ export function describeDataset(dataset: ClinicalDataset, place = "this computer
 
 /**
  * Which list a dataset belongs in: what a computer has or is getting, or
- * what can still be added to it. A download that failed before anything
- * arrived stays with what can be added, where it is tried again.
+ * what can still be added to it, apart by what adding it takes. Open datasets
+ * such as the demos come first, so they can be tried before PhysioNet grants
+ * access to the rest. A download that failed before anything arrived stays
+ * with what can be added, where it is tried again.
  */
-export function datasetGroup(dataset: ClinicalDataset): "present" | "available" {
-  return dataset.state !== "missing" || dataset.job?.state === "running" ? "present" : "available";
+export function datasetGroup(
+  dataset: ClinicalDataset,
+): "present" | "open" | "credentialed" | "own" {
+  if (dataset.state !== "missing" || dataset.job?.state === "running") return "present";
+  if (dataset.custom === true) return "own";
+  return dataset.requiresCredentials ? "credentialed" : "open";
 }
 
 /**
