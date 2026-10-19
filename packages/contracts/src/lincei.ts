@@ -269,7 +269,7 @@ export const LinceiRequest = Schema.Union([
     id: Schema.String,
     credentials: PhysioNetCredentials,
   }),
-  /** Turns down an agent's image request; the agent is told. */
+  /** Turns down an agent's image request, or stops its fetch; the agent is told. */
   Schema.TaggedStruct("ClinicalImageRequestDecline", { id: Schema.String }),
   /** Reads the user's preferences. */
   Schema.TaggedStruct("Preferences", {}),

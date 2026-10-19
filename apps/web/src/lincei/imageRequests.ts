@@ -26,9 +26,10 @@ export interface ImageRequestButton {
 }
 
 /**
- * The header's button while a request is open: one waiting for a login comes
- * first, then one fetching. Nothing once every request has finished; those
- * were announced as they ended.
+ * The header's button while a request needs the researcher or runs: one
+ * waiting for a login comes first, then one fetching, then one whose fetch
+ * failed, which can be signed in to again. Nothing once every request is done
+ * or declined; those were announced as they ended.
  */
 export function describeImageRequestButton(
   requests: ReadonlyArray<ClinicalImageRequest>,
@@ -42,12 +43,20 @@ export function describeImageRequestButton(
     };
   }
   const fetching = requests.find((request) => request.state === "fetching");
-  if (fetching === undefined) return null;
-  const total = fetching.total ?? fetching.images;
+  if (fetching !== undefined) {
+    const total = fetching.total ?? fetching.images;
+    return {
+      request: fetching,
+      label: `Fetching images from ${requestDatasetName(fetching)}: ${fetching.completed} of ${total}`,
+      waiting: false,
+    };
+  }
+  const failed = requests.findLast((request) => request.state === "failed");
+  if (failed === undefined) return null;
   return {
-    request: fetching,
-    label: `Fetching images from ${requestDatasetName(fetching)}: ${fetching.completed} of ${total}`,
-    waiting: false,
+    request: failed,
+    label: `Fetching images from ${requestDatasetName(failed)} stopped. Sign in again to retry`,
+    waiting: true,
   };
 }
 

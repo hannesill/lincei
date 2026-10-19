@@ -15,6 +15,10 @@
  * finished, an hour. One dataset fetches for one request at a time, because
  * two fetches of the same files would write the same partial files.
  *
+ * A request fetches a copy of the cohort list taken when it was filed, so the
+ * researcher's login only ever fetches the images they were asked about, even
+ * when the agent rewrites its file meanwhile.
+ *
  * @module ClinicalImageRequests
  */
 import type { ClinicalImageRequest, PhysioNetCredentials } from "@t3tools/contracts";
@@ -23,6 +27,7 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -70,6 +75,7 @@ export class ClinicalImageRequests extends Context.Service<
       id: string,
       credentials: PhysioNetCredentials,
     ) => Effect.Effect<ClinicalImageRequest, ClinicalImageRequestsError>;
+    /** Closes a request that waits for the researcher, or stops its fetch. */
     readonly decline: (
       id: string,
     ) => Effect.Effect<ClinicalImageRequest, ClinicalImageRequestsError>;
@@ -98,11 +104,17 @@ const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const scope = yield* Effect.scope;
+  /** Holds each request's copy of its cohort list, for as long as the server runs. */
+  const lists = yield* fileSystem
+    .makeTempDirectoryScoped({ prefix: "lincei-image-requests-" })
+    .pipe(Effect.orDie);
 
-  /** Each request, with the cohort list it fetches. */
+  /** Each request, with the path of the copy of the cohort list it fetches. */
   const requests = new Map<string, ClinicalImageRequest & { readonly list: string }>();
   /** When each request finished, for forgetting it. */
   const finishedAt = new Map<string, number>();
+  /** The fetch each request started last, for stopping it. */
+  const fetches = new Map<string, Fiber.Fiber<void>>();
 
   /** A request as clients and agents see it: without the path of its list. */
   const snapshot = (id: string) =>
@@ -124,13 +136,21 @@ const make = Effect.gen(function* () {
       }
     });
 
+  const removeList = (list: string) => fileSystem.remove(list, { force: true }).pipe(Effect.ignore);
+
+  const drop = (id: string) =>
+    Effect.gen(function* () {
+      const request = requests.get(id);
+      requests.delete(id);
+      finishedAt.delete(id);
+      fetches.delete(id);
+      if (request !== undefined) yield* removeList(request.list);
+    });
+
   const forget = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     for (const [id, at] of finishedAt) {
-      if (now - at > FINISHED_RETENTION_MS) {
-        finishedAt.delete(id);
-        requests.delete(id);
-      }
+      if (now - at > FINISHED_RETENTION_MS) yield* drop(id);
     }
   });
 
@@ -149,7 +169,7 @@ const make = Effect.gen(function* () {
         message: `Fetching ${request.images} images from ${name}.`,
       });
       finishedAt.delete(id);
-      yield* datasets
+      const fiber = yield* datasets
         .fetchImages({
           name: request.dataset,
           list: request.list,
@@ -181,6 +201,7 @@ const make = Effect.gen(function* () {
           }),
           Effect.forkIn(scope),
         );
+      fetches.set(id, fiber);
     });
 
   const fetchingDataset = (dataset: string) =>
@@ -191,45 +212,45 @@ const make = Effect.gen(function* () {
   const request: ClinicalImageRequests["Service"]["request"] = (input) =>
     Effect.gen(function* () {
       yield* forget;
-      const list = input.list.trim();
-      if (!path.isAbsolute(list) || path.extname(list).toLowerCase() !== ".csv") {
+      const source = input.list.trim();
+      if (!path.isAbsolute(source) || path.extname(source).toLowerCase() !== ".csv") {
         return yield* new ClinicalImageRequestsError({
           message:
             "Pass the full path of a .csv file that lists the cohort's images, one row per image with a dicom_id (or image_path) column.",
         });
       }
+      const tooLarge = new ClinicalImageRequestsError({
+        message: `${source} is not a cohort list: it must be a CSV file of at most 10 MB.`,
+      });
       const info = yield* fileSystem
-        .stat(list)
+        .stat(source)
         .pipe(
           Effect.mapError(
-            () => new ClinicalImageRequestsError({ message: `There is no file at ${list}.` }),
+            () => new ClinicalImageRequestsError({ message: `There is no file at ${source}.` }),
           ),
         );
-      if (info.type !== "File" || Number(info.size) > MAX_LIST_BYTES) {
-        return yield* new ClinicalImageRequestsError({
-          message: `${list} is not a cohort list: it must be a CSV file of at most 10 MB.`,
-        });
-      }
-      const cohort = readCohort(
-        yield* fileSystem
-          .readFileString(list)
-          .pipe(
-            Effect.mapError(
-              () => new ClinicalImageRequestsError({ message: `Lincei could not read ${list}.` }),
-            ),
+      if (info.type !== "File" || Number(info.size) > MAX_LIST_BYTES) return yield* tooLarge;
+      const text = yield* fileSystem
+        .readFileString(source)
+        .pipe(
+          Effect.mapError(
+            () => new ClinicalImageRequestsError({ message: `Lincei could not read ${source}.` }),
           ),
-      );
+        );
+      // The file may have grown since it was measured.
+      if (text.length > MAX_LIST_BYTES) return yield* tooLarge;
+      const cohort = readCohort(text);
       if (!cohort.header.some((column) => IMAGE_COLUMNS.has(column))) {
         return yield* new ClinicalImageRequestsError({
-          message: `${list} has no dicom_id or image_path column, so it names no images.`,
+          message: `${source} has no dicom_id or image_path column, so it names no images.`,
         });
       }
       if (cohort.rows === 0 || cohort.rows > MAX_IMAGES_PER_REQUEST) {
         return yield* new ClinicalImageRequestsError({
           message:
             cohort.rows === 0
-              ? `${list} lists no images.`
-              : `${list} lists ${cohort.rows} images; one request fetches at most ${MAX_IMAGES_PER_REQUEST}. Split the cohort, or ask the user whether a sample will do: PhysioNet sends images slowly, often a few hundred an hour.`,
+              ? `${source} lists no images.`
+              : `${source} lists ${cohort.rows} images; one request fetches at most ${MAX_IMAGES_PER_REQUEST}. Split the cohort, or ask the user whether a sample will do: PhysioNet sends images slowly, often a few hundred an hour.`,
         });
       }
       const listed = yield* datasets.list.pipe(
@@ -247,21 +268,24 @@ const make = Effect.gen(function* () {
           message: `There is no dataset called "${input.dataset.slice(0, 60)}". Use M4's name for it, as m4.list_datasets() reports.`,
         });
       }
-
-      // A newer request from the thread for the same dataset replaces one still waiting.
-      for (const [id, earlier] of requests) {
-        if (
-          earlier.threadId === input.threadId &&
-          earlier.dataset === dataset.name &&
-          earlier.state === "waiting-for-login"
-        ) {
-          requests.delete(id);
-        }
+      const name = dataset.title ?? dataset.name;
+      if (!dataset.requiresCredentials && fetchingDataset(dataset.name)) {
+        return yield* new ClinicalImageRequestsError({
+          message: `Images from ${name} are being fetched for another request. Ask again when that has finished.`,
+        });
       }
 
       const id = (yield* crypto.randomUUIDv4().pipe(Effect.orDie)).slice(0, 12);
-      const name = dataset.title ?? dataset.name;
-      requests.set(id, {
+      const list = path.join(lists, `${id}.csv`);
+      yield* fileSystem.writeFileString(list, text).pipe(
+        Effect.mapError(
+          () =>
+            new ClinicalImageRequestsError({
+              message: `Lincei could not keep a copy of ${source}. Check that the disk has free space, then try again.`,
+            }),
+        ),
+      );
+      const filed: ClinicalImageRequest & { readonly list: string } = {
         id,
         threadId: input.threadId,
         dataset: dataset.name,
@@ -273,21 +297,33 @@ const make = Effect.gen(function* () {
         ...(dataset.agreementUrl === undefined ? {} : { agreementUrl: dataset.agreementUrl }),
         requestedAt: yield* Clock.currentTimeMillis,
         list,
-      });
-      if (!dataset.requiresCredentials) {
-        if (fetchingDataset(dataset.name)) {
-          requests.delete(id);
-          return yield* new ClinicalImageRequestsError({
-            message: `Images from ${name} are being fetched for another request. Ask again when that has finished.`,
-          });
+      };
+      /** Shows the request, in place of the thread's earlier one for the dataset that nobody fetches. */
+      const file = Effect.gen(function* () {
+        for (const [earlierId, earlier] of requests) {
+          if (
+            earlier.threadId === input.threadId &&
+            earlier.dataset === dataset.name &&
+            (earlier.state === "waiting-for-login" || earlier.state === "failed")
+          ) {
+            yield* drop(earlierId);
+          }
         }
+        requests.set(id, filed);
+      });
+
+      if (!dataset.requiresCredentials) {
+        yield* file;
         yield* startFetch(id);
         return yield* snapshot(id);
       }
       // M4 is asked without a login first: it only reads the disk then, and
-      // the researcher is asked only for images that are not here yet.
+      // the researcher is asked only for images that are not here yet. The
+      // request is shown only once that is known, so no login can be given
+      // to it meanwhile.
       const asked = yield* Effect.exit(datasets.fetchImages({ name: dataset.name, list }));
       if (asked._tag === "Success") {
+        yield* file;
         yield* set(id, {
           state: "done",
           completed: cohort.rows,
@@ -297,9 +333,10 @@ const make = Effect.gen(function* () {
       }
       const refusal = Cause.findErrorOption(asked.cause);
       if (Option.isSome(refusal) && refusal.value.code === "missing_credentials") {
+        yield* file;
         return yield* snapshot(id);
       }
-      requests.delete(id);
+      yield* removeList(list);
       return yield* new ClinicalImageRequestsError({
         message: Option.match(refusal, {
           onNone: () => `Lincei could not check which images from ${name} are here. Try again.`,
@@ -349,12 +386,23 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const current = requests.get(id);
       if (current === undefined) return yield* notFound();
-      if (current.state === "fetching" || current.state === "done") {
-        return yield* new ClinicalImageRequestsError({
-          message: "These images are already being fetched or are here.",
+      if (current.state === "done") {
+        return yield* new ClinicalImageRequestsError({ message: "These images are already here." });
+      }
+      if (current.state !== "fetching") {
+        yield* set(id, { state: "declined", message: "You declined to fetch these images." });
+        return yield* snapshot(id);
+      }
+      const fetch = fetches.get(id);
+      if (fetch !== undefined) yield* Fiber.interrupt(fetch);
+      // The fetch may have ended on its own just before.
+      if (requests.get(id)?.state === "fetching") {
+        yield* set(id, {
+          state: "declined",
+          message:
+            "You stopped fetching these images. Those that had arrived stay on this computer.",
         });
       }
-      yield* set(id, { state: "declined", message: "You declined to fetch these images." });
       return yield* snapshot(id);
     });
 

@@ -1868,6 +1868,77 @@ describe("ClinicalDatasets", () => {
       );
     });
 
+    it.effect("prepares and removes nothing while images are fetched, nor fetches meanwhile", () =>
+      Effect.gen(function* () {
+        const fetching = yield* Deferred.make<void>();
+        const preparing = yield* Deferred.make<void>();
+        yield* withDatasets(
+          (run) =>
+            run.args[0] === "fetch-images"
+              ? Deferred.succeed(fetching, undefined).pipe(Effect.andThen(Effect.never))
+              : run.args[0] === "download"
+                ? Deferred.succeed(preparing, undefined).pipe(Effect.andThen(Effect.never))
+                : Effect.succeed(exited(0)),
+          ({ datasets, commands }) =>
+            Effect.gen(function* () {
+              const fetch = yield* Effect.forkChild(
+                datasets.fetchImages({ name: "mimic-iv-demo", list: "/studies/cxr/cohort.csv" }),
+              );
+              yield* Deferred.await(fetching);
+              const busy =
+                "Images from mimic-iv-demo are being fetched for a conversation. Wait for that to finish, or stop it there, then try again.";
+              const download = yield* datasets
+                .download({ name: "mimic-iv-demo" })
+                .pipe(Effect.flip);
+              expect(download.message).toBe(busy);
+              const removal = yield* datasets.remove("mimic-iv-demo").pipe(Effect.flip);
+              expect(removal.message).toBe(busy);
+              expect(
+                commands.some((args) => args[0] === "download" || args[0] === "remove-dataset"),
+              ).toBe(false);
+
+              // A fetch that is over, stopped here, holds nothing.
+              yield* Fiber.interrupt(fetch);
+              yield* datasets.download({ name: "mimic-iv-demo" });
+              yield* Deferred.await(preparing);
+              const refused = yield* datasets
+                .fetchImages({ name: "mimic-iv-demo", list: "/studies/cxr/cohort.csv" })
+                .pipe(Effect.flip);
+              expect(refused.message).toBe(
+                "mimic-iv-demo is being prepared. Wait for that to finish, then ask the agent in the conversation to fetch the images again.",
+              );
+            }),
+          { capabilities: WITH_FETCH },
+        );
+      }),
+    );
+
+    it.effect("sends the researcher back to the conversation when M4 cannot be run", () =>
+      withDatasets(
+        (run) =>
+          run.args[0] === "fetch-images"
+            ? Effect.fail(
+                new ProcessRunner.ProcessSpawnError({
+                  command: run.command,
+                  argumentCount: run.args.length,
+                  cause: new Error("ENOENT"),
+                }),
+              )
+            : Effect.succeed(exited(0)),
+        ({ datasets }) =>
+          Effect.gen(function* () {
+            const error = yield* datasets
+              .fetchImages({ name: "mimic-cxr-jpg", list: "/studies/cxr/cohort.csv" })
+              .pipe(Effect.flip);
+            expect(error.message).toContain(
+              "Lincei could not start M4, which fetches images. Ask the agent in the conversation to fetch the images again.",
+            );
+            expect(error.message).not.toContain("on its row");
+          }),
+        { listing: CXR_LISTING, capabilities: WITH_FETCH },
+      ),
+    );
+
     it.effect("refuses before running M4 with an M4 that cannot fetch", () =>
       withDatasets(
         () => Effect.die("M4 must not run"),

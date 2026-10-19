@@ -70,12 +70,14 @@ function requestsOf(
  * Agents' requests for a cohort's images in this thread (the MCP tool
  * `lincei_clinical_fetch_images`). While one waits for the researcher's
  * PhysioNet login, the header shows a button and the sign-in opens by itself
- * once; while one fetches, the button shows how far it got; when one ends,
- * a toast says how. The login is typed only here and goes with one request.
+ * once; while one fetches, the button shows how far it got and can stop it;
+ * when one ends, a toast says how, and a failed one keeps the button for
+ * signing in again. The login is typed only here and goes with one request.
  *
- * The thread is asked every few seconds while an agent works, which is when
+ * The thread is asked once when it opens, for requests made before this
+ * window looked, then every few seconds while an agent works, which is when
  * requests are made, and while a request is open. Renders nothing otherwise,
- * and against a server that is not Lincei.
+ * and against a server that is not Lincei. Keyed by thread where it is used.
  */
 export function ImageRequestPrompt({
   threadRef,
@@ -130,14 +132,10 @@ export function ImageRequestPrompt({
 
   const onLook = useEffectEvent(show);
 
-  const polling =
-    canOperate &&
-    environmentId !== null &&
-    threadId !== null &&
-    (phase === "running" || requests.some(isOpenRequest));
+  const polling = phase === "running" || requests.some(isOpenRequest);
 
   useEffect(() => {
-    if (!polling || environmentId === null || threadId === null) return;
+    if (!canOperate || environmentId === null || threadId === null) return;
     let stopped = false;
     const look = async () => {
       const answer = requestsOf(
@@ -146,12 +144,12 @@ export function ImageRequestPrompt({
       if (!stopped && answer.ok) onLook(answer.requests);
     };
     void look();
-    const timer = setInterval(() => void look(), POLL_INTERVAL_MS);
+    const timer = polling ? setInterval(() => void look(), POLL_INTERVAL_MS) : undefined;
     return () => {
       stopped = true;
       clearInterval(timer);
     };
-  }, [polling, environmentId, threadId, request]);
+  }, [canOperate, polling, environmentId, threadId, request]);
 
   const button = describeImageRequestButton(requests);
   if (environmentId === null || (button === null && signingIn === null)) return null;
@@ -242,7 +240,7 @@ function ImageRequestDialog({
           // Keyed so a password typed for one request is gone when another opens.
           <SignInForm key={shown.id} request={shown} busy={busy} setBusy={setBusy} {...actions} />
         ) : (
-          <RequestState request={shown} onClose={actions.onClose} />
+          <RequestState request={shown} busy={busy} setBusy={setBusy} {...actions} />
         )}
       </DialogPopup>
     </Dialog>
@@ -408,11 +406,21 @@ function SignInForm({
 function RequestState({
   request,
   onClose,
-}: {
+  onDecline,
+  busy,
+  setBusy,
+}: DialogActions & {
   readonly request: ClinicalImageRequest;
-  readonly onClose: () => void;
+  readonly busy: boolean;
+  readonly setBusy: (busy: boolean) => void;
 }) {
+  const [problem, setProblem] = useState<string | null>(null);
   const total = request.total ?? request.images;
+  const stop = async () => {
+    setBusy(true);
+    setProblem(await onDecline(request.id));
+    setBusy(false);
+  };
   return (
     <>
       <DialogHeader>
@@ -428,8 +436,22 @@ function RequestState({
               })}
         </DialogDescription>
       </DialogHeader>
+      {problem === null ? null : (
+        <DialogPanel>
+          <p role="alert" className="text-xs leading-relaxed text-destructive">
+            {problem}
+          </p>
+        </DialogPanel>
+      )}
       <DialogFooter variant="bare">
-        <Button onClick={onClose}>Close</Button>
+        {request.state === "fetching" ? (
+          <Button variant="ghost" disabled={busy} onClick={() => void stop()}>
+            {busy ? "Stopping…" : "Stop fetching"}
+          </Button>
+        ) : null}
+        <Button disabled={busy} onClick={onClose}>
+          Close
+        </Button>
       </DialogFooter>
     </>
   );
