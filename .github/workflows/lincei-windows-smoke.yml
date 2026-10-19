@@ -82,7 +82,8 @@ jobs:
           for ($t = 10; $t -le 90; $t += 10) {
             Start-Sleep 10
             $procs = @(Get-Process | Where-Object { $_.Path -eq $env:LINCEI_EXE })
-            $pages = try { (Invoke-RestMethod "http://127.0.0.1:$env:CDP_PORT/json/list" -TimeoutSec 5 | Where-Object type -eq "page" | ForEach-Object { "$($_.title) | $($_.url.Substring(0, [Math]::Min(100, $_.url.Length)))" }) -join " ;; " } catch { "cdp unreachable: $($_.Exception.Message)" }
+            # ConvertFrom-Json enumerates the JSON array; Invoke-RestMethod hands it on as one object.
+            $pages = try { ((Invoke-WebRequest "http://127.0.0.1:$env:CDP_PORT/json/list" -TimeoutSec 5).Content | ConvertFrom-Json | Where-Object type -eq "page" | ForEach-Object { "$($_.title) | $($_.url.Substring(0, [Math]::Min(100, $_.url.Length)))" }) -join " ;; " } catch { "cdp unreachable: $($_.Exception.Message)" }
             # ExitCode throws while the process is still running.
             $exit = if ($app.HasExited) { $app.ExitCode } else { "-" }
             "t=${t}s main alive: $(-not $app.HasExited) exit: $exit lincei processes: $($procs.Count) pages: $pages" | Tee-Object -FilePath $log -Append
